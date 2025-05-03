@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "Starting pre-commit hook..."
+
+# Get list of staged files
+STAGED_FILES=$(git diff --cached --name-only)
+
+# Check if any backend files are staged
+BACKEND_CHANGES=false
+for FILE in $STAGED_FILES; do
+  if [[ $FILE == backend/* ]]; then
+    BACKEND_CHANGES=true
+    break
+  fi
+done
+
+# Only run backend linting if backend files were changed
+if [ "$BACKEND_CHANGES" = true ]; then
+  echo "Backend files changed, running linting..."
+  cd backend && npm run lint-staged
+else
+  echo "No backend files changed, skipping linting..."
+fi 
+
+# Frontend linting section (commented out for now)
+# When frontend team is ready, they can uncomment and configure this section
+#
+# FRONTEND_CHANGES=false
+# for FILE in $STAGED_FILES; do
+#   if [[ $FILE == real-qualified-dashboard/* ]]; then
+#     FRONTEND_CHANGES=true
+#     break
+#   fi
+# done
+#
+# if [ "$FRONTEND_CHANGES" = true ]; then
+#   echo "Frontend files changed, running linting..."
+#   cd real-qualified-dashboard && npm run lint-staged
+# else
+#   echo "No frontend files changed, skipping linting..."
+# fi 
