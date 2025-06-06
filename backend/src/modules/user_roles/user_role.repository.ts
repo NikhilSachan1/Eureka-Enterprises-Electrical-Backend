@@ -10,9 +10,12 @@ export class UserRoleRepository {
     private repository: Repository<UserRoleEntity>,
   ) {}
 
-  async create(userRole: Partial<UserRoleEntity>, entityManager: EntityManager) {
+  async create(userRole: Partial<UserRoleEntity>, entityManager?: EntityManager) {
     try {
-      return await entityManager.getRepository(UserRoleEntity).save(userRole);
+      const repository = entityManager
+        ? entityManager.getRepository(UserRoleEntity)
+        : this.repository;
+      return await repository.save(userRole);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

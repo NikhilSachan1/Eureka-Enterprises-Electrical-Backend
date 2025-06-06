@@ -92,7 +92,8 @@ export class UserRepository {
 
   async create(user: CreateUserDto, entityManager?: EntityManager): Promise<UserEntity> {
     try {
-      return entityManager.getRepository(UserEntity).save(user);
+      const repository = entityManager ? entityManager.getRepository(UserEntity) : this.repository;
+      return repository.save(user);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

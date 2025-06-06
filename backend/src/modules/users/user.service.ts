@@ -4,7 +4,7 @@ import { UserRepository } from './user.repository';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { USERS_ERRORS, USER_FIELD_NAMES } from './constants/user.constants';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
-import { FindOptionsWhere } from 'typeorm';
+import { EntityManager, FindOptionsWhere } from 'typeorm';
 import { GetUsersDto } from './dto';
 
 @Injectable()
@@ -33,9 +33,10 @@ export class UserService {
 
   async create(
     user: Partial<UserEntity & { roleId: string; invitationId: string }>,
+    entityManager?: EntityManager,
   ): Promise<UserEntity> {
     try {
-      return await this.userRepository.create(user as any);
+      return await this.userRepository.create(user as any, entityManager);
     } catch (error) {
       throw error;
     }

@@ -7,7 +7,7 @@ import { UserRoleEntity } from './entities/user_role.entity';
 export class UserRoleService {
   constructor(private userRoleRepository: UserRoleRepository) {}
 
-  async create(userRole: Partial<UserRoleEntity>, entityManager: EntityManager) {
+  async create(userRole: Partial<UserRoleEntity>, entityManager?: EntityManager) {
     try {
       return await this.userRoleRepository.create(userRole, entityManager);
     } catch (error) {

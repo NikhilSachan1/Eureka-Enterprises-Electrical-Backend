@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common';
 export class AppService {
   getHello(): { message: string } {
     return {
-      message: 'Hello, I am RealQualified. Feeling great, and so is your system',
+      message: 'Hello, I am Eureka PeopleOps. Feeling great, and so is your system',
     };
   }
 }

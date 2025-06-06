@@ -16,6 +16,7 @@ export const AUTH_ERRORS = {
     "The current password you entered is incorrect. If you've forgotten it, please reset your password.",
   INVITATION_EMAIL_MISMATCH: 'Email does not match with the invitation email',
   USER_ARCHIVED: 'This account is inactive. Contact admin.',
+  ROLE_NOT_FOUND: 'Role not found.',
 };
 
 export const AUTH_RESPONSES = {

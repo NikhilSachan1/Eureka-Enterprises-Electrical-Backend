@@ -22,21 +22,3 @@ if [ "$BACKEND_CHANGES" = true ]; then
 else
   echo "No backend files changed, skipping linting..."
 fi 
-
-# Frontend linting section (commented out for now)
-# When frontend team is ready, they can uncomment and configure this section
-#
-# FRONTEND_CHANGES=false
-# for FILE in $STAGED_FILES; do
-#   if [[ $FILE == real-qualified-dashboard/* ]]; then
-#     FRONTEND_CHANGES=true
-#     break
-#   fi
-# done
-#
-# if [ "$FRONTEND_CHANGES" = true ]; then
-#   echo "Frontend files changed, running linting..."
-#   cd real-qualified-dashboard && npm run lint-staged
-# else
-#   echo "No frontend files changed, skipping linting..."
-# fi 

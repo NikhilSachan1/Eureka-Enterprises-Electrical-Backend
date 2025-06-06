@@ -1,7 +1,7 @@
 {
-  "name": "real-qualified",
+  "name": "Eureka PeopleOps",
   "version": "1.0.0",
-  "description": "Real Qualified Backend",
+  "description": "Eureka PeopleOps Backend",
   "private": true,
   "license": "MIT",
   "scripts": {

@@ -15,9 +15,9 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return { message: "Hello, I am RealQualified. Feeling great, and so is your system"}', () => {
+    it('should return { message: "Hello, I am Eureka PeopleOps. Feeling great, and so is your system"}', () => {
       expect(appController.getHello()).toStrictEqual({
-        message: 'Hello, I am RealQualified. Feeling great, and so is your system',
+        message: 'Hello, I am Eureka PeopleOps. Feeling great, and so is your system',
       });
     });
   });

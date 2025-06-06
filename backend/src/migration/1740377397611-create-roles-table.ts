@@ -56,8 +56,10 @@ export class CreateRolesTable1740377397611 implements MigrationInterface {
           INSERT INTO roles (name, description)
           VALUES 
             ('ADMIN', 'Administrator with full access'),
-            ('TEAM_MEMBER', 'Team member with limited access'),
-            ('CLIENT', 'Client with restricted access')
+            ('HR', 'HR with limited access'),
+            ('ENGINEER', 'Engineer with limited access'),
+            ('DRIVER', 'Driver with limited access'),
+            ('MANAGER', 'Manager with limited access')
         `);
   }
 

@@ -70,12 +70,12 @@ export class SignupDto {
   confirmPassword: string;
 
   @ApiProperty({
-    description: 'Invitation token received via email',
+    description: 'Role of the user',
     required: true,
     type: String,
-    example: 'encrypted-token-string',
+    example: 'ADMIN',
   })
   @IsString()
   @IsNotEmpty()
-  invitationToken: string;
+  role: string;
 }

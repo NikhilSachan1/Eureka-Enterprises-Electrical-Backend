@@ -16,6 +16,10 @@ import { AUTH_ERRORS, AUTH_RESPONSES, AUTH_REDIRECT_ROUTES } from './constants/a
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { MailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
+import { RoleService } from '../roles/role.service';
+import { UserRoleService } from '../user_roles/user_role.service';
+import { DataSource } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class AuthService {
@@ -25,6 +29,9 @@ export class AuthService {
     private jwtService: JwtService,
     private utilityService: UtilityService,
     private mailService: MailService,
+    private roleService: RoleService,
+    private userRoleService: UserRoleService,
+    @InjectDataSource() private dataSource: DataSource,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -45,15 +52,13 @@ export class AuthService {
     const { email, password } = user;
     const validatedUser = await this.validateUser(email, password);
     if (!validatedUser) throw new BadRequestException(AUTH_ERRORS.INVALID_CREDENTIALS);
-    const { id, firstName, lastName, email: userEmail, role, contactNumber } = validatedUser;
+    const { id, firstName, lastName, email: userEmail, role } = validatedUser;
     const tokenPayload = { id, email: userEmail, role };
     return {
       token: this.jwtService.sign(tokenPayload),
       name: `${firstName} ${lastName}`,
       email: userEmail,
       role,
-      contactNumber,
-      id,
     };
   }
 
@@ -159,30 +164,56 @@ export class AuthService {
   }
 
   async signUp(signupDto: SignupDto) {
-    try {
-      const { email, password, confirmPassword } = signupDto;
+    const { email, password, confirmPassword, role } = signupDto;
 
-      if (password !== confirmPassword) {
-        throw new BadRequestException(AUTH_ERRORS.PASSWORDS_DO_NOT_MATCH);
-      }
-
-      const existingUser = await this.userService.findOne({ email });
-      if (existingUser) {
-        throw new BadRequestException(AUTH_ERRORS.EMAIL_ALREADY_EXISTS);
-      }
-
-      const user = await this.userService.create({
-        ...signupDto,
-        password: this.utilityService.createHash(password),
-        status: UserStatus.ACTIVE,
-      });
-
-      return {
-        id: user.id,
-        message: AUTH_RESPONSES.SIGNUP_SUCCESS,
-      };
-    } catch (error) {
-      throw error;
+    // Input validation
+    if (password !== confirmPassword) {
+      throw new BadRequestException(AUTH_ERRORS.PASSWORDS_DO_NOT_MATCH);
     }
+
+    // Pre-transaction checks
+    const [existingUser, roleEntity] = await Promise.all([
+      this.userService.findOne({ email }),
+      this.roleService.findOne({ where: { name: role } }),
+    ]);
+
+    if (existingUser) {
+      throw new BadRequestException(AUTH_ERRORS.EMAIL_ALREADY_EXISTS);
+    }
+
+    if (!roleEntity) {
+      throw new NotFoundException(AUTH_ERRORS.ROLE_NOT_FOUND);
+    }
+
+    // Execute in transaction
+    return await this.dataSource.transaction(async (entityManager) => {
+      try {
+        // Create user
+        const userData = {
+          ...signupDto,
+          password: this.utilityService.createHash(password),
+          status: UserStatus.ACTIVE,
+        };
+
+        const user = await this.userService.create(userData, entityManager);
+
+        // Create user role assignment
+        await this.userRoleService.create(
+          {
+            userId: user.id,
+            roleId: roleEntity.id,
+          },
+          entityManager,
+        );
+
+        return {
+          id: user.id,
+          message: AUTH_RESPONSES.SIGNUP_SUCCESS,
+        };
+      } catch (error) {
+        Logger.error('SignUp transaction failed:', error);
+        throw error;
+      }
+    });
   }
 }
