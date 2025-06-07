@@ -2,6 +2,7 @@ export function getUserPermissionsQuery() {
   return `
     SELECT 
       p.name as "permissionName",
+      p.module as "permissionModule",
       p.id as "permissionId"
     FROM role_permissions rp
     INNER JOIN permissions p ON rp."permissionId" = p.id

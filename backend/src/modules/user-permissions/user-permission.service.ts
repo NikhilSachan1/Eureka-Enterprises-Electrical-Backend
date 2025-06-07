@@ -70,7 +70,9 @@ export class UserPermissionService {
       // Add permissions from roles
       rolePermissions.forEach((rp) => {
         permissionMap.set(rp.permissionId, {
+          id: rp.permissionId,
           name: rp.permissionName,
+          module: rp.permissionModule,
           source: PermissionSource.ROLE,
           isGranted: true,
         });
@@ -79,19 +81,58 @@ export class UserPermissionService {
       // Apply user-specific overrides (these take precedence)
       userOverrides.forEach((override) => {
         permissionMap.set(override.permission.id, {
+          id: override.permission.id,
           name: override.permission.name,
+          module: override.permission.module,
           source: PermissionSource.OVERRIDE,
           isGranted: override.isGranted,
         });
       });
 
-      const grantedPermissions = Array.from(permissionMap.values()).filter(
+      const allPermissions = Array.from(permissionMap.values()).filter(
         (permission) => permission.isGranted,
       );
 
+      // Group permissions by module
+      const groupedByModule = allPermissions.reduce(
+        (acc, permission) => {
+          const module = permission.module;
+
+          if (!acc[module]) {
+            acc[module] = [];
+          }
+
+          acc[module].push({
+            id: permission.id,
+            name: permission.name,
+            label: permission.label,
+            source: permission.source,
+            isGranted: permission.isGranted,
+          });
+
+          return acc;
+        },
+        {} as Record<
+          string,
+          Array<{
+            id: string;
+            name: string;
+            label?: string;
+            source: PermissionSource;
+            isGranted: boolean;
+          }>
+        >,
+      );
+
+      // Convert to array format
+      const permissionsArray = Object.keys(groupedByModule).map((module) => ({
+        module,
+        permissions: groupedByModule[module],
+      }));
+
       return {
         userId,
-        permissions: grantedPermissions,
+        permissions: permissionsArray,
       };
     } catch (error) {
       throw error;
