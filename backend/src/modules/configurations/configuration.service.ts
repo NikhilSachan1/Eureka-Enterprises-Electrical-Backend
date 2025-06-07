@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigurationRepository } from './configuration.repository';
-import { EntityManager, FindOneOptions } from 'typeorm';
+import { EntityManager, FindManyOptions, FindOneOptions } from 'typeorm';
 import { ConfigurationEntity } from './entities/configuration.entity';
 import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
 import { CONFIGURATION_ERRORS } from './constants/configuration.constant';
@@ -32,7 +32,7 @@ export class ConfigurationService {
     }
   }
 
-  async findAll(options: GetConfigurationDto): Promise<{
+  async findAll(options: FindManyOptions<ConfigurationEntity> & GetConfigurationDto): Promise<{
     records: ConfigurationEntity[];
     totalRecords: number;
   }> {
@@ -53,7 +53,13 @@ export class ConfigurationService {
 
   async findOneOrFail(options: FindOneOptions<ConfigurationEntity>): Promise<ConfigurationEntity> {
     try {
-      return await this.configurationRepository.findOneOrFail(options);
+      const configuration = await this.configurationRepository.findOne(options);
+
+      if (!configuration) {
+        throw new NotFoundException(CONFIGURATION_ERRORS.NOT_FOUND);
+      }
+
+      return configuration;
     } catch (error) {
       throw error;
     }

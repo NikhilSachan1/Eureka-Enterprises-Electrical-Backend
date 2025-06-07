@@ -15,6 +15,9 @@ import { FilesModule } from 'src/modules/common/file-upload/files.module';
 import { RolesModule } from 'src/modules/roles/role.module';
 import { ConfigurationsModule } from 'src/modules/configurations/configuration.module';
 import { ConfigSettingsModule } from 'src/modules/config-settings/config-setting.module';
+import { PermissionsModule } from 'src/modules/permissions/permission.module';
+import { RolePermissionsModule } from 'src/modules/role-permissions/role-permission.module';
+import { UserPermissionsModule } from 'src/modules/user-permissions/user-permission.module';
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import { ConfigSettingsModule } from 'src/modules/config-settings/config-setting
     RolesModule,
     ConfigurationsModule,
     ConfigSettingsModule,
+    PermissionsModule,
+    RolePermissionsModule,
+    UserPermissionsModule,
   ],
   controllers: [AppController],
   providers: [

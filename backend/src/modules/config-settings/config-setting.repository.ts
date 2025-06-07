@@ -1,7 +1,13 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigSettingEntity } from './entities/config-setting.entity';
-import { EntityManager, FindOneOptions, FindOptionsWhere, Repository } from 'typeorm';
+import {
+  EntityManager,
+  FindManyOptions,
+  FindOneOptions,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { CreateConfigSettingDto, GetConfigSettingDto } from './dto';
 import { UtilityService } from 'src/utils/utility/utility.service';
 
@@ -27,7 +33,7 @@ export class ConfigSettingRepository {
     }
   }
 
-  async findAll(options: GetConfigSettingDto): Promise<{
+  async findAll(options: FindManyOptions<ConfigSettingEntity> & GetConfigSettingDto): Promise<{
     records: ConfigSettingEntity[];
     totalRecords: number;
   }> {

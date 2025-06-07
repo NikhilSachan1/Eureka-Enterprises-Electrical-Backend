@@ -4,7 +4,7 @@ import { UserRepository } from './user.repository';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { USERS_ERRORS, USER_FIELD_NAMES } from './constants/user.constants';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
-import { EntityManager, FindOptionsWhere } from 'typeorm';
+import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { GetUsersDto } from './dto';
 
 @Injectable()
@@ -25,6 +25,16 @@ export class UserService {
   async findOne(options: FindOptionsWhere<UserEntity>) {
     try {
       const user = await this.userRepository.findOne({ where: options });
+      return user;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findOneOrFail(options: FindOneOptions<UserEntity>): Promise<UserEntity> {
+    try {
+      const user = await this.userRepository.findOne(options);
+      if (!user) throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
       return user;
     } catch (error) {
       throw error;

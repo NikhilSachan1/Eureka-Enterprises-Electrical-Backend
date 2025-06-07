@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigSettingRepository } from './config-setting.repository';
-import { EntityManager } from 'typeorm';
+import { EntityManager, FindManyOptions, FindOneOptions } from 'typeorm';
 import { ConfigSettingEntity } from './entities/config-setting.entity';
 import { CreateConfigSettingDto, GetConfigSettingDto, UpdateConfigSettingDto } from './dto';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -29,7 +29,7 @@ export class ConfigSettingService {
     updateDto: UpdateConfigSettingDto,
     entityManager?: EntityManager,
   ): Promise<ConfigSettingEntity> {
-    const configSetting = await this.findOneOrFail(id);
+    const configSetting = await this.findOneOrFail({ where: { id } });
 
     if (updateDto.value !== undefined) {
       ValueTypeValidator.validate(
@@ -48,27 +48,22 @@ export class ConfigSettingService {
     return await this.performUpsert({ ...configSetting, ...updateData }, entityManager, id);
   }
 
-  async findAll(options: GetConfigSettingDto): Promise<{
+  async findAll(options: FindManyOptions<ConfigSettingEntity> & GetConfigSettingDto): Promise<{
     records: ConfigSettingEntity[];
     totalRecords: number;
   }> {
     return await this.configSettingRepository.findAll(options);
   }
 
-  async findOne(id: string): Promise<ConfigSettingEntity | null> {
-    return await this.configSettingRepository.findOne({
-      where: { id },
-      relations: ['configuration'],
-    });
+  async findOne(options: FindOneOptions<ConfigSettingEntity>): Promise<ConfigSettingEntity | null> {
+    return await this.configSettingRepository.findOne(options);
   }
 
-  async findOneOrFail(id: string): Promise<ConfigSettingEntity> {
-    const configSetting = await this.findOne(id);
-
+  async findOneOrFail(options: FindOneOptions<ConfigSettingEntity>): Promise<ConfigSettingEntity> {
+    const configSetting = await this.configSettingRepository.findOne(options);
     if (!configSetting) {
       throw new NotFoundException(CONFIG_SETTING_ERRORS.NOT_FOUND);
     }
-
     return configSetting;
   }
 
@@ -104,7 +99,7 @@ export class ConfigSettingService {
           { ...data, isActive: true },
           transactionManager,
         );
-        return await this.findOneOrFail(existingId);
+        return await this.findOneOrFail({ where: { id: existingId } });
       } else {
         return await this.configSettingRepository.create(
           { ...data, isActive: true },

@@ -1,7 +1,13 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigurationEntity } from './entities/configuration.entity';
-import { EntityManager, FindOneOptions, FindOptionsWhere, Repository } from 'typeorm';
+import {
+  EntityManager,
+  FindManyOptions,
+  FindOneOptions,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
 import { UtilityService } from 'src/utils/utility/utility.service';
 
@@ -27,14 +33,12 @@ export class ConfigurationRepository {
     }
   }
 
-  async findAll(options: GetConfigurationDto): Promise<{
+  async findAll(options: FindManyOptions<ConfigurationEntity> & GetConfigurationDto): Promise<{
     records: ConfigurationEntity[];
     totalRecords: number;
   }> {
     try {
-      const [configurations, total] = await this.repository.findAndCount({
-        where: options,
-      });
+      const [configurations, total] = await this.repository.findAndCount(options);
       return this.utilityService.listResponse(configurations, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -44,14 +48,6 @@ export class ConfigurationRepository {
   async findOne(options: FindOneOptions<ConfigurationEntity>): Promise<ConfigurationEntity> {
     try {
       return await this.repository.findOne(options);
-    } catch (error) {
-      throw new InternalServerErrorException(error);
-    }
-  }
-
-  async findOneOrFail(options: FindOneOptions<ConfigurationEntity>): Promise<ConfigurationEntity> {
-    try {
-      return await this.repository.findOneOrFail(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

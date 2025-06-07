@@ -1,4 +1,5 @@
 import { UserRoleEntity } from 'src/modules/user-roles/entities/user-role.entity';
+import { RolePermissionEntity } from 'src/modules/role-permissions/entities/role-permission.entity';
 import {
   Column,
   Entity,
@@ -24,6 +25,9 @@ export class RoleEntity {
 
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.role)
   userRoles: UserRoleEntity[];
+
+  @OneToMany(() => RolePermissionEntity, (rolePermission) => rolePermission.role)
+  rolePermissions: RolePermissionEntity[];
 
   @CreateDateColumn({
     type: 'time with time zone',

@@ -1,6 +1,7 @@
 import { Entity, Column, OneToMany, Index } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { UserRoleEntity } from 'src/modules/user-roles/entities/user-role.entity';
+import { UserPermissionEntity } from 'src/modules/user-permissions/entities/user-permission.entity';
 
 @Entity('users')
 export class UserEntity extends BaseEntity {
@@ -32,4 +33,7 @@ export class UserEntity extends BaseEntity {
 
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.user)
   userRoles: UserRoleEntity[];
+
+  @OneToMany(() => UserPermissionEntity, (userPermission) => userPermission.user)
+  userPermissions: UserPermissionEntity[];
 }

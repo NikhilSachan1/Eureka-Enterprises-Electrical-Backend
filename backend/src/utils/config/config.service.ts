@@ -7,6 +7,9 @@ import { RoleEntity } from 'src/modules/roles/entities/role.entity';
 import { UserRoleEntity } from 'src/modules/user-roles/entities/user-role.entity';
 import { ConfigSettingEntity } from 'src/modules/config-settings/entities/config-setting.entity';
 import { ConfigurationEntity } from 'src/modules/configurations/entities/configuration.entity';
+import { RolePermissionEntity } from 'src/modules/role-permissions/entities/role-permission.entity';
+import { PermissionEntity } from 'src/modules/permissions/entities/permission.entity';
+import { UserPermissionEntity } from 'src/modules/user-permissions/entities/user-permission.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -33,7 +36,16 @@ export class ConfigService {
       database: Environments.DATABASE_NAME,
       logging: true,
       migrationsRun,
-      entities: [UserEntity, RoleEntity, UserRoleEntity, ConfigurationEntity, ConfigSettingEntity],
+      entities: [
+        UserEntity,
+        RoleEntity,
+        UserRoleEntity,
+        ConfigurationEntity,
+        ConfigSettingEntity,
+        PermissionEntity,
+        RolePermissionEntity,
+        UserPermissionEntity,
+      ],
       migrations: [migrationDir],
       synchronize: false,
     };

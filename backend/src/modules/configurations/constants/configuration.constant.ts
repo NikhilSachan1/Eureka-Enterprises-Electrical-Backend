@@ -8,4 +8,5 @@ export enum ConfigurationValueType {
 
 export const CONFIGURATION_ERRORS = {
   CONFIGURATION_KEY_ALREADY_EXISTS: `Configuration key {{key}} already exists`,
+  NOT_FOUND: 'Configuration not found',
 };
