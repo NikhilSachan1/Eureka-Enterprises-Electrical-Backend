@@ -17,7 +17,7 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 import { MailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
 import { RoleService } from '../roles/role.service';
-import { UserRoleService } from '../user_roles/user_role.service';
+import { UserRoleService } from '../user-roles/user-role.service';
 import { DataSource } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 

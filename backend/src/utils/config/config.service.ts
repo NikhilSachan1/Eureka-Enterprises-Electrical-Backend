@@ -4,7 +4,9 @@ import { Environments } from '../../../env-configs';
 import { ENVIRONMENT_CONFIG } from './constants/constants';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { RoleEntity } from 'src/modules/roles/entities/role.entity';
-import { UserRoleEntity } from 'src/modules/user_roles/entities/user_role.entity';
+import { UserRoleEntity } from 'src/modules/user-roles/entities/user-role.entity';
+import { ConfigSettingEntity } from 'src/modules/config-settings/entities/config-setting.entity';
+import { ConfigurationEntity } from 'src/modules/configurations/entities/configuration.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -31,7 +33,7 @@ export class ConfigService {
       database: Environments.DATABASE_NAME,
       logging: true,
       migrationsRun,
-      entities: [UserEntity, RoleEntity, UserRoleEntity],
+      entities: [UserEntity, RoleEntity, UserRoleEntity, ConfigurationEntity, ConfigSettingEntity],
       migrations: [migrationDir],
       synchronize: false,
     };

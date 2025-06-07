@@ -7,7 +7,7 @@ import { Environments } from 'env-configs';
 import { SharedModule } from '../shared/shared.module';
 import { MailModule } from '../common/email/email.module';
 import { RolesModule } from '../roles/role.module';
-import { UserRoleModule } from '../user_roles/user_role.module';
+import { UserRoleModule } from '../user-roles/user-role.module';
 
 @Module({
   imports: [

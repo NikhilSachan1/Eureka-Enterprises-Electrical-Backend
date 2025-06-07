@@ -6,7 +6,7 @@ import { UserController } from './user.controller';
 import { UserRepository } from './user.repository';
 import { SharedModule } from '../shared/shared.module';
 import { RolesModule } from '../roles/role.module';
-import { UserRoleModule } from '../user_roles/user_role.module';
+import { UserRoleModule } from '../user-roles/user-role.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([UserEntity]), SharedModule, RolesModule, UserRoleModule],

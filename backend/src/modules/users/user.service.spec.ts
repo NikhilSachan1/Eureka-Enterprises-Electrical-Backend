@@ -3,7 +3,7 @@ import { UserService } from './user.service';
 import { UserRepository } from './user.repository';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { RoleService } from '../roles/role.service';
-import { UserRoleService } from '../user_roles/user_role.service';
+import { UserRoleService } from '../user-roles/user-role.service';
 import { EntityManager } from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import {

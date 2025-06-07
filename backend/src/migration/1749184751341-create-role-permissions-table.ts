@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex, TableForeignKey } from 'typeorm';
 
-export class CreateConfigurationsTable1749182041422 implements MigrationInterface {
+export class CreateRolePermissionsTable1749184751341 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'configurations',
+        name: 'role_permissions',
         columns: [
           {
             name: 'id',
@@ -14,35 +14,14 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
             default: 'gen_random_uuid()',
           },
           {
-            name: 'module',
-            type: 'text',
+            name: 'roleId',
+            type: 'uuid',
             isNullable: false,
           },
           {
-            name: 'key',
-            type: 'text',
+            name: 'permissionId',
+            type: 'uuid',
             isNullable: false,
-          },
-          {
-            name: 'label',
-            type: 'text',
-            isNullable: false,
-          },
-          {
-            name: 'valueType',
-            type: 'text',
-            isNullable: false,
-          },
-          {
-            name: 'isEditable',
-            type: 'boolean',
-            isNullable: false,
-            default: true,
-          },
-          {
-            name: 'description',
-            type: 'text',
-            isNullable: true,
           },
           {
             name: 'createdBy',
@@ -79,26 +58,44 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
         ],
         uniques: [
           {
-            name: 'UQ_configurations_module_key',
-            columnNames: ['module', 'key'],
+            name: 'UQ_role_permissions_role_permission',
+            columnNames: ['roleId', 'permissionId'],
           },
         ],
       }),
       true,
     );
 
-    // Add check constraint for valueType
-    await queryRunner.query(`
-            ALTER TABLE configurations 
-            ADD CONSTRAINT CHK_configurations_value_type 
-            CHECK ("valueType" IN ('json', 'array', 'number', 'text', 'boolean'))
-        `);
+    // Create foreign key relationships
+    await queryRunner.createForeignKey(
+      'role_permissions',
+      new TableForeignKey({
+        name: 'FK_role_permissions_role_id',
+        columnNames: ['roleId'],
+        referencedTableName: 'roles',
+        referencedColumnNames: ['id'],
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    await queryRunner.createForeignKey(
+      'role_permissions',
+      new TableForeignKey({
+        name: 'FK_role_permissions_permission_id',
+        columnNames: ['permissionId'],
+        referencedTableName: 'permissions',
+        referencedColumnNames: ['id'],
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      }),
+    );
 
     // Create foreign key relationships for audit fields
     await queryRunner.createForeignKey(
-      'configurations',
+      'role_permissions',
       new TableForeignKey({
-        name: 'FK_configurations_created_by',
+        name: 'FK_role_permissions_created_by',
         columnNames: ['createdBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -108,9 +105,9 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
     );
 
     await queryRunner.createForeignKey(
-      'configurations',
+      'role_permissions',
       new TableForeignKey({
-        name: 'FK_configurations_updated_by',
+        name: 'FK_role_permissions_updated_by',
         columnNames: ['updatedBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -120,9 +117,9 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
     );
 
     await queryRunner.createForeignKey(
-      'configurations',
+      'role_permissions',
       new TableForeignKey({
-        name: 'FK_configurations_deleted_by',
+        name: 'FK_role_permissions_deleted_by',
         columnNames: ['deletedBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -133,47 +130,39 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
 
     // Create indexes for better query performance
     await queryRunner.createIndex(
-      'configurations',
+      'role_permissions',
       new TableIndex({
-        name: 'IDX_configurations_module',
-        columnNames: ['module'],
+        name: 'IDX_role_permissions_role_id',
+        columnNames: ['roleId'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'role_permissions',
       new TableIndex({
-        name: 'IDX_configurations_key',
-        columnNames: ['key'],
+        name: 'IDX_role_permissions_permission_id',
+        columnNames: ['permissionId'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'role_permissions',
       new TableIndex({
-        name: 'IDX_configurations_is_editable',
-        columnNames: ['isEditable'],
-      }),
-    );
-
-    await queryRunner.createIndex(
-      'configurations',
-      new TableIndex({
-        name: 'IDX_configurations_deleted_at',
-        columnNames: ['deletedAt'],
-      }),
-    );
-
-    await queryRunner.createIndex(
-      'configurations',
-      new TableIndex({
-        name: 'IDX_configurations_created_by',
+        name: 'IDX_role_permissions_created_by',
         columnNames: ['createdBy'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'role_permissions',
+      new TableIndex({
+        name: 'IDX_role_permissions_deleted_at',
+        columnNames: ['deletedAt'],
       }),
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('configurations');
+    await queryRunner.dropTable('role_permissions');
   }
 }

@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex, TableForeignKey } from 'typeorm';
 
-export class CreateConfigurationsTable1749182041422 implements MigrationInterface {
+export class CreateUserPermissionsTable1749184757606 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'configurations',
+        name: 'user_permission_overrides',
         columns: [
           {
             name: 'id',
@@ -14,35 +14,19 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
             default: 'gen_random_uuid()',
           },
           {
-            name: 'module',
-            type: 'text',
+            name: 'userId',
+            type: 'uuid',
             isNullable: false,
           },
           {
-            name: 'key',
-            type: 'text',
+            name: 'permissionId',
+            type: 'uuid',
             isNullable: false,
           },
           {
-            name: 'label',
-            type: 'text',
-            isNullable: false,
-          },
-          {
-            name: 'valueType',
-            type: 'text',
-            isNullable: false,
-          },
-          {
-            name: 'isEditable',
+            name: 'isGranted',
             type: 'boolean',
             isNullable: false,
-            default: true,
-          },
-          {
-            name: 'description',
-            type: 'text',
-            isNullable: true,
           },
           {
             name: 'createdBy',
@@ -79,26 +63,44 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
         ],
         uniques: [
           {
-            name: 'UQ_configurations_module_key',
-            columnNames: ['module', 'key'],
+            name: 'UQ_user_permission_overrides_user_permission',
+            columnNames: ['userId', 'permissionId'],
           },
         ],
       }),
       true,
     );
 
-    // Add check constraint for valueType
-    await queryRunner.query(`
-            ALTER TABLE configurations 
-            ADD CONSTRAINT CHK_configurations_value_type 
-            CHECK ("valueType" IN ('json', 'array', 'number', 'text', 'boolean'))
-        `);
+    // Create foreign key relationships
+    await queryRunner.createForeignKey(
+      'user_permission_overrides',
+      new TableForeignKey({
+        name: 'FK_user_permission_overrides_user_id',
+        columnNames: ['userId'],
+        referencedTableName: 'users',
+        referencedColumnNames: ['id'],
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    await queryRunner.createForeignKey(
+      'user_permission_overrides',
+      new TableForeignKey({
+        name: 'FK_user_permission_overrides_permission_id',
+        columnNames: ['permissionId'],
+        referencedTableName: 'permissions',
+        referencedColumnNames: ['id'],
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      }),
+    );
 
     // Create foreign key relationships for audit fields
     await queryRunner.createForeignKey(
-      'configurations',
+      'user_permission_overrides',
       new TableForeignKey({
-        name: 'FK_configurations_created_by',
+        name: 'FK_user_permission_overrides_created_by',
         columnNames: ['createdBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -108,9 +110,9 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
     );
 
     await queryRunner.createForeignKey(
-      'configurations',
+      'user_permission_overrides',
       new TableForeignKey({
-        name: 'FK_configurations_updated_by',
+        name: 'FK_user_permission_overrides_updated_by',
         columnNames: ['updatedBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -120,9 +122,9 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
     );
 
     await queryRunner.createForeignKey(
-      'configurations',
+      'user_permission_overrides',
       new TableForeignKey({
-        name: 'FK_configurations_deleted_by',
+        name: 'FK_user_permission_overrides_deleted_by',
         columnNames: ['deletedBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -133,47 +135,47 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
 
     // Create indexes for better query performance
     await queryRunner.createIndex(
-      'configurations',
+      'user_permission_overrides',
       new TableIndex({
-        name: 'IDX_configurations_module',
-        columnNames: ['module'],
+        name: 'IDX_user_permission_overrides_user_id',
+        columnNames: ['userId'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'user_permission_overrides',
       new TableIndex({
-        name: 'IDX_configurations_key',
-        columnNames: ['key'],
+        name: 'IDX_user_permission_overrides_permission_id',
+        columnNames: ['permissionId'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'user_permission_overrides',
       new TableIndex({
-        name: 'IDX_configurations_is_editable',
-        columnNames: ['isEditable'],
+        name: 'IDX_user_permission_overrides_is_granted',
+        columnNames: ['isGranted'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'user_permission_overrides',
       new TableIndex({
-        name: 'IDX_configurations_deleted_at',
-        columnNames: ['deletedAt'],
-      }),
-    );
-
-    await queryRunner.createIndex(
-      'configurations',
-      new TableIndex({
-        name: 'IDX_configurations_created_by',
+        name: 'IDX_user_permission_overrides_created_by',
         columnNames: ['createdBy'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'user_permission_overrides',
+      new TableIndex({
+        name: 'IDX_user_permission_overrides_deleted_at',
+        columnNames: ['deletedAt'],
       }),
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('configurations');
+    await queryRunner.dropTable('user_permission_overrides');
   }
 }

@@ -22,8 +22,8 @@ export class UserRepository {
 
       const queryBuilder = this.repository
         .createQueryBuilder('users')
-        .leftJoinAndSelect('users.userRoles', 'user_roles')
-        .leftJoinAndSelect('user_roles.role', 'role')
+        .leftJoinAndSelect('users.userRoles', 'user-roles')
+        .leftJoinAndSelect('user-roles.role', 'role')
         .select([
           'users.id',
           'users.firstName',
@@ -36,7 +36,7 @@ export class UserRepository {
           'users.createdAt',
           'users.updatedAt',
           'users.deletedAt',
-          'user_roles.id',
+          'user-roles.id',
           'role.name',
         ]);
 

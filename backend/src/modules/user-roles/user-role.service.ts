@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { UserRoleRepository } from './user_role.repository';
+import { UserRoleRepository } from './user-role.repository';
 import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
-import { UserRoleEntity } from './entities/user_role.entity';
+import { UserRoleEntity } from './entities/user-role.entity';
 
 @Injectable()
 export class UserRoleService {

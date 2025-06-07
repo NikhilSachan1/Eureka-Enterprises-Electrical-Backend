@@ -14,12 +14,12 @@ export class CreateConfigSettingsTable1749182601061 implements MigrationInterfac
             default: 'gen_random_uuid()',
           },
           {
-            name: 'config_id',
+            name: 'configId',
             type: 'uuid',
             isNullable: false,
           },
           {
-            name: 'context_key',
+            name: 'contextKey',
             type: 'text',
             isNullable: true,
           },
@@ -29,26 +29,52 @@ export class CreateConfigSettingsTable1749182601061 implements MigrationInterfac
             isNullable: false,
           },
           {
-            name: 'effective_from',
+            name: 'effectiveFrom',
             type: 'date',
             isNullable: true,
           },
           {
-            name: 'effective_to',
+            name: 'effectiveTo',
             type: 'date',
             isNullable: true,
           },
           {
-            name: 'created_at',
+            name: 'createdBy',
+            type: 'uuid',
+            isNullable: true,
+          },
+          {
+            name: 'updatedBy',
+            type: 'uuid',
+            isNullable: true,
+          },
+          {
+            name: 'deletedBy',
+            type: 'uuid',
+            isNullable: true,
+          },
+          {
+            name: 'createdAt',
             type: 'timestamp',
             isNullable: false,
             default: 'NOW()',
           },
           {
-            name: 'updated_at',
+            name: 'updatedAt',
             type: 'timestamp',
             isNullable: false,
             default: 'NOW()',
+          },
+          {
+            name: 'deletedAt',
+            type: 'timestamp',
+            isNullable: true,
+          },
+          {
+            name: 'isActive',
+            type: 'boolean',
+            isNullable: false,
+            default: true,
           },
         ],
       }),
@@ -60,10 +86,47 @@ export class CreateConfigSettingsTable1749182601061 implements MigrationInterfac
       'config_settings',
       new TableForeignKey({
         name: 'FK_config_settings_config_id',
-        columnNames: ['config_id'],
+        columnNames: ['configId'],
         referencedTableName: 'configurations',
         referencedColumnNames: ['id'],
         onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    // Create foreign key relationships for audit fields
+    await queryRunner.createForeignKey(
+      'config_settings',
+      new TableForeignKey({
+        name: 'FK_config_settings_created_by',
+        columnNames: ['createdBy'],
+        referencedTableName: 'users',
+        referencedColumnNames: ['id'],
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    await queryRunner.createForeignKey(
+      'config_settings',
+      new TableForeignKey({
+        name: 'FK_config_settings_updated_by',
+        columnNames: ['updatedBy'],
+        referencedTableName: 'users',
+        referencedColumnNames: ['id'],
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    await queryRunner.createForeignKey(
+      'config_settings',
+      new TableForeignKey({
+        name: 'FK_config_settings_deleted_by',
+        columnNames: ['deletedBy'],
+        referencedTableName: 'users',
+        referencedColumnNames: ['id'],
+        onDelete: 'SET NULL',
         onUpdate: 'CASCADE',
       }),
     );
@@ -73,7 +136,7 @@ export class CreateConfigSettingsTable1749182601061 implements MigrationInterfac
       'config_settings',
       new TableIndex({
         name: 'IDX_config_settings_config_id',
-        columnNames: ['config_id'],
+        columnNames: ['configId'],
       }),
     );
 
@@ -81,7 +144,7 @@ export class CreateConfigSettingsTable1749182601061 implements MigrationInterfac
       'config_settings',
       new TableIndex({
         name: 'IDX_config_settings_context_key',
-        columnNames: ['context_key'],
+        columnNames: ['contextKey'],
       }),
     );
 
@@ -89,7 +152,23 @@ export class CreateConfigSettingsTable1749182601061 implements MigrationInterfac
       'config_settings',
       new TableIndex({
         name: 'IDX_config_settings_effective_dates',
-        columnNames: ['effective_from', 'effective_to'],
+        columnNames: ['effectiveFrom', 'effectiveTo'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'config_settings',
+      new TableIndex({
+        name: 'IDX_config_settings_deleted_at',
+        columnNames: ['deletedAt'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'config_settings',
+      new TableIndex({
+        name: 'IDX_config_settings_created_by',
+        columnNames: ['createdBy'],
       }),
     );
   }

@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner, Table, TableIndex, TableForeignKey } from 'typeorm';
 
-export class CreateConfigurationsTable1749182041422 implements MigrationInterface {
+export class CreatePermissionsTable1749184742915 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
-        name: 'configurations',
+        name: 'permissions',
         columns: [
           {
             name: 'id',
@@ -14,30 +14,20 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
             default: 'gen_random_uuid()',
           },
           {
-            name: 'module',
+            name: 'name',
             type: 'text',
             isNullable: false,
+            isUnique: true,
           },
           {
-            name: 'key',
+            name: 'module',
             type: 'text',
             isNullable: false,
           },
           {
             name: 'label',
             type: 'text',
-            isNullable: false,
-          },
-          {
-            name: 'valueType',
-            type: 'text',
-            isNullable: false,
-          },
-          {
-            name: 'isEditable',
-            type: 'boolean',
-            isNullable: false,
-            default: true,
+            isNullable: true,
           },
           {
             name: 'description',
@@ -77,28 +67,15 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
             isNullable: true,
           },
         ],
-        uniques: [
-          {
-            name: 'UQ_configurations_module_key',
-            columnNames: ['module', 'key'],
-          },
-        ],
       }),
       true,
     );
 
-    // Add check constraint for valueType
-    await queryRunner.query(`
-            ALTER TABLE configurations 
-            ADD CONSTRAINT CHK_configurations_value_type 
-            CHECK ("valueType" IN ('json', 'array', 'number', 'text', 'boolean'))
-        `);
-
     // Create foreign key relationships for audit fields
     await queryRunner.createForeignKey(
-      'configurations',
+      'permissions',
       new TableForeignKey({
-        name: 'FK_configurations_created_by',
+        name: 'FK_permissions_created_by',
         columnNames: ['createdBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -108,9 +85,9 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
     );
 
     await queryRunner.createForeignKey(
-      'configurations',
+      'permissions',
       new TableForeignKey({
-        name: 'FK_configurations_updated_by',
+        name: 'FK_permissions_updated_by',
         columnNames: ['updatedBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -120,9 +97,9 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
     );
 
     await queryRunner.createForeignKey(
-      'configurations',
+      'permissions',
       new TableForeignKey({
-        name: 'FK_configurations_deleted_by',
+        name: 'FK_permissions_deleted_by',
         columnNames: ['deletedBy'],
         referencedTableName: 'users',
         referencedColumnNames: ['id'],
@@ -133,47 +110,39 @@ export class CreateConfigurationsTable1749182041422 implements MigrationInterfac
 
     // Create indexes for better query performance
     await queryRunner.createIndex(
-      'configurations',
+      'permissions',
       new TableIndex({
-        name: 'IDX_configurations_module',
+        name: 'IDX_permissions_name',
+        columnNames: ['name'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'permissions',
+      new TableIndex({
+        name: 'IDX_permissions_module',
         columnNames: ['module'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'permissions',
       new TableIndex({
-        name: 'IDX_configurations_key',
-        columnNames: ['key'],
-      }),
-    );
-
-    await queryRunner.createIndex(
-      'configurations',
-      new TableIndex({
-        name: 'IDX_configurations_is_editable',
-        columnNames: ['isEditable'],
-      }),
-    );
-
-    await queryRunner.createIndex(
-      'configurations',
-      new TableIndex({
-        name: 'IDX_configurations_deleted_at',
+        name: 'IDX_permissions_deleted_at',
         columnNames: ['deletedAt'],
       }),
     );
 
     await queryRunner.createIndex(
-      'configurations',
+      'permissions',
       new TableIndex({
-        name: 'IDX_configurations_created_by',
+        name: 'IDX_permissions_created_by',
         columnNames: ['createdBy'],
       }),
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('configurations');
+    await queryRunner.dropTable('permissions');
   }
 }

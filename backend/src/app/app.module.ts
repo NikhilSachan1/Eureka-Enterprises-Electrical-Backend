@@ -13,6 +13,8 @@ import { CustomLoggerModule } from 'src/utils/custom-logger/custom-logger.module
 import { SharedModule } from 'src/modules/shared/shared.module';
 import { FilesModule } from 'src/modules/common/file-upload/files.module';
 import { RolesModule } from 'src/modules/roles/role.module';
+import { ConfigurationsModule } from 'src/modules/configurations/configuration.module';
+import { ConfigSettingsModule } from 'src/modules/config-settings/config-setting.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { RolesModule } from 'src/modules/roles/role.module';
     SharedModule,
     FilesModule,
     RolesModule,
+    ConfigurationsModule,
+    ConfigSettingsModule,
   ],
   controllers: [AppController],
   providers: [

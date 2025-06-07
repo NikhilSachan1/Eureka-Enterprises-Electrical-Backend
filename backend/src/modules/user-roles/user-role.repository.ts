@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UserRoleEntity } from './entities/user_role.entity';
+import { UserRoleEntity } from './entities/user-role.entity';
 import { EntityManager, FindOneOptions, FindOptionsWhere, Repository } from 'typeorm';
 
 @Injectable()
