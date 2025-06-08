@@ -10,6 +10,7 @@ import { ConfigurationEntity } from 'src/modules/configurations/entities/configu
 import { RolePermissionEntity } from 'src/modules/role-permissions/entities/role-permission.entity';
 import { PermissionEntity } from 'src/modules/permissions/entities/permission.entity';
 import { UserPermissionEntity } from 'src/modules/user-permissions/entities/user-permission.entity';
+import { AttendanceEntity } from 'src/modules/attendance/entities/attendance.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -45,6 +46,7 @@ export class ConfigService {
         PermissionEntity,
         RolePermissionEntity,
         UserPermissionEntity,
+        AttendanceEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

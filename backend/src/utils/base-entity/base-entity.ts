@@ -2,12 +2,13 @@
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import {
   BaseEntity as baseEntity,
-  CreateDateColumn,
   DeleteDateColumn,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  UpdateDateColumn,
+  Column,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 
 export class BaseEntity extends baseEntity {
@@ -26,16 +27,29 @@ export class BaseEntity extends baseEntity {
   @JoinColumn({ name: 'deletedBy' })
   deletedBy?: string;
 
-  @CreateDateColumn({
-    type: 'time with time zone',
+  @Column({
+    type: 'timestamp',
+    default: () => 'NOW()',
   })
   createdAt: Date;
 
-  @UpdateDateColumn({
-    type: 'time with time zone',
+  @Column({
+    type: 'timestamp',
+    default: () => 'NOW()',
   })
   updatedAt: Date;
 
   @DeleteDateColumn()
   deletedAt?: Date;
+
+  @BeforeInsert()
+  setCreatedAt() {
+    this.createdAt = new Date();
+    this.updatedAt = new Date();
+  }
+
+  @BeforeUpdate()
+  setUpdatedAt() {
+    this.updatedAt = new Date();
+  }
 }

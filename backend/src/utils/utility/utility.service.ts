@@ -4,6 +4,7 @@ import { Environments } from '../../../env-configs';
 import * as CryptoJS from 'crypto-js';
 import { DataFailureOperationType, DataSuccessOperationType } from './constants/utility.constants';
 import { createHmac } from 'crypto';
+import * as moment from 'moment-timezone';
 
 @Injectable()
 export class UtilityService {
@@ -55,5 +56,23 @@ export class UtilityService {
 
   toTitleCase(str: string) {
     return str.replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  convertLocalTimeToUTC(timeString: string, timezone = 'Asia/Kolkata'): Date {
+    const today = new Date();
+    const [hours, minutes] = timeString.split(':').map(Number);
+
+    const localMoment = moment.tz(
+      {
+        year: today.getFullYear(),
+        month: today.getMonth(),
+        date: today.getDate(),
+        hour: hours,
+        minute: minutes,
+      },
+      timezone,
+    );
+
+    return localMoment.utc().toDate();
   }
 }

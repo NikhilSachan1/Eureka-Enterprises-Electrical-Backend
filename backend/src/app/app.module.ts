@@ -18,6 +18,7 @@ import { ConfigSettingsModule } from 'src/modules/config-settings/config-setting
 import { PermissionsModule } from 'src/modules/permissions/permission.module';
 import { RolePermissionsModule } from 'src/modules/role-permissions/role-permission.module';
 import { UserPermissionsModule } from 'src/modules/user-permissions/user-permission.module';
+import { AttendanceModule } from 'src/modules/attendance/attendance.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { UserPermissionsModule } from 'src/modules/user-permissions/user-permiss
     PermissionsModule,
     RolePermissionsModule,
     UserPermissionsModule,
+    AttendanceModule,
   ],
   controllers: [AppController],
   providers: [
