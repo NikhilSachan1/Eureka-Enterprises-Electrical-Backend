@@ -34,6 +34,12 @@ export enum ApprovalStatus {
   PENDING = 'pending',
 }
 
+export enum ShiftStatus {
+  BEFORE_SHIFT = 'BEFORE_SHIFT',
+  DURING_SHIFT = 'DURING_SHIFT',
+  AFTER_SHIFT = 'AFTER_SHIFT',
+}
+
 export const ATTENDANCE_ERRORS = {
   NOT_FOUND: 'Attendance record not found',
   ALREADY_CHECKED_IN: 'Already checked in for today',
@@ -55,6 +61,25 @@ export const ATTENDANCE_ERRORS = {
   REGULARIZATION_NOT_ALLOWED_DURING_SHIFT: 'Regularization is not allowed during shift hours',
   FUTURE_DATE_REGULARIZATION_NOT_ALLOWED: 'Regularization is not allowed for future dates',
   ALREADY_REGULARIZED: 'Attendance is already regularized and status is {status}',
+  FORCE_ATTENDANCE_SAME_DAY_SHIFT_NOT_OVER:
+    'Force attendance for same day is only allowed before shift end time',
+  FORCE_ATTENDANCE_INVALID_TIME_FORMAT: 'Invalid time format. Use HH:MM format',
+  FORCE_ATTENDANCE_CHECK_OUT_BEFORE_CHECK_IN: 'Check-out time cannot be before check-in time',
+  FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED: 'Force attendance is not allowed for future dates',
+  FORCE_ATTENDANCE_ALREADY_EXISTS:
+    'Employee already has attendance record for this date. Please use regularization instead.',
+  FORCE_ATTENDANCE_PERMISSION_DENIED:
+    'You do not have permission to force attendance for this user',
+  FORCE_ATTENDANCE_BEFORE_SHIFT_NOT_ALLOWED: 'Force attendance is not allowed before shift starts',
+  FORCE_ATTENDANCE_DURING_SHIFT_ONLY_CHECKIN:
+    'Only check-in is allowed for same day force attendance during shift',
+  FORCE_ATTENDANCE_AFTER_SHIFT_BOTH_REQUIRED:
+    'Both check-in and check-out times are required for same day force attendance after shift ends',
+  FORCE_ATTENDANCE_CHECK_IN_TIME_REQUIRED:
+    'Check-in time is required for same day force attendance',
+  FORCE_ATTENDANCE_BOTH_CHECK_IN_AND_CHECK_OUT_REQUIRED:
+    'Both check-in and check-out times are required for same day force attendance',
+  FORCE_ATTENDANCE_INVALID_STATUS: 'Unable to determine shift status',
 };
 
 export const ATTENDANCE_RESPONSES = {
@@ -62,6 +87,7 @@ export const ATTENDANCE_RESPONSES = {
   CHECK_OUT_SUCCESS: 'Successfully checked out',
   ATTENDANCE_UPDATED: 'Attendance record updated successfully',
   ATTENDANCE_REGULARIZED: 'Attendance regularized successfully',
+  FORCE_ATTENDANCE_SUCCESS: 'Force attendance applied successfully',
 };
 
 export const DEFAULT_APPROVAL_COMMENT = {
@@ -74,6 +100,7 @@ export const DEFAULT_APPROVAL_COMMENT = {
   NOT_CHECKED_IN_YET: 'Regularized as not checked in yet',
   APPROVAL_PENDING: 'Regularized as approval pending',
   HOLIDAY: 'Regularized as holiday',
+  FORCED: 'Force attendance',
 };
 
 export enum AttendanceEntityFields {

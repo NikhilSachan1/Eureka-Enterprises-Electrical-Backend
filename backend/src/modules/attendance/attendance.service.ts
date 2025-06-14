@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, FindOneOptions } from 'typeorm';
 import { AttendanceRepository } from './attendance.repository';
-import { AttendanceActionDto } from './dto';
+import { AttendanceActionDto, RegularizeAttendanceDto, ForceAttendanceDto } from './dto';
 import {
   ATTENDANCE_ERRORS,
   ATTENDANCE_RESPONSES,
@@ -11,6 +11,7 @@ import {
   ApprovalStatus,
   AttendanceAction,
   DEFAULT_APPROVAL_COMMENT,
+  ShiftStatus,
 } from './constants/attendance.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import {
@@ -18,7 +19,6 @@ import {
   CONFIGURATION_MODULES,
 } from '../../utils/master-constants/master-constants';
 import { AttendanceEntity } from './entities/attendance.entity';
-import { RegularizeAttendanceDto } from './dto/regularization.dto';
 import { UtilityService } from '../../utils/utility/utility.service';
 
 @Injectable()
@@ -271,11 +271,11 @@ export class AttendanceService {
     return await this.dataSource.transaction(async (entityManager) => {
       const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(
         checkInTime,
-        shiftConfigs.timezone,
+        timezone || shiftConfigs.timezone,
       );
       const checkOutTimeUTC = this.utilityService.convertLocalTimeToUTC(
         checkOutTime,
-        shiftConfigs.timezone,
+        timezone || shiftConfigs.timezone,
       );
       switch (status) {
         case AttendanceStatus.PRESENT:
@@ -790,5 +790,351 @@ export class AttendanceService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async forceAttendance(createdBy: string, forceAttendanceDto: ForceAttendanceDto) {
+    const {
+      userId,
+      attendanceDate,
+      checkInTime,
+      checkOutTime,
+      reason,
+      notes,
+      timezone,
+      entrySourceType,
+      attendanceType,
+    } = forceAttendanceDto;
+
+    const targetDate = new Date(attendanceDate);
+    const today = new Date();
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const targetDateOnly = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+    );
+
+    // Validate date is not in future
+    if (targetDateOnly > todayDate) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED);
+    }
+
+    const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
+    const isPreviousDay = targetDateOnly < todayDate;
+    const isSameDay = targetDateOnly.getTime() === todayDate.getTime();
+
+    return await this.dataSource.transaction(async (entityManager) => {
+      const existingAttendance = await this.attendanceRepository.findOne(
+        {
+          where: {
+            userId,
+            attendanceDate: targetDateOnly,
+            isActive: true,
+          },
+        },
+        entityManager,
+      );
+
+      if (existingAttendance) {
+        throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_ALREADY_EXISTS);
+      }
+
+      if (isSameDay) {
+        return await this.handleSameDayForceAttendance(
+          userId,
+          createdBy,
+          targetDateOnly,
+          today,
+          checkInTime,
+          checkOutTime,
+          reason,
+          notes,
+          shiftConfigs,
+          configSettingId,
+          entrySourceType,
+          attendanceType,
+          timezone,
+          entityManager,
+        );
+      } else if (isPreviousDay) {
+        return await this.handlePreviousDayForceAttendance(
+          userId,
+          createdBy,
+          targetDateOnly,
+          checkInTime,
+          checkOutTime,
+          reason,
+          notes,
+          configSettingId,
+          entrySourceType,
+          attendanceType,
+          timezone,
+          entityManager,
+        );
+      }
+    });
+  }
+
+  private async handleSameDayForceAttendance(
+    userId: string,
+    createdBy: string,
+    targetDate: Date,
+    currentTime: Date,
+    checkInTime: string,
+    checkOutTime: string,
+    reason: string,
+    notes: string,
+    shiftConfigs: any,
+    configSettingId: string,
+    entrySourceType: string,
+    attendanceType: AttendanceType,
+    timezone: string,
+    entityManager: any,
+  ) {
+    const shiftStatus = await this.getShiftStatus(shiftConfigs, currentTime);
+
+    switch (shiftStatus) {
+      case ShiftStatus.BEFORE_SHIFT:
+        throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_BEFORE_SHIFT_NOT_ALLOWED);
+
+      case ShiftStatus.DURING_SHIFT:
+        return await this.handleDuringShiftForceAttendance(
+          userId,
+          createdBy,
+          targetDate,
+          currentTime,
+          checkInTime,
+          reason,
+          notes,
+          shiftConfigs,
+          configSettingId,
+          entrySourceType,
+          attendanceType,
+          timezone,
+          entityManager,
+        );
+
+      case ShiftStatus.AFTER_SHIFT:
+        return await this.handleAfterShiftForceAttendance(
+          userId,
+          createdBy,
+          targetDate,
+          currentTime,
+          checkInTime,
+          checkOutTime,
+          reason,
+          notes,
+          shiftConfigs,
+          configSettingId,
+          entrySourceType,
+          attendanceType,
+          timezone,
+          entityManager,
+        );
+
+      default:
+        throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_INVALID_STATUS);
+    }
+  }
+
+  private async getShiftStatus(shiftConfigs: any, currentTime: Date): Promise<ShiftStatus> {
+    const currentHourMinute = currentTime.getUTCHours() * 100 + currentTime.getUTCMinutes();
+    const [startHour, startMinute] = shiftConfigs.startTime.split(':').map(Number);
+    const [endHour, endMinute] = shiftConfigs.endTime.split(':').map(Number);
+    const shiftStart = startHour * 100 + startMinute;
+    const shiftEnd = endHour * 100 + endMinute;
+
+    if (currentHourMinute < shiftStart) {
+      return ShiftStatus.BEFORE_SHIFT;
+    } else if (currentHourMinute >= shiftStart && currentHourMinute <= shiftEnd) {
+      return ShiftStatus.DURING_SHIFT;
+    } else {
+      return ShiftStatus.AFTER_SHIFT;
+    }
+  }
+
+  private async handleDuringShiftForceAttendance(
+    userId: string,
+    createdBy: string,
+    targetDate: Date,
+    currentTime: Date,
+    checkInTime: string,
+    reason: string,
+    notes: string,
+    shiftConfigs: any,
+    configSettingId: string,
+    entrySourceType: string,
+    attendanceType: AttendanceType,
+    timezone: string,
+    entityManager: any,
+  ) {
+    if (!checkInTime) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_CHECK_IN_TIME_REQUIRED);
+    }
+
+    const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(
+      checkInTime,
+      timezone || shiftConfigs.timezone,
+    );
+    await this.validateTimeWithinShift(shiftConfigs, checkInTimeUTC, 'Check-in');
+
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate: targetDate,
+        checkInTime: checkInTimeUTC,
+        status: AttendanceStatus.CHECKED_IN,
+        entrySourceType,
+        attendanceType,
+        approvalStatus: ApprovalStatus.APPROVED,
+        notes,
+        shiftConfigId: configSettingId,
+        isActive: true,
+        createdBy,
+        approvalBy: createdBy,
+        approvalAt: currentTime,
+        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+      },
+      entityManager,
+    );
+
+    return {
+      message: ATTENDANCE_RESPONSES.FORCE_ATTENDANCE_SUCCESS,
+      checkInTime: checkInTimeUTC,
+    };
+  }
+
+  private async handleAfterShiftForceAttendance(
+    userId: string,
+    createdBy: string,
+    targetDate: Date,
+    currentTime: Date,
+    checkInTime: string,
+    checkOutTime: string,
+    reason: string,
+    notes: string,
+    shiftConfigs: any,
+    configSettingId: string,
+    entrySourceType: string,
+    attendanceType: AttendanceType,
+    timezone: string,
+    entityManager: any,
+  ) {
+    // After shift - both check-in and check-out are required
+    if (!checkInTime || !checkOutTime) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_AFTER_SHIFT_BOTH_REQUIRED);
+    }
+
+    const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(
+      checkInTime,
+      timezone || shiftConfigs.timezone,
+    );
+    const checkOutTimeUTC = this.utilityService.convertLocalTimeToUTC(
+      checkOutTime,
+      timezone || shiftConfigs.timezone,
+    );
+
+    // Validate check-out is after check-in
+    if (checkOutTimeUTC <= checkInTimeUTC) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_CHECK_OUT_BEFORE_CHECK_IN);
+    }
+
+    await this.validateTimeWithinShift(shiftConfigs, checkInTimeUTC, 'Check-in');
+    await this.validateTimeWithinShift(shiftConfigs, checkOutTimeUTC, 'Check-out');
+
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate: targetDate,
+        checkInTime: checkInTimeUTC,
+        checkOutTime: checkOutTimeUTC,
+        status: AttendanceStatus.PRESENT,
+        entrySourceType,
+        attendanceType,
+        approvalStatus: ApprovalStatus.APPROVED,
+        notes,
+        shiftConfigId: configSettingId,
+        isActive: true,
+        createdBy,
+        approvalBy: createdBy,
+        approvalAt: currentTime,
+        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+      },
+      entityManager,
+    );
+
+    const workDurationSeconds = (checkOutTimeUTC.getTime() - checkInTimeUTC.getTime()) / 1000;
+
+    return {
+      message: ATTENDANCE_RESPONSES.FORCE_ATTENDANCE_SUCCESS,
+      checkInTime: checkInTimeUTC,
+      checkOutTime: checkOutTimeUTC,
+      workDuration: workDurationSeconds,
+    };
+  }
+
+  private async handlePreviousDayForceAttendance(
+    userId: string,
+    createdBy: string,
+    targetDate: Date,
+    checkInTime: string,
+    checkOutTime: string,
+    reason: string,
+    notes: string,
+    configSettingId: string,
+    entrySourceType: string,
+    attendanceType: AttendanceType,
+    timezone: string,
+    entityManager: any,
+  ) {
+    if (!checkInTime || !checkOutTime) {
+      throw new BadRequestException(
+        ATTENDANCE_ERRORS.FORCE_ATTENDANCE_BOTH_CHECK_IN_AND_CHECK_OUT_REQUIRED,
+      );
+    }
+
+    const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(checkInTime, timezone);
+    const checkOutTimeUTC = this.utilityService.convertLocalTimeToUTC(checkOutTime, timezone);
+
+    // Validate check-out is after check-in
+    if (checkOutTimeUTC <= checkInTimeUTC) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_CHECK_OUT_BEFORE_CHECK_IN);
+    }
+
+    const { shiftConfigs } = await this.getShiftConfigs();
+    await this.validateTimeWithinShift(shiftConfigs, checkInTimeUTC, 'Check-in');
+    await this.validateTimeWithinShift(shiftConfigs, checkOutTimeUTC, 'Check-out');
+
+    const currentTime = new Date();
+
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate: targetDate,
+        checkInTime: checkInTimeUTC,
+        checkOutTime: checkOutTimeUTC,
+        status: AttendanceStatus.PRESENT,
+        entrySourceType,
+        attendanceType,
+        approvalStatus: ApprovalStatus.APPROVED, // Force attendance is pre-approved
+        notes,
+        shiftConfigId: configSettingId,
+        isActive: true,
+        createdBy,
+        approvalBy: createdBy,
+        approvalAt: currentTime,
+        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+      },
+      entityManager,
+    );
+
+    const workDurationSeconds = (checkOutTimeUTC.getTime() - checkInTimeUTC.getTime()) / 1000;
+
+    return {
+      message: ATTENDANCE_RESPONSES.FORCE_ATTENDANCE_SUCCESS,
+      checkInTime: checkInTimeUTC,
+      checkOutTime: checkOutTimeUTC,
+      workDuration: workDurationSeconds,
+    };
   }
 }

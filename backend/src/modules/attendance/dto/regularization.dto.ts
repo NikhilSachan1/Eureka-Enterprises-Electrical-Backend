@@ -63,7 +63,7 @@ export class RegularizeAttendanceDto {
     required: true,
   })
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   timezone: string;
 
   @IsEnum(EntrySourceType)

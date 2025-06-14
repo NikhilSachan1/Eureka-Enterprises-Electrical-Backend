@@ -1,11 +1,9 @@
 import { Controller, Post, Body, Request, Param } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { AttendanceActionDto } from './dto';
+import { AttendanceActionDto, ForceAttendanceDto, RegularizeAttendanceDto } from './dto';
 import { DetectSource } from './decorators';
 import { AttendanceType, EntrySourceType } from './constants/attendance.constants';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RegularizeAttendanceDto } from './dto/regularization.dto';
-
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
 @Controller('attendance')
@@ -35,6 +33,19 @@ export class AttendanceController {
       ...regularizeAttendanceDto,
       entrySourceType: sourceType,
       attendanceType: AttendanceType.REGULARIZED,
+    });
+  }
+
+  @Post('force')
+  async forceAttendance(
+    // @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Body() forceAttendanceDto: ForceAttendanceDto,
+    @DetectSource() sourceType: EntrySourceType,
+  ) {
+    return this.attendanceService.forceAttendance('123e4567-e89b-12d3-a456-426614174000', {
+      ...forceAttendanceDto,
+      entrySourceType: sourceType,
+      attendanceType: AttendanceType.FORCED,
     });
   }
 }
