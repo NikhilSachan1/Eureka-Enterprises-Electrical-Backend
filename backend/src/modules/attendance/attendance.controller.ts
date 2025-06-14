@@ -38,11 +38,11 @@ export class AttendanceController {
 
   @Post('force')
   async forceAttendance(
-    // @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() forceAttendanceDto: ForceAttendanceDto,
     @DetectSource() sourceType: EntrySourceType,
   ) {
-    return this.attendanceService.forceAttendance('123e4567-e89b-12d3-a456-426614174000', {
+    return this.attendanceService.forceAttendance(createdBy, {
       ...forceAttendanceDto,
       entrySourceType: sourceType,
       attendanceType: AttendanceType.FORCED,
