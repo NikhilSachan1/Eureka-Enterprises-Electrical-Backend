@@ -1,4 +1,4 @@
-import { IsEnum, IsString, IsOptional, Min, IsNumber } from 'class-validator';
+import { IsEnum, IsString, IsOptional, Min, IsNumber, Max } from 'class-validator';
 import { DefaultPaginationValues, PAGNIATION_ERRORS } from '../utility/constants/utility.constants';
 import { ApiProperty } from '@nestjs/swagger';
 import { SortOrder } from '../utility/constants/utility.constants';
@@ -24,6 +24,7 @@ export class BaseGetDto {
   @Transform(({ value }) => parseInt(value))
   @IsNumber()
   @Min(1)
+  @Max(100)
   @IsOptional()
   pageSize?: number = DefaultPaginationValues.PAGE_SIZE;
 

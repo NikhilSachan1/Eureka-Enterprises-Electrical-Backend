@@ -2,7 +2,15 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, FindOneOptions } from 'typeorm';
 import { AttendanceRepository } from './attendance.repository';
-import { AttendanceActionDto, RegularizeAttendanceDto, ForceAttendanceDto } from './dto';
+import {
+  AttendanceActionDto,
+  RegularizeAttendanceDto,
+  ForceAttendanceDto,
+  AttendanceQueryDto,
+  AttendanceListResponseDto,
+  AttendanceRecordDto,
+  AttendanceStatsDto,
+} from './dto';
 import {
   ATTENDANCE_ERRORS,
   ATTENDANCE_RESPONSES,
@@ -20,6 +28,7 @@ import {
 } from '../../utils/master-constants/master-constants';
 import { AttendanceEntity } from './entities/attendance.entity';
 import { UtilityService } from '../../utils/utility/utility.service';
+import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/attendance-queries';
 
 @Injectable()
 export class AttendanceService {
@@ -1136,5 +1145,86 @@ export class AttendanceService {
       checkOutTime: checkOutTimeUTC,
       workDuration: workDurationSeconds,
     };
+  }
+
+  async getAttendanceRecords(queryDto: AttendanceQueryDto): Promise<AttendanceListResponseDto> {
+    const { ...filters } = queryDto;
+
+    const { query, countQuery, params } = buildAttendanceListQuery(filters);
+    const { query: statsQuery, params: statsParams } = buildAttendanceStatsQuery(filters);
+
+    const [records, total, stats] = await Promise.all([
+      this.attendanceRepository.executeRawQuery(query, params),
+      this.attendanceRepository.executeRawQuery(countQuery, params),
+      this.attendanceRepository.executeRawQuery(statsQuery, statsParams),
+    ]);
+
+    return {
+      stats: this.transformStatsResult(stats),
+      records: records.map(this.transformRawRecord),
+      totalRecords: total,
+    };
+  }
+
+  private transformRawRecord(record: any): AttendanceRecordDto {
+    return {
+      id: record.id,
+      user: record.user,
+      attendanceDate: record.attendanceDate,
+      checkInTime: record.checkInTime,
+      checkOutTime: record.checkOutTime,
+      status: record.status,
+      approvalStatus: record.approvalStatus,
+      workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
+      notes: record.notes,
+    };
+  }
+
+  private calculateWorkDuration(checkIn?: Date, checkOut?: Date): number {
+    if (!checkIn || !checkOut) return 0;
+
+    const diffMs = checkOut.getTime() - checkIn.getTime();
+    return Math.floor(diffMs / 1000);
+  }
+
+  private transformStatsResult(statsResult: any[]): AttendanceStatsDto {
+    const attendance: Record<string, number> = {};
+    const approval: Record<string, number> = {};
+
+    Object.values(AttendanceStatus).forEach((status) => {
+      attendance[status] = 0;
+    });
+    Object.values(ApprovalStatus).forEach((status) => {
+      approval[status] = 0;
+    });
+
+    let totalCount = 0;
+
+    statsResult.forEach(
+      ({
+        count,
+        status,
+        approvalStatus,
+      }: {
+        count: number;
+        status: AttendanceStatus;
+        approvalStatus: ApprovalStatus;
+      }) => {
+        totalCount += count;
+
+        if (status) {
+          attendance[status] = (attendance[status] || 0) + count;
+        }
+
+        if (approvalStatus) {
+          approval[approvalStatus] = (approval[approvalStatus] || 0) + count;
+        }
+      },
+    );
+
+    attendance.total = totalCount;
+    approval.total = totalCount;
+
+    return { attendance, approval };
   }
 }

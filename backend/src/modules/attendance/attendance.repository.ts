@@ -73,4 +73,12 @@ export class AttendanceRepository {
       throw new InternalServerErrorException(error);
     }
   }
+
+  async executeRawQuery(query: string, params: any[] = []): Promise<any | any[]> {
+    try {
+      return await this.repository.query(query, params);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }

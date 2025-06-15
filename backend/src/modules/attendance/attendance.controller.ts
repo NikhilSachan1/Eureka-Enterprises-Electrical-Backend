@@ -1,9 +1,16 @@
-import { Controller, Post, Body, Request, Param } from '@nestjs/common';
+import { Controller, Post, Body, Request, Param, Get, Query } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { AttendanceActionDto, ForceAttendanceDto, RegularizeAttendanceDto } from './dto';
+import {
+  AttendanceActionDto,
+  ForceAttendanceDto,
+  RegularizeAttendanceDto,
+  AttendanceQueryDto,
+  AttendanceListResponseDto,
+} from './dto';
 import { DetectSource } from './decorators';
 import { AttendanceType, EntrySourceType } from './constants/attendance.constants';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
 @Controller('attendance')
@@ -47,5 +54,14 @@ export class AttendanceController {
       entrySourceType: sourceType,
       attendanceType: AttendanceType.FORCED,
     });
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get attendance records with statistics' })
+  @ApiResponse({ status: 200, type: AttendanceListResponseDto })
+  async getAttendanceRecords(
+    @Query() queryDto: AttendanceQueryDto,
+  ): Promise<AttendanceListResponseDto> {
+    return this.attendanceService.getAttendanceRecords(queryDto);
   }
 }
