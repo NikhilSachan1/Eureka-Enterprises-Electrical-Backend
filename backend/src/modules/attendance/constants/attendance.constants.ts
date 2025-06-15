@@ -81,6 +81,7 @@ export const ATTENDANCE_ERRORS = {
     'Both check-in and check-out times are required for same day force attendance',
   FORCE_ATTENDANCE_INVALID_STATUS: 'Unable to determine shift status',
   EMPLOYEE_CANNOT_SPECIFY_USER_IDS: 'userIds should not exist for employee role',
+  USER_ID_REQUIRED: 'userId is required for admin, manager and hr role',
 };
 
 export const ATTENDANCE_RESPONSES = {

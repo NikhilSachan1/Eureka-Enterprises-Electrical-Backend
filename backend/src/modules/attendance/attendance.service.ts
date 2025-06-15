@@ -29,6 +29,7 @@ import {
 import { AttendanceEntity } from './entities/attendance.entity';
 import { UtilityService } from '../../utils/utility/utility.service';
 import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/attendance-queries';
+import { AttendanceHistoryDto } from './dto/attendance-history.dto';
 
 @Injectable()
 export class AttendanceService {
@@ -1226,5 +1227,22 @@ export class AttendanceService {
     approval.total = totalCount;
 
     return { attendance, approval };
+  }
+
+  async getAttendanceHistory(attendanceHistoryDto: AttendanceHistoryDto) {
+    try {
+      const { date, userId } = attendanceHistoryDto;
+
+      const attendance = await this.attendanceRepository.findAll({
+        where: {
+          userId,
+          attendanceDate: new Date(date),
+        },
+      });
+
+      return attendance;
+    } catch (error) {
+      throw error;
+    }
   }
 }

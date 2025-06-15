@@ -20,6 +20,8 @@ import { DetectSource } from './decorators';
 import { AttendanceType, EntrySourceType } from './constants/attendance.constants';
 import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
+import { AttendanceHistoryDto } from './dto/attendance-history.dto';
+import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';
 
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
@@ -70,8 +72,14 @@ export class AttendanceController {
   @UseInterceptors(AttendanceUserInterceptor)
   @ApiResponse({ status: 200, type: AttendanceListResponseDto })
   async getAttendanceRecords(
-    @Query() queryDto: AttendanceQueryDto,
+    @Query() attendanceQueryDto: AttendanceQueryDto,
   ): Promise<AttendanceListResponseDto> {
-    return this.attendanceService.getAttendanceRecords(queryDto);
+    return this.attendanceService.getAttendanceRecords(attendanceQueryDto);
+  }
+
+  @Get('history')
+  @UseInterceptors(AttendanceHistoryUserInterceptor)
+  async getAttendanceHistory(@Query() attendanceHistoryDto: AttendanceHistoryDto) {
+    return this.attendanceService.getAttendanceHistory(attendanceHistoryDto);
   }
 }
