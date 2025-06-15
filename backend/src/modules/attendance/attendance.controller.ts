@@ -1,4 +1,13 @@
-import { Controller, Post, Body, Request, Param, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Request,
+  Param,
+  Get,
+  Query,
+  UseInterceptors,
+} from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import {
   AttendanceActionDto,
@@ -9,7 +18,8 @@ import {
 } from './dto';
 import { DetectSource } from './decorators';
 import { AttendanceType, EntrySourceType } from './constants/attendance.constants';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
+import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
 
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
@@ -57,7 +67,7 @@ export class AttendanceController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get attendance records with statistics' })
+  @UseInterceptors(AttendanceUserInterceptor)
   @ApiResponse({ status: 200, type: AttendanceListResponseDto })
   async getAttendanceRecords(
     @Query() queryDto: AttendanceQueryDto,
