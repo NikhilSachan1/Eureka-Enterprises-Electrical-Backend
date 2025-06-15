@@ -1245,4 +1245,18 @@ export class AttendanceService {
       throw error;
     }
   }
+
+  async getEmployeeCurrentAttendanceStatus(userId: string) {
+    try {
+      const attendance = await this.attendanceRepository.findOne({
+        where: {
+          userId,
+          isActive: true,
+        },
+      });
+      return attendance;
+    } catch (error) {
+      throw error;
+    }
+  }
 }

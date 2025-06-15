@@ -26,7 +26,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   const appPort = Environments.APP_PORT || 3333;
-  const globalPrefix = 'api';
+  const globalPrefix = 'api/v1';
   const customLogger = new CustomLoggerService();
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   app.use(json({ limit: '50mb' }));
@@ -52,7 +52,7 @@ async function bootstrap() {
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT-auth')
       .build();
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api', app, document);
+    SwaggerModule.setup('api/v1', app, document);
   }
 
   await app.listen(appPort, () => {

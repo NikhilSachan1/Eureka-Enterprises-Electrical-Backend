@@ -82,4 +82,11 @@ export class AttendanceController {
   async getAttendanceHistory(@Query() attendanceHistoryDto: AttendanceHistoryDto) {
     return this.attendanceService.getAttendanceHistory(attendanceHistoryDto);
   }
+
+  @Get('current-status')
+  async getEmployeeCurrentAttendanceStatus(
+    @Request() { user: { id: userId } }: { user: { id: string } },
+  ) {
+    return this.attendanceService.getEmployeeCurrentAttendanceStatus(userId);
+  }
 }
