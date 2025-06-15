@@ -10,6 +10,8 @@ import {
   AttendanceListResponseDto,
   AttendanceRecordDto,
   AttendanceStatsDto,
+  AttendanceBulkApprovalDto,
+  AttendanceApprovalDto,
 } from './dto';
 import {
   ATTENDANCE_ERRORS,
@@ -1258,5 +1260,104 @@ export class AttendanceService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async handleBulkAttendanceApproval({ approvals, approvedBy }: AttendanceBulkApprovalDto) {
+    try {
+      const result = [];
+      const errors = [];
+
+      for (const approval of approvals) {
+        try {
+          const attendance = await this.handleSingleAttendanceApproval(
+            approval.attendanceId,
+            approval,
+            approvedBy,
+          );
+          result.push(attendance);
+        } catch (error) {
+          errors.push({
+            attendanceId: approval.attendanceId,
+            error: error.message,
+          });
+        }
+      }
+      return {
+        message: ATTENDANCE_RESPONSES.ATTENDANCE_APPROVAL_PROCESSED.replace(
+          '{length}',
+          approvals.length.toString(),
+        )
+          .replace('{success}', result.length.toString())
+          .replace('{error}', errors.length.toString()),
+        result,
+        errors,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async handleSingleAttendanceApproval(
+    attendanceId: string,
+    approvalDto: AttendanceApprovalDto,
+    approvedBy: string,
+  ) {
+    const { approvalStatus, approvalComment } = approvalDto;
+
+    return await this.dataSource.transaction(async (entityManager) => {
+      const attendance = await this.attendanceRepository.findOne(
+        {
+          where: { id: attendanceId, isActive: true },
+          relations: ['user'],
+        },
+        entityManager,
+      );
+
+      if (!attendance) {
+        throw new NotFoundException(ATTENDANCE_ERRORS.NOT_FOUND);
+      }
+
+      if (attendance.approvalStatus !== ApprovalStatus.PENDING) {
+        throw new BadRequestException(
+          ATTENDANCE_ERRORS.ATTENDANCE_APPROVAL_ALREADY_PROCESSED.replace(
+            '{status}',
+            attendance.approvalStatus,
+          ),
+        );
+      }
+
+      const currentTime = new Date();
+      const updateAttendanceRecord: Partial<AttendanceEntity> = {
+        approvalStatus,
+        approvalBy: approvedBy,
+        approvalAt: currentTime,
+        approvalComment,
+        updatedBy: approvedBy,
+      };
+
+      if (approvalStatus === ApprovalStatus.APPROVED) {
+        updateAttendanceRecord.status = AttendanceStatus.PRESENT;
+      }
+
+      if (approvalStatus === ApprovalStatus.REJECTED) {
+        updateAttendanceRecord.status = AttendanceStatus.ABSENT;
+      }
+
+      await this.attendanceRepository.update(
+        { id: attendanceId },
+        updateAttendanceRecord,
+        entityManager,
+      );
+
+      return {
+        message: ATTENDANCE_RESPONSES.ATTENDANCE_APPROVAL_SUCCESS.replace(
+          '{status}',
+          approvalStatus,
+        ),
+        attendanceId,
+        newStatus: updateAttendanceRecord.status,
+        approvalStatus,
+      };
+    });
   }
 }

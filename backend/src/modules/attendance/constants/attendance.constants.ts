@@ -82,6 +82,8 @@ export const ATTENDANCE_ERRORS = {
   FORCE_ATTENDANCE_INVALID_STATUS: 'Unable to determine shift status',
   EMPLOYEE_CANNOT_SPECIFY_USER_IDS: 'userIds should not exist for employee role',
   USER_ID_REQUIRED: 'userId is required for admin, manager and hr role',
+  ATTENDANCE_APPROVAL_ALREADY_PROCESSED:
+    'Attendance approval is already processed and has {status} status',
 };
 
 export const ATTENDANCE_RESPONSES = {
@@ -90,6 +92,9 @@ export const ATTENDANCE_RESPONSES = {
   ATTENDANCE_UPDATED: 'Attendance record updated successfully',
   ATTENDANCE_REGULARIZED: 'Attendance regularized successfully',
   FORCE_ATTENDANCE_SUCCESS: 'Force attendance applied successfully',
+  ATTENDANCE_APPROVAL_SUCCESS: 'Attendance has been {status} successfully',
+  ATTENDANCE_APPROVAL_PROCESSED:
+    'Processed {length} attendance records with {success} success and {error} errors',
 };
 
 export const DEFAULT_APPROVAL_COMMENT = {

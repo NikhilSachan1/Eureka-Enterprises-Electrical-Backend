@@ -15,12 +15,13 @@ import {
   RegularizeAttendanceDto,
   AttendanceQueryDto,
   AttendanceListResponseDto,
+  AttendanceBulkApprovalDto,
+  AttendanceHistoryDto,
 } from './dto';
 import { DetectSource } from './decorators';
 import { AttendanceType, EntrySourceType } from './constants/attendance.constants';
 import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
-import { AttendanceHistoryDto } from './dto/attendance-history.dto';
 import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';
 
 @ApiTags('Attendance')
@@ -88,5 +89,16 @@ export class AttendanceController {
     @Request() { user: { id: userId } }: { user: { id: string } },
   ) {
     return this.attendanceService.getEmployeeCurrentAttendanceStatus(userId);
+  }
+
+  @Post('approval')
+  async attendanceApproval(
+    @Request() { user: { id: approvedBy } }: { user: { id: string } },
+    @Body() attendanceApprovalDto: AttendanceBulkApprovalDto,
+  ) {
+    return this.attendanceService.handleBulkAttendanceApproval({
+      ...attendanceApprovalDto,
+      approvedBy,
+    });
   }
 }
