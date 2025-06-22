@@ -60,6 +60,13 @@ export class AuthService {
       email: userEmail,
       firstName,
       lastName,
+      designation: [
+        'Senior Software Engineer',
+        'Software Engineer',
+        'Electrical Engineer',
+        'Site Manager',
+        'Human Resources',
+      ][Math.floor(Math.random() * 5)], //TODO: Configure this with the actual designation
       role,
     };
   }
