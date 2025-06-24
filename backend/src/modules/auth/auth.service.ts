@@ -67,6 +67,8 @@ export class AuthService {
         'Site Manager',
         'Human Resources',
       ][Math.floor(Math.random() * 5)], //TODO: Configure this with the actual designation
+      profilePicture:
+        'https://images.unsplash.com/photo-1628563694622-5a76957fd09c?q=80&w=387&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
       role,
     };
   }

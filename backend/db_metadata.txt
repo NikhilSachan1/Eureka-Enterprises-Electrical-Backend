@@ -3,7 +3,11 @@ id	module	key	label	valueType	isEditable	description	createdBy	updatedBy	deleted
 97200c07-8c4b-48a3-ae7f-7dee594224ca	attendance	status	Status	array	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-08 00:36:00.123	2025-06-08 00:36:00.123	[NULL]
 c617f40f-bdc1-4767-9a5d-f68b9c07e10f	attendance	shift_configs	Shift Timings	json	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-08 00:42:02.234	2025-06-08 00:42:02.234	[NULL]
 89879d3f-a718-4d19-922d-ad4013c21fa6	attendance	regularization_configs	Regularization Configs	json	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-08 23:08:38.804	2025-06-08 23:08:38.804	[NULL]
-
+e16cf0fa-a147-4aa0-9f84-793ab7e36658	attendance	approvals	Approval Configs	json	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-15 11:05:55.832	2025-06-15 11:05:55.832	[NULL]
+6b1d6be1-d146-43b8-b6f0-3e4465acdfbc	leave	calendar_settings	Calendar Settings	json	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-22 09:19:50.493	2025-06-22 09:19:50.493	[NULL]
+1cf7f11e-4512-4b6c-b34a-d528de5d005b	leave	default_credit_policy	Default credit policy	json	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-22 09:20:23.747	2025-06-22 09:20:23.747	[NULL]
+9c540d64-d492-426b-b20e-58a1e47cb249	leave	leave_types	Leave Types	json	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-22 09:21:24.350	2025-06-22 09:21:24.350	[NULL]
+6b5a3330-08d0-4b98-8a25-6b5a70f23b3d	leave	holiday_calendar	Holiday calendar	array	true	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-22 09:22:31.197	2025-06-22 09:22:31.197	[NULL]
 
 
 
@@ -12,4 +16,74 @@ e0543d28-2a7b-47ea-a079-76a155eb3112	963151e5-4d62-407f-8e58-609cd9eb5c34	[NULL]
 ae24e839-a59d-4f8a-916a-fd18a51db048	963151e5-4d62-407f-8e58-609cd9eb5c34	[NULL]	["leave", "attendance"]	[NULL]	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-07 09:49:03.168	2025-06-07 09:49:18.464	[NULL]	false
 e2efba3f-ef14-4781-a766-d56bf887f5c6	963151e5-4d62-407f-8e58-609cd9eb5c34	[NULL]	["vehicle", "leave", "attendance"]	[NULL]	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-07 09:49:18.464	2025-06-07 09:49:18.464	[NULL]	true
 6f7ed1ac-db1f-4e6d-bb71-faf0ebe16d2a	c617f40f-bdc1-4767-9a5d-f68b9c07e10f	[NULL]	{"endTime": "12:30", "timezone": "Asia/Kolkata", "startTime": "03:30", "breakMinutes": null, "graceInMinutes": null, "manualCheckOut": false, "multiplePunchesInOneDay": false}	[NULL]	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-08 11:33:00.175	2025-06-08 11:33:00.175	[NULL]	true
-14250b8b-f395-4b7e-bfcf-1bfd4e8d93b7	89879d3f-a718-4d19-922d-ad4013c21fa6	[NULL]	{"isRegularizationAllowed": true}	[NULL]	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-08 23:09:42.085	2025-06-08 23:09:42.085	[NULL]	true
+14250b8b-f395-4b7e-bfcf-1bfd4e8d93b7	89879d3f-a718-4d19-922d-ad4013c21fa6	[NULL]	{"isRegularizationAllowed": true}	[NULL]	[NULL]	[NULL]	[NULL]	[NULL]	2025-06-08 23:09:42.085	2025-06-08 23:09:42.085	[NULL]	true    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+examples: 
+
+{
+  "credit_cycle_type": "financial_year",  // or "calendar_year", "custom"
+  "start_month": 4,                       // 1 = Jan, 4 = Apr (only if custom)
+  "end_month": 3,
+  "credit_at": "month_start",             // or "month_end", "cycle_end"
+  "default_leave_policy": "enabled",      // fallback if calendar not set
+  "joining_cutoff_day": 15,               // used to determine full/half leave
+  "mid_month_join_policy": {
+    "before_cutoff": "full",              // full = full leave credited
+    "after_cutoff": "half"
+  },
+  "allow_fractional": false              // if false, always round to whole
+}
+
+
+
+{
+  "annual_leave_types": {
+    "casual": 12,
+    "sick": 6,
+    "earned": 18
+  },
+  "credit_frequency": "yearly",
+  "credit_at": "cycle_start",             // or "cycle_end"
+  "carry_forward": false
+}
+
+
+{
+  "label": "Casual Leave",
+  "max_leaves_per_cycle": 12,
+  "cycle": "yearly",                     // or monthly, quarterly
+  "carry_forward": false,
+  "allow_half_day": true,
+  "allow_same_day_apply": false,
+  "apply_before_days": 2,
+  "allow_backward_apply": true,
+  "overuse_allowed": false,
+  "encashable": false,
+  "approval_required": true
+}
