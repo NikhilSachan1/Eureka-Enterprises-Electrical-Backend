@@ -41,9 +41,13 @@ export class AuthService {
     } else if (user.status === UserStatus.ARCHIVED) {
       throw new ForbiddenException(AUTH_ERRORS.USER_ARCHIVED);
     }
+    const userRole = await this.userRoleService.findOne({
+      where: { userId: user.id },
+      relations: ['role'],
+    });
     const isPasswordMatch = this.utilityService.compare(password, user.password);
     if (user && isPasswordMatch) {
-      return user;
+      return { ...user, role: userRole.role.name };
     }
     return null;
   }

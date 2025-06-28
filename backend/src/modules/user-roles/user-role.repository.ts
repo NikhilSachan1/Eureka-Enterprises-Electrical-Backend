@@ -21,9 +21,12 @@ export class UserRoleRepository {
     }
   }
 
-  async findOne(options: FindOneOptions<UserRoleEntity>, entityManager: EntityManager) {
+  async findOne(options: FindOneOptions<UserRoleEntity>, entityManager?: EntityManager) {
     try {
-      return await entityManager.getRepository(UserRoleEntity).findOne(options);
+      const repository = entityManager
+        ? entityManager.getRepository(UserRoleEntity)
+        : this.repository;
+      return await repository.findOne(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
@@ -32,12 +35,13 @@ export class UserRoleRepository {
   async update(
     identifierConditions: FindOptionsWhere<UserRoleEntity>,
     updateData: Partial<UserRoleEntity>,
-    entityManager: EntityManager,
+    entityManager?: EntityManager,
   ) {
     try {
-      return await entityManager
-        .getRepository(UserRoleEntity)
-        .update(identifierConditions, updateData);
+      const repository = entityManager
+        ? entityManager.getRepository(UserRoleEntity)
+        : this.repository;
+      return await repository.update(identifierConditions, updateData);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

@@ -3,7 +3,7 @@ import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { Entity, JoinColumn, ManyToOne, Index, Column } from 'typeorm';
 
-@Entity('user-roles')
+@Entity('user_roles')
 export class UserRoleEntity extends BaseEntity {
   @Column({ name: 'userId' })
   userId: string;

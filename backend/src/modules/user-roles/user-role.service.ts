@@ -15,7 +15,7 @@ export class UserRoleService {
     }
   }
 
-  async findOne(options: FindOneOptions<UserRoleEntity>, entityManager: EntityManager) {
+  async findOne(options: FindOneOptions<UserRoleEntity>, entityManager?: EntityManager) {
     try {
       return await this.userRoleRepository.findOne(options, entityManager);
     } catch (error) {

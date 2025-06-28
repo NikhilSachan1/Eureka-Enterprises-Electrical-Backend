@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { RolePermissionRepository } from './role-permission.repository';
 import { EntityManager, FindOptionsWhere } from 'typeorm';
 import { RolePermissionEntity } from './entities/role-permission.entity';
@@ -34,7 +39,7 @@ export class RolePermissionService {
 
     if (existing) {
       if (existing.isActive === isActive) {
-        throw new BadRequestException(ROLE_PERMISSION_ERRORS.ALREADY_EXISTS);
+        throw new ConflictException(ROLE_PERMISSION_ERRORS.ALREADY_EXISTS);
       }
 
       await this.rolePermissionRepository.update(whereClause, {

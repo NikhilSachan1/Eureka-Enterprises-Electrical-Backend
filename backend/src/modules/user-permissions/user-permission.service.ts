@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { UserPermissionRepository } from './user-permission.repository';
 import { EntityManager } from 'typeorm';
 import { UserPermissionEntity } from './entities/user-permission.entity';
-import { CreateUserPermissionDto } from './dto/user-permission.dto';
+import { BulkCreateUserPermissionsDto, CreateUserPermissionDto } from './dto/user-permission.dto';
 import { PermissionSource } from './constants/user-permission.constants';
 import { UserPermissionResult } from './user-permission.types';
 import { UserService } from '../users/user.service';
@@ -14,7 +14,6 @@ import {
   USER_PERMISSION_SUCCESS_MESSAGES,
 } from './constants/user-permission.constants';
 import { NotFoundException } from '@nestjs/common';
-import { BulkUpdateUserPermissionDto } from './dto/update-user-permission.dto';
 
 @Injectable()
 export class UserPermissionService {
@@ -25,30 +24,54 @@ export class UserPermissionService {
   ) {}
 
   async create(
-    createDto: CreateUserPermissionDto,
+    { permissionId, isGranted, userId }: CreateUserPermissionDto & { userId: string },
     entityManager?: EntityManager,
   ): Promise<UserPermissionEntity> {
-    await this.validateUserExists(createDto.userId);
-    await this.validatePermissionExists(createDto.permissionId);
+    await this.validatePermissionExists(permissionId);
 
-    const existing = await this.userPermissionRepository.findOne({
-      where: {
-        userId: createDto.userId,
-        permissionId: createDto.permissionId,
-        deletedAt: null,
-      },
-    });
+    const whereClause = { userId, permissionId, deletedAt: null };
+    const existing = await this.userPermissionRepository.findOne({ where: whereClause });
 
     if (existing) {
-      await this.userPermissionRepository.update(
-        { id: existing.id },
-        { isGranted: createDto.isGranted },
-        entityManager,
-      );
-      return existing;
+      if (existing.isGranted === isGranted) {
+        throw new ConflictException(USER_PERMISSION_ERRORS.ALREADY_EXISTS);
+      }
+
+      await this.userPermissionRepository.update(whereClause, {
+        isGranted,
+        updatedAt: new Date(),
+      });
+
+      return this.userPermissionRepository.findOne({ where: whereClause });
     }
 
-    return await this.userPermissionRepository.create(createDto, entityManager);
+    return this.userPermissionRepository.create({ userId, permissionId, isGranted }, entityManager);
+  }
+
+  async bulkCreate(
+    { userId, userPermissions }: BulkCreateUserPermissionsDto,
+    entityManager?: EntityManager,
+  ): Promise<UserPermissionEntity[]> {
+    const results: UserPermissionEntity[] = [];
+    await this.validateUserExists(userId);
+
+    for (const { permissionId, isGranted } of userPermissions) {
+      try {
+        const result = await this.create(
+          {
+            userId,
+            permissionId,
+            isGranted,
+          },
+          entityManager,
+        );
+        results.push(result);
+      } catch (error) {
+        throw error;
+      }
+    }
+
+    return results;
   }
 
   private async validateUserExists(userId: string): Promise<void> {
@@ -165,7 +188,6 @@ export class UserPermissionService {
     if (!existing) {
       throw new NotFoundException(USER_PERMISSION_ERRORS.NOT_FOUND);
     }
-
     await this.userPermissionRepository.delete(existing.id, deletedBy, entityManager);
 
     return { message: USER_PERMISSION_SUCCESS_MESSAGES.DELETED };
@@ -188,74 +210,6 @@ export class UserPermissionService {
 
     return {
       message: USER_PERMISSION_SUCCESS_MESSAGES.DELETED,
-    };
-  }
-
-  async bulkUpdate(
-    { userId, permissions }: BulkUpdateUserPermissionDto,
-    updatedBy: string,
-    entityManager?: EntityManager,
-  ): Promise<{
-    message: string;
-    updated: number;
-    skipped: Array<{
-      permissionId: string;
-      permissionName?: string;
-      reason: string;
-    }>;
-  }> {
-    await this.validateUserExists(userId);
-
-    const permissionDetails = new Map();
-    for (const permission of permissions) {
-      const permissionEntity = await this.permissionService.findOneOrFail({
-        where: { id: permission.permissionId, deletedAt: null },
-      });
-      permissionDetails.set(permission.permissionId, permissionEntity);
-    }
-
-    let updatedCount = 0;
-    const skippedPermissions: Array<{
-      permissionId: string;
-      permissionName?: string;
-      reason: string;
-    }> = [];
-
-    // Only update existing permission overrides, don't create new ones
-    for (const permission of permissions) {
-      const existing = await this.userPermissionRepository.findOne({
-        where: {
-          userId,
-          permissionId: permission.permissionId,
-          deletedAt: null,
-        },
-      });
-
-      if (existing) {
-        await this.userPermissionRepository.update(
-          { id: existing.id },
-          {
-            isGranted: permission.isGranted,
-            updatedBy,
-            updatedAt: new Date(),
-          },
-          entityManager,
-        );
-        updatedCount++;
-      } else {
-        const permissionEntity = permissionDetails.get(permission.permissionId);
-        skippedPermissions.push({
-          permissionId: permission.permissionId,
-          permissionName: permissionEntity?.name,
-          reason: USER_PERMISSION_ERRORS.SKIPPED,
-        });
-      }
-    }
-
-    return {
-      message: USER_PERMISSION_SUCCESS_MESSAGES.UPDATED,
-      updated: updatedCount,
-      skipped: skippedPermissions,
     };
   }
 }

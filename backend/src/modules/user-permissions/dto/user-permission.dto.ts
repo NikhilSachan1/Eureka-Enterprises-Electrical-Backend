@@ -1,29 +1,38 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsBoolean, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsUUID, IsArray, IsNotEmpty, ValidateNested, IsBoolean } from 'class-validator';
 
 export class CreateUserPermissionDto {
-  @ApiProperty({ description: 'User ID' })
+  @ApiProperty({ description: 'Permission ID', example: '123e4567-e89b-12d3-a456-426614174000' })
   @IsUUID()
-  userId: string;
-
-  @ApiProperty({ description: 'Permission ID' })
-  @IsUUID()
+  @IsNotEmpty()
   permissionId: string;
 
-  @ApiProperty({ description: 'Whether permission is granted or revoked' })
+  @ApiProperty({ description: 'Is active', example: true })
   @IsBoolean()
+  @IsNotEmpty()
   isGranted: boolean;
 }
 
 export class BulkCreateUserPermissionsDto {
-  @ApiProperty({ description: 'User ID' })
+  @ApiProperty({ description: 'Role ID', example: '123e4567-e89b-12d3-a456-426614174000' })
   @IsUUID()
+  @IsNotEmpty()
   userId: string;
 
-  @ApiProperty({ description: 'Array of permission grants/revokes' })
+  @ApiProperty({
+    description: 'Array of permission IDs',
+    type: [CreateUserPermissionDto],
+    example: [
+      {
+        permissionId: '123e4567-e89b-12d3-a456-426614174000',
+        isActive: true,
+      },
+    ],
+  })
   @IsArray()
-  permissions: Array<{
-    permissionId: string;
-    isGranted: boolean;
-  }>;
+  @ValidateNested({ each: true })
+  @Type(() => CreateUserPermissionDto)
+  @IsNotEmpty()
+  userPermissions: CreateUserPermissionDto[];
 }
