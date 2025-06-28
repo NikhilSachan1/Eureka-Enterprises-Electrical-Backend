@@ -14,6 +14,7 @@ import {
   USER_PERMISSION_SUCCESS_MESSAGES,
 } from './constants/user-permission.constants';
 import { NotFoundException } from '@nestjs/common';
+import { BulkUpdateUserPermissionDto } from './dto/update-user-permission.dto';
 
 @Injectable()
 export class UserPermissionService {
@@ -187,6 +188,74 @@ export class UserPermissionService {
 
     return {
       message: USER_PERMISSION_SUCCESS_MESSAGES.DELETED,
+    };
+  }
+
+  async bulkUpdate(
+    { userId, permissions }: BulkUpdateUserPermissionDto,
+    updatedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{
+    message: string;
+    updated: number;
+    skipped: Array<{
+      permissionId: string;
+      permissionName?: string;
+      reason: string;
+    }>;
+  }> {
+    await this.validateUserExists(userId);
+
+    const permissionDetails = new Map();
+    for (const permission of permissions) {
+      const permissionEntity = await this.permissionService.findOneOrFail({
+        where: { id: permission.permissionId, deletedAt: null },
+      });
+      permissionDetails.set(permission.permissionId, permissionEntity);
+    }
+
+    let updatedCount = 0;
+    const skippedPermissions: Array<{
+      permissionId: string;
+      permissionName?: string;
+      reason: string;
+    }> = [];
+
+    // Only update existing permission overrides, don't create new ones
+    for (const permission of permissions) {
+      const existing = await this.userPermissionRepository.findOne({
+        where: {
+          userId,
+          permissionId: permission.permissionId,
+          deletedAt: null,
+        },
+      });
+
+      if (existing) {
+        await this.userPermissionRepository.update(
+          { id: existing.id },
+          {
+            isGranted: permission.isGranted,
+            updatedBy,
+            updatedAt: new Date(),
+          },
+          entityManager,
+        );
+        updatedCount++;
+      } else {
+        const permissionEntity = permissionDetails.get(permission.permissionId);
+        skippedPermissions.push({
+          permissionId: permission.permissionId,
+          permissionName: permissionEntity?.name,
+          reason: USER_PERMISSION_ERRORS.SKIPPED,
+        });
+      }
+    }
+
+    return {
+      message: USER_PERMISSION_SUCCESS_MESSAGES.UPDATED,
+      updated: updatedCount,
+      skipped: skippedPermissions,
     };
   }
 }

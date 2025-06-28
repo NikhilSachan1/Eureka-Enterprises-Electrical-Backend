@@ -1,10 +1,11 @@
-import { Controller, Post, Get, Delete, Body, Request } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Put, Body, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UserPermissionService } from './user-permission.service';
 import {
   CreateUserPermissionDto,
   DeleteUserPermissionDto,
   BulkDeleteUserPermissionsDto,
+  BulkUpdateUserPermissionDto,
 } from './dto';
 
 @ApiTags('User Permissions')
@@ -37,5 +38,13 @@ export class UserPermissionController {
     @Request() { user: { id: userId } }: { user: { id: string } },
   ) {
     return await this.userPermissionService.bulkDelete(bulkDeleteDto, userId);
+  }
+
+  @Put('bulk')
+  async bulkUpdate(
+    @Body() bulkUpdateDto: BulkUpdateUserPermissionDto,
+    @Request() { user: { id: userId } }: { user: { id: string } },
+  ) {
+    return await this.userPermissionService.bulkUpdate(bulkUpdateDto, userId);
   }
 }
