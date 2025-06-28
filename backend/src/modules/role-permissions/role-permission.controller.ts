@@ -1,11 +1,10 @@
-import { Controller, Post, Delete, Body, Request } from '@nestjs/common';
+import { Controller, Post, Delete, Body, Request, Query, Get } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RolePermissionService } from './role-permission.service';
 import {
-  CreateRolePermissionDto,
   BulkCreateRolePermissionsDto,
-  DeleteRolePermissionDto,
   BulkDeleteRolePermissionsDto,
+  GetAllRolePermissionDto,
 } from './dto';
 
 @ApiTags('Role Permissions')
@@ -14,22 +13,14 @@ import {
 export class RolePermissionController {
   constructor(private readonly rolePermissionService: RolePermissionService) {}
 
-  @Post()
-  async create(@Body() createRolePermissionDto: CreateRolePermissionDto) {
-    return await this.rolePermissionService.create(createRolePermissionDto);
-  }
-
   @Post('bulk')
   async bulkCreate(@Body() bulkCreateDto: BulkCreateRolePermissionsDto) {
     return await this.rolePermissionService.bulkCreate(bulkCreateDto);
   }
 
-  @Delete()
-  async delete(
-    @Body() deleteRolePermissionDto: DeleteRolePermissionDto,
-    @Request() { user: { id: userId } }: { user: { id: string } },
-  ) {
-    return await this.rolePermissionService.delete(deleteRolePermissionDto, userId);
+  @Get()
+  async findAll(@Query() getAllRolePermissionDto: GetAllRolePermissionDto) {
+    return await this.rolePermissionService.findAll(getAllRolePermissionDto);
   }
 
   @Delete('bulk')

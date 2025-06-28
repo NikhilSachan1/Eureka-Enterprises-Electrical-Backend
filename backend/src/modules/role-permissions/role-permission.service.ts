@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { RolePermissionRepository } from './role-permission.repository';
-import { EntityManager } from 'typeorm';
+import { EntityManager, FindOptionsWhere } from 'typeorm';
 import { RolePermissionEntity } from './entities/role-permission.entity';
 import {
   CreateRolePermissionDto,
@@ -24,39 +24,44 @@ export class RolePermissionService {
   ) {}
 
   async create(
-    createDto: CreateRolePermissionDto,
+    { permissionId, isActive, roleId }: CreateRolePermissionDto & { roleId: string },
     entityManager?: EntityManager,
   ): Promise<RolePermissionEntity> {
-    await this.validateRoleExists(createDto.roleId);
-    await this.validatePermissionExists(createDto.permissionId);
+    await this.validatePermissionExists(permissionId);
 
-    const existing = await this.rolePermissionRepository.findOne({
-      where: {
-        roleId: createDto.roleId,
-        permissionId: createDto.permissionId,
-        deletedAt: null,
-      },
-    });
+    const whereClause = { roleId, permissionId, deletedAt: null };
+    const existing = await this.rolePermissionRepository.findOne({ where: whereClause });
 
     if (existing) {
-      throw new BadRequestException(ROLE_PERMISSION_ERRORS.ALREADY_EXISTS);
+      if (existing.isActive === isActive) {
+        throw new BadRequestException(ROLE_PERMISSION_ERRORS.ALREADY_EXISTS);
+      }
+
+      await this.rolePermissionRepository.update(whereClause, {
+        isActive,
+        updatedAt: new Date(),
+      });
+
+      return this.rolePermissionRepository.findOne({ where: whereClause });
     }
 
-    return await this.rolePermissionRepository.create(createDto, entityManager);
+    return this.rolePermissionRepository.create({ roleId, permissionId, isActive }, entityManager);
   }
 
   async bulkCreate(
-    bulkDto: BulkCreateRolePermissionsDto,
+    { roleId, rolePermissions }: BulkCreateRolePermissionsDto,
     entityManager?: EntityManager,
   ): Promise<RolePermissionEntity[]> {
     const results: RolePermissionEntity[] = [];
+    await this.validateRoleExists(roleId);
 
-    for (const permissionId of bulkDto.permissionIds) {
+    for (const { permissionId, isActive } of rolePermissions) {
       try {
         const result = await this.create(
           {
-            roleId: bulkDto.roleId,
+            roleId,
             permissionId,
+            isActive,
           },
           entityManager,
         );
@@ -69,6 +74,17 @@ export class RolePermissionService {
     }
 
     return results;
+  }
+
+  async findAll(options: FindOptionsWhere<RolePermissionEntity>): Promise<{
+    records: RolePermissionEntity[];
+    totalRecords: number;
+  }> {
+    try {
+      return await this.rolePermissionRepository.findAll(options);
+    } catch (error) {
+      throw error;
+    }
   }
 
   async delete(
