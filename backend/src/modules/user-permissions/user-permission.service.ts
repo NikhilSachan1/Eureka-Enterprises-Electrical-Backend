@@ -8,6 +8,12 @@ import { UserPermissionResult } from './user-permission.types';
 import { UserService } from '../users/user.service';
 import { PermissionService } from '../permissions/permission.service';
 import { getUserPermissionsQuery } from './queries/user-permission.queries';
+import { DeleteUserPermissionDto, BulkDeleteUserPermissionsDto } from './dto';
+import {
+  USER_PERMISSION_ERRORS,
+  USER_PERMISSION_SUCCESS_MESSAGES,
+} from './constants/user-permission.constants';
+import { NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class UserPermissionService {
@@ -137,5 +143,50 @@ export class UserPermissionService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async delete(
+    { userId, permissionId }: DeleteUserPermissionDto,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{ message: string }> {
+    await this.validateUserExists(userId);
+    await this.validatePermissionExists(permissionId);
+
+    const existing = await this.userPermissionRepository.findOne({
+      where: {
+        userId,
+        permissionId,
+        deletedAt: null,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(USER_PERMISSION_ERRORS.NOT_FOUND);
+    }
+
+    await this.userPermissionRepository.delete(existing.id, deletedBy, entityManager);
+
+    return { message: USER_PERMISSION_SUCCESS_MESSAGES.DELETED };
+  }
+
+  async bulkDelete(
+    { userId, permissionIds }: BulkDeleteUserPermissionsDto,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{ message: string }> {
+    await this.validateUserExists(userId);
+
+    for (const permissionId of permissionIds) {
+      await this.validatePermissionExists(permissionId);
+    }
+
+    for (const permissionId of permissionIds) {
+      await this.delete({ userId, permissionId }, deletedBy, entityManager);
+    }
+
+    return {
+      message: USER_PERMISSION_SUCCESS_MESSAGES.DELETED,
+    };
   }
 }

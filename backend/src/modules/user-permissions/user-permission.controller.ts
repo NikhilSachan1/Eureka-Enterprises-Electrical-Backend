@@ -1,7 +1,11 @@
-import { Controller, Post, Get, Body, Request } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UserPermissionService } from './user-permission.service';
-import { CreateUserPermissionDto } from './dto/user-permission.dto';
+import {
+  CreateUserPermissionDto,
+  DeleteUserPermissionDto,
+  BulkDeleteUserPermissionsDto,
+} from './dto';
 
 @ApiTags('User Permissions')
 @ApiBearerAuth('JWT-auth')
@@ -17,5 +21,21 @@ export class UserPermissionController {
   @Get()
   async getUserPermissions(@Request() { user: { id: userId } }: { user: { id: string } }) {
     return await this.userPermissionService.getUserPermissions(userId);
+  }
+
+  @Delete()
+  async delete(
+    @Body() deleteUserPermissionDto: DeleteUserPermissionDto,
+    @Request() { user: { id: userId } }: { user: { id: string } },
+  ) {
+    return await this.userPermissionService.delete(deleteUserPermissionDto, userId);
+  }
+
+  @Delete('bulk')
+  async bulkDelete(
+    @Body() bulkDeleteDto: BulkDeleteUserPermissionsDto,
+    @Request() { user: { id: userId } }: { user: { id: string } },
+  ) {
+    return await this.userPermissionService.bulkDelete(bulkDeleteDto, userId);
   }
 }

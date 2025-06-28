@@ -68,4 +68,15 @@ export class UserPermissionRepository {
       throw new InternalServerErrorException(error);
     }
   }
+
+  async delete(id: string, deletedBy: string, entityManager?: EntityManager): Promise<void> {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(UserPermissionEntity)
+        : this.repository;
+      await repository.update(id, { deletedBy, deletedAt: new Date() });
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }

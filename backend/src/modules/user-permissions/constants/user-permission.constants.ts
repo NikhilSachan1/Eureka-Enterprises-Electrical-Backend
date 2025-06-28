@@ -5,6 +5,10 @@ export const USER_PERMISSION_ERRORS = {
   INVALID_GRANT_STATUS: 'isGranted must be a boolean value',
 } as const;
 
+export const USER_PERMISSION_SUCCESS_MESSAGES = {
+  DELETED: 'User permission override deleted successfully',
+} as const;
+
 export enum PermissionSource {
   ROLE = 'role',
   OVERRIDE = 'override',
