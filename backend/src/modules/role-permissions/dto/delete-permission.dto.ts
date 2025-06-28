@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsArray, IsNotEmpty } from 'class-validator';
 
-export class CreateRolePermissionDto {
+export class DeleteRolePermissionDto {
   @ApiProperty({ description: 'Role ID', example: '123e4567-e89b-12d3-a456-426614174000' })
   @IsUUID()
   @IsNotEmpty()
@@ -13,10 +13,9 @@ export class CreateRolePermissionDto {
   permissionId: string;
 }
 
-export class BulkCreateRolePermissionsDto {
+export class BulkDeleteRolePermissionsDto {
   @ApiProperty({ description: 'Role ID', example: '123e4567-e89b-12d3-a456-426614174000' })
   @IsUUID()
-  @IsNotEmpty()
   roleId: string;
 
   @ApiProperty({

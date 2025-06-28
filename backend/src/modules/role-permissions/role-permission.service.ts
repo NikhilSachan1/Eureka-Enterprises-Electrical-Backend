@@ -1,9 +1,17 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { RolePermissionRepository } from './role-permission.repository';
 import { EntityManager } from 'typeorm';
 import { RolePermissionEntity } from './entities/role-permission.entity';
-import { CreateRolePermissionDto, BulkCreateRolePermissionsDto } from './dto/role-permission.dto';
-import { ROLE_PERMISSION_ERRORS } from './constants/role-permission.constants';
+import {
+  CreateRolePermissionDto,
+  BulkCreateRolePermissionsDto,
+  DeleteRolePermissionDto,
+  BulkDeleteRolePermissionsDto,
+} from './dto';
+import {
+  ROLE_PERMISSION_ERRORS,
+  ROLE_PERMISSION_SUCCESS_MESSAGES,
+} from './constants/role-permission.constants';
 import { RoleService } from '../roles/role.service';
 import { PermissionService } from '../permissions/permission.service';
 
@@ -61,6 +69,48 @@ export class RolePermissionService {
     }
 
     return results;
+  }
+
+  async delete(
+    { roleId, permissionId }: DeleteRolePermissionDto,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{ message: string }> {
+    await this.validateRoleExists(roleId);
+    await this.validatePermissionExists(permissionId);
+
+    const existing = await this.rolePermissionRepository.findOne({
+      where: {
+        roleId,
+        permissionId,
+        deletedAt: null,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(ROLE_PERMISSION_ERRORS.NOT_FOUND);
+    }
+    await this.rolePermissionRepository.delete(existing.id, deletedBy, entityManager);
+
+    return { message: ROLE_PERMISSION_SUCCESS_MESSAGES.DELETED };
+  }
+
+  async bulkDelete(
+    { roleId, permissionIds }: BulkDeleteRolePermissionsDto,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{ message: string }> {
+    await this.validateRoleExists(roleId);
+    for (const permissionId of permissionIds) {
+      await this.validatePermissionExists(permissionId);
+    }
+    for (const permissionId of permissionIds) {
+      await this.delete({ roleId, permissionId }, deletedBy, entityManager);
+    }
+
+    return {
+      message: ROLE_PERMISSION_SUCCESS_MESSAGES.DELETED,
+    };
   }
 
   private async validateRoleExists(roleId: string): Promise<void> {
