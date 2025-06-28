@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PermissionRepository } from './permission.repository';
-import { EntityManager, FindManyOptions, FindOneOptions } from 'typeorm';
+import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { PermissionEntity } from './entities/permission.entity';
 import { CreatePermissionDto } from './dto/permission.dto';
 import { PERMISSION_ERRORS } from './constants/permission.constants';
@@ -69,6 +69,23 @@ export class PermissionService {
         throw new NotFoundException(PERMISSION_ERRORS.NOT_FOUND);
       }
       return permission;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async update(
+    identifierConditions: FindOptionsWhere<PermissionEntity>,
+    updateData: Partial<PermissionEntity>,
+    entityManager?: EntityManager,
+  ) {
+    try {
+      await this.validateModuleExists(updateData.module);
+      return await this.permissionRepository.update(
+        identifierConditions,
+        updateData,
+        entityManager,
+      );
     } catch (error) {
       throw error;
     }

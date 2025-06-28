@@ -1,7 +1,13 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PermissionEntity } from './entities/permission.entity';
-import { EntityManager, FindManyOptions, FindOneOptions, Repository } from 'typeorm';
+import {
+  EntityManager,
+  FindManyOptions,
+  FindOneOptions,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { CreatePermissionDto } from './dto/permission.dto';
 import { UtilityService } from 'src/utils/utility/utility.service';
 
@@ -53,6 +59,21 @@ export class PermissionRepository {
   async findOneOrFail(options: FindOneOptions<PermissionEntity>): Promise<PermissionEntity> {
     try {
       return await this.repository.findOneOrFail(options);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async update(
+    identifierConditions: FindOptionsWhere<PermissionEntity>,
+    updateData: Partial<PermissionEntity>,
+    entityManager?: EntityManager,
+  ) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(PermissionEntity)
+        : this.repository;
+      return await repository.update(identifierConditions, updateData);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
