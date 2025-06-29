@@ -3,13 +3,15 @@ import { PermissionRepository } from './permission.repository';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { PermissionEntity } from './entities/permission.entity';
 import { CreatePermissionDto } from './dto/permission.dto';
-import { PERMISSION_ERRORS } from './constants/permission.constants';
+import { PERMISSION_ERRORS, PERMISSION_FIELD_NAMES } from './constants/permission.constants';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { ConfigurationService } from '../configurations/configuration.service';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
+import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
+import { UtilityService } from 'src/utils/utility/utility.service';
 
 @Injectable()
 export class PermissionService {
@@ -17,6 +19,7 @@ export class PermissionService {
     private readonly permissionRepository: PermissionRepository,
     private readonly configSettingService: ConfigSettingService,
     private readonly configurationService: ConfigurationService,
+    private readonly utilityService: UtilityService,
   ) {}
 
   async create(
@@ -81,10 +84,10 @@ export class PermissionService {
   ) {
     try {
       await this.findOneOrFail({ where: { id: identifierConditions.id } });
-      return await this.permissionRepository.update(
-        identifierConditions,
-        updateData,
-        entityManager,
+      await this.permissionRepository.update(identifierConditions, updateData, entityManager);
+      return this.utilityService.getSuccessMessage(
+        PERMISSION_FIELD_NAMES.PERMISSION,
+        DataSuccessOperationType.UPDATE,
       );
     } catch (error) {
       throw error;

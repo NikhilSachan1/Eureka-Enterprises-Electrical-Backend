@@ -6,3 +6,7 @@ export const PERMISSION_ERRORS = {
   INVALID_MODULE_NOT_IN_CONFIG: (module: string, config: string) =>
     `Module '${module}' is not configured in config settings. Please add module configuration first. ${config}`,
 } as const;
+
+export const PERMISSION_FIELD_NAMES = {
+  PERMISSION: 'Permission',
+} as const;
