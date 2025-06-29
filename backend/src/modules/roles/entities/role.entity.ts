@@ -21,6 +21,9 @@ export class RoleEntity {
   name: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
+  label: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
   description: string;
 
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.role)
