@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { SchedulerService } from './scheduler.service';
-import { HttpModule } from '@nestjs/axios';
 
 @Module({
-  imports: [HttpModule],
+  imports: [],
   controllers: [],
   providers: [SchedulerService],
 })
