@@ -2,6 +2,7 @@ import { UsersModule } from 'src/modules/users/user.module';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { Module, Scope } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HttpErrorFilter } from 'src/utils/custom-error-filter/error.filter';
@@ -19,6 +20,7 @@ import { PermissionsModule } from 'src/modules/permissions/permission.module';
 import { RolePermissionsModule } from 'src/modules/role-permissions/role-permission.module';
 import { UserPermissionsModule } from 'src/modules/user-permissions/user-permission.module';
 import { AttendanceModule } from 'src/modules/attendance/attendance.module';
+import { SchedulerModule } from 'src/modules/scheduler-temp/scheduler.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { AttendanceModule } from 'src/modules/attendance/attendance.module';
     RolePermissionsModule,
     UserPermissionsModule,
     AttendanceModule,
+    ScheduleModule.forRoot(),
+    SchedulerModule,
   ],
   controllers: [AppController],
   providers: [
