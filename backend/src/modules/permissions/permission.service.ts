@@ -80,7 +80,7 @@ export class PermissionService {
     entityManager?: EntityManager,
   ) {
     try {
-      await this.validateModuleExists(updateData.module);
+      await this.findOneOrFail({ where: { id: identifierConditions.id } });
       return await this.permissionRepository.update(
         identifierConditions,
         updateData,
