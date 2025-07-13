@@ -11,10 +11,15 @@ import { ROLE_ERRORS, ROLE_FIELD_NAMES } from './constants/role.constants';
 import { CreateRoleDto, DeleteRoleDto } from './dto';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { PermissionService } from '../permissions/permission.service';
 
 @Injectable()
 export class RoleService {
-  constructor(private roleRepository: RoleRepository, private utilityService: UtilityService) {}
+  constructor(
+    private roleRepository: RoleRepository,
+    private utilityService: UtilityService,
+    private permissionService: PermissionService,
+  ) {}
 
   async create(createRoleDto: CreateRoleDto): Promise<RoleEntity> {
     try {
@@ -49,11 +54,18 @@ export class RoleService {
   }
 
   async findAll(options: FindOptionsWhere<RoleEntity>): Promise<{
-    records: RoleEntity[];
+    records: (RoleEntity & { permissionCount: number })[];
     totalRecords: number;
+    totalPermissions: number;
   }> {
     try {
-      return await this.roleRepository.findAll(options);
+      const rolesResult = await this.roleRepository.findAll(options);
+      const totalPermissionsResult = await this.permissionService.findAll({ where: {} });
+
+      return {
+        ...rolesResult,
+        totalPermissions: totalPermissionsResult.totalRecords,
+      };
     } catch (error) {
       throw error;
     }

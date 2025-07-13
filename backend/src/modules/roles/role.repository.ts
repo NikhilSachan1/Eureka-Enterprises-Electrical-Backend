@@ -31,14 +31,41 @@ export class RoleRepository {
   }
 
   async findAll(options: FindOptionsWhere<RoleEntity>): Promise<{
-    records: RoleEntity[];
+    records: (RoleEntity & { permissionCount: number })[];
     totalRecords: number;
   }> {
     try {
-      const [roles, total] = await this.repository.findAndCount({
-        where: options,
-      });
-      return this.utilityService.listResponse(roles, total);
+      const queryBuilder = this.repository
+        .createQueryBuilder('role')
+        .leftJoin('role.rolePermissions', 'rolePermission', 'rolePermission.isActive = true')
+        .select([
+          'role.id',
+          'role.name',
+          'role.label',
+          'role.description',
+          'role.isEditable',
+          'role.isDeletable',
+          'role.createdAt',
+          'role.updatedAt',
+          'role.deletedAt',
+        ])
+        .addSelect('COUNT(rolePermission.id)', 'permissionCount')
+        .where('role.deletedAt IS NULL')
+        .groupBy('role.id');
+
+      if (options.name) {
+        queryBuilder.andWhere('role.name ILIKE :name', { name: `%${options.name}%` });
+      }
+
+      const roles = await queryBuilder.getRawAndEntities();
+      const total = await queryBuilder.getCount();
+
+      const rolesWithPermissionCount = roles.entities.map((role, index) => ({
+        ...role,
+        permissionCount: parseInt(roles.raw[index].permissionCount) || 0,
+      }));
+
+      return this.utilityService.listResponse(rolesWithPermissionCount, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

@@ -1,7 +1,20 @@
-import { Controller, Post, Get, Delete, Body, Request, UseInterceptors } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  Request,
+  UseInterceptors,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UserPermissionService } from './user-permission.service';
-import { BulkDeleteUserPermissionsDto, BulkCreateUserPermissionsDto } from './dto';
+import {
+  BulkDeleteUserPermissionsDto,
+  BulkCreateUserPermissionsDto,
+  GetUserPermissionStatsDto,
+} from './dto';
 import { UserPermissionUserIdInterceptor } from './interceptors/user-permission-userid.interceptor';
 
 @ApiTags('User Permissions')
@@ -19,6 +32,11 @@ export class UserPermissionController {
   @UseInterceptors(UserPermissionUserIdInterceptor)
   async getUserPermissions(@Request() { user: { id: userId } }: { user: { id: string } }) {
     return await this.userPermissionService.getUserPermissions(userId);
+  }
+
+  @Get('stats')
+  async getUserPermissionStats(@Query() options: GetUserPermissionStatsDto) {
+    return await this.userPermissionService.findAllUsersWithPermissionStats(options);
   }
 
   @Delete('bulk')

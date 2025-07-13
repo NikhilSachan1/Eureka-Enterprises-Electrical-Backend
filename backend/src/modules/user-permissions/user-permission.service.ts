@@ -7,8 +7,15 @@ import { PermissionSource } from './constants/user-permission.constants';
 import { UserPermissionResult } from './user-permission.types';
 import { UserService } from '../users/user.service';
 import { PermissionService } from '../permissions/permission.service';
-import { getUserPermissionsQuery } from './queries/user-permission.queries';
-import { DeleteUserPermissionDto, BulkDeleteUserPermissionsDto } from './dto';
+import {
+  findAllUsersWithPermissionStats,
+  getUserPermissionsQuery,
+} from './queries/user-permission.queries';
+import {
+  DeleteUserPermissionDto,
+  BulkDeleteUserPermissionsDto,
+  GetUserPermissionStatsDto,
+} from './dto';
 import {
   USER_PERMISSION_ERRORS,
   USER_PERMISSION_SUCCESS_MESSAGES,
@@ -211,5 +218,54 @@ export class UserPermissionService {
     return {
       message: USER_PERMISSION_SUCCESS_MESSAGES.DELETED,
     };
+  }
+
+  async findAllUsersWithPermissionStats(options: GetUserPermissionStatsDto): Promise<{
+    records: Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      status: string;
+      rolePermissionsCount: number;
+      userPermissionsCount: number;
+      totalPermissions: number;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    totalRecords: number;
+    systemTotalPermissions: number;
+  }> {
+    try {
+      const { pageSize, page } = options;
+      const offset = (page - 1) * pageSize;
+      const { usersQuery, countQuery } = findAllUsersWithPermissionStats(options);
+      const params = [pageSize, offset];
+      const [users, countResult] = await Promise.all([
+        this.userPermissionRepository.executeRawQuery(usersQuery, params),
+        this.userPermissionRepository.executeRawQuery(countQuery),
+      ]);
+
+      const transformedUsers = users.map((user: any) => ({
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        status: user.status,
+        rolePermissionsCount: parseInt(user.role_permissions_count) || 0,
+        userPermissionsCount: parseInt(user.user_permissions_count) || 0,
+        totalPermissions: parseInt(user.total_permissions) || 0,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }));
+
+      return {
+        records: transformedUsers,
+        totalRecords: parseInt(countResult[0].total_users),
+        systemTotalPermissions: users.length > 0 ? parseInt(users[0].system_total_permissions) : 0,
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 }
