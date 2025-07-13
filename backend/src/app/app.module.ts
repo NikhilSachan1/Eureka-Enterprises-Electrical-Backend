@@ -21,6 +21,8 @@ import { RolePermissionsModule } from 'src/modules/role-permissions/role-permiss
 import { UserPermissionsModule } from 'src/modules/user-permissions/user-permission.module';
 import { AttendanceModule } from 'src/modules/attendance/attendance.module';
 import { SchedulerModule } from 'src/modules/scheduler-temp/scheduler.module';
+// import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.module';
+// import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { SchedulerModule } from 'src/modules/scheduler-temp/scheduler.module';
     RolePermissionsModule,
     UserPermissionsModule,
     AttendanceModule,
+    // LeaveApplicationsModule,
+    // LeaveBalancesModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],

@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateRoleDto {
   @ApiProperty({ description: 'Role name', example: 'ADMIN' })
@@ -18,4 +18,22 @@ export class CreateRoleDto {
   @IsString()
   @IsNotEmpty()
   description?: string;
+
+  @ApiProperty({
+    description: 'Is editable',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isEditable?: boolean;
+
+  @ApiProperty({
+    description: 'Is deletable',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isDeletable?: boolean;
 }

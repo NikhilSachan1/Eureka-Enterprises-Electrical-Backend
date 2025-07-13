@@ -1,9 +1,14 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { RoleRepository } from './role.repository';
 import { RoleEntity } from './entities/role.entity';
 import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { ROLE_ERRORS, ROLE_FIELD_NAMES } from './constants/role.constants';
-import { CreateRoleDto } from './dto';
+import { CreateRoleDto, DeleteRoleDto } from './dto';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 
@@ -60,14 +65,46 @@ export class RoleService {
     entityManager?: EntityManager,
   ) {
     try {
-      await this.findOneOrFail({
+      const role = await this.findOneOrFail({
         where: identifierConditions,
       });
+      if (!role.isEditable) {
+        throw new BadRequestException(ROLE_ERRORS.NOT_EDITABLE);
+      }
       await this.roleRepository.update(identifierConditions, updateData, entityManager);
       return this.utilityService.getSuccessMessage(
         ROLE_FIELD_NAMES.ROLE,
         DataSuccessOperationType.UPDATE,
       );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async delete(identifierConditions: FindOptionsWhere<RoleEntity>) {
+    try {
+      const role = await this.findOneOrFail({ where: identifierConditions });
+      if (!role.isDeletable) {
+        throw new BadRequestException(ROLE_ERRORS.NOT_DELETABLE);
+      }
+      await this.roleRepository.update(identifierConditions, { deletedAt: new Date() });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async deleteBulk({ ids }: DeleteRoleDto) {
+    try {
+      const results = { success: [], failed: [] };
+      for (const id of ids) {
+        try {
+          await this.delete({ id });
+          results.success.push(id);
+        } catch (error) {
+          results.failed.push({ id, error: error.message });
+        }
+      }
+      return results;
     } catch (error) {
       throw error;
     }

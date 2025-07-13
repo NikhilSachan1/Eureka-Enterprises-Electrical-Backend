@@ -26,6 +26,12 @@ export class RoleEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   description: string;
 
+  @Column({ type: 'boolean', default: false })
+  isEditable: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isDeletable: boolean;
+
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.role)
   userRoles: UserRoleEntity[];
 

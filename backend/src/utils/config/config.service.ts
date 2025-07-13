@@ -11,6 +11,8 @@ import { RolePermissionEntity } from 'src/modules/role-permissions/entities/role
 import { PermissionEntity } from 'src/modules/permissions/entities/permission.entity';
 import { UserPermissionEntity } from 'src/modules/user-permissions/entities/user-permission.entity';
 import { AttendanceEntity } from 'src/modules/attendance/entities/attendance.entity';
+import { LeaveApplicationsEntity } from 'src/modules/leave-applications/entities/leave-application.entity';
+import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-balance.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -47,6 +49,8 @@ export class ConfigService {
         RolePermissionEntity,
         UserPermissionEntity,
         AttendanceEntity,
+        LeaveApplicationsEntity,
+        LeaveBalanceEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

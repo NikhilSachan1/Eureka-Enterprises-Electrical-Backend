@@ -20,7 +20,7 @@ export class PermissionRepository {
   ) {}
 
   async create(
-    permission: CreatePermissionDto,
+    permission: CreatePermissionDto & { createdBy: string },
     entityManager?: EntityManager,
   ): Promise<PermissionEntity> {
     try {

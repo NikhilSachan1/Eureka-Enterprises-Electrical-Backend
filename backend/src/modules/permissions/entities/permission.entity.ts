@@ -19,6 +19,12 @@ export class PermissionEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ type: 'boolean', default: false })
+  isEditable: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isDeletable: boolean;
+
   @Column({ type: 'uuid', nullable: true })
   createdBy?: string;
 

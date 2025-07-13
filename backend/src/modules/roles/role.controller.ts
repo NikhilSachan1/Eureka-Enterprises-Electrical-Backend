@@ -1,6 +1,6 @@
-import { Controller, Post, Body, Get, Query, Patch, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Patch, Param, Delete } from '@nestjs/common';
 import { RoleService } from './role.service';
-import { CreateRoleDto, GetAllRoleDto, UpdateRoleDto } from './dto';
+import { CreateRoleDto, GetAllRoleDto, UpdateRoleDto, DeleteRoleDto } from './dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Roles')
@@ -22,5 +22,10 @@ export class RoleController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
     return await this.roleService.update({ id }, updateRoleDto);
+  }
+
+  @Delete('bulk')
+  async delete(@Body() deleteRoleDto: DeleteRoleDto) {
+    return await this.roleService.deleteBulk(deleteRoleDto);
   }
 }
