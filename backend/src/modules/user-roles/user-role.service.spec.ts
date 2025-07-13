@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserRoleService } from './user-role.service';
 import { UserRoleRepository } from './user-role.repository';
-import { CreateUserRoleDto } from './dto/user-role.dto';
+import { CreateUserRoleDto } from './dto/update-user-role.dto';
 import { EntityManager } from 'typeorm';
 
 describe('UserRoleService', () => {
