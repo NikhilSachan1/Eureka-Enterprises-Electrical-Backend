@@ -29,9 +29,13 @@ export class RolePermissionRepository {
 
   async findOne(
     options: FindOneOptions<RolePermissionEntity>,
+    entityManager?: EntityManager,
   ): Promise<RolePermissionEntity | null> {
     try {
-      return await this.repository.findOne(options);
+      const repository = entityManager
+        ? entityManager.getRepository(RolePermissionEntity)
+        : this.repository;
+      return await repository.findOne(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
@@ -54,10 +58,13 @@ export class RolePermissionRepository {
   async update(
     identifierConditions: FindOptionsWhere<RolePermissionEntity>,
     updateData: Partial<RolePermissionEntity>,
+    entityManager?: EntityManager,
   ) {
     try {
-      const updateResult = await this.repository.update(identifierConditions, updateData);
-      return updateResult;
+      const repository = entityManager
+        ? entityManager.getRepository(RolePermissionEntity)
+        : this.repository;
+      return await repository.update(identifierConditions, updateData);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

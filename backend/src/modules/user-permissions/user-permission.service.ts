@@ -36,8 +36,10 @@ export class UserPermissionService {
   ): Promise<UserPermissionEntity> {
     await this.validatePermissionExists(permissionId);
 
-    const whereClause = { userId, permissionId, deletedAt: null };
-    const existing = await this.userPermissionRepository.findOne({ where: whereClause });
+    const whereClause = { userId, permissionId };
+    const existing = await this.userPermissionRepository.findOne({
+      where: { ...whereClause, deletedAt: null },
+    });
 
     if (existing) {
       if (existing.isGranted === isGranted) {

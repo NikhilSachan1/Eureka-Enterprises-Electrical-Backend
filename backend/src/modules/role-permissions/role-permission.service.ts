@@ -28,14 +28,17 @@ export class RolePermissionService {
     private readonly permissionsService: PermissionService,
   ) {}
 
-  async create(
-    { permissionId, isActive, roleId }: CreateRolePermissionDto & { roleId: string },
-    entityManager?: EntityManager,
-  ): Promise<RolePermissionEntity> {
+  async create({
+    permissionId,
+    isActive,
+    roleId,
+  }: CreateRolePermissionDto & { roleId: string }): Promise<RolePermissionEntity> {
     await this.validatePermissionExists(permissionId);
 
-    const whereClause = { roleId, permissionId, deletedAt: null };
-    const existing = await this.rolePermissionRepository.findOne({ where: whereClause });
+    const whereClause = { roleId, permissionId };
+    const existing = await this.rolePermissionRepository.findOne({
+      where: { ...whereClause, deletedAt: null },
+    });
 
     if (existing) {
       if (existing.isActive === isActive) {
@@ -50,26 +53,23 @@ export class RolePermissionService {
       return this.rolePermissionRepository.findOne({ where: whereClause });
     }
 
-    return this.rolePermissionRepository.create({ roleId, permissionId, isActive }, entityManager);
+    return this.rolePermissionRepository.create({ roleId, permissionId, isActive });
   }
 
-  async bulkCreate(
-    { roleId, rolePermissions }: BulkCreateRolePermissionsDto,
-    entityManager?: EntityManager,
-  ): Promise<RolePermissionEntity[]> {
+  async bulkCreate({
+    roleId,
+    rolePermissions,
+  }: BulkCreateRolePermissionsDto): Promise<RolePermissionEntity[]> {
     const results: RolePermissionEntity[] = [];
     await this.validateRoleExists(roleId);
 
     for (const { permissionId, isActive } of rolePermissions) {
       try {
-        const result = await this.create(
-          {
-            roleId,
-            permissionId,
-            isActive,
-          },
-          entityManager,
-        );
+        const result = await this.create({
+          roleId,
+          permissionId,
+          isActive,
+        });
         results.push(result);
       } catch (error) {
         if (!(error instanceof BadRequestException)) {
