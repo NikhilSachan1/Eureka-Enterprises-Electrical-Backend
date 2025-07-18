@@ -1,7 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateLeaveApplicationDto } from './dto/create-leave-application.dto';
 import { LeaveApplicationsEntity } from './entities/leave-application.entity';
-import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindManyOptions,
+  FindOneOptions,
+  FindOptionsWhere,
+} from 'typeorm';
 import { LeaveApplicationsRepository } from './leave-applications.repository';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import {
@@ -19,6 +25,7 @@ import {
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class LeaveApplicationsService {
@@ -28,6 +35,7 @@ export class LeaveApplicationsService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly leaveBalanceService: LeaveBalancesService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -235,7 +243,7 @@ export class LeaveApplicationsService {
     throw new BadRequestException(LEAVE_APPLICATION_ERRORS.INVALID_CYCLE_TYPE);
   }
 
-  private async leaveApplicationValidation(
+  private async validateLeaveApplication(
     leaveCategory: string,
     contextKey: string,
     leaveType: string,
@@ -342,27 +350,54 @@ export class LeaveApplicationsService {
       );
       await this.validateLeaveType(leaveType, contextKey);
       await this.validateLeaveCategory(leaveCategory, contextKey);
-      await this.leaveApplicationValidation(
+      await this.validateLeaveApplication(
         leaveCategory,
         contextKey,
         leaveType,
         fromDate,
         numberOfDays,
       );
-      await this.validateLeaveBalance(userId, leaveCategory, financialYear, numberOfDays);
-
-      // Create the leave application
-      const leaveApplicationData = {
+      const leaveBalance = await this.validateLeaveBalance(
         userId,
-        leaveType,
         leaveCategory,
-        fromDate: new Date(fromDate),
-        toDate: new Date(toDate),
-        reason,
-        approvalStatus: ApprovalStatus.PENDING,
-      };
+        financialYear,
+        numberOfDays,
+      );
 
-      return await this.create(leaveApplicationData);
+      await this.dataSource.transaction(async (entityManager) => {
+        // Create the leave application
+        const leaveApplicationData = {
+          userId,
+          leaveType,
+          leaveCategory,
+          fromDate: new Date(fromDate),
+          toDate: new Date(toDate),
+          reason,
+          approvalStatus: ApprovalStatus.PENDING,
+        };
+
+        await this.create(leaveApplicationData, entityManager);
+
+        const updateLeaveBalanceData = {
+          identifierConditions: {
+            userId,
+            leaveCategory,
+            financialYear,
+          },
+          updatedData: {
+            consumed: (parseFloat(leaveBalance.consumed) + numberOfDays).toString(),
+          },
+        };
+        await this.leaveBalanceService.update(
+          updateLeaveBalanceData.identifierConditions,
+          updateLeaveBalanceData.updatedData,
+          entityManager,
+        );
+      });
+      return this.utilityService.getSuccessMessage(
+        LEAVE_APPLICATION_FIELD_NAMES.LEAVE_APPLICATION,
+        DataSuccessOperationType.CREATE,
+      );
     } catch (error) {
       throw error;
     }

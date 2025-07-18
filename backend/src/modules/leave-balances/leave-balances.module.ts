@@ -10,5 +10,6 @@ import { SharedModule } from '../shared/shared.module';
   imports: [TypeOrmModule.forFeature([LeaveBalanceEntity]), SharedModule],
   controllers: [LeaveBalancesController],
   providers: [LeaveBalancesService, LeaveBalancesRepository],
+  exports: [LeaveBalancesService],
 })
 export class LeaveBalancesModule {}
