@@ -14,6 +14,9 @@ export class LeaveApplicationsEntity extends BaseEntity {
   @Column({ type: 'varchar' })
   leaveType: string;
 
+  @Column({ type: 'varchar' })
+  leaveApplicationType: string;
+
   @Column({ type: 'timestamp' })
   fromDate: Date;
 

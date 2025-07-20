@@ -43,3 +43,9 @@ export enum ApprovalStatus {
   REJECTED = 'rejected',
   PENDING = 'pending',
 }
+
+export enum LeaveApplicationType {
+  SELF = 'self',
+  FORCED = 'forced',
+  SYSTEM = 'system',
+}
