@@ -254,6 +254,7 @@ export class UserPermissionService {
         lastName: user.lastName,
         email: user.email,
         status: user.status,
+        role: user.role_names,
         rolePermissionsCount: parseInt(user.role_permissions_count) || 0,
         userPermissionsCount: parseInt(user.user_permissions_count) || 0,
         totalPermissions: parseInt(user.total_permissions) || 0,
