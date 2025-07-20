@@ -667,9 +667,9 @@ export class LeaveApplicationsService {
     const stats = this.calculateStatsFromResults(statsResults, transformedLeaveBalances);
 
     return {
+      stats,
       records: transformedRecords,
       totalRecords: parseInt(totalRecords),
-      stats,
     };
   }
 

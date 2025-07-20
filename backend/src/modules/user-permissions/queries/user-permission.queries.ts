@@ -30,7 +30,7 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
         u.status,
         u."createdAt",
         u."updatedAt",
-        STRING_AGG(DISTINCT r.name, ', ') as role_names,
+        STRING_AGG(DISTINCT r.label, ', ') as role_names,
         COUNT(DISTINCT rp."permissionId") FILTER (WHERE rp."isActive" = true AND rp."deletedAt" IS NULL) as role_permissions_count,
         COUNT(DISTINCT up."permissionId") FILTER (WHERE up."isGranted" = true AND up."deletedAt" IS NULL) as user_permissions_count
       FROM users u
