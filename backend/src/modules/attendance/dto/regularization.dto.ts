@@ -1,10 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
-import {
-  AttendanceStatus,
-  AttendanceType,
-  EntrySourceType,
-} from '../constants/attendance.constants';
+import { AttendanceStatus, AttendanceType } from '../constants/attendance.constants';
+import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 
 export class RegularizeAttendanceDto {
   @ApiProperty({

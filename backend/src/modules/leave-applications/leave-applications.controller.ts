@@ -1,9 +1,16 @@
-import { Controller, Post, Body, Request } from '@nestjs/common';
+import { Controller, Post, Body, Request, UseInterceptors, Get, Query } from '@nestjs/common';
 import { LeaveApplicationsService } from './leave-applications.service';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Public } from '../auth/decorators/public.decorator';
-import { CreateLeaveApplicationDto, ForceLeaveApplicationDto } from './dto';
+import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import {
+  CreateLeaveApplicationDto,
+  ForceLeaveApplicationDto,
+  GetLeaveApplicationsDto,
+  LeaveApplicationResponseDto,
+} from './dto';
 import { LeaveApplicationType } from './constants/leave-application.constants';
+import { EntrySourceType } from 'src/utils/master-constants/master-constants';
+import { DetectSource } from '../attendance/decorators/source-detector.decorator';
+import { LeaveUserInterceptor } from './interceptors/leave-user.interceptor';
 
 @ApiTags('Leave')
 @ApiBearerAuth('JWT-auth')
@@ -11,30 +18,39 @@ import { LeaveApplicationType } from './constants/leave-application.constants';
 export class LeaveApplicationsController {
   constructor(private readonly leaveApplicationsService: LeaveApplicationsService) {}
 
-  @Public()
   @Post('apply')
   applyLeave(
     @Request() { user: { id: userId } }: { user: { id: string } },
     @Body() createLeaveApplicationDto: CreateLeaveApplicationDto,
+    @DetectSource() sourceType: EntrySourceType,
   ) {
     return this.leaveApplicationsService.applyLeave({
       ...createLeaveApplicationDto,
       leaveApplicationType: LeaveApplicationType.SELF,
       userId,
       createdBy: userId,
+      entrySourceType: sourceType,
     });
   }
 
   @Post('force')
-  async forceAttendance(
+  async forceLeaveApplication(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() forceLeaveApplicationDto: ForceLeaveApplicationDto,
+    @DetectSource() sourceType: EntrySourceType,
   ) {
     return this.leaveApplicationsService.forceLeaveApplication({
       ...forceLeaveApplicationDto,
       leaveApplicationType: LeaveApplicationType.FORCED,
-      userId: createdBy,
       createdBy,
+      entrySourceType: sourceType,
     });
+  }
+
+  @Get()
+  @UseInterceptors(LeaveUserInterceptor)
+  @ApiResponse({ status: 200, type: LeaveApplicationResponseDto })
+  async getLeaveApplications(@Query() filters: GetLeaveApplicationsDto) {
+    return this.leaveApplicationsService.getLeaveApplications(filters);
   }
 }

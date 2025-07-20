@@ -1,10 +1,7 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import {
-  EntrySourceType,
-  AttendanceType,
-  AttendanceAction,
-} from '../constants/attendance.constants';
+import { AttendanceType, AttendanceAction } from '../constants/attendance.constants';
 import { ApiProperty } from '@nestjs/swagger';
+import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 
 export class AttendanceActionDto {
   @ApiProperty({

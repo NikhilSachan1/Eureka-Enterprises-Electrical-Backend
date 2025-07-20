@@ -15,6 +15,12 @@ export class LeaveApplicationsEntity extends BaseEntity {
   leaveType: string;
 
   @Column({ type: 'varchar' })
+  leaveCategory: string;
+
+  @Column({ type: 'varchar' })
+  entrySourceType: string;
+
+  @Column({ type: 'varchar' })
   leaveApplicationType: string;
 
   @Column({ type: 'timestamp' })

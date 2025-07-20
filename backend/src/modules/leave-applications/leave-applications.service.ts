@@ -7,6 +7,8 @@ import {
   FindManyOptions,
   FindOneOptions,
   FindOptionsWhere,
+  In,
+  IsNull,
 } from 'typeorm';
 import { LeaveApplicationsRepository } from './leave-applications.repository';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
@@ -27,7 +29,18 @@ import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { ForceLeaveApplicationDto } from './dto';
+import {
+  ForceLeaveApplicationDto,
+  GetLeaveApplicationsDto,
+  LeaveApplicationResponseDto,
+} from './dto';
+import {
+  buildLeaveApplicationCountQuery,
+  buildLeaveApplicationListQuery,
+  buildLeaveApplicationStatsQuery,
+  buildUniqueUserIdsQuery,
+} from './queries/leave-queries.dto';
+import { UserService } from '../users/user.service';
 
 @Injectable()
 export class LeaveApplicationsService {
@@ -38,6 +51,7 @@ export class LeaveApplicationsService {
     private readonly configSettingService: ConfigSettingService,
     private readonly leaveBalanceService: LeaveBalancesService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly userService: UserService,
   ) {}
 
   async create(
@@ -103,25 +117,25 @@ export class LeaveApplicationsService {
     }
   }
 
-  private async getLeaveCalendarSetting(contextKey: string) {
+  private async getLeaveCalendarSetting() {
     const leaveCalendarSetting = await this.configurationService.findOneOrFail({
       where: { module: CONFIGURATION_MODULES.LEAVE, key: CONFIGURATION_KEYS.CALENDAR_SETTINGS },
     });
 
     const configSetting = await this.configSettingService.findOneOrFail({
-      where: { configId: leaveCalendarSetting.id, contextKey, isActive: true },
+      where: { configId: leaveCalendarSetting.id, isActive: true },
     });
 
     return configSetting;
   }
 
-  private async validateLeaveType(leaveType: string, contextKey: string) {
+  private async validateLeaveType(leaveType: string, financialYear: string) {
     const leaveTypeSetting = await this.configurationService.findOneOrFail({
       where: { module: CONFIGURATION_MODULES.LEAVE, key: CONFIGURATION_KEYS.LEAVE_TYPES },
     });
 
     const configSetting = await this.configSettingService.findOneOrFail({
-      where: { configId: leaveTypeSetting.id, contextKey, isActive: true },
+      where: { configId: leaveTypeSetting.id, contextKey: financialYear, isActive: true },
     });
 
     const isValidLeaveType = configSetting.value.some((item: any) => item.name === leaveType);
@@ -137,7 +151,7 @@ export class LeaveApplicationsService {
     }
   }
 
-  private async validateLeaveCategory(leaveCategory: string, contextKey: string) {
+  private async validateLeaveCategory(leaveCategory: string, financialYear: string) {
     const leaveCategorySetting = await this.configurationService.findOneOrFail({
       where: {
         module: CONFIGURATION_MODULES.LEAVE,
@@ -146,7 +160,7 @@ export class LeaveApplicationsService {
     });
 
     const configSetting = await this.configSettingService.findOneOrFail({
-      where: { configId: leaveCategorySetting.id, contextKey, isActive: true },
+      where: { configId: leaveCategorySetting.id, contextKey: financialYear, isActive: true },
     });
     const isValidLeaveCategory = configSetting.value.some(
       (item: any) => item.name === leaveCategory,
@@ -173,15 +187,14 @@ export class LeaveApplicationsService {
       where: { userId, leaveCategory, financialYear },
     });
 
-    if (
-      parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed) <
-      numberOfDays
-    ) {
+    const balance = parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
+
+    if (balance < numberOfDays) {
       throw new BadRequestException(
         LEAVE_APPLICATION_ERRORS.LEAVE_BALANCE_EXHAUSTED.replace(
           '{leaveCategory}',
           leaveCategory,
-        ).replace('{numberOfDays}', numberOfDays.toString()),
+        ).replace('{balance}', balance.toString()),
       );
     }
 
@@ -193,8 +206,54 @@ export class LeaveApplicationsService {
     const endDate = new Date(toDate);
 
     const timeDifference = endDate.getTime() - startDate.getTime();
-    const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24));
+    const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
+
     return daysDifference;
+  }
+
+  private generateDateRange(fromDate: string, toDate: string): string[] {
+    const dates: string[] = [];
+    const startDate = new Date(fromDate);
+    const endDate = new Date(toDate);
+
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      dates.push(currentDate.toISOString().split('T')[0]); // Format as YYYY-MM-DD
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return dates;
+  }
+
+  private async validateHolidays(dates: string[], financialYear: string): Promise<void> {
+    const holidayCalendarConfig = await this.configurationService.findOneOrFail({
+      where: { module: CONFIGURATION_MODULES.LEAVE, key: CONFIGURATION_KEYS.HOLIDAY_CALENDAR },
+    });
+
+    const configSetting = await this.configSettingService.findOneOrFail({
+      where: { configId: holidayCalendarConfig.id, contextKey: financialYear, isActive: true },
+    });
+
+    const holidays = configSetting.value.holidays;
+
+    for (const date of dates) {
+      const isHoliday = holidays.some((holiday: any) => {
+        if (typeof holiday === 'string') {
+          return holiday === date;
+        }
+        if (typeof holiday === 'object' && holiday.date) {
+          return holiday.date === date;
+        }
+        return false;
+      });
+
+      if (isHoliday) {
+        throw new BadRequestException(
+          LEAVE_APPLICATION_ERRORS.HOLIDAY_VALIDATION_ERROR.replace('{date}', date),
+        );
+      }
+    }
   }
 
   private async validateLeaveDates(
@@ -247,7 +306,7 @@ export class LeaveApplicationsService {
 
   private async validateLeaveApplication(
     leaveCategory: string,
-    contextKey: string,
+    financialYear: string,
     leaveType: string,
     fromDate: string,
     numberOfDays: number,
@@ -260,7 +319,11 @@ export class LeaveApplicationsService {
     });
 
     const configSetting = await this.configSettingService.findOneOrFail({
-      where: { configId: leaveCategoriesConfigSetting.id, contextKey, isActive: true },
+      where: {
+        configId: leaveCategoriesConfigSetting.id,
+        contextKey: financialYear,
+        isActive: true,
+      },
     });
 
     const categoryConfig = configSetting.value[leaveCategory];
@@ -341,6 +404,7 @@ export class LeaveApplicationsService {
     reason,
     leaveApplicationType,
     createdBy,
+    entrySourceType,
   }: CreateLeaveApplicationDto & {
     userId: string;
     leaveApplicationType: LeaveApplicationType;
@@ -348,19 +412,23 @@ export class LeaveApplicationsService {
   }) {
     try {
       const {
-        contextKey,
+        id: leaveConfigId,
         value: { cycleType },
-      } = await this.getLeaveCalendarSetting(leaveType);
+      } = await this.getLeaveCalendarSetting();
       const { financialYear, numberOfDays } = await this.validateLeaveDates(
         fromDate,
         toDate,
         cycleType,
       );
-      await this.validateLeaveType(leaveType, contextKey);
-      await this.validateLeaveCategory(leaveCategory, contextKey);
+      await this.validateLeaveType(leaveType, financialYear);
+      await this.validateLeaveCategory(leaveCategory, financialYear);
+
+      const dateRange = this.generateDateRange(fromDate, toDate);
+      await this.validateHolidays(dateRange, financialYear);
+
       await this.validateLeaveApplication(
         leaveCategory,
-        contextKey,
+        financialYear,
         leaveType,
         fromDate,
         numberOfDays,
@@ -373,21 +441,48 @@ export class LeaveApplicationsService {
       );
 
       await this.dataSource.transaction(async (entityManager) => {
-        // Create the leave application
-        const leaveApplicationData = {
-          userId,
-          leaveType,
-          leaveCategory,
-          fromDate: new Date(fromDate),
-          toDate: new Date(toDate),
-          reason,
-          approvalStatus: ApprovalStatus.PENDING,
-          leaveApplicationType,
-          createdBy,
-        };
+        for (const date of dateRange) {
+          const existingLeaveApplication = await this.findOne({
+            where: {
+              userId,
+              leaveCategory,
+              fromDate: new Date(date),
+              toDate: new Date(date),
+            },
+          });
 
-        await this.create(leaveApplicationData, entityManager);
+          if (existingLeaveApplication) {
+            throw new BadRequestException(
+              LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ALREADY_EXISTS.replace(
+                '{fromDate}',
+                date,
+              ).replace('{toDate}', date),
+            );
+          }
+        }
 
+        const leaveApplicationPromises = dateRange.map((date) => {
+          const leaveApplicationData = {
+            userId,
+            leaveType,
+            leaveCategory,
+            leaveConfigId,
+            fromDate: new Date(date),
+            toDate: new Date(date),
+            reason,
+            approvalStatus: ApprovalStatus.PENDING,
+            leaveApplicationType,
+            entrySourceType,
+            createdBy,
+          };
+
+          return this.create(leaveApplicationData, entityManager);
+        });
+
+        // Wait for all leave applications to be created
+        await Promise.all(leaveApplicationPromises);
+
+        // Update leave balance
         const updateLeaveBalanceData = {
           identifierConditions: {
             userId,
@@ -398,12 +493,14 @@ export class LeaveApplicationsService {
             consumed: (parseFloat(leaveBalance.consumed) + numberOfDays).toString(),
           },
         };
+
         await this.leaveBalanceService.update(
           updateLeaveBalanceData.identifierConditions,
           updateLeaveBalanceData.updatedData,
           entityManager,
         );
       });
+
       return this.utilityService.getSuccessMessage(
         LEAVE_APPLICATION_FIELD_NAMES.LEAVE_APPLICATION,
         DataSuccessOperationType.CREATE,
@@ -422,45 +519,87 @@ export class LeaveApplicationsService {
     reason,
     leaveApplicationType,
     createdBy,
-  }: ForceLeaveApplicationDto & { leaveApplicationType: LeaveApplicationType; createdBy: string }) {
+    entrySourceType,
+    approvalReason,
+  }: ForceLeaveApplicationDto & {
+    leaveApplicationType: LeaveApplicationType;
+    createdBy: string;
+  }) {
     try {
+      await this.userService.findOneOrFail({ where: { id: userId } });
       const {
-        contextKey,
+        id: leaveConfigId,
         value: { cycleType },
-      } = await this.getLeaveCalendarSetting(leaveType);
+      } = await this.getLeaveCalendarSetting();
       const { financialYear, numberOfDays } = await this.validateLeaveDates(
         fromDate,
         toDate,
         cycleType,
       );
-      await this.validateLeaveType(leaveType, contextKey);
-      await this.validateLeaveCategory(leaveCategory, contextKey);
+      await this.validateLeaveType(leaveType, financialYear);
+      await this.validateLeaveCategory(leaveCategory, financialYear);
+      const dateRange = this.generateDateRange(fromDate, toDate);
+      await this.validateHolidays(dateRange, financialYear);
+
       await this.validateLeaveApplication(
         leaveCategory,
-        contextKey,
+        financialYear,
         leaveType,
         fromDate,
         numberOfDays,
       );
+
       const leaveBalance = await this.validateLeaveBalance(
         userId,
         leaveCategory,
         financialYear,
         numberOfDays,
       );
+
       await this.dataSource.transaction(async (entityManager) => {
-        const leaveApplicationData = {
-          userId,
-          leaveType,
-          leaveCategory,
-          fromDate: new Date(fromDate),
-          toDate: new Date(toDate),
-          reason,
-          approvalStatus: ApprovalStatus.APPROVED,
-          leaveApplicationType,
-          createdBy,
-        };
-        await this.create(leaveApplicationData, entityManager);
+        for (const date of dateRange) {
+          const existingLeaveApplication = await this.findOne({
+            where: {
+              userId,
+              leaveCategory,
+              fromDate: new Date(date),
+              toDate: new Date(date),
+            },
+          });
+
+          if (existingLeaveApplication) {
+            throw new BadRequestException(
+              LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ALREADY_EXISTS.replace(
+                '{fromDate}',
+                date,
+              ).replace('{toDate}', date),
+            );
+          }
+        }
+
+        const leaveApplicationPromises = dateRange.map((date) => {
+          const leaveApplicationData = {
+            userId,
+            leaveType,
+            leaveCategory,
+            leaveConfigId,
+            fromDate: new Date(date),
+            toDate: new Date(date),
+            reason,
+            approvalStatus: ApprovalStatus.APPROVED,
+            approvalAt: new Date(),
+            approvalBy: createdBy,
+            approvalReason,
+            leaveApplicationType,
+            entrySourceType,
+            createdBy,
+          };
+
+          return this.create(leaveApplicationData, entityManager);
+        });
+
+        await Promise.all(leaveApplicationPromises);
+
         const updateLeaveBalanceData = {
           identifierConditions: {
             userId,
@@ -471,12 +610,14 @@ export class LeaveApplicationsService {
             consumed: (parseFloat(leaveBalance.consumed) + numberOfDays).toString(),
           },
         };
+
         await this.leaveBalanceService.update(
           updateLeaveBalanceData.identifierConditions,
           updateLeaveBalanceData.updatedData,
           entityManager,
         );
       });
+
       return this.utilityService.getSuccessMessage(
         LEAVE_APPLICATION_FIELD_NAMES.LEAVE_APPLICATION,
         DataSuccessOperationType.CREATE,
@@ -484,5 +625,159 @@ export class LeaveApplicationsService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async getLeaveApplications(filters: GetLeaveApplicationsDto): Promise<{
+    records: LeaveApplicationResponseDto[];
+    totalRecords: number;
+    stats: any;
+  }> {
+    // Build all queries
+    const { query, params } = buildLeaveApplicationListQuery(filters);
+    const { query: countQuery, params: countParams } = buildLeaveApplicationCountQuery(filters);
+    const { query: statsQuery, params: statsParams } = buildLeaveApplicationStatsQuery(filters);
+    const { query: uniqueUsersQuery, params: uniqueUsersParams } = buildUniqueUserIdsQuery(filters);
+
+    // Execute all queries in parallel
+    const [records, totalRecordsResult, statsResults, uniqueUserResults] = await Promise.all([
+      this.leaveApplicationsRepository.rawQuery(query, params),
+      this.leaveApplicationsRepository.rawQuery(countQuery, countParams),
+      this.leaveApplicationsRepository.rawQuery(statsQuery, statsParams),
+      this.leaveApplicationsRepository.rawQuery(uniqueUsersQuery, uniqueUsersParams),
+    ]);
+
+    const transformedRecords = this.transformLeaveApplicationRecords(records);
+    const totalRecords = totalRecordsResult[0]?.total || 0;
+
+    // Get unique user IDs from the filtered results (not just current page)
+    const uniqueUserIds = uniqueUserResults.map((row) => row.userId);
+
+    let leaveBalances = [];
+    if (uniqueUserIds.length > 0) {
+      const leaveBalanceResult = await this.leaveBalanceService.findAll({
+        where: {
+          userId: In(uniqueUserIds),
+          deletedAt: IsNull(),
+        },
+      });
+      leaveBalances = leaveBalanceResult.records;
+    }
+
+    const transformedLeaveBalances = this.transformLeaveBalanceRecords(leaveBalances);
+    const stats = this.calculateStatsFromResults(statsResults, transformedLeaveBalances);
+
+    return {
+      records: transformedRecords,
+      totalRecords: parseInt(totalRecords),
+      stats,
+    };
+  }
+
+  private transformLeaveApplicationRecords(leaveApplications: any[]) {
+    return leaveApplications.map((leaveApplication) => {
+      return {
+        id: leaveApplication.id,
+        userId: leaveApplication.userId,
+        leaveType: leaveApplication.leaveType,
+        leaveCategory: leaveApplication.leaveCategory,
+        fromDate: leaveApplication.fromDate,
+        toDate: leaveApplication.toDate,
+        reason: leaveApplication.reason,
+        approvalStatus: leaveApplication.approvalStatus,
+        approvalAt: leaveApplication.approvalAt,
+        approvalBy: leaveApplication.approvalBy,
+        approvalReason: leaveApplication.approvalReason,
+        createdAt: leaveApplication.createdAt,
+        updatedAt: leaveApplication.updatedAt,
+        createdBy: leaveApplication.createdBy,
+        entrySourceType: leaveApplication.entrySourceType,
+        approvalByUser: leaveApplication.approvalBy
+          ? {
+              firstName: leaveApplication.approvalByFirstName,
+              lastName: leaveApplication.approvalByLastName,
+              email: leaveApplication.approvalByEmail,
+            }
+          : null,
+        user: leaveApplication.userId
+          ? {
+              firstName: leaveApplication.firstName,
+              lastName: leaveApplication.lastName,
+              email: leaveApplication.email,
+            }
+          : null,
+        createdByUser: {
+          firstName: leaveApplication.createdByFirstName,
+          lastName: leaveApplication.createdByLastName,
+          email: leaveApplication.createdByEmail,
+        },
+      };
+    });
+  }
+
+  private transformLeaveBalanceRecords(leaveBalances: any[]) {
+    return leaveBalances.map((balance) => {
+      const totalCredited = parseFloat(balance.totalAllocated);
+      const totalConsumed = parseFloat(balance.consumed);
+      const totalBalance = totalCredited - totalConsumed;
+
+      return {
+        totalCredited,
+        totalConsumed,
+        totalBalance,
+      };
+    });
+  }
+
+  private calculateStatsFromResults(statsResults: any[], leaveBalances: any[]) {
+    // Initialize approval stats
+    const approvalStats = {
+      total: 0,
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      cancelled: 0,
+    };
+
+    // Calculate approval stats from query results
+    statsResults.forEach((result) => {
+      const count = parseInt(result.count);
+      approvalStats.total += count;
+
+      switch (result.approvalStatus) {
+        case ApprovalStatus.PENDING:
+          approvalStats.pending = count;
+          break;
+        case ApprovalStatus.APPROVED:
+          approvalStats.approved = count;
+          break;
+        case ApprovalStatus.REJECTED:
+          approvalStats.rejected = count;
+          break;
+        case ApprovalStatus.CANCELLED:
+          approvalStats.cancelled = count;
+          break;
+      }
+    });
+
+    // Calculate leave balance stats considering all components
+    const totalCredited = leaveBalances.reduce((sum, balance) => {
+      return sum + parseFloat(balance.totalCredited);
+    }, 0);
+    const totalConsumed = leaveBalances.reduce(
+      (sum, balance) => sum + parseFloat(balance.totalConsumed),
+      0,
+    );
+    const totalBalance = totalCredited - totalConsumed;
+
+    const leaveBalanceStats = {
+      totalCredited,
+      totalConsumed,
+      totalBalance,
+    };
+
+    return {
+      approval: approvalStats,
+      leaveBalance: leaveBalanceStats,
+    };
   }
 }

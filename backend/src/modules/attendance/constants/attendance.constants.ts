@@ -1,9 +1,3 @@
-export enum EntrySourceType {
-  WEB = 'web',
-  APP = 'app',
-  BIOMETRIC = 'biometric',
-}
-
 export enum AttendanceType {
   SELF = 'self',
   REGULARIZED = 'regularized',

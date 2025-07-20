@@ -19,7 +19,8 @@ import {
   AttendanceHistoryDto,
 } from './dto';
 import { DetectSource } from './decorators';
-import { AttendanceType, EntrySourceType } from './constants/attendance.constants';
+import { AttendanceType } from './constants/attendance.constants';
+import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
 import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';

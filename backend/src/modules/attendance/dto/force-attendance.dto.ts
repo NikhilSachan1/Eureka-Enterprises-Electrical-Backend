@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, IsDateString } from 'class-validator';
-import { AttendanceType, EntrySourceType } from '../constants/attendance.constants';
+import { AttendanceType } from '../constants/attendance.constants';
+import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 
 export class ForceAttendanceDto {
   @ApiProperty({

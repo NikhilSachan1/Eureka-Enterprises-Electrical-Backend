@@ -19,3 +19,9 @@ export enum LeaveCycleType {
   FINANCIAL_YEAR = 'financial_year',
   CALENDAR_YEAR = 'calendar_year',
 }
+
+export enum EntrySourceType {
+  WEB = 'web',
+  APP = 'app',
+  BIOMETRIC = 'biometric',
+}

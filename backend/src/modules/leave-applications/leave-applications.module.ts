@@ -8,6 +8,7 @@ import { LeaveApplicationsRepository } from './leave-applications.repository';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
+import { UsersModule } from '../users/user.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
     ConfigurationsModule,
     ConfigSettingsModule,
     LeaveBalancesModule,
+    UsersModule,
   ],
   controllers: [LeaveApplicationsController],
   providers: [LeaveApplicationsService, LeaveApplicationsRepository],

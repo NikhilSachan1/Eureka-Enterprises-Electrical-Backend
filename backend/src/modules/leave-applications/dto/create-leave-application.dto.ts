@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { IsValidDate, IsValidDateRange } from '../validators/date-range.validator';
+import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 
 export class CreateLeaveApplicationDto {
   @ApiProperty({
@@ -50,4 +51,8 @@ export class CreateLeaveApplicationDto {
   @IsNotEmpty()
   @IsString()
   reason: string;
+
+  @IsEnum(EntrySourceType)
+  @IsOptional()
+  entrySourceType: EntrySourceType;
 }
