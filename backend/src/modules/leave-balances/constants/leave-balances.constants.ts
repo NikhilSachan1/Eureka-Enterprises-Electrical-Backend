@@ -1,6 +1,7 @@
 export const LEAVE_BALANCE_ERRORS = {
   NOT_FOUND: 'Leave balance not found',
   INVALID_SORT_FIELD: 'Invalid sort field, it should be one of the following: ',
+  EMPLOYEE_CANNOT_SPECIFY_USER_IDS: 'Employee cannot specify user IDs',
 };
 
 export const LEAVE_BALANCE_FIELD_NAMES = {
