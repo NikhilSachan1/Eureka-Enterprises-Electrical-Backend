@@ -8,6 +8,8 @@ import {
 } from './constants/leave-balances.constants';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { GetAllLeaveBalanceDto } from './dto';
+import { buildLeaveBalanceQuery } from './queries/leave-balances.queries';
 
 @Injectable()
 export class LeaveBalancesService {
@@ -55,5 +57,17 @@ export class LeaveBalancesService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async getAllLeaveBalances(options: GetAllLeaveBalanceDto): Promise<{
+    records: LeaveBalanceEntity[];
+    totalRecords: number;
+  }> {
+    const query = buildLeaveBalanceQuery(options);
+    const records = await this.leaveBalancesRepository.rawQuery(query);
+    return {
+      records,
+      totalRecords: records.length,
+    };
   }
 }

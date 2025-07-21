@@ -8,7 +8,6 @@ import {
   FindOneOptions,
   FindOptionsWhere,
   In,
-  IsNull,
 } from 'typeorm';
 import { LeaveApplicationsRepository } from './leave-applications.repository';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
@@ -657,7 +656,7 @@ export class LeaveApplicationsService {
       const leaveBalanceResult = await this.leaveBalanceService.findAll({
         where: {
           userId: In(uniqueUserIds),
-          deletedAt: IsNull(),
+          financialYear: filters.financialYear,
         },
       });
       leaveBalances = leaveBalanceResult.records;

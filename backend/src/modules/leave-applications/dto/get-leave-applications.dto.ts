@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
   ApprovalStatus,
@@ -18,6 +18,11 @@ export class GetLeaveApplicationsDto extends BaseGetDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiProperty({ description: 'Financial year', example: '2025-2026', required: true })
+  @IsString()
+  @IsNotEmpty()
+  financialYear: string;
 
   @ApiProperty({
     description: 'Specific date (YYYY-MM-DD)',
