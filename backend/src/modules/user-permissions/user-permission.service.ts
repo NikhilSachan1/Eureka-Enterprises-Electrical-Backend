@@ -129,7 +129,7 @@ export class UserPermissionService {
       });
 
       const allPermissions = Array.from(permissionMap.values()).filter(
-        (permission) => permission.isGranted,
+        (permission) => permission.isGranted === true || permission.isGranted === false,
       );
 
       // Group permissions by module
