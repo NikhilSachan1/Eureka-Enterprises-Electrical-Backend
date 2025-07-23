@@ -14,6 +14,7 @@ import {
   BulkDeleteUserPermissionsDto,
   BulkCreateUserPermissionsDto,
   GetUserPermissionStatsDto,
+  GetUserPermissionDto,
 } from './dto';
 import { UserPermissionUserIdInterceptor } from './interceptors/user-permission-userid.interceptor';
 
@@ -30,7 +31,7 @@ export class UserPermissionController {
 
   @Get()
   @UseInterceptors(UserPermissionUserIdInterceptor)
-  async getUserPermissions(@Request() { user: { id: userId } }: { user: { id: string } }) {
+  async getUserPermissions(@Query() { userId }: GetUserPermissionDto) {
     return await this.userPermissionService.getUserPermissions(userId);
   }
 
