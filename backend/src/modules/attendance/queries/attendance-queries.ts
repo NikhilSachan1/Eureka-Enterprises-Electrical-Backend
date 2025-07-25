@@ -199,7 +199,7 @@ export function buildAttendanceStatsQuery(query: AttendanceQueryDto) {
       u."firstName" ILIKE $${paramIndex} OR 
       u."lastName" ILIKE $${paramIndex} OR 
       u."email" ILIKE $${paramIndex} OR 
-      u."employeeId" ILIKE $${paramIndex}
+      u."id" ILIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
