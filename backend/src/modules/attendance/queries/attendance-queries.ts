@@ -69,7 +69,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       u."firstName" ILIKE $${paramIndex} OR 
       u."lastName" ILIKE $${paramIndex} OR 
       u."email" ILIKE $${paramIndex} OR 
-      u."employeeId" ILIKE $${paramIndex}
+      u."id" ILIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
@@ -113,7 +113,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       u."firstName",
       u."lastName",
       u."email",
-      u."employeeId",
+      u."id",
       rb."firstName" as "regularizedByFirstName",
       rb."lastName" as "regularizedByLastName",
       ab."firstName" as "approvalByFirstName",
@@ -135,13 +135,14 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
     WHERE ${whereClause}
   `;
 
-  // Add pagination params
-  params.push(pageSize, offset);
+  // Add pagination params only for main query
+  const mainQueryParams = [...params, pageSize, offset];
 
   return {
     query: mainQuery,
     countQuery,
-    params,
+    params: mainQueryParams,
+    countParams: params, // Separate params for count query without pagination
   };
 }
 

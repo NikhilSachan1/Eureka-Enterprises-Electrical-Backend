@@ -1153,19 +1153,19 @@ export class AttendanceService {
   async getAttendanceRecords(queryDto: AttendanceQueryDto): Promise<AttendanceListResponseDto> {
     const { ...filters } = queryDto;
 
-    const { query, countQuery, params } = buildAttendanceListQuery(filters);
+    const { query, countQuery, params, countParams } = buildAttendanceListQuery(filters);
     const { query: statsQuery, params: statsParams } = buildAttendanceStatsQuery(filters);
 
-    const [records, total, stats] = await Promise.all([
+    const [records, [{ total }], stats] = await Promise.all([
       this.attendanceRepository.executeRawQuery(query, params),
-      this.attendanceRepository.executeRawQuery(countQuery, params),
+      this.attendanceRepository.executeRawQuery(countQuery, countParams),
       this.attendanceRepository.executeRawQuery(statsQuery, statsParams),
     ]);
 
     return {
       stats: this.transformStatsResult(stats),
       records: records.map(this.transformRawRecord),
-      totalRecords: total,
+      totalRecords: parseInt(total),
     };
   }
 
