@@ -19,7 +19,6 @@ export class AttendanceRecordDto {
     name: string;
     email: string;
     employeeId: string;
-    department: string;
   };
 
   @ApiProperty()

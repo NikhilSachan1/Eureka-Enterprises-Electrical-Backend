@@ -1171,8 +1171,13 @@ export class AttendanceService {
 
   private transformRawRecord(record: any): AttendanceRecordDto {
     return {
-      id: record.id,
-      user: record.user,
+      id: record.attendanceId,
+      user: {
+        id: record.userId,
+        name: `${record.firstName} ${record.lastName}`.trim(),
+        email: record.email,
+        employeeId: '1234567890', // TODO: get employee id from user table
+      },
       attendanceDate: record.attendanceDate,
       checkInTime: record.checkInTime,
       checkOutTime: record.checkOutTime,

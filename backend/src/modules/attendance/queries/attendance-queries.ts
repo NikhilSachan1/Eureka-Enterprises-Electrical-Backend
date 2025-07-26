@@ -93,7 +93,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
   // Main query
   const mainQuery = `
     SELECT 
-      a."id",
+      a."id" as "attendanceId",
       a."userId",
       a."attendanceDate",
       a."checkInTime",
@@ -113,7 +113,6 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       u."firstName",
       u."lastName",
       u."email",
-      u."id",
       rb."firstName" as "regularizedByFirstName",
       rb."lastName" as "regularizedByLastName",
       ab."firstName" as "approvalByFirstName",
