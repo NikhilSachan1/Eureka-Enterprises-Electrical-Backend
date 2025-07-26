@@ -1164,7 +1164,7 @@ export class AttendanceService {
 
     return {
       stats: this.transformStatsResult(stats),
-      records: records.map(this.transformRawRecord),
+      records: records.map((record: any) => this.transformRawRecord(record)),
       totalRecords: parseInt(total),
     };
   }
@@ -1184,9 +1184,12 @@ export class AttendanceService {
   }
 
   private calculateWorkDuration(checkIn?: Date, checkOut?: Date): number {
-    if (!checkIn || !checkOut) return 0;
+    if (!checkIn) return 0;
 
-    const diffMs = checkOut.getTime() - checkIn.getTime();
+    // If no checkout time, use current time to calculate ongoing work duration
+    const endTime = checkOut || new Date();
+
+    const diffMs = endTime.getTime() - checkIn.getTime();
     return Math.floor(diffMs / 1000);
   }
 
@@ -1209,18 +1212,18 @@ export class AttendanceService {
         status,
         approvalStatus,
       }: {
-        count: number;
+        count: string;
         status: AttendanceStatus;
         approvalStatus: ApprovalStatus;
       }) => {
-        totalCount += count;
+        totalCount += parseInt(count);
 
         if (status) {
-          attendance[status] = (attendance[status] || 0) + count;
+          attendance[status] = (attendance[status] || 0) + parseInt(count);
         }
 
         if (approvalStatus) {
-          approval[approvalStatus] = (approval[approvalStatus] || 0) + count;
+          approval[approvalStatus] = (approval[approvalStatus] || 0) + parseInt(count);
         }
       },
     );

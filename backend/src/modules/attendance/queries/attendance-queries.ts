@@ -208,7 +208,7 @@ export function buildAttendanceStatsQuery(query: AttendanceQueryDto) {
   const whereClause = whereConditions.join(' AND ');
 
   const statsQuery = `
-    SELECT 
+    SELECT
       a."status",
       a."approvalStatus",
       COUNT(*) as count
