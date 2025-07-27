@@ -110,6 +110,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       a."notes",
       a."createdAt",
       a."updatedAt",
+      a."createdBy",
       u."firstName",
       u."lastName",
       u."email",
