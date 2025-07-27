@@ -113,13 +113,13 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       u."firstName",
       u."lastName",
       u."email",
-      rb."firstName" as "regularizedByFirstName",
-      rb."lastName" as "regularizedByLastName",
+      cb."firstName" as "createdByFirstName",
+      cb."lastName" as "createdByLastName",
       ab."firstName" as "approvalByFirstName",
       ab."lastName" as "approvalByLastName"
     FROM "attendances" a
     LEFT JOIN "users" u ON a."userId" = u."id"
-    LEFT JOIN "users" rb ON a."regularizedBy" = rb."id"
+    LEFT JOIN "users" cb ON a."createdBy" = cb."id"
     LEFT JOIN "users" ab ON a."approvalBy" = ab."id"
     WHERE ${whereClause}
     ORDER BY ${orderByField} ${sortOrder}

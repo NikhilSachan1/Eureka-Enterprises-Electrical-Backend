@@ -15,17 +15,28 @@ export class BaseEntity extends baseEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Keep the string columns
+  @Column({ type: 'uuid', nullable: true })
+  createdBy?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  updatedBy?: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  deletedBy?: string;
+
+  // Add proper relation properties
   @ManyToOne(() => UserEntity, (user) => user.id, { nullable: true })
   @JoinColumn({ name: 'createdBy' })
-  createdBy?: string;
+  createdByUser?: UserEntity;
 
   @ManyToOne(() => UserEntity, (user) => user.id, { nullable: true })
   @JoinColumn({ name: 'updatedBy' })
-  updatedBy?: string;
+  updatedByUser?: UserEntity;
 
   @ManyToOne(() => UserEntity, (user) => user.id, { nullable: true })
   @JoinColumn({ name: 'deletedBy' })
-  deletedBy?: string;
+  deletedByUser?: UserEntity;
 
   @Column({
     type: 'timestamp',

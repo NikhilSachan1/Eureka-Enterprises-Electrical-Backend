@@ -16,7 +16,26 @@ export class AttendanceRecordDto {
   @ApiProperty()
   user: {
     id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeId: string;
+  };
+
+  @ApiProperty()
+  createdBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeId: string;
+  };
+
+  @ApiProperty()
+  approvalBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
     email: string;
     employeeId: string;
   };

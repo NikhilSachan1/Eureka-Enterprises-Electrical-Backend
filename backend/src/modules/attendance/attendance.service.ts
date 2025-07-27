@@ -1174,9 +1174,24 @@ export class AttendanceService {
       id: record.attendanceId,
       user: {
         id: record.userId,
-        name: `${record.firstName} ${record.lastName}`.trim(),
+        firstName: record.firstName,
+        lastName: record.lastName,
         email: record.email,
-        employeeId: '1234567890', // TODO: get employee id from user table
+        employeeId: 'EE-10001', // TODO: get employee id from user table
+      },
+      createdBy: {
+        id: record.createdBy,
+        firstName: record.createdByFirstName,
+        lastName: record.createdByLastName,
+        email: record.email,
+        employeeId: 'EE-10001', // TODO: get employee id from user table
+      },
+      approvalBy: {
+        id: record.approvalBy,
+        firstName: record.approvalByFirstName,
+        lastName: record.approvalByLastName,
+        email: record.email,
+        employeeId: 'EE-10001', // TODO: get employee id from user table
       },
       attendanceDate: record.attendanceDate,
       checkInTime: record.checkInTime,
@@ -1247,6 +1262,27 @@ export class AttendanceService {
         where: {
           userId,
           attendanceDate: new Date(date),
+        },
+        relations: ['user', 'approvalByUser', 'createdByUser'],
+        select: {
+          user: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+          approvalByUser: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+          createdByUser: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
         },
       });
 
