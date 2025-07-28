@@ -1,13 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsUUID, IsDateString } from 'class-validator';
-import { IsValidConfigValue } from '../decorators/config-value.decorator';
+import { IsValidConfigValue, IsLeaveConfigValid } from '../decorators/config-value.decorator';
 
 export class CreateConfigSettingDto {
   @ApiProperty({ description: 'Configuration ID' })
   @IsUUID()
+  @IsLeaveConfigValid()
   configId: string;
 
-  @ApiProperty({ description: 'Context key', example: '2025', required: false })
+  @ApiProperty({
+    description: 'Context key <mostly-financial-year>',
+    example: '2025-2026',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   contextKey?: string;
@@ -25,12 +30,12 @@ export class CreateConfigSettingDto {
   @IsValidConfigValue()
   value: any;
 
-  @ApiProperty({ description: 'Effective from date', example: '2025-01-01', required: false })
+  @ApiProperty({ description: 'Effective from date', example: '2025-04-01', required: false })
   @IsOptional()
   @IsDateString()
   effectiveFrom?: string;
 
-  @ApiProperty({ description: 'Effective to date', example: '2025-12-31', required: false })
+  @ApiProperty({ description: 'Effective to date', example: '2026-03-31', required: false })
   @IsOptional()
   @IsDateString()
   effectiveTo?: string;

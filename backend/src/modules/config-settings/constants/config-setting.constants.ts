@@ -24,6 +24,12 @@ export const CONFIG_SETTING_ERRORS = {
     `No active config setting found for key '${configKey}'${
       contextKey ? ` and context '${contextKey}'` : ''
     }`,
+  EFFECTIVE_FROM_AND_TO_REQUIRED:
+    'effectiveFrom and effectiveTo are required for leave configurations',
+  EFFECTIVE_FROM_CANNOT_BE_GREATER_THAN_TO: 'effectiveFrom cannot be greater than effectiveTo',
+  LEAVE_CONFIG_CANNOT_BE_CREATED_UPDATED_FOR_CURRENT_FINANCIAL_YEAR:
+    'Leave configuration cannot be created or updated for the current financial year',
+  EFFECTIVE_FROM_TO_CANNOT_BE_IN_PAST: 'effectiveFrom or effectiveTo cannot be in the past',
 } as const;
 
 export const CONFIG_SETTING_RESPONSES = {

@@ -75,4 +75,12 @@ export class UtilityService {
 
     return localMoment.utc().toDate();
   }
+
+  getCurrentFinancialYear() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const financialYear = month < 3 ? year - 1 : year;
+    return `${financialYear}-${financialYear + 1}`;
+  }
 }
