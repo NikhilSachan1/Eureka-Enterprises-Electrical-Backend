@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, FindOneOptions } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, FindOneOptions } from 'typeorm';
 import { AttendanceRepository } from './attendance.repository';
 import {
   AttendanceActionDto,
@@ -22,6 +22,7 @@ import {
   AttendanceAction,
   DEFAULT_APPROVAL_COMMENT,
   ShiftStatus,
+  AttendanceEntityFields,
 } from './constants/attendance.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import {
@@ -32,6 +33,7 @@ import { AttendanceEntity } from './entities/attendance.entity';
 import { UtilityService } from '../../utils/utility/utility.service';
 import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/attendance-queries';
 import { AttendanceHistoryDto } from './dto/attendance-history.dto';
+import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class AttendanceService {
@@ -804,6 +806,23 @@ export class AttendanceService {
     }
   }
 
+  async update(
+    identifierConditions: FindOptionsWhere<AttendanceEntity>,
+    updateData: Partial<AttendanceEntity>,
+    entityManager?: EntityManager,
+  ) {
+    try {
+      await this.findOneOrFail({ where: identifierConditions });
+      await this.attendanceRepository.update(identifierConditions, updateData, entityManager);
+      return this.utilityService.getSuccessMessage(
+        AttendanceEntityFields.ID,
+        DataSuccessOperationType.UPDATE,
+      );
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async forceAttendance(createdBy: string, forceAttendanceDto: ForceAttendanceDto) {
     const {
       userId,
@@ -1286,7 +1305,12 @@ export class AttendanceService {
         },
       });
 
-      return attendance;
+      return attendance.records.map((record) => {
+        return {
+          ...record,
+          workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
+        };
+      });
     } catch (error) {
       throw error;
     }
