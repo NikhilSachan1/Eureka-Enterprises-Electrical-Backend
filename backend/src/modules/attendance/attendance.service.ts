@@ -1024,7 +1024,7 @@ export class AttendanceService {
         createdBy,
         approvalBy: createdBy,
         approvalAt: currentTime,
-        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+        approvalComment: reason || DEFAULT_APPROVAL_COMMENT.FORCED,
       },
       entityManager,
     );
@@ -1089,7 +1089,7 @@ export class AttendanceService {
         createdBy,
         approvalBy: createdBy,
         approvalAt: currentTime,
-        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+        approvalComment: reason || DEFAULT_APPROVAL_COMMENT.FORCED,
       },
       entityManager,
     );
@@ -1154,7 +1154,7 @@ export class AttendanceService {
         createdBy,
         approvalBy: createdBy,
         approvalAt: currentTime,
-        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+        approvalComment: reason || DEFAULT_APPROVAL_COMMENT.FORCED,
       },
       entityManager,
     );
