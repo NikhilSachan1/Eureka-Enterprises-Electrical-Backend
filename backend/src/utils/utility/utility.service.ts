@@ -83,4 +83,11 @@ export class UtilityService {
     const financialYear = month < 3 ? year - 1 : year;
     return `${financialYear}-${financialYear + 1}`;
   }
+
+  getFinancialYear(date: Date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const financialYear = month < 3 ? year - 1 : year;
+    return `${financialYear}-${financialYear + 1}`;
+  }
 }

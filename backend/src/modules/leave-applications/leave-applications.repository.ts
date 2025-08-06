@@ -49,9 +49,13 @@ export class LeaveApplicationsRepository {
 
   async findOne(
     options: FindOneOptions<LeaveApplicationsEntity>,
+    entityManager?: EntityManager,
   ): Promise<LeaveApplicationsEntity | null> {
     try {
-      return await this.repository.findOne(options);
+      const repository = entityManager
+        ? entityManager.getRepository(LeaveApplicationsEntity)
+        : this.repository;
+      return await repository.findOne(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

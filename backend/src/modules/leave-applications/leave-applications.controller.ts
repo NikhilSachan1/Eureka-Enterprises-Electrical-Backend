@@ -6,6 +6,7 @@ import {
   ForceLeaveApplicationDto,
   GetLeaveApplicationsDto,
   LeaveApplicationResponseDto,
+  LeaveBulkApprovalDto,
 } from './dto';
 import { LeaveApplicationType } from './constants/leave-application.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
@@ -52,5 +53,16 @@ export class LeaveApplicationsController {
   @ApiResponse({ status: 200, type: LeaveApplicationResponseDto })
   async getLeaveApplications(@Query() filters: GetLeaveApplicationsDto) {
     return this.leaveApplicationsService.getLeaveApplications(filters);
+  }
+
+  @Post('approval')
+  async leaveApproval(
+    @Request() { user: { id: approvalBy } }: { user: { id: string } },
+    @Body() leaveBulkApprovalDto: LeaveBulkApprovalDto,
+  ) {
+    return this.leaveApplicationsService.handleBulkLeaveApplicationApproval({
+      ...leaveBulkApprovalDto,
+      approvalBy,
+    });
   }
 }

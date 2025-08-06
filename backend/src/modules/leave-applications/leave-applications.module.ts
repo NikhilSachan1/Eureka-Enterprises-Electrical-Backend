@@ -9,6 +9,7 @@ import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 import { UsersModule } from '../users/user.module';
+import { AttendanceModule } from '../attendance/attendance.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from '../users/user.module';
     ConfigSettingsModule,
     LeaveBalancesModule,
     UsersModule,
+    AttendanceModule,
   ],
   controllers: [LeaveApplicationsController],
   providers: [LeaveApplicationsService, LeaveApplicationsRepository],

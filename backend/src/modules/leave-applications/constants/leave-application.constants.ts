@@ -28,6 +28,16 @@ export const LEAVE_APPLICATION_ERRORS = {
     'Leave application already exists for the same leave category, for dates {fromDate} to {toDate}',
   HOLIDAY_VALIDATION_ERROR:
     'Leave cannot be applied on holiday: {date}. Please remove this date from your leave application.',
+  LEAVE_APPLICATION_STATUS_SWITCH_ERROR:
+    'Leave application is already in {status} state, cannot be processed',
+  LEAVE_APPLICATION_ATTENDANCE_STATUS_REQUIRED:
+    'Attendance status is required when leave date is current date or earlier',
+  LEAVE_APPLICATION_ATTENDANCE_STATUS_NOT_ALLOWED:
+    'Attendance status is not allowed when leave date is future date',
+  LEAVE_CANCELLATION_NOT_ALLOWED:
+    'Leave cancellation is not allowed after leave date is passed or current date, for cancellation contact the Admin or HR',
+  LEAVE_REJECTED_CANNOT_BE_APPROVED:
+    'Rejected leave application cannot be approved, ask employee to reapply the leave application',
 };
 
 export const LEAVE_APPLICATION_FIELD_NAMES = {
@@ -36,6 +46,10 @@ export const LEAVE_APPLICATION_FIELD_NAMES = {
 
 export const LEAVE_APPLICATION_SUCCESS_MESSAGES = {
   CREATE: 'Leave application created successfully',
+  LEAVE_APPLICATION_APPROVAL_PROCESSED:
+    'Leave application approval processed successfully for {length} leave applications. {success} successful, {error} failed',
+  LEAVE_APPLICATION_APPROVAL_SUCCESS:
+    'Leave application approval processed successfully for {status}',
 };
 
 export enum LeaveType {
@@ -84,3 +98,7 @@ export const LEAVE_APPLICATION_SORTABLE_FIELDS = {
   fullName: 'CONCAT(u."firstName", \' \', u."lastName")',
   approverFullName: 'CONCAT(approver."firstName", \' \', approver."lastName")',
 } as const;
+
+export const DEFAULT_APPROVAL_COMMENT = {
+  LEAVE_APPLICATION: 'Leave application',
+};

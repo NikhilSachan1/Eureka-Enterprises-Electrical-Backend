@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CreateLeaveApplicationDto } from './dto/create-leave-application.dto';
 import { LeaveApplicationsEntity } from './entities/leave-application.entity';
 import {
   DataSource,
@@ -17,6 +16,8 @@ import {
   ApprovalStatus,
   LeaveType,
   LeaveApplicationType,
+  LEAVE_APPLICATION_SUCCESS_MESSAGES,
+  DEFAULT_APPROVAL_COMMENT,
 } from './constants/leave-application.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import {
@@ -32,6 +33,9 @@ import {
   ForceLeaveApplicationDto,
   GetLeaveApplicationsDto,
   LeaveApplicationResponseDto,
+  LeaveBulkApprovalDto,
+  CreateLeaveApplicationDto,
+  LeaveApprovalDto,
 } from './dto';
 import {
   buildLeaveApplicationCountQuery,
@@ -40,6 +44,7 @@ import {
   buildUniqueUserIdsQuery,
 } from './queries/leave-queries.dto';
 import { UserService } from '../users/user.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 @Injectable()
 export class LeaveApplicationsService {
@@ -49,6 +54,7 @@ export class LeaveApplicationsService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly leaveBalanceService: LeaveBalancesService,
+    private readonly attendanceService: AttendanceService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly userService: UserService,
   ) {}
@@ -779,4 +785,461 @@ export class LeaveApplicationsService {
       leaveBalance: leaveBalanceStats,
     };
   }
+
+  async handleBulkLeaveApplicationApproval({ approvals, approvalBy }: LeaveBulkApprovalDto) {
+    try {
+      const result = [];
+      const errors = [];
+
+      for (const approval of approvals) {
+        try {
+          const leaveApplication = await this.handleSingleLeaveApplicationApproval(
+            approval.leaveApplicationId,
+            approval,
+            approvalBy,
+          );
+          result.push(leaveApplication);
+        } catch (error) {
+          errors.push({
+            leaveApplicationId: approval.leaveApplicationId,
+            error: error.message,
+          });
+        }
+      }
+      return {
+        message: LEAVE_APPLICATION_SUCCESS_MESSAGES.LEAVE_APPLICATION_APPROVAL_PROCESSED.replace(
+          '{length}',
+          approvals.length.toString(),
+        )
+          .replace('{success}', result.length.toString())
+          .replace('{error}', errors.length.toString()),
+        result,
+        errors,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async handleSingleLeaveApplicationApproval(
+    leaveApplicationId: string,
+    approvalDto: LeaveApprovalDto,
+    approvalBy: string,
+  ) {
+    try {
+      const { approvalStatus, approvalComment, attendanceStatus = null } = approvalDto;
+
+      return await this.dataSource.transaction(async (entityManager) => {
+        const leaveApplication = await this.leaveApplicationsRepository.findOne(
+          {
+            where: { id: leaveApplicationId },
+            relations: ['user'],
+          },
+          entityManager,
+        );
+
+        if (!leaveApplication) {
+          throw new NotFoundException(LEAVE_APPLICATION_ERRORS.NOT_FOUND);
+        }
+
+        await this.validateAndUpdateLeaveApplicationApproval(
+          leaveApplication,
+          approvalStatus as ApprovalStatus,
+          attendanceStatus,
+          approvalBy,
+          approvalComment,
+        );
+
+        return {
+          message: LEAVE_APPLICATION_SUCCESS_MESSAGES.LEAVE_APPLICATION_APPROVAL_SUCCESS.replace(
+            '{status}',
+            approvalStatus,
+          ),
+          leaveApplicationId,
+          newStatus: leaveApplication.approvalStatus,
+          approvalStatus,
+        };
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private async validateAndUpdateLeaveApplicationApproval(
+    {
+      approvalStatus: currentApprovalStatus,
+      fromDate,
+      id: leaveApplicationId,
+      userId,
+      leaveCategory,
+    }: LeaveApplicationsEntity,
+    approvalStatus: ApprovalStatus,
+    attendanceStatus: string | null,
+    approvalBy: string,
+    approvalComment: string,
+  ) {
+    try {
+      const currentDate = new Date();
+      currentDate.setHours(0, 0, 0, 0);
+
+      fromDate = new Date(fromDate);
+      fromDate.setHours(0, 0, 0, 0);
+
+      if (fromDate <= currentDate && !attendanceStatus) {
+        throw new BadRequestException(
+          LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ATTENDANCE_STATUS_REQUIRED,
+        );
+      }
+      if (attendanceStatus && fromDate > currentDate) {
+        throw new BadRequestException(
+          LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ATTENDANCE_STATUS_NOT_ALLOWED,
+        );
+      }
+      switch (currentApprovalStatus) {
+        case ApprovalStatus.PENDING:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              // attendance status will be changed to leave only if approval is for current date or earlier
+              await this.dataSource.transaction(async (entityManager) => {
+                if (attendanceStatus) {
+                  const attendance = await this.attendanceService.findOneOrFail({
+                    where: { userId: userId, attendanceDate: fromDate, isActive: true },
+                  });
+                  await this.attendanceService.update(
+                    { id: attendance.id },
+                    {
+                      isActive: false,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.attendanceService.create(
+                    {
+                      ...attendance,
+                      status: attendanceStatus,
+                      approvalStatus: ApprovalStatus.APPROVED,
+                      approvalAt: new Date(),
+                      approvalBy,
+                      approvalComment: `${DEFAULT_APPROVAL_COMMENT.LEAVE_APPLICATION} - ${approvalComment}`,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveApplicationsRepository.update(
+                    { id: leaveApplicationId },
+                    {
+                      approvalStatus,
+                      approvalBy,
+                      approvalAt: new Date(),
+                      approvalReason: approvalComment,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                } else {
+                  await this.leaveApplicationsRepository.update(
+                    { id: leaveApplicationId },
+                    {
+                      approvalStatus,
+                      approvalBy,
+                      approvalAt: new Date(),
+                      approvalReason: approvalComment,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                }
+              });
+              break;
+            case ApprovalStatus.REJECTED:
+              await this.dataSource.transaction(async (entityManager) => {
+                if (attendanceStatus) {
+                  const attendance = await this.attendanceService.findOneOrFail({
+                    where: { userId: userId, attendanceDate: fromDate, isActive: true },
+                  });
+                  await this.attendanceService.update(
+                    { id: attendance.id },
+                    {
+                      isActive: false,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.attendanceService.create(
+                    {
+                      ...attendance,
+                      status: attendanceStatus,
+                      approvalStatus: ApprovalStatus.APPROVED,
+                      approvalAt: new Date(),
+                      approvalBy,
+                      approvalComment: `${DEFAULT_APPROVAL_COMMENT.LEAVE_APPLICATION} - ${approvalComment}`,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveApplicationsRepository.update(
+                    { id: leaveApplicationId },
+                    {
+                      approvalStatus,
+                      approvalBy,
+                      approvalAt: new Date(),
+                      approvalReason: approvalComment,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveBalanceService.update(
+                    {
+                      userId,
+                      leaveCategory,
+                      financialYear: this.utilityService.getFinancialYear(fromDate),
+                    },
+                    { consumed: () => '"consumed::int" + 1' } as any,
+                    entityManager,
+                  );
+                } else {
+                  await this.leaveApplicationsRepository.update(
+                    { id: leaveApplicationId },
+                    {
+                      approvalStatus,
+                      approvalBy,
+                      approvalAt: new Date(),
+                      approvalReason: approvalComment,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveBalanceService.update(
+                    {
+                      userId,
+                      leaveCategory,
+                      financialYear: this.utilityService.getFinancialYear(fromDate),
+                    },
+                    { consumed: () => '"consumed::int" + 1' } as any,
+                    entityManager,
+                  );
+                }
+              });
+              break;
+            case ApprovalStatus.CANCELLED:
+              if (fromDate <= currentDate) {
+                throw new BadRequestException(
+                  LEAVE_APPLICATION_ERRORS.LEAVE_CANCELLATION_NOT_ALLOWED,
+                );
+              }
+              await this.dataSource.transaction(async (entityManager) => {
+                await this.leaveApplicationsRepository.update(
+                  { id: leaveApplicationId },
+                  {
+                    approvalStatus,
+                    approvalBy,
+                    approvalAt: new Date(),
+                    approvalReason: approvalComment,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                await this.leaveBalanceService.update(
+                  {
+                    userId,
+                    leaveCategory,
+                    financialYear: this.utilityService.getFinancialYear(fromDate),
+                  },
+                  { consumed: () => '"consumed::int" + 1' } as any,
+                  entityManager,
+                );
+              });
+              break;
+          }
+          break;
+        case ApprovalStatus.APPROVED:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.REJECTED:
+              await this.dataSource.transaction(async (entityManager) => {
+                if (attendanceStatus) {
+                  const attendance = await this.attendanceService.findOneOrFail({
+                    where: { userId: userId, attendanceDate: fromDate, isActive: true },
+                  });
+                  await this.attendanceService.update(
+                    { id: attendance.id },
+                    {
+                      isActive: false,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.attendanceService.create(
+                    {
+                      ...attendance,
+                      status: attendanceStatus,
+                      approvalStatus: ApprovalStatus.APPROVED,
+                      approvalAt: new Date(),
+                      approvalBy,
+                      approvalComment: `${DEFAULT_APPROVAL_COMMENT.LEAVE_APPLICATION} - ${approvalComment}`,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveApplicationsRepository.update(
+                    { id: leaveApplicationId },
+                    {
+                      approvalStatus,
+                      approvalBy,
+                      approvalAt: new Date(),
+                      approvalReason: approvalComment,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveBalanceService.update(
+                    {
+                      userId,
+                      leaveCategory,
+                      financialYear: this.utilityService.getFinancialYear(fromDate),
+                    },
+                    { consumed: () => '"consumed::int" + 1' } as any,
+                    entityManager,
+                  );
+                } else {
+                  await this.leaveApplicationsRepository.update(
+                    { id: leaveApplicationId },
+                    {
+                      approvalStatus,
+                      approvalBy,
+                      approvalAt: new Date(),
+                      approvalReason: approvalComment,
+                      updatedBy: approvalBy,
+                    },
+                    entityManager,
+                  );
+                  await this.leaveBalanceService.update(
+                    {
+                      userId,
+                      leaveCategory,
+                      financialYear: this.utilityService.getFinancialYear(fromDate),
+                    },
+                    { consumed: () => '"consumed::int" + 1' } as any,
+                    entityManager,
+                  );
+                }
+              });
+              break;
+            case ApprovalStatus.CANCELLED:
+              if (fromDate <= currentDate) {
+                throw new BadRequestException(
+                  LEAVE_APPLICATION_ERRORS.LEAVE_CANCELLATION_NOT_ALLOWED,
+                );
+              }
+              await this.dataSource.transaction(async (entityManager) => {
+                await this.leaveApplicationsRepository.update(
+                  { id: leaveApplicationId },
+                  {
+                    approvalStatus,
+                    approvalBy,
+                    approvalAt: new Date(),
+                    approvalReason: approvalComment,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                await this.leaveBalanceService.update(
+                  {
+                    userId,
+                    leaveCategory,
+                    financialYear: this.utilityService.getFinancialYear(fromDate),
+                  },
+                  { consumed: () => '"consumed::int" + 1' } as any,
+                  entityManager,
+                );
+              });
+              break;
+          }
+          break;
+        case ApprovalStatus.REJECTED:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_REJECTED_CANNOT_BE_APPROVED,
+              );
+            case ApprovalStatus.REJECTED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.CANCELLED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+          }
+        case ApprovalStatus.CANCELLED:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.REJECTED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.CANCELLED:
+              throw new BadRequestException(
+                LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+          }
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
 }
+
+// TODO: Holiday validation is pending and need to be done in force leave and approvals logic.
