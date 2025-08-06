@@ -58,12 +58,12 @@ export class AttendanceController {
   }
 
   @Post('force')
-  async forceAttendance(
+  async handleBulkForceAttendance(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() forceAttendanceDto: ForceAttendanceDto,
     @DetectSource() sourceType: EntrySourceType,
   ) {
-    return this.attendanceService.forceAttendance(createdBy, {
+    return this.attendanceService.handleBulkForceAttendance(createdBy, {
       ...forceAttendanceDto,
       entrySourceType: sourceType,
       attendanceType: AttendanceType.FORCED,

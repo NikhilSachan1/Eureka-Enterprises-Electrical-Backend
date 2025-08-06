@@ -1,16 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsDateString, IsArray, IsUUID } from 'class-validator';
 import { AttendanceType } from '../constants/attendance.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
+import { Transform } from 'class-transformer';
 
 export class ForceAttendanceDto {
-  @ApiProperty({
-    description: 'The ID of the user for whom attendance is being forced',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-  })
-  @IsString()
+  @ApiProperty({ description: 'User IDs', type: [String], required: true })
+  @IsArray()
   @IsNotEmpty()
-  userId: string;
+  @IsUUID(4, { each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  userIds: string[];
 
   @ApiProperty({
     description: 'The date for which attendance is being forced (YYYY-MM-DD format)',

@@ -831,87 +831,113 @@ export class AttendanceService {
     }
   }
 
-  async forceAttendance(createdBy: string, forceAttendanceDto: ForceAttendanceDto) {
-    const {
-      userId,
-      attendanceDate,
-      checkInTime,
-      checkOutTime,
-      reason,
-      notes,
-      timezone,
-      entrySourceType,
-      attendanceType,
-    } = forceAttendanceDto;
-
-    const targetDate = new Date(attendanceDate);
-    const today = new Date();
-    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const targetDateOnly = new Date(
-      targetDate.getFullYear(),
-      targetDate.getMonth(),
-      targetDate.getDate(),
-    );
-
-    // Validate date is not in future
-    if (targetDateOnly > todayDate) {
-      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED);
+  async handleBulkForceAttendance(
+    createdBy: string,
+    bulkForceAttendanceDto: ForceAttendanceDto,
+  ): Promise<{ message: string }> {
+    try {
+      for (const userId of bulkForceAttendanceDto.userIds) {
+        await this.handleSingleForceAttendance(createdBy, {
+          ...bulkForceAttendanceDto,
+          userId,
+        });
+      }
+      return {
+        message: ATTENDANCE_RESPONSES.FORCE_ATTENDANCE_SUCCESS,
+      };
+    } catch (error) {
+      throw error;
     }
+  }
 
-    const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
-    const isPreviousDay = targetDateOnly < todayDate;
-    const isSameDay = targetDateOnly.getTime() === todayDate.getTime();
+  async handleSingleForceAttendance(
+    createdBy: string,
+    forceAttendanceDto: ForceAttendanceDto & { userId: string },
+  ) {
+    try {
+      const {
+        userId,
+        attendanceDate,
+        checkInTime,
+        checkOutTime,
+        reason,
+        notes,
+        timezone,
+        entrySourceType,
+        attendanceType,
+      } = forceAttendanceDto;
 
-    return await this.dataSource.transaction(async (entityManager) => {
-      const existingAttendance = await this.attendanceRepository.findOne(
-        {
-          where: {
-            userId,
-            attendanceDate: targetDateOnly,
-            isActive: true,
-          },
-        },
-        entityManager,
+      const targetDate = new Date(attendanceDate);
+      const today = new Date();
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const targetDateOnly = new Date(
+        targetDate.getFullYear(),
+        targetDate.getMonth(),
+        targetDate.getDate(),
       );
 
-      if (existingAttendance) {
-        throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_ALREADY_EXISTS);
+      // Validate date is not in future
+      if (targetDateOnly > todayDate) {
+        throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED);
       }
 
-      if (isSameDay) {
-        return await this.handleSameDayForceAttendance(
-          userId,
-          createdBy,
-          targetDateOnly,
-          today,
-          checkInTime,
-          checkOutTime,
-          reason,
-          notes,
-          shiftConfigs,
-          configSettingId,
-          entrySourceType,
-          attendanceType,
-          timezone,
+      const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
+      const isPreviousDay = targetDateOnly < todayDate;
+      const isSameDay = targetDateOnly.getTime() === todayDate.getTime();
+
+      return await this.dataSource.transaction(async (entityManager) => {
+        const existingAttendance = await this.attendanceRepository.findOne(
+          {
+            where: {
+              userId,
+              attendanceDate: targetDateOnly,
+              isActive: true,
+            },
+          },
           entityManager,
         );
-      } else if (isPreviousDay) {
-        return await this.handlePreviousDayForceAttendance(
-          userId,
-          createdBy,
-          targetDateOnly,
-          checkInTime,
-          checkOutTime,
-          reason,
-          notes,
-          configSettingId,
-          entrySourceType,
-          attendanceType,
-          timezone,
-          entityManager,
-        );
-      }
-    });
+
+        if (existingAttendance) {
+          throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_ALREADY_EXISTS);
+        }
+
+        if (isSameDay) {
+          return await this.handleSameDayForceAttendance(
+            userId,
+            createdBy,
+            targetDateOnly,
+            today,
+            checkInTime,
+            checkOutTime,
+            reason,
+            notes,
+            shiftConfigs,
+            configSettingId,
+            entrySourceType,
+            attendanceType,
+            timezone,
+            entityManager,
+          );
+        } else if (isPreviousDay) {
+          return await this.handlePreviousDayForceAttendance(
+            userId,
+            createdBy,
+            targetDateOnly,
+            checkInTime,
+            checkOutTime,
+            reason,
+            notes,
+            configSettingId,
+            entrySourceType,
+            attendanceType,
+            timezone,
+            entityManager,
+          );
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   private async handleSameDayForceAttendance(
