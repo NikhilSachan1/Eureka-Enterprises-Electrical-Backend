@@ -44,6 +44,14 @@ export class AttendanceService {
     private readonly utilityService: UtilityService,
   ) {}
 
+  async create(attendance: Partial<AttendanceEntity>, entityManager?: EntityManager) {
+    try {
+      return await this.attendanceRepository.create(attendance, entityManager);
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async handleAttendanceAction(userId: string, attendanceActionDto: AttendanceActionDto) {
     const { action, entrySourceType, attendanceType, notes } = attendanceActionDto;
     const today = new Date();
@@ -1385,7 +1393,7 @@ export class AttendanceService {
         throw new NotFoundException(ATTENDANCE_ERRORS.NOT_FOUND);
       }
 
-      if (attendance.approvalStatus !== ApprovalStatus.PENDING) {
+      if (attendance.approvalStatus === approvalStatus) {
         throw new BadRequestException(
           ATTENDANCE_ERRORS.ATTENDANCE_APPROVAL_ALREADY_PROCESSED.replace(
             '{status}',
