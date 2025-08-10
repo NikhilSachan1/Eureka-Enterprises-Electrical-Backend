@@ -1358,7 +1358,18 @@ export class AttendanceService {
           isActive: true,
         },
       });
-      return attendance;
+      return {
+        ...attendance,
+        workDuration: this.calculateWorkDuration(attendance.checkInTime, attendance.checkOutTime),
+        location: 'Indore',
+        clientName: 'Adani Plant',
+        associatedEmployee: {
+          id: attendance.userId,
+          firstName: attendance.user.firstName,
+          lastName: attendance.user.lastName,
+          email: attendance.user.email,
+        },
+      };
     } catch (error) {
       throw error;
     }
