@@ -19,7 +19,11 @@ export class UserPermissionUserIdInterceptor implements NestInterceptor {
       if (request.query.userId || request.query.permissionId || request.query.isGranted) {
         throw new BadRequestException(USER_PERMISSION_ERRORS.CANNOT_SPECIFY_FIELDS);
       }
-      request.query.userId = [user.id];
+      request.query.userId = user.id;
+    } else if (user.role === Roles.ADMIN || user.role === Roles.HR || user.role === Roles.MANAGER) {
+      if (!request.query.userId) {
+        request.query.userId = user.id;
+      }
     }
 
     return next.handle();
