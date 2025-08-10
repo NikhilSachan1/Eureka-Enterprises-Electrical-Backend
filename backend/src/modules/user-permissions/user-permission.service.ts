@@ -91,11 +91,10 @@ export class UserPermissionService {
     await this.permissionService.findOneOrFail({ where: { id: permissionId, deletedAt: null } });
   }
 
-  async getUserPermissions(userId: string): Promise<UserPermissionResult> {
+  async getUserPermissions(userId: string, isActive?: boolean): Promise<UserPermissionResult> {
     try {
       const rolePermissions = await this.userPermissionRepository.executeRawQuery(
-        getUserPermissionsQuery(),
-        [userId],
+        getUserPermissionsQuery(userId, isActive),
       );
 
       // Get user-specific permission overrides

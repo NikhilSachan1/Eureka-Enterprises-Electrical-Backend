@@ -16,7 +16,7 @@ export class UserPermissionUserIdInterceptor implements NestInterceptor {
     const user = request.user;
 
     if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
-      if (request.query.userId || request.query.permissionId || request.query.isGranted) {
+      if (request.query.userId || request.query.permissionId || request.query.isActive) {
         throw new BadRequestException(USER_PERMISSION_ERRORS.CANNOT_SPECIFY_FIELDS);
       }
       request.query.userId = user.id;

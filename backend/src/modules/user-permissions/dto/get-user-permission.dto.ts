@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 
 export class GetUserPermissionDto {
   @ApiProperty({
@@ -10,4 +11,14 @@ export class GetUserPermissionDto {
   @IsOptional()
   @IsUUID()
   userId: string;
+
+  @ApiProperty({ description: 'Is active', example: true, required: false })
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

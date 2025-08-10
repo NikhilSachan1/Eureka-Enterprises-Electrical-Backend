@@ -1,6 +1,6 @@
 import { GetUserPermissionStatsDto } from '../dto';
 
-export function getUserPermissionsQuery() {
+export function getUserPermissionsQuery(userId: string, isActive?: boolean) {
   return `
     SELECT 
       p.name as "permissionName",
@@ -9,7 +9,9 @@ export function getUserPermissionsQuery() {
     FROM role_permissions rp
     INNER JOIN permissions p ON rp."permissionId" = p.id
     INNER JOIN user_roles ur ON rp."roleId" = ur."roleId"
-    WHERE ur."userId" = $1 
+    WHERE ur."userId" = '${userId}' ${
+    isActive !== undefined ? `AND rp."isActive" = ${isActive}` : ''
+  }
       AND rp."deletedAt" IS NULL 
       AND p."deletedAt" IS NULL 
       AND ur."deletedAt" IS NULL

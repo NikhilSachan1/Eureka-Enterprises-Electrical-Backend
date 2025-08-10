@@ -31,8 +31,8 @@ export class UserPermissionController {
 
   @Get()
   @UseInterceptors(UserPermissionUserIdInterceptor)
-  async getUserPermissions(@Query() { userId }: GetUserPermissionDto) {
-    return await this.userPermissionService.getUserPermissions(userId);
+  async getUserPermissions(@Query() { userId, isActive }: GetUserPermissionDto) {
+    return await this.userPermissionService.getUserPermissions(userId, isActive);
   }
 
   @Get('stats')
