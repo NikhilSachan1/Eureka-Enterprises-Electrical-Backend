@@ -5,7 +5,8 @@ export function getUserPermissionsQuery(userId: string, isActive?: boolean) {
     SELECT 
       p.name as "permissionName",
       p.module as "permissionModule",
-      p.id as "permissionId"
+      p.id as "permissionId",
+      rp."isActive" as "isGranted"
     FROM role_permissions rp
     INNER JOIN permissions p ON rp."permissionId" = p.id
     INNER JOIN user_roles ur ON rp."roleId" = ur."roleId"

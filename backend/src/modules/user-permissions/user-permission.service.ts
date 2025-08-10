@@ -112,7 +112,7 @@ export class UserPermissionService {
           name: rp.permissionName,
           module: rp.permissionModule,
           source: PermissionSource.ROLE,
-          isGranted: true,
+          isGranted: rp.isGranted,
         });
       });
 
