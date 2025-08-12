@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsDateString, IsArray, IsUUID } from 'class-validator';
-import { AttendanceType } from '../constants/attendance.constants';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsArray,
+  IsUUID,
+  IsEnum,
+} from 'class-validator';
+import { AttendanceStatus, AttendanceType } from '../constants/attendance.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { Transform } from 'class-transformer';
 
@@ -45,6 +53,16 @@ export class ForceAttendanceDto {
   @IsString()
   @IsNotEmpty()
   reason: string;
+
+  @ApiProperty({
+    description: 'Attendance status',
+    enum: AttendanceStatus,
+    required: true,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(AttendanceStatus)
+  status: AttendanceStatus;
 
   @ApiProperty({
     description: 'Additional notes',
