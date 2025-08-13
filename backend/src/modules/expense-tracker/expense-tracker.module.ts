@@ -17,5 +17,6 @@ import { ConfigurationsModule } from '../configurations/configuration.module';
   ],
   controllers: [ExpenseTrackerController],
   providers: [ExpenseTrackerService, ExpenseTrackerRepository],
+  exports: [ExpenseTrackerService],
 })
 export class ExpenseTrackerModule {}

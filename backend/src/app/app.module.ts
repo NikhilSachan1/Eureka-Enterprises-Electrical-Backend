@@ -23,6 +23,7 @@ import { AttendanceModule } from 'src/modules/attendance/attendance.module';
 import { SchedulerModule } from 'src/modules/scheduler-temp/scheduler.module';
 import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.module';
 import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
+import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-ap
     AttendanceModule,
     LeaveApplicationsModule,
     LeaveBalancesModule,
+    ExpenseTrackerModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],
