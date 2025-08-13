@@ -59,7 +59,7 @@ export const FOLDER_NAME_PREFIX = 'user_';
 
 export const FIELD_NAMES = {
   PROFILE_PICTURE: 'profilePicture',
-  FILE: 'file',
+  FILES: 'files',
   DOCUMENT: 'document',
 };
 
@@ -83,7 +83,5 @@ export const FILE_ERRORS = {
 };
 
 export const FILE_UPLOAD_FOLDER_NAMES = {
-  CALL_RECORDINGS: 'call-recordings',
-  CLIENT_DOCUMENTS: 'client-documents',
-  CALL_TEAMS: 'call-teams',
+  EXPENSE_FILES: 'expense-files',
 };
