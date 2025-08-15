@@ -1366,14 +1366,27 @@ export class AttendanceService {
           userId,
           isActive: true,
         },
+        relations: ['user'],
+        select: {
+          user: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       });
       return {
-        ...attendance,
+        id: attendance.id,
+        checkInTime: attendance.checkInTime,
+        checkOutTime: attendance.checkOutTime,
+        status: attendance.status,
+        approvalStatus: attendance.approvalStatus,
         workDuration: this.calculateWorkDuration(attendance.checkInTime, attendance.checkOutTime),
-        location: 'Indore',
-        clientName: 'Adani Plant',
-        associatedEmployee: {
-          id: attendance.userId,
+        location: 'Indore', // TODO: get location dynamically
+        clientName: 'Adani Plant', // TODO: get client name dynamically
+        user: {
+          id: attendance.user.id,
           firstName: attendance.user.firstName,
           lastName: attendance.user.lastName,
           email: attendance.user.email,
