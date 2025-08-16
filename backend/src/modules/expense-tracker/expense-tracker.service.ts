@@ -916,6 +916,22 @@ export class ExpenseTrackerService {
       throw error;
     }
   }
+
+  async deleteExpense(id: string, deletedBy: string) {
+    try {
+      await this.findOneOrFail({ where: { id } });
+      await this.expenseTrackerRepository.update(
+        { id },
+        { isActive: false, updatedBy: deletedBy, deletedBy, deletedAt: new Date() },
+      );
+      return this.utilityService.getSuccessMessage(
+        ExpenseTrackerEntityFields.EXPENSE,
+        DataSuccessOperationType.DELETE,
+      );
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 // TODO: Email notification to the user

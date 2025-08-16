@@ -8,6 +8,7 @@ import {
   Param,
   Get,
   Query,
+  Delete,
 } from '@nestjs/common';
 import { ExpenseTrackerService } from './expense-tracker.service';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiResponse } from '@nestjs/swagger';
@@ -151,5 +152,13 @@ export class ExpenseTrackerController {
   @ApiResponse({ status: 200, type: ExpenseHistoryResponseDto })
   async getExpenseHistory(@Param('id') id: string) {
     return this.expenseTrackerService.getExpenseHistory(id);
+  }
+
+  @Delete(':id')
+  async deleteExpense(
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Param('id') id: string,
+  ) {
+    return this.expenseTrackerService.deleteExpense(id, deletedBy);
   }
 }
