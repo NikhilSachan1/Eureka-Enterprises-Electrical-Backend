@@ -13,6 +13,7 @@ export enum ApprovalStatus {
   PENDING = 'pending',
   APPROVED = 'approved',
   REJECTED = 'rejected',
+  CANCELLED = 'cancelled',
 }
 
 export const EXPENSE_TRACKER_ERRORS = {
@@ -29,6 +30,18 @@ export const EXPENSE_TRACKER_ERRORS = {
   EMPLOYEE_CANNOT_SPECIFY_USER_IDS:
     'Employee cannot specify user ids, only the employee can view their own expenses',
   AMOUNT_MUST_BE_GREATER_THAN_ZERO: 'Amount must be greater than 0',
+  EXPENSE_STATUS_SWITCH_ERROR:
+    'Expense is already in {status} state, cannot be processed. Reach out to the manager, admin or HR for assistance',
+  EXPENSE_CANNOT_BE_APPROVED_BY_CREATOR:
+    'Expense cannot be approved by the creator, only the manager, admin or HR can approve',
+  EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR:
+    'Expense cannot be rejected by the creator, only the manager, admin or HR can reject',
+};
+
+export const EXPENSE_TRACKER_SUCCESS_MESSAGES = {
+  EXPENSE_APPROVAL_PROCESSED:
+    'Expense approval processed successfully. {success} out of {length} expenses approved, {error} errors occurred',
+  EXPENSE_APPROVAL_SUCCESS: 'Expense approval processed successfully for {status}',
 };
 
 export const DEFAULT_EXPENSE = {

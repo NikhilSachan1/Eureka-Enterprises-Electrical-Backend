@@ -4,6 +4,8 @@ import {
   CreateCreditExpenseDto,
   CreateDebitExpenseDto,
   EditExpenseDto,
+  ExpenseBulkApprovalDto,
+  ExpenseApprovalDto,
   ExpenseListResponseDto,
   ExpenseQueryDto,
   ForceExpenseDto,
@@ -22,6 +24,7 @@ import {
   ApprovalStatus,
   DEFAULT_EXPENSE,
   ExpenseTrackerEntityFields,
+  EXPENSE_TRACKER_SUCCESS_MESSAGES,
 } from './constants/expense-tracker.constants';
 import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
@@ -215,9 +218,10 @@ export class ExpenseTrackerService {
 
   async findOneOrFail(
     options: FindOneOptions<ExpenseTrackerEntity>,
+    entityManager?: EntityManager,
   ): Promise<ExpenseTrackerEntity> {
     try {
-      const expense = await this.expenseTrackerRepository.findOne(options);
+      const expense = await this.expenseTrackerRepository.findOne(options, entityManager);
 
       if (!expense) {
         throw new NotFoundException(EXPENSE_TRACKER_ERRORS.NOT_FOUND);
@@ -453,6 +457,377 @@ export class ExpenseTrackerService {
           },
         })),
       };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async handleBulkExpenseApproval({
+    approvals,
+    approvalBy,
+    entrySourceType,
+  }: ExpenseBulkApprovalDto & { entrySourceType: EntrySourceType }) {
+    try {
+      const result = [];
+      const errors = [];
+
+      for (const approval of approvals) {
+        try {
+          const expense = await this.handleSingleExpenseApproval(
+            approval.expenseId,
+            approval,
+            approvalBy,
+            entrySourceType,
+          );
+          result.push(expense);
+        } catch (error) {
+          errors.push({
+            expenseId: approval.expenseId,
+            error: error.message,
+          });
+        }
+      }
+      return {
+        message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_APPROVAL_PROCESSED.replace(
+          '{length}',
+          approvals.length.toString(),
+        )
+          .replace('{success}', result.length.toString())
+          .replace('{error}', errors.length.toString()),
+        result,
+        errors,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async handleSingleExpenseApproval(
+    expenseId: string,
+    approvalDto: ExpenseApprovalDto,
+    approvalBy: string,
+    entrySourceType: EntrySourceType,
+  ) {
+    try {
+      const { approvalStatus, approvalComment } = approvalDto;
+
+      return await this.dataSource.transaction(async (entityManager) => {
+        const expense = await this.findOneOrFail(
+          {
+            where: { id: expenseId },
+            relations: ['user'],
+          },
+          entityManager,
+        );
+
+        await this.validateAndUpdateExpenseApproval(
+          expense,
+          approvalStatus as ApprovalStatus,
+          approvalBy,
+          approvalComment,
+          entrySourceType,
+        );
+
+        return {
+          message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_APPROVAL_SUCCESS.replace(
+            '{status}',
+            approvalStatus,
+          ),
+          expenseId,
+          newStatus: expense.approvalStatus,
+          approvalStatus,
+        };
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private async validateAndUpdateExpenseApproval(
+    { approvalStatus: currentApprovalStatus, id: expenseId }: ExpenseTrackerEntity,
+    approvalStatus: ApprovalStatus,
+    approvalBy: string,
+    approvalReason: string,
+    entrySourceType: EntrySourceType,
+  ) {
+    try {
+      switch (currentApprovalStatus) {
+        case ApprovalStatus.PENDING:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              await this.dataSource.transaction(async (entityManager) => {
+                const expense = await this.findOneOrFail({ where: { id: expenseId } });
+                await this.expenseTrackerRepository.update(
+                  { id: expenseId },
+                  {
+                    isActive: false,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                if (approvalBy === expense.createdBy) {
+                  throw new BadRequestException(
+                    EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_APPROVED_BY_CREATOR,
+                  );
+                }
+                const originalExpenseId = expense.originalExpenseId || expenseId;
+                const parentExpenseId = expenseId;
+                const versionNumber = expense.versionNumber + 1;
+
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { id: __, ...expenseData } = expense;
+
+                await this.expenseTrackerRepository.create(
+                  {
+                    ...expenseData,
+                    isActive: true,
+                    updatedBy: approvalBy,
+                    approvalAt: new Date(),
+                    approvalStatus,
+                    approvalBy,
+                    approvalReason,
+                    entrySourceType,
+                    originalExpenseId,
+                    parentExpenseId,
+                    versionNumber,
+                  },
+                  entityManager,
+                );
+              });
+              break;
+            case ApprovalStatus.REJECTED:
+              await this.dataSource.transaction(async (entityManager) => {
+                const expense = await this.findOneOrFail({ where: { id: expenseId } });
+                await this.expenseTrackerRepository.update(
+                  { id: expenseId },
+                  {
+                    isActive: false,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                if (approvalBy === expense.createdBy) {
+                  throw new BadRequestException(
+                    EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
+                  );
+                }
+                const originalExpenseId = expense.originalExpenseId || expenseId;
+                const parentExpenseId = expenseId;
+                const versionNumber = expense.versionNumber + 1;
+
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { id: __, ...expenseData } = expense;
+
+                await this.expenseTrackerRepository.create(
+                  {
+                    ...expenseData,
+                    isActive: true,
+                    updatedBy: approvalBy,
+                    approvalAt: new Date(),
+                    approvalStatus,
+                    approvalBy,
+                    approvalReason,
+                    entrySourceType,
+                    originalExpenseId,
+                    parentExpenseId,
+                    versionNumber,
+                  },
+                  entityManager,
+                );
+              });
+              break;
+            case ApprovalStatus.CANCELLED:
+              await this.dataSource.transaction(async (entityManager) => {
+                const expense = await this.findOneOrFail({ where: { id: expenseId } });
+                await this.expenseTrackerRepository.update(
+                  { id: expenseId },
+                  {
+                    isActive: false,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                const originalExpenseId = expense.originalExpenseId || expenseId;
+                const parentExpenseId = expenseId;
+                const versionNumber = expense.versionNumber + 1;
+
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { id: __, ...expenseData } = expense;
+
+                await this.expenseTrackerRepository.create(
+                  {
+                    ...expenseData,
+                    isActive: true,
+                    updatedBy: approvalBy,
+                    approvalAt: new Date(),
+                    approvalStatus,
+                    approvalBy,
+                    approvalReason,
+                    entrySourceType,
+                    originalExpenseId,
+                    parentExpenseId,
+                    versionNumber,
+                  },
+                  entityManager,
+                );
+              });
+              break;
+          }
+          break;
+        case ApprovalStatus.APPROVED:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.REJECTED:
+              await this.dataSource.transaction(async (entityManager) => {
+                const expense = await this.findOneOrFail({ where: { id: expenseId } });
+                await this.expenseTrackerRepository.update(
+                  { id: expenseId },
+                  {
+                    isActive: false,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                if (approvalBy === expense.createdBy) {
+                  throw new BadRequestException(
+                    EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
+                  );
+                }
+                const originalExpenseId = expense.originalExpenseId || expenseId;
+                const parentExpenseId = expenseId;
+                const versionNumber = expense.versionNumber + 1;
+
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { id: __, ...expenseData } = expense;
+
+                await this.expenseTrackerRepository.create(
+                  {
+                    ...expenseData,
+                    isActive: true,
+                    updatedBy: approvalBy,
+                    approvalAt: new Date(),
+                    approvalStatus,
+                    approvalBy,
+                    approvalReason,
+                    entrySourceType,
+                    originalExpenseId,
+                    parentExpenseId,
+                    versionNumber,
+                  },
+                  entityManager,
+                );
+              });
+              break;
+            case ApprovalStatus.CANCELLED:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+          }
+          break;
+        case ApprovalStatus.REJECTED:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.APPROVED:
+              await this.dataSource.transaction(async (entityManager) => {
+                const expense = await this.findOneOrFail({ where: { id: expenseId } });
+                await this.expenseTrackerRepository.update(
+                  { id: expenseId },
+                  {
+                    isActive: false,
+                    updatedBy: approvalBy,
+                  },
+                  entityManager,
+                );
+                if (approvalBy === expense.createdBy) {
+                  throw new BadRequestException(
+                    EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
+                  );
+                }
+                const originalExpenseId = expense.originalExpenseId || expenseId;
+                const parentExpenseId = expenseId;
+                const versionNumber = expense.versionNumber + 1;
+
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { id: __, ...expenseData } = expense;
+
+                await this.expenseTrackerRepository.create(
+                  {
+                    ...expenseData,
+                    isActive: true,
+                    updatedBy: approvalBy,
+                    approvalAt: new Date(),
+                    approvalStatus,
+                    approvalBy,
+                    approvalReason,
+                    entrySourceType,
+                    originalExpenseId,
+                    parentExpenseId,
+                    versionNumber,
+                  },
+                  entityManager,
+                );
+              });
+              break;
+            case ApprovalStatus.REJECTED:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+            case ApprovalStatus.CANCELLED:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+          }
+          break;
+        case ApprovalStatus.CANCELLED:
+          switch (approvalStatus) {
+            case ApprovalStatus.PENDING ||
+              ApprovalStatus.APPROVED ||
+              ApprovalStatus.REJECTED ||
+              ApprovalStatus.CANCELLED:
+              throw new BadRequestException(
+                EXPENSE_TRACKER_ERRORS.EXPENSE_STATUS_SWITCH_ERROR.replace(
+                  '{status}',
+                  approvalStatus,
+                ),
+              );
+          }
+          break;
+      }
     } catch (error) {
       throw error;
     }

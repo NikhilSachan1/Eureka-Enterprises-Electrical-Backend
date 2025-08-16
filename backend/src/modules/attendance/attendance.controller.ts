@@ -94,12 +94,12 @@ export class AttendanceController {
 
   @Post('approval')
   async attendanceApproval(
-    @Request() { user: { id: approvedBy } }: { user: { id: string } },
+    @Request() { user: { id: approvalBy } }: { user: { id: string } },
     @Body() attendanceApprovalDto: AttendanceBulkApprovalDto,
   ) {
     return this.attendanceService.handleBulkAttendanceApproval({
       ...attendanceApprovalDto,
-      approvedBy,
+      approvalBy,
     });
   }
 }

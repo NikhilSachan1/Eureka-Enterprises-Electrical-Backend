@@ -27,6 +27,7 @@ import {
   ExpenseQueryDto,
   ExpenseListResponseDto,
   ExpenseHistoryResponseDto,
+  ExpenseBulkApprovalDto,
 } from './dto';
 import { ExpenseUserInterceptor } from './interceptors/expense-user.interceptor';
 
@@ -114,6 +115,19 @@ export class ExpenseTrackerController {
       ...editExpenseDto,
       id,
       updatedBy,
+      entrySourceType: sourceType,
+    });
+  }
+
+  @Post('approval')
+  async expenseApproval(
+    @Request() { user: { id: approvalBy } }: { user: { id: string } },
+    @Body() expenseApprovalDto: ExpenseBulkApprovalDto,
+    @DetectSource() sourceType: EntrySourceType,
+  ) {
+    return this.expenseTrackerService.handleBulkExpenseApproval({
+      ...expenseApprovalDto,
+      approvalBy,
       entrySourceType: sourceType,
     });
   }
