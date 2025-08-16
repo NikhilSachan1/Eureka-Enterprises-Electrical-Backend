@@ -17,7 +17,7 @@ export class AttendanceQueryDto extends BaseGetDto {
   @IsOptional()
   @IsEnum(Object.keys(ATTENDANCE_SORTABLE_FIELDS), { each: true })
   @IsString()
-  sortField?: string;
+  sortField?: string = ATTENDANCE_SORTABLE_FIELDS.CREATED_AT;
 
   @ApiProperty({ description: 'Start date (YYYY-MM-DD)', example: '2024-01-01', required: false })
   @IsOptional()

@@ -129,5 +129,6 @@ export const ATTENDANCE_SORTABLE_FIELDS = {
   CHECK_OUT_TIME: 'a."checkOutTime"',
   STATUS: 'a."status"',
   CREATED_AT: 'a."createdAt"',
+  UPDATED_AT: 'a."updatedAt"',
   USER_NAME: 'u."firstName"',
 };
