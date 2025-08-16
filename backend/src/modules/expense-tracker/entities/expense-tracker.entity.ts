@@ -16,6 +16,9 @@ export class ExpenseTrackerEntity extends BaseEntity {
   @Column({ type: 'varchar', nullable: false })
   description: string;
 
+  @Column({ type: 'boolean', nullable: false, default: false })
+  isActive: boolean;
+
   @Column({ type: 'decimal', nullable: false })
   amount: number;
 

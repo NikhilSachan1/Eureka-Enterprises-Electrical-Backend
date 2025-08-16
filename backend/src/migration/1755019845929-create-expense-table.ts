@@ -19,6 +19,12 @@ export class CreateExpenseTable1755019845929 implements MigrationInterface {
             isNullable: false,
           },
           {
+            name: 'isActive',
+            type: 'boolean',
+            default: false,
+            isNullable: false,
+          },
+          {
             name: 'category',
             type: 'varchar',
             isNullable: false,

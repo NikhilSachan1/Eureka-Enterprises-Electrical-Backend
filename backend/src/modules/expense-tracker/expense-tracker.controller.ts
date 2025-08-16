@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Request, UseInterceptors } from '@nestjs/common';
+import { Controller, Post, Body, Request, UseInterceptors, Patch, Param } from '@nestjs/common';
 import { ExpenseTrackerService } from './expense-tracker.service';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
@@ -9,7 +9,12 @@ import {
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators';
-import { CreateCreditExpenseDto, CreateDebitExpenseDto, ForceExpenseDto } from './dto';
+import {
+  CreateCreditExpenseDto,
+  CreateDebitExpenseDto,
+  ForceExpenseDto,
+  EditExpenseDto,
+} from './dto';
 
 @ApiTags('Expense Tracker')
 @ApiBearerAuth('JWT-auth')
@@ -78,5 +83,23 @@ export class ExpenseTrackerController {
       createdBy,
       sourceType,
     });
+  }
+
+  @Patch('/:id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    type: EditExpenseDto,
+    required: true,
+  })
+  async editExpense(
+    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Param('id') id: string,
+    @Body() editExpenseDto: EditExpenseDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
+    @DetectSource()
+    sourceType: EntrySourceType,
+  ) {
+    return this.expenseTrackerService.editExpense({ ...editExpenseDto, id, updatedBy, sourceType });
   }
 }

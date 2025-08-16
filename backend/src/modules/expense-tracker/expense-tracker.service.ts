@@ -1,6 +1,11 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ExpenseTrackerRepository } from './expense-tracker.repository';
-import { CreateCreditExpenseDto, CreateDebitExpenseDto, ForceExpenseDto } from './dto';
+import {
+  CreateCreditExpenseDto,
+  CreateDebitExpenseDto,
+  EditExpenseDto,
+  ForceExpenseDto,
+} from './dto';
 import {
   CONFIGURATION_MODULES,
   CONFIGURATION_KEYS,
@@ -14,7 +19,13 @@ import {
   TransactionType,
   ApprovalStatus,
   DEFAULT_EXPENSE,
+  ExpenseTrackerEntityFields,
 } from './constants/expense-tracker.constants';
+import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
+import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
+import { UtilityService } from 'src/utils/utility/utility.service';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -22,6 +33,8 @@ export class ExpenseTrackerService {
     private readonly expenseTrackerRepository: ExpenseTrackerRepository,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly utilityService: UtilityService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async createDebitExpense(
@@ -35,6 +48,7 @@ export class ExpenseTrackerService {
 
       const expense = await this.expenseTrackerRepository.create({
         ...createExpenseDto,
+        isActive: true,
         amount: Number(amount),
         approvalStatus: ApprovalStatus.PENDING,
         transactionType: TransactionType.DEBIT,
@@ -132,6 +146,7 @@ export class ExpenseTrackerService {
 
       const expense = await this.expenseTrackerRepository.create({
         ...forceExpenseDto,
+        isActive: true,
         amount: Number(amount),
         approvalStatus: ApprovalStatus.APPROVED,
         approvalAt: new Date(),
@@ -163,6 +178,7 @@ export class ExpenseTrackerService {
 
       const expense = await this.expenseTrackerRepository.create({
         ...createExpenseDto,
+        isActive: true,
         amount: Number(amount),
         approvalStatus: ApprovalStatus.APPROVED,
         approvalAt: new Date(),
@@ -174,6 +190,83 @@ export class ExpenseTrackerService {
         createdBy,
       });
       return expense;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findOne(options: FindOneOptions<ExpenseTrackerEntity>): Promise<ExpenseTrackerEntity> {
+    try {
+      return await this.expenseTrackerRepository.findOne(options);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findOneOrFail(
+    options: FindOneOptions<ExpenseTrackerEntity>,
+  ): Promise<ExpenseTrackerEntity> {
+    try {
+      const expense = await this.expenseTrackerRepository.findOne(options);
+
+      if (!expense) {
+        throw new NotFoundException(EXPENSE_TRACKER_ERRORS.NOT_FOUND);
+      }
+
+      return expense;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async update(
+    identifierConditions: FindOptionsWhere<ExpenseTrackerEntity>,
+    updateData: Partial<ExpenseTrackerEntity>,
+    entityManager?: EntityManager,
+  ) {
+    try {
+      await this.findOneOrFail({ where: identifierConditions });
+      await this.expenseTrackerRepository.update(identifierConditions, updateData, entityManager);
+      return this.utilityService.getSuccessMessage(
+        ExpenseTrackerEntityFields.ID,
+        DataSuccessOperationType.UPDATE,
+      );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async editExpense(
+    editExpenseDto: EditExpenseDto & { id: string; updatedBy: string; sourceType: EntrySourceType },
+  ) {
+    try {
+      const { id, updatedBy, sourceType } = editExpenseDto;
+      const expense = await this.findOneOrFail({ where: { id } });
+      if (expense.createdBy !== updatedBy) {
+        throw new BadRequestException(
+          EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED_BY_OTHER_USER,
+        );
+      }
+      if (expense.approvalStatus !== ApprovalStatus.PENDING) {
+        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED);
+      }
+      await this.dataSource.transaction(async (entityManager) => {
+        await this.update({ id }, { ...editExpenseDto, isActive: false, updatedBy }, entityManager);
+        await this.expenseTrackerRepository.create(
+          {
+            ...expense,
+            ...editExpenseDto,
+            isActive: true,
+            updatedBy,
+            entrySourceType: sourceType,
+          },
+          entityManager,
+        );
+      });
+      return this.utilityService.getSuccessMessage(
+        ExpenseTrackerEntityFields.ID,
+        DataSuccessOperationType.UPDATE,
+      );
     } catch (error) {
       throw error;
     }
