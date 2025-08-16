@@ -15,6 +15,7 @@ import { LeaveApplicationsEntity } from 'src/modules/leave-applications/entities
 import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-balance.entity';
 import { ExpenseTrackerEntity } from 'src/modules/expense-tracker/entities/expense-tracker.entity';
 import { ExpenseFilesEntity } from 'src/modules/expense-files/entities/expense-files.entity';
+import { CardsEntity } from 'src/modules/cards/entities/card.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -55,6 +56,7 @@ export class ConfigService {
         LeaveBalanceEntity,
         ExpenseTrackerEntity,
         ExpenseFilesEntity,
+        CardsEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

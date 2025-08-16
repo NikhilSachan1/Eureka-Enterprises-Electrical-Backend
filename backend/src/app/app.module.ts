@@ -24,6 +24,7 @@ import { SchedulerModule } from 'src/modules/scheduler-temp/scheduler.module';
 import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.module';
 import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
 import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';
+import { CardsModule } from 'src/modules/cards/cards.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracke
     LeaveApplicationsModule,
     LeaveBalancesModule,
     ExpenseTrackerModule,
+    CardsModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],
