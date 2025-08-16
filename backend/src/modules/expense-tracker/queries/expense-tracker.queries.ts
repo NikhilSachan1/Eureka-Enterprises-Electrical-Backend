@@ -99,6 +99,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
     LEFT JOIN "users" ab ON e."approvalBy" = ab."id"
+    LEFT JOIN "expense_files" ef ON e."id" = ef."expenseId"
     ${whereClause}
     ORDER BY e."${sortField}" ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}

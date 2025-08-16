@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, FindManyOptions, Repository } from 'typeorm';
 import { ExpenseFilesEntity } from './entities/expense-files.entity';
 
 @Injectable()
@@ -15,6 +15,17 @@ export class ExpenseFilesRepository {
         ? entityManager.getRepository(ExpenseFilesEntity)
         : this.repository;
       return await repository.save(expenseFiles);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async findAll(options: FindManyOptions<ExpenseFilesEntity>, entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(ExpenseFilesEntity)
+        : this.repository;
+      return await repository.find(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

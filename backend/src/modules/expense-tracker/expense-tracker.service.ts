@@ -27,7 +27,7 @@ import {
   EXPENSE_TRACKER_SUCCESS_MESSAGES,
 } from './constants/expense-tracker.constants';
 import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
-import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere, In } from 'typeorm';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -432,6 +432,13 @@ export class ExpenseTrackerService {
         rejectedCount: 0,
       };
 
+      const expenseFiles = await this.expenseFilesService.findAll({
+        where: {
+          expenseId: In(records.map((record: any) => record.id)),
+        },
+        select: ['id', 'fileKey', 'expenseId'],
+      });
+
       // Transform records to include user information
       const transformedRecords = records.map((record: any) => ({
         id: record.id,
@@ -451,6 +458,9 @@ export class ExpenseTrackerService {
         expenseEntryType: record.expenseEntryType,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        fileKeys: expenseFiles
+          .filter((file) => file.expenseId === record.id)
+          .map((file) => file.fileKey),
         user: {
           firstName: record.firstName,
           lastName: record.lastName,
