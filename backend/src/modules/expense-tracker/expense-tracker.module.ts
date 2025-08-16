@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SharedModule } from '../shared/shared.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
+import { ExpenseFilesModule } from '../expense-files/expense-files.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ConfigurationsModule } from '../configurations/configuration.module';
     SharedModule,
     ConfigurationsModule,
     ConfigSettingsModule,
+    ExpenseFilesModule,
   ],
   controllers: [ExpenseTrackerController],
   providers: [ExpenseTrackerService, ExpenseTrackerRepository],

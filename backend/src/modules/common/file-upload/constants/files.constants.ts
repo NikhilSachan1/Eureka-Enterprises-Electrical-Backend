@@ -53,6 +53,7 @@ export const FILE_UPLOAD_ERRORS = {
 export const FIELD_FORMATS: { [key: string]: string[] } = {
   profilePicture: [ALLOWED_FILE_CATEGORY.IMAGE],
   document: [ALLOWED_FILE_CATEGORY.PDF],
+  files: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -67,12 +68,14 @@ export const FIELD_NAME_REFORMED = {
   profilePicture: 'Profile Picture.',
   file: 'Uploaded file.',
   document: 'Uploaded document',
+  files: 'Uploaded files',
 };
 
 export const DATABASE_FIELD_NAMES = {
   profilePicture: 'profilePictureUrl',
   document: 'fileKey',
   file: 'file', // This is generic, not a db column
+  files: 'fileKeys',
 };
 
 export const FILE_ERRORS = {

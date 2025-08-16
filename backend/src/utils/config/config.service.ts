@@ -14,6 +14,7 @@ import { AttendanceEntity } from 'src/modules/attendance/entities/attendance.ent
 import { LeaveApplicationsEntity } from 'src/modules/leave-applications/entities/leave-application.entity';
 import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-balance.entity';
 import { ExpenseTrackerEntity } from 'src/modules/expense-tracker/entities/expense-tracker.entity';
+import { ExpenseFilesEntity } from 'src/modules/expense-files/entities/expense-files.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -53,6 +54,7 @@ export class ConfigService {
         LeaveApplicationsEntity,
         LeaveBalanceEntity,
         ExpenseTrackerEntity,
+        ExpenseFilesEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

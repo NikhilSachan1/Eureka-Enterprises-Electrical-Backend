@@ -14,9 +14,9 @@ import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiResponse } from '@nest
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   FIELD_NAMES,
-  // FILE_UPLOAD_FOLDER_NAMES,
+  FILE_UPLOAD_FOLDER_NAMES,
 } from '../common/file-upload/constants/files.constants';
-// import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
+import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators';
 import {
@@ -48,10 +48,12 @@ export class ExpenseTrackerController {
     @Request() { user: { id: userId } }: { user: { id: string } },
     @Body() createExpenseDto: CreateDebitExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
-    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
+    { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
     return this.expenseTrackerService.createDebitExpense({
       ...createExpenseDto,
+      fileKeys,
       userId,
       sourceType,
     });
@@ -68,12 +70,14 @@ export class ExpenseTrackerController {
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() forceExpenseDto: ForceExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
-    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
+    { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
     return this.expenseTrackerService.forceExpense({
       ...forceExpenseDto,
       createdBy,
       sourceType,
+      fileKeys,
     });
   }
 
@@ -88,12 +92,14 @@ export class ExpenseTrackerController {
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() createExpenseDto: CreateCreditExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
-    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
+    { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
     return this.expenseTrackerService.createCreditExpense({
       ...createExpenseDto,
       createdBy,
       sourceType,
+      fileKeys,
     });
   }
 
@@ -109,13 +115,15 @@ export class ExpenseTrackerController {
     @Param('id') id: string,
     @Body() editExpenseDto: EditExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
-    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
+    { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
     return this.expenseTrackerService.editExpense({
       ...editExpenseDto,
       id,
       updatedBy,
       entrySourceType: sourceType,
+      fileKeys,
     });
   }
 

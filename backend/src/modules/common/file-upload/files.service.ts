@@ -47,7 +47,7 @@ export class FilesService {
           return filePath;
         }),
       );
-      uploadedFileKeys[dbAttribute] = fileKeys.length === 1 ? fileKeys[0] : fileKeys;
+      uploadedFileKeys[dbAttribute] = fileKeys.length === 1 ? [fileKeys[0]] : fileKeys;
     }
     return uploadedFileKeys;
   }

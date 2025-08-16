@@ -36,6 +36,7 @@ import {
   buildExpenseBalanceQuery,
   buildExpenseSummaryQuery,
 } from './queries/expense-tracker.queries';
+import { ExpenseFilesService } from '../expense-files/expense-files.service';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -45,29 +46,51 @@ export class ExpenseTrackerService {
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly expenseFilesService: ExpenseFilesService,
   ) {}
 
   async createDebitExpense(
-    createExpenseDto: CreateDebitExpenseDto & { userId: string; sourceType: EntrySourceType },
+    createExpenseDto: CreateDebitExpenseDto & {
+      userId: string;
+      sourceType: EntrySourceType;
+      fileKeys: string[];
+    },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, userId, sourceType } = createExpenseDto;
+      const { category, paymentMode, amount, expenseDate, userId, sourceType, fileKeys } =
+        createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate);
 
-      const expense = await this.expenseTrackerRepository.create({
-        ...createExpenseDto,
-        isActive: true,
-        amount: Number(amount),
-        approvalStatus: ApprovalStatus.PENDING,
-        transactionType: TransactionType.DEBIT,
-        expenseEntryType: ExpenseEntryType.SELF,
-        entrySourceType: sourceType,
-        createdBy: userId,
-      });
+      return await this.dataSource.transaction(async (entityManager) => {
+        const expense = await this.expenseTrackerRepository.create(
+          {
+            ...createExpenseDto,
+            isActive: true,
+            amount: Number(amount),
+            approvalStatus: ApprovalStatus.PENDING,
+            transactionType: TransactionType.DEBIT,
+            expenseEntryType: ExpenseEntryType.SELF,
+            entrySourceType: sourceType,
+            createdBy: userId,
+          },
+          entityManager,
+        );
 
-      return expense;
+        if (fileKeys) {
+          await this.expenseFilesService.create(
+            {
+              expenseId: expense.id,
+              fileKeys,
+              createdBy: userId,
+            },
+            entityManager,
+          );
+        }
+
+        return expense;
+      });
     } catch (error) {
       throw error;
     }
@@ -147,40 +170,62 @@ export class ExpenseTrackerService {
   }
 
   async forceExpense(
-    forceExpenseDto: ForceExpenseDto & { createdBy: string; sourceType: EntrySourceType },
+    forceExpenseDto: ForceExpenseDto & {
+      createdBy: string;
+      sourceType: EntrySourceType;
+      fileKeys: string[];
+    },
   ) {
     try {
-      const { category, paymentMode, amount, createdBy, sourceType, expenseDate } = forceExpenseDto;
+      const { category, paymentMode, amount, createdBy, sourceType, expenseDate, fileKeys } =
+        forceExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
       if (new Date(expenseDate) > new Date()) {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
       }
 
-      const expense = await this.expenseTrackerRepository.create({
-        ...forceExpenseDto,
-        isActive: true,
-        amount: Number(amount),
-        approvalStatus: ApprovalStatus.APPROVED,
-        approvalAt: new Date(),
-        approvalBy: createdBy,
-        approvalReason: DEFAULT_EXPENSE.FORCE_APPROVAL_REASON,
-        transactionType: TransactionType.DEBIT,
-        expenseEntryType: ExpenseEntryType.FORCED,
-        entrySourceType: sourceType,
-        createdBy,
+      return await this.dataSource.transaction(async (entityManager) => {
+        const expense = await this.expenseTrackerRepository.create({
+          ...forceExpenseDto,
+          isActive: true,
+          amount: Number(amount),
+          approvalStatus: ApprovalStatus.APPROVED,
+          approvalAt: new Date(),
+          approvalBy: createdBy,
+          approvalReason: DEFAULT_EXPENSE.FORCE_APPROVAL_REASON,
+          transactionType: TransactionType.DEBIT,
+          expenseEntryType: ExpenseEntryType.FORCED,
+          entrySourceType: sourceType,
+          createdBy,
+        });
+
+        if (fileKeys) {
+          await this.expenseFilesService.create(
+            {
+              expenseId: expense.id,
+              fileKeys,
+              createdBy,
+            },
+            entityManager,
+          );
+        }
+        return expense;
       });
-      return expense;
     } catch (error) {
       throw error;
     }
   }
 
   async createCreditExpense(
-    createExpenseDto: CreateCreditExpenseDto & { createdBy: string; sourceType: EntrySourceType },
+    createExpenseDto: CreateCreditExpenseDto & {
+      createdBy: string;
+      sourceType: EntrySourceType;
+      fileKeys: string[];
+    },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, createdBy, sourceType } =
+      const { category, paymentMode, amount, expenseDate, createdBy, sourceType, fileKeys } =
         createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
@@ -189,20 +234,37 @@ export class ExpenseTrackerService {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
       }
 
-      const expense = await this.expenseTrackerRepository.create({
-        ...createExpenseDto,
-        isActive: true,
-        amount: Number(amount),
-        approvalStatus: ApprovalStatus.APPROVED,
-        approvalAt: new Date(),
-        approvalBy: createdBy,
-        approvalReason: DEFAULT_EXPENSE.CREDIT_APPROVAL_REASON,
-        transactionType: TransactionType.CREDIT,
-        expenseEntryType: ExpenseEntryType.SELF,
-        entrySourceType: sourceType,
-        createdBy,
+      return await this.dataSource.transaction(async (entityManager) => {
+        const expense = await this.expenseTrackerRepository.create(
+          {
+            ...createExpenseDto,
+            isActive: true,
+            amount: Number(amount),
+            approvalStatus: ApprovalStatus.APPROVED,
+            approvalAt: new Date(),
+            approvalBy: createdBy,
+            approvalReason: DEFAULT_EXPENSE.CREDIT_APPROVAL_REASON,
+            transactionType: TransactionType.CREDIT,
+            expenseEntryType: ExpenseEntryType.SELF,
+            entrySourceType: sourceType,
+            createdBy,
+          },
+          entityManager,
+        );
+
+        if (fileKeys) {
+          await this.expenseFilesService.create(
+            {
+              expenseId: expense.id,
+              fileKeys,
+              createdBy,
+            },
+            entityManager,
+          );
+        }
+
+        return expense;
       });
-      return expense;
     } catch (error) {
       throw error;
     }
@@ -255,10 +317,11 @@ export class ExpenseTrackerService {
       id: string;
       updatedBy: string;
       entrySourceType: EntrySourceType;
+      fileKeys: string[];
     },
   ) {
     try {
-      const { id, updatedBy, entrySourceType, editReason } = editExpenseDto;
+      const { id, updatedBy, entrySourceType, editReason, fileKeys } = editExpenseDto;
       const expense = await this.findOneOrFail({ where: { id, isActive: true } });
 
       if (expense.createdBy !== updatedBy) {
@@ -270,7 +333,7 @@ export class ExpenseTrackerService {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED);
       }
 
-      await this.dataSource.transaction(async (entityManager) => {
+      return await this.dataSource.transaction(async (entityManager) => {
         await this.expenseTrackerRepository.update(
           { id },
           { isActive: false, updatedBy },
@@ -300,12 +363,23 @@ export class ExpenseTrackerService {
           },
           entityManager,
         );
-      });
 
-      return this.utilityService.getSuccessMessage(
-        ExpenseTrackerEntityFields.EXPENSE,
-        DataSuccessOperationType.UPDATE,
-      );
+        if (fileKeys) {
+          await this.expenseFilesService.create(
+            {
+              expenseId: expense.id,
+              fileKeys,
+              createdBy: updatedBy,
+            },
+            entityManager,
+          );
+        }
+
+        return this.utilityService.getSuccessMessage(
+          ExpenseTrackerEntityFields.EXPENSE,
+          DataSuccessOperationType.UPDATE,
+        );
+      });
     } catch (error) {
       throw error;
     }

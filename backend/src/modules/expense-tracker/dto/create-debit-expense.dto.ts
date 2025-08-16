@@ -60,4 +60,14 @@ export class CreateDebitExpenseDto {
   @IsNotEmpty()
   @IsString()
   paymentMode: string;
+
+  @ApiProperty({
+    description: 'Files to be uploaded.',
+    type: 'string',
+    format: 'binary',
+    isArray: true,
+    maxItems: 10,
+    required: true,
+  })
+  files: any;
 }
