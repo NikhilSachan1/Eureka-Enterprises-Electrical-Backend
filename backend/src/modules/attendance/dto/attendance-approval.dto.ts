@@ -46,5 +46,5 @@ export class AttendanceBulkApprovalDto {
   @Type(() => AttendanceApprovalDto)
   approvals: AttendanceApprovalDto[];
 
-  approvedBy?: string;
+  approvalBy?: string;
 }

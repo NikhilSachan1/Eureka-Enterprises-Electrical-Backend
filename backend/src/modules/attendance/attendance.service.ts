@@ -1397,7 +1397,7 @@ export class AttendanceService {
     }
   }
 
-  async handleBulkAttendanceApproval({ approvals, approvedBy }: AttendanceBulkApprovalDto) {
+  async handleBulkAttendanceApproval({ approvals, approvalBy }: AttendanceBulkApprovalDto) {
     try {
       const result = [];
       const errors = [];
@@ -1407,7 +1407,7 @@ export class AttendanceService {
           const attendance = await this.handleSingleAttendanceApproval(
             approval.attendanceId,
             approval,
-            approvedBy,
+            approvalBy,
           );
           result.push(attendance);
         } catch (error) {
@@ -1435,7 +1435,7 @@ export class AttendanceService {
   async handleSingleAttendanceApproval(
     attendanceId: string,
     approvalDto: AttendanceApprovalDto,
-    approvedBy: string,
+    approvalBy: string,
   ) {
     const { approvalStatus, approvalComment } = approvalDto;
 
@@ -1464,10 +1464,10 @@ export class AttendanceService {
       const currentTime = new Date();
       const updateAttendanceRecord: Partial<AttendanceEntity> = {
         approvalStatus,
-        approvalBy: approvedBy,
+        approvalBy: approvalBy,
         approvalAt: currentTime,
         approvalComment,
-        updatedBy: approvedBy,
+        updatedBy: approvalBy,
       };
 
       if (approvalStatus === ApprovalStatus.APPROVED) {
