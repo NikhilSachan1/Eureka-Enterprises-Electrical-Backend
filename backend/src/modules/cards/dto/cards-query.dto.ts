@@ -38,4 +38,13 @@ export class CardsQueryDto extends BaseGetDto {
   @IsOptional()
   @IsString()
   holderName?: string;
+
+  @ApiProperty({
+    description: 'Search',
+    example: '1234567890',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

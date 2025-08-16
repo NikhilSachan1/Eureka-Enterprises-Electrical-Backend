@@ -1,7 +1,10 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Request } from '@nestjs/common';
 import { CardsService } from './cards.service';
 import { CreateCardDto, CardsQueryDto, UpdateCardDto } from './dto';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Cards')
+@ApiBearerAuth('JWT-auth')
 @Controller('cards')
 export class CardsController {
   constructor(private readonly cardsService: CardsService) {}

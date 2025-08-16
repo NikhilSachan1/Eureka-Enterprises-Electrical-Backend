@@ -15,7 +15,7 @@ export class BaseGetDto {
   @IsEnum(SortOrder, { message: PAGNIATION_ERRORS.INVALID_SORT_ORDER })
   sortOrder?: string = DefaultPaginationValues.SORT_ORDER;
 
-  @ApiProperty({ description: 'Column to be sorted by', example: 'firstName', required: false })
+  @ApiProperty({ description: 'Column to be sorted by', example: 'createdAt', required: false })
   @IsOptional()
   @IsString()
   sortField?: string = DefaultPaginationValues.SORT_FIELD;

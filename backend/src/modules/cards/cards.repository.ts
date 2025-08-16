@@ -8,12 +8,16 @@ import {
   Repository,
 } from 'typeorm';
 import { CardsEntity } from './entities/card.entity';
+import { CardsQueryDto } from './dto';
+import { UtilityService } from 'src/utils/utility/utility.service';
+import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class CardsRepository {
   constructor(
     @InjectRepository(CardsEntity)
     private readonly repository: Repository<CardsEntity>,
+    private readonly utilityService: UtilityService,
   ) {}
   async create(cards: Partial<CardsEntity>, entityManager?: EntityManager) {
     try {
@@ -24,10 +28,42 @@ export class CardsRepository {
     }
   }
 
-  async findAll(options: FindManyOptions<CardsEntity>, entityManager?: EntityManager) {
+  async findAll(
+    options: FindManyOptions<CardsEntity> & CardsQueryDto,
+    entityManager?: EntityManager,
+  ) {
     try {
       const repository = entityManager ? entityManager.getRepository(CardsEntity) : this.repository;
-      return await repository.find(options);
+      const { search, page, pageSize, sortField, sortOrder, ...where } =
+        options.where as FindOptionsWhere<CardsEntity> & CardsQueryDto;
+
+      const queryBuilder = repository.createQueryBuilder('cards');
+
+      if (search) {
+        queryBuilder.where('cards.cardNumber LIKE :search', { search: `%${search}%` });
+        queryBuilder.orWhere('cards.cardType LIKE :search', { search: `%${search}%` });
+        queryBuilder.orWhere('cards.holderName LIKE :search', { search: `%${search}%` });
+        queryBuilder.orWhere('cards.expiryDate LIKE :search', { search: `%${search}%` });
+      }
+
+      if (sortField && sortOrder) {
+        queryBuilder.orderBy(`cards.${sortField}`, sortOrder as SortOrder);
+      }
+
+      if (page && pageSize) {
+        queryBuilder.skip((page - 1) * pageSize);
+        queryBuilder.take(pageSize);
+      }
+
+      if (where) {
+        Object.keys(where).forEach((key) => {
+          queryBuilder.andWhere(`cards.${key} = :${key}`, { [key]: where[key] });
+        });
+      }
+
+      const [cards, total] = await queryBuilder.getManyAndCount();
+
+      return this.utilityService.listResponse(cards, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
