@@ -122,3 +122,12 @@ export enum AttendanceEntityFields {
   NOTES = 'notes',
   IS_ACTIVE = 'isActive',
 }
+
+export const ATTENDANCE_SORTABLE_FIELDS = {
+  ATTENDANCE_DATE: 'a."attendanceDate"',
+  CHECK_IN_TIME: 'a."checkInTime"',
+  CHECK_OUT_TIME: 'a."checkOutTime"',
+  STATUS: 'a."status"',
+  CREATED_AT: 'a."createdAt"',
+  USER_NAME: 'u."firstName"',
+};

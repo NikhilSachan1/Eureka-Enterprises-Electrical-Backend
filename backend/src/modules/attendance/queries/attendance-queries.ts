@@ -1,4 +1,5 @@
 import { AttendanceQueryDto } from '../dto/attendance-query.dto';
+import { ATTENDANCE_SORTABLE_FIELDS } from '../constants/attendance.constants';
 
 export function buildAttendanceListQuery(query: AttendanceQueryDto) {
   const {
@@ -77,17 +78,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
 
   const whereClause = whereConditions.join(' AND ');
 
-  // Sort field mapping
-  const sortFieldMap: Record<string, string> = {
-    attendanceDate: 'a."attendanceDate"',
-    checkInTime: 'a."checkInTime"',
-    checkOutTime: 'a."checkOutTime"',
-    status: 'a."status"',
-    createdAt: 'a."createdAt"',
-    userName: 'u."firstName"',
-  };
-
-  const orderByField = sortFieldMap[sortField] || 'a."attendanceDate"';
+  const orderByField = ATTENDANCE_SORTABLE_FIELDS[sortField] || 'a."attendanceDate"';
   const offset = (page - 1) * pageSize;
 
   // Main query

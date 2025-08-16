@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { EXPENSE_TRACKER_ERRORS } from '../constants/expense-tracker.constants';
+import { Transform, Type } from 'class-transformer';
 
 export class EditExpenseDto {
   @ApiProperty({
@@ -21,12 +23,23 @@ export class EditExpenseDto {
   description: string;
 
   @ApiProperty({
+    description: 'Edit Reason',
+    example: 'Flight to Paris',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  editReason: string;
+
+  @ApiProperty({
     description: 'Expense Amount',
     example: 100,
     required: true,
   })
   @IsNotEmpty()
+  @Transform(({ value }) => parseFloat(value))
   @IsNumber()
+  @Min(0.01, { message: EXPENSE_TRACKER_ERRORS.AMOUNT_MUST_BE_GREATER_THAN_ZERO })
   amount: number;
 
   @ApiProperty({
@@ -44,6 +57,7 @@ export class EditExpenseDto {
     required: true,
   })
   @IsNotEmpty()
+  @Type(() => Date)
   @IsDate()
   expenseDate: Date;
 

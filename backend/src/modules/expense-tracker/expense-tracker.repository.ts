@@ -1,7 +1,13 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { EntityManager, FindOneOptions, FindOptionsWhere, Repository } from 'typeorm';
+import {
+  EntityManager,
+  FindManyOptions,
+  FindOneOptions,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
 
 @Injectable()
@@ -33,6 +39,17 @@ export class ExpenseTrackerRepository {
     }
   }
 
+  async findAll(options: FindManyOptions<ExpenseTrackerEntity>, entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(ExpenseTrackerEntity)
+        : this.repository;
+      return await repository.find(options);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
   async update(
     identifierConditions: FindOptionsWhere<ExpenseTrackerEntity>,
     updateData: Partial<ExpenseTrackerEntity>,
@@ -43,6 +60,17 @@ export class ExpenseTrackerRepository {
         ? entityManager.getRepository(ExpenseTrackerEntity)
         : this.repository;
       return await repository.update(identifierConditions, updateData);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async executeRawQuery(query: string, params: any[], entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(ExpenseTrackerEntity)
+        : this.repository;
+      return await repository.query(query, params);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

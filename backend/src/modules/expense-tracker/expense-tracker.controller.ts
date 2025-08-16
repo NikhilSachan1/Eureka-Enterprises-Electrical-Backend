@@ -1,12 +1,22 @@
-import { Controller, Post, Body, Request, UseInterceptors, Patch, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Request,
+  UseInterceptors,
+  Patch,
+  Param,
+  Get,
+  Query,
+} from '@nestjs/common';
 import { ExpenseTrackerService } from './expense-tracker.service';
-import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   FIELD_NAMES,
-  FILE_UPLOAD_FOLDER_NAMES,
+  // FILE_UPLOAD_FOLDER_NAMES,
 } from '../common/file-upload/constants/files.constants';
-import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
+// import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators';
 import {
@@ -14,7 +24,11 @@ import {
   CreateDebitExpenseDto,
   ForceExpenseDto,
   EditExpenseDto,
+  ExpenseQueryDto,
+  ExpenseListResponseDto,
+  ExpenseHistoryResponseDto,
 } from './dto';
+import { ExpenseUserInterceptor } from './interceptors/expense-user.interceptor';
 
 @ApiTags('Expense Tracker')
 @ApiBearerAuth('JWT-auth')
@@ -32,9 +46,8 @@ export class ExpenseTrackerController {
   async createDebitExpense(
     @Request() { user: { id: userId } }: { user: { id: string } },
     @Body() createExpenseDto: CreateDebitExpenseDto,
-    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
-    @DetectSource()
-    sourceType: EntrySourceType,
+    @DetectSource() sourceType: EntrySourceType,
+    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
   ) {
     return this.expenseTrackerService.createDebitExpense({
       ...createExpenseDto,
@@ -53,9 +66,8 @@ export class ExpenseTrackerController {
   async forceExpense(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() forceExpenseDto: ForceExpenseDto,
-    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
-    @DetectSource()
-    sourceType: EntrySourceType,
+    @DetectSource() sourceType: EntrySourceType,
+    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
   ) {
     return this.expenseTrackerService.forceExpense({
       ...forceExpenseDto,
@@ -74,9 +86,8 @@ export class ExpenseTrackerController {
   async createCreditExpense(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() createExpenseDto: CreateCreditExpenseDto,
-    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
-    @DetectSource()
-    sourceType: EntrySourceType,
+    @DetectSource() sourceType: EntrySourceType,
+    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
   ) {
     return this.expenseTrackerService.createCreditExpense({
       ...createExpenseDto,
@@ -96,10 +107,27 @@ export class ExpenseTrackerController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Param('id') id: string,
     @Body() editExpenseDto: EditExpenseDto,
-    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
-    @DetectSource()
-    sourceType: EntrySourceType,
+    @DetectSource() sourceType: EntrySourceType,
+    // @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES) files?: any,
   ) {
-    return this.expenseTrackerService.editExpense({ ...editExpenseDto, id, updatedBy, sourceType });
+    return this.expenseTrackerService.editExpense({
+      ...editExpenseDto,
+      id,
+      updatedBy,
+      entrySourceType: sourceType,
+    });
+  }
+
+  @Get()
+  @UseInterceptors(ExpenseUserInterceptor)
+  @ApiResponse({ status: 200, type: ExpenseListResponseDto })
+  async getExpenseRecords(@Query() expenseQueryDto: ExpenseQueryDto) {
+    return this.expenseTrackerService.getExpenseRecords(expenseQueryDto);
+  }
+
+  @Get(':id/history')
+  @ApiResponse({ status: 200, type: ExpenseHistoryResponseDto })
+  async getExpenseHistory(@Param('id') id: string) {
+    return this.expenseTrackerService.getExpenseHistory(id);
   }
 }

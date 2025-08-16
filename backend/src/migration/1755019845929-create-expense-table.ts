@@ -67,7 +67,7 @@ export class CreateExpenseTable1755019845929 implements MigrationInterface {
           {
             name: 'approvalReason',
             type: 'varchar',
-            isNullable: false,
+            isNullable: true,
           },
           {
             name: 'transactionType',
@@ -88,6 +88,27 @@ export class CreateExpenseTable1755019845929 implements MigrationInterface {
             name: 'expenseEntryType',
             type: 'text',
             isNullable: false,
+          },
+          {
+            name: 'originalExpenseId',
+            type: 'uuid',
+            isNullable: true,
+          },
+          {
+            name: 'parentExpenseId',
+            type: 'uuid',
+            isNullable: true,
+          },
+          {
+            name: 'versionNumber',
+            type: 'integer',
+            isNullable: false,
+            default: 1,
+          },
+          {
+            name: 'editReason',
+            type: 'varchar',
+            isNullable: true,
           },
           {
             name: 'createdAt',
@@ -153,6 +174,28 @@ export class CreateExpenseTable1755019845929 implements MigrationInterface {
     await queryRunner.createForeignKey(
       'expenses',
       new TableForeignKey({
+        columnNames: ['originalExpenseId'],
+        referencedColumnNames: ['id'],
+        referencedTableName: 'expenses',
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    await queryRunner.createForeignKey(
+      'expenses',
+      new TableForeignKey({
+        columnNames: ['parentExpenseId'],
+        referencedColumnNames: ['id'],
+        referencedTableName: 'expenses',
+        onDelete: 'SET NULL',
+        onUpdate: 'CASCADE',
+      }),
+    );
+
+    await queryRunner.createForeignKey(
+      'expenses',
+      new TableForeignKey({
         columnNames: ['createdBy'],
         referencedColumnNames: ['id'],
         referencedTableName: 'users',
@@ -205,6 +248,22 @@ export class CreateExpenseTable1755019845929 implements MigrationInterface {
       new TableIndex({
         name: 'idx_expenses_approvalStatus',
         columnNames: ['approvalStatus'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'expenses',
+      new TableIndex({
+        name: 'idx_expenses_originalExpenseId',
+        columnNames: ['originalExpenseId'],
+      }),
+    );
+
+    await queryRunner.createIndex(
+      'expenses',
+      new TableIndex({
+        name: 'idx_expenses_isActive',
+        columnNames: ['isActive'],
       }),
     );
   }

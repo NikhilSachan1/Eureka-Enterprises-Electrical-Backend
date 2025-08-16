@@ -4,6 +4,8 @@ import {
   CreateCreditExpenseDto,
   CreateDebitExpenseDto,
   EditExpenseDto,
+  ExpenseListResponseDto,
+  ExpenseQueryDto,
   ForceExpenseDto,
 } from './dto';
 import {
@@ -23,9 +25,14 @@ import {
 } from './constants/expense-tracker.constants';
 import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
-import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
+import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { InjectDataSource } from '@nestjs/typeorm';
+import {
+  buildExpenseListQuery,
+  buildExpenseBalanceQuery,
+  buildExpenseSummaryQuery,
+} from './queries/expense-tracker.queries';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -127,9 +134,9 @@ export class ExpenseTrackerService {
 
     const allowedDays = Number(expenseCycleInDays);
     const currentDate = new Date();
-    const allowedDate = new Date(currentDate.getTime() - allowedDays);
+    const allowedDate = new Date(currentDate.getTime() - allowedDays * 24 * 60 * 60 * 1000);
 
-    if (new Date(expenseDate) < allowedDate) {
+    if (expenseDate < allowedDate) {
       throw new BadRequestException(
         EXPENSE_TRACKER_ERRORS.EXPENSE_DATE_TOO_OLD.replace('{days}', allowedDays.toString()),
       );
@@ -140,9 +147,12 @@ export class ExpenseTrackerService {
     forceExpenseDto: ForceExpenseDto & { createdBy: string; sourceType: EntrySourceType },
   ) {
     try {
-      const { category, paymentMode, amount, createdBy, sourceType } = forceExpenseDto;
+      const { category, paymentMode, amount, createdBy, sourceType, expenseDate } = forceExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
+      if (new Date(expenseDate) > new Date()) {
+        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
+      }
 
       const expense = await this.expenseTrackerRepository.create({
         ...forceExpenseDto,
@@ -237,11 +247,16 @@ export class ExpenseTrackerService {
   }
 
   async editExpense(
-    editExpenseDto: EditExpenseDto & { id: string; updatedBy: string; sourceType: EntrySourceType },
+    editExpenseDto: EditExpenseDto & {
+      id: string;
+      updatedBy: string;
+      entrySourceType: EntrySourceType;
+    },
   ) {
     try {
-      const { id, updatedBy, sourceType } = editExpenseDto;
-      const expense = await this.findOneOrFail({ where: { id } });
+      const { id, updatedBy, entrySourceType, editReason } = editExpenseDto;
+      const expense = await this.findOneOrFail({ where: { id, isActive: true } });
+
       if (expense.createdBy !== updatedBy) {
         throw new BadRequestException(
           EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED_BY_OTHER_USER,
@@ -250,23 +265,194 @@ export class ExpenseTrackerService {
       if (expense.approvalStatus !== ApprovalStatus.PENDING) {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED);
       }
+
       await this.dataSource.transaction(async (entityManager) => {
-        await this.update({ id }, { ...editExpenseDto, isActive: false, updatedBy }, entityManager);
+        await this.expenseTrackerRepository.update(
+          { id },
+          { isActive: false, updatedBy },
+          entityManager,
+        );
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id: _, ...editData } = editExpenseDto;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id: __, ...expenseData } = expense;
+
+        const originalExpenseId = expense.originalExpenseId || expense.id;
+        const parentExpenseId = expense.id;
+        const versionNumber = expense.versionNumber + 1;
+
         await this.expenseTrackerRepository.create(
           {
-            ...expense,
-            ...editExpenseDto,
+            ...expenseData,
+            ...editData,
             isActive: true,
             updatedBy,
-            entrySourceType: sourceType,
+            entrySourceType,
+            originalExpenseId,
+            parentExpenseId,
+            versionNumber,
+            editReason: editReason || DEFAULT_EXPENSE.EDIT_REASON,
           },
           entityManager,
         );
       });
+
       return this.utilityService.getSuccessMessage(
-        ExpenseTrackerEntityFields.ID,
+        ExpenseTrackerEntityFields.EXPENSE,
         DataSuccessOperationType.UPDATE,
       );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async getExpenseRecords(expenseQueryDto: ExpenseQueryDto): Promise<ExpenseListResponseDto> {
+    try {
+      const { ...filters } = expenseQueryDto;
+
+      // Build all queries
+      const { query, countQuery, params, countParams } = buildExpenseListQuery(filters);
+      const { openingBalanceQuery, openingBalanceParams, periodTotalsQuery, periodParams } =
+        buildExpenseBalanceQuery(filters);
+      const { summaryQuery, params: summaryParams } = buildExpenseSummaryQuery(filters);
+
+      // Execute all queries in parallel
+      const [records, [{ total }], openingBalanceResult, periodTotalsResult, [summaryResult]] =
+        await Promise.all([
+          this.expenseTrackerRepository.executeRawQuery(query, params),
+          this.expenseTrackerRepository.executeRawQuery(countQuery, countParams),
+          this.expenseTrackerRepository.executeRawQuery(openingBalanceQuery, openingBalanceParams),
+          this.expenseTrackerRepository.executeRawQuery(periodTotalsQuery, periodParams),
+          this.expenseTrackerRepository.executeRawQuery(summaryQuery, summaryParams),
+        ]);
+
+      // Calculate opening balance
+      const openingBalance =
+        openingBalanceResult.length > 0
+          ? openingBalanceResult[0]
+          : { totalCredit: 0, totalDebit: 0 };
+      const openingBalanceAmount =
+        Number(openingBalance.totalCredit) - Number(openingBalance.totalDebit);
+
+      // Calculate period totals
+      const periodTotals =
+        periodTotalsResult.length > 0 ? periodTotalsResult[0] : { periodCredit: 0, periodDebit: 0 };
+      const periodCredit = Number(periodTotals.periodCredit);
+      const periodDebit = Number(periodTotals.periodDebit);
+
+      // Calculate closing balance
+      const closingBalanceAmount = openingBalanceAmount + periodCredit - periodDebit;
+
+      // Summary data
+      const summary = summaryResult || {
+        totalCredit: 0,
+        totalDebit: 0,
+        totalRecords: 0,
+        pendingCount: 0,
+        approvedCount: 0,
+        rejectedCount: 0,
+      };
+
+      // Transform records to include user information
+      const transformedRecords = records.map((record: any) => ({
+        id: record.id,
+        userId: record.userId,
+        category: record.category,
+        description: record.description,
+        amount: Number(record.amount),
+        transactionId: record.transactionId,
+        expenseDate: record.expenseDate,
+        approvalStatus: record.approvalStatus,
+        approvalBy: record.approvalBy,
+        approvalAt: record.approvalAt,
+        approvalReason: record.approvalReason,
+        transactionType: record.transactionType,
+        paymentMode: record.paymentMode,
+        entrySourceType: record.entrySourceType,
+        expenseEntryType: record.expenseEntryType,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        user: {
+          firstName: record.firstName,
+          lastName: record.lastName,
+          email: record.email,
+          employeeId: record.employeeId,
+        },
+        approvalByUser: record.approvalBy
+          ? {
+              firstName: record.approvalByFirstName,
+              lastName: record.approvalByLastName,
+            }
+          : null,
+      }));
+
+      return {
+        records: transformedRecords,
+        totalRecords: Number(total),
+        stats: {
+          balances: {
+            openingBalance: openingBalanceAmount,
+            closingBalance: closingBalanceAmount,
+            totalCredit: Number(summary.totalCredit),
+            totalDebit: Number(summary.totalDebit),
+            periodCredit: periodCredit,
+            periodDebit: periodDebit,
+          },
+          approval: {
+            pending: Number(summary.pendingCount),
+            approved: Number(summary.approvedCount),
+            rejected: Number(summary.rejectedCount),
+            total: Number(summary.totalRecords),
+          },
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async getExpenseHistory(expenseId: string) {
+    try {
+      const expense = await this.findOneOrFail({ where: { id: expenseId } });
+
+      // Get the original expense ID (could be this expense or an ancestor)
+      const originalExpenseId = expense.originalExpenseId || expense.id;
+
+      // Find all versions of this expense
+      const history = await this.expenseTrackerRepository.findAll({
+        where: [
+          { originalExpenseId }, // All subsequent versions
+        ],
+        relations: ['user', 'approvalByUser'],
+        order: { versionNumber: SortOrder.ASC },
+      });
+
+      return {
+        originalExpenseId,
+        currentVersion: expense.versionNumber,
+        totalVersions: history.length,
+        history: history.map((record) => ({
+          id: record.id,
+          versionNumber: record.versionNumber,
+          amount: record.amount,
+          category: record.category,
+          description: record.description,
+          expenseDate: record.expenseDate,
+          approvalStatus: record.approvalStatus,
+          isActive: record.isActive,
+          editReason: record.editReason,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+          createdBy: record.createdBy,
+          updatedBy: record.updatedBy,
+          user: {
+            firstName: record.user.firstName,
+            lastName: record.user.lastName,
+            email: record.user.email,
+          },
+        })),
+      };
     } catch (error) {
       throw error;
     }

@@ -10,7 +10,6 @@ export const DetectSource = createParamDecorator(
     if (customSource) {
       return customSource.toLowerCase() === 'app' ? EntrySourceType.APP : EntrySourceType.WEB;
     }
-
     return EntrySourceType.WEB;
   },
 );

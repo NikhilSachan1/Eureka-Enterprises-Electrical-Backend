@@ -13,6 +13,7 @@ import { UserPermissionEntity } from 'src/modules/user-permissions/entities/user
 import { AttendanceEntity } from 'src/modules/attendance/entities/attendance.entity';
 import { LeaveApplicationsEntity } from 'src/modules/leave-applications/entities/leave-application.entity';
 import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-balance.entity';
+import { ExpenseTrackerEntity } from 'src/modules/expense-tracker/entities/expense-tracker.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -51,6 +52,7 @@ export class ConfigService {
         AttendanceEntity,
         LeaveApplicationsEntity,
         LeaveBalanceEntity,
+        ExpenseTrackerEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,
