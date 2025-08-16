@@ -62,7 +62,6 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
       LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
       LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."employeeId") LIKE LOWER($${paramIndex}) OR
       LOWER(e."description") LIKE LOWER($${paramIndex})
     )`);
     params.push(`%${search}%`);
@@ -95,7 +94,6 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       u."firstName",
       u."lastName",
       u."email",
-      u."employeeId",
       ab."firstName" as "approvalByFirstName",
       ab."lastName" as "approvalByLastName"
     FROM "expenses" e
@@ -116,7 +114,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     ${whereClause}
   `;
 
-  const countParams = params.slice(0, paramIndex - 2); // Remove limit and offset
+  const countParams = params.slice(0, paramIndex - 2 + 1); // Remove limit and offset
 
   return {
     query,
@@ -156,7 +154,6 @@ export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
       LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
       LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
       LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."employeeId") LIKE LOWER($${paramIndex}) OR
       LOWER(e."description") LIKE LOWER($${paramIndex})
     )`);
     params.push(`%${search}%`);
@@ -295,7 +292,6 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
       LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
       LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
       LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."employeeId") LIKE LOWER($${paramIndex}) OR
       LOWER(e."description") LIKE LOWER($${paramIndex})
     )`);
     params.push(`%${search}%`);
@@ -322,3 +318,5 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
     params,
   };
 };
+
+// TODO: Confirm the query is correct, whenever tested with the frontend.

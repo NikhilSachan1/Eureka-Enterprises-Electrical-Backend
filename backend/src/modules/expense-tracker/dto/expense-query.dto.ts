@@ -2,9 +2,22 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsDateString, IsEnum, IsArray, IsString } from 'class-validator';
 import { BaseGetDto } from '../../../utils/base-dto/base-get-dto';
-import { ApprovalStatus } from '../constants/expense-tracker.constants';
+import {
+  ApprovalStatus,
+  ExpenseTrackerSortableFields,
+} from '../constants/expense-tracker.constants';
 
 export class ExpenseQueryDto extends BaseGetDto {
+  @ApiProperty({
+    description: 'Sort field',
+    enum: ExpenseTrackerSortableFields,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(ExpenseTrackerSortableFields)
+  @IsString()
+  sortField?: string = 'createdAt';
+
   @ApiProperty({ description: 'Start date (YYYY-MM-DD)', example: '2024-01-01', required: false })
   @IsOptional()
   @IsDateString()
@@ -51,3 +64,5 @@ export class ExpenseQueryDto extends BaseGetDto {
   @IsString()
   search?: string;
 }
+
+//sortfield wala sort karna hai.

@@ -41,3 +41,13 @@ export enum ExpenseTrackerEntityFields {
   ID = 'id',
   EXPENSE = 'Expense',
 }
+
+export enum ExpenseTrackerSortableFields {
+  EXPENSE_DATE = 'expenseDate',
+  AMOUNT = 'amount',
+  CATEGORY = 'category',
+  DESCRIPTION = 'description',
+  APPROVAL_STATUS = 'approvalStatus',
+  CREATED_AT = 'createdAt',
+  UPDATED_AT = 'updatedAt',
+}
