@@ -16,6 +16,9 @@ import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-ba
 import { ExpenseTrackerEntity } from 'src/modules/expense-tracker/entities/expense-tracker.entity';
 import { ExpenseFilesEntity } from 'src/modules/expense-files/entities/expense-files.entity';
 import { CardsEntity } from 'src/modules/cards/entities/card.entity';
+import { VehicleEntity } from 'src/modules/vehicles/entities/vehicle.entity';
+import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-file.entity';
+import { VehicleEventEntity } from 'src/modules/vehicle-events/entities/vehicle-event.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -57,6 +60,9 @@ export class ConfigService {
         ExpenseTrackerEntity,
         ExpenseFilesEntity,
         CardsEntity,
+        VehicleEntity,
+        VehicleFileEntity,
+        VehicleEventEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,
