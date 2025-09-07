@@ -685,6 +685,7 @@ export class LeaveApplicationsService {
         userId: leaveApplication.userId,
         leaveType: leaveApplication.leaveType,
         leaveCategory: leaveApplication.leaveCategory,
+        leaveApplicationType: leaveApplication.leaveApplicationType,
         fromDate: leaveApplication.fromDate,
         toDate: leaveApplication.toDate,
         reason: leaveApplication.reason,

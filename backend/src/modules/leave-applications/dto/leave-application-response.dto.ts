@@ -32,6 +32,9 @@ export class LeaveApplicationResponseDto {
   leaveCategory: string;
 
   @ApiProperty()
+  leaveApplicationType: string;
+
+  @ApiProperty()
   fromDate: string;
 
   @ApiProperty()
