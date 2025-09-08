@@ -47,12 +47,13 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
         approver."lastName" as "approverLastName",
         approver."email" as "approverEmail",
         -- Created by
-        u."firstName" as "createdByFirstName",
-        u."lastName" as "createdByLastName",
-        u."email" as "createdByEmail"
+        creator."firstName" as "createdByFirstName",
+        creator."lastName" as "createdByLastName",
+        creator."email" as "createdByEmail"
     FROM leave_applications la
     INNER JOIN users u ON la."userId" = u."id"
     LEFT JOIN users approver ON la."approvalBy" = approver."id"
+    LEFT JOIN users creator ON la."createdBy" = creator."id"
   `;
 
   // WHERE conditions
