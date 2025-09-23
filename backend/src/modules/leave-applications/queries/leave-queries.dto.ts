@@ -43,9 +43,9 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
         u."email",
         u."contactNumber",
         -- Approver information
-        approver."firstName" as "approverFirstName",
-        approver."lastName" as "approverLastName",
-        approver."email" as "approverEmail",
+        approver."firstName" as "approvalByFirstName",
+        approver."lastName" as "approvalByLastName",
+        approver."email" as "approvalByEmail",
         -- Created by
         creator."firstName" as "createdByFirstName",
         creator."lastName" as "createdByLastName",
