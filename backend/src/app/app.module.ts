@@ -25,7 +25,10 @@ import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.m
 import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
 import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';
 import { CardsModule } from 'src/modules/cards/cards.module';
-import { VehiclesModule } from 'src/modules/vehicles/vehicles.module';
+import { VehicleMastersModule } from 'src/modules/vehicle-masters/vehicle-masters.module';
+import { VehicleEventsModule } from 'src/modules/vehicle-events/vehicle-events.module';
+import { VehicleVersionsModule } from 'src/modules/vehicle-versions/vehicle-versions.module';
+import { VehicleFilesModule } from 'src/modules/vehicle-files/vehicle-files.module';
 
 @Module({
   imports: [
@@ -46,7 +49,10 @@ import { VehiclesModule } from 'src/modules/vehicles/vehicles.module';
     LeaveBalancesModule,
     ExpenseTrackerModule,
     CardsModule,
-    VehiclesModule,
+    VehicleMastersModule,
+    VehicleVersionsModule,
+    VehicleEventsModule,
+    VehicleFilesModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],

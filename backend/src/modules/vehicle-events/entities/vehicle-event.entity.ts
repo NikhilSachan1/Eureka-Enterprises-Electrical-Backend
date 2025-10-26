@@ -1,17 +1,15 @@
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { Column, Entity, Index, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
-import { VehicleEntity } from 'src/modules/vehicles/entities/vehicle.entity';
-import { UserEntity } from 'src/modules/users/entities/user.entity';
+import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicle-master.entity';
 import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-file.entity';
 
 @Entity('vehicles_events')
-@Index('idx_vehicles_events_vehicle_id', ['vehicleId'])
 @Index('idx_vehicles_events_from_user', ['fromUser'])
 @Index('idx_vehicles_events_to_user', ['toUser'])
 @Index('idx_vehicles_events_created_by', ['createdBy'])
 export class VehicleEventEntity extends BaseEntity {
   @Column({ type: 'uuid', nullable: false })
-  vehicleId: string;
+  vehicleMasterId: string;
 
   @Column({ type: 'varchar', nullable: false })
   eventType: string;
@@ -26,18 +24,10 @@ export class VehicleEventEntity extends BaseEntity {
   metadata?: Record<string, any>;
 
   // Relations
-  @ManyToOne(() => VehicleEntity, (vehicle) => vehicle.vehicleEvents)
-  @JoinColumn({ name: 'vehicleId' })
-  vehicle: VehicleEntity;
+  @ManyToOne(() => VehicleMasterEntity, (vehicle) => vehicle.vehicleEvents)
+  @JoinColumn({ name: 'vehicleMasterId' })
+  vehicleMaster: VehicleMasterEntity;
 
-  @ManyToOne(() => UserEntity, (user) => user.id, { nullable: true })
-  @JoinColumn({ name: 'fromUser' })
-  fromUserEntity?: UserEntity;
-
-  @ManyToOne(() => UserEntity, (user) => user.id, { nullable: true })
-  @JoinColumn({ name: 'toUser' })
-  toUserEntity?: UserEntity;
-
-  @OneToMany(() => VehicleFileEntity, (vehicleFile) => vehicleFile.vehicleEvents)
+  @OneToMany(() => VehicleFileEntity, (vehicleFile) => vehicleFile.vehicleEvent)
   vehicleFiles: VehicleFileEntity[];
 }

@@ -7,21 +7,21 @@ import {
   FindOptionsWhere,
   Repository,
 } from 'typeorm';
-import { VehicleEntity } from './entities/vehicle.entity';
+import { VehicleVersionEntity } from './entities/vehicle-versions.entity';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { VehicleQueryDto } from './dto';
+import { VehicleVersionsQueryDto } from './dto';
 
 @Injectable()
-export class VehiclesRepository {
+export class VehicleVersionsRepository {
   constructor(
-    @InjectRepository(VehicleEntity)
-    private readonly repository: Repository<VehicleEntity>,
+    @InjectRepository(VehicleVersionEntity)
+    private readonly repository: Repository<VehicleVersionEntity>,
     private readonly utilityService: UtilityService,
   ) {}
-  async create(vehicles: Partial<VehicleEntity>, entityManager?: EntityManager) {
+  async create(vehicles: Partial<VehicleVersionEntity>, entityManager?: EntityManager) {
     try {
       const repository = entityManager
-        ? entityManager.getRepository(VehicleEntity)
+        ? entityManager.getRepository(VehicleVersionEntity)
         : this.repository;
       return await repository.save(vehicles);
     } catch (error) {
@@ -30,12 +30,12 @@ export class VehiclesRepository {
   }
 
   async findAll(
-    options: FindManyOptions<VehicleEntity> & VehicleQueryDto,
+    options: FindManyOptions<VehicleVersionEntity> & VehicleVersionsQueryDto,
     entityManager?: EntityManager,
   ) {
     try {
       const repository = entityManager
-        ? entityManager.getRepository(VehicleEntity)
+        ? entityManager.getRepository(VehicleVersionEntity)
         : this.repository;
       const [vehicles, total] = await repository.findAndCount(options);
       return this.utilityService.listResponse(vehicles, total);
@@ -44,10 +44,10 @@ export class VehiclesRepository {
     }
   }
 
-  async findOne(options: FindOneOptions<VehicleEntity>, entityManager?: EntityManager) {
+  async findOne(options: FindOneOptions<VehicleVersionEntity>, entityManager?: EntityManager) {
     try {
       const repository = entityManager
-        ? entityManager.getRepository(VehicleEntity)
+        ? entityManager.getRepository(VehicleVersionEntity)
         : this.repository;
       return await repository.findOne(options);
     } catch (error) {
@@ -56,13 +56,13 @@ export class VehiclesRepository {
   }
 
   async update(
-    identifierConditions: FindOptionsWhere<VehicleEntity>,
-    updateData: Partial<VehicleEntity>,
+    identifierConditions: FindOptionsWhere<VehicleVersionEntity>,
+    updateData: Partial<VehicleVersionEntity>,
     entityManager?: EntityManager,
   ) {
     try {
       const repository = entityManager
-        ? entityManager.getRepository(VehicleEntity)
+        ? entityManager.getRepository(VehicleVersionEntity)
         : this.repository;
       return await repository.update(identifierConditions, updateData);
     } catch (error) {
@@ -71,12 +71,12 @@ export class VehiclesRepository {
   }
 
   async delete(
-    identifierConditions: FindOptionsWhere<VehicleEntity>,
+    identifierConditions: FindOptionsWhere<VehicleVersionEntity>,
     entityManager?: EntityManager,
   ) {
     try {
       const repository = entityManager
-        ? entityManager.getRepository(VehicleEntity)
+        ? entityManager.getRepository(VehicleVersionEntity)
         : this.repository;
       return await repository.delete(identifierConditions);
     } catch (error) {

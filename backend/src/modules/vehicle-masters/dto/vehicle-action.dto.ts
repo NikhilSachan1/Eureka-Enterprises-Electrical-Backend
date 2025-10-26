@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
-import { VehicleEventTypes } from '../constants/vehicle.constants';
+import { VehicleEventTypes } from '../constants/vehicle-masters.constants';
 
 export class VehicleActionDto {
   @ApiProperty({

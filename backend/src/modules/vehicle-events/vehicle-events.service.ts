@@ -2,9 +2,11 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateVehicleEventDto } from './dto/create-vehicle-event.dto';
 import { DataSource, EntityManager } from 'typeorm';
 import { VehicleEventsRepository } from './vehicle-events.repository';
-import { VehicleActionDto } from '../vehicles/dto/vehicle-action.dto';
-import { VehicleEventTypes, VEHICLE_ERRORS } from '../vehicles/constants/vehicle.constants';
+import { VehicleActionDto } from '../vehicle-versions/dto/vehicle-action.dto';
 import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
+import { VehicleEventTypes } from '../vehicle-masters/constants/vehicle-masters.constants';
+import { VEHICLE_EVENTS_ERRORS } from './constants/vehicle-events.constants';
+import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 
 @Injectable()
 export class VehicleEventsService {
@@ -31,7 +33,7 @@ export class VehicleEventsService {
     createdBy: string,
   ) {
     try {
-      const { vehicleId, action, toUserId, fromUserId } = vehicleActionDto;
+      const { vehicleMasterId, action, toUserId, fromUserId, metadata } = vehicleActionDto;
       await this.dataSource.transaction(async (entityManager: EntityManager) => {
         switch (action) {
           case VehicleEventTypes.HANDOVER_INITIATED ||
@@ -40,10 +42,11 @@ export class VehicleEventsService {
             VehicleEventTypes.HANDOVER_CANCELLED:
             const vehicleEvent = await this.create(
               {
-                vehicleId,
+                vehicleMasterId,
                 eventType: action,
                 toUser: toUserId,
                 fromUser: fromUserId,
+                metadata,
                 createdBy,
               },
               entityManager,
@@ -52,7 +55,7 @@ export class VehicleEventsService {
             if (vehicleFiles) {
               await this.vehicleFilesService.create(
                 {
-                  vehicleId,
+                  vehicleMasterId,
                   fileType: action,
                   fileKeys: vehicleFiles,
                   vehicleEventsId: vehicleEvent.id,
@@ -66,19 +69,32 @@ export class VehicleEventsService {
           case VehicleEventTypes.DEALLOCATED:
             const deallocationEvent = await this.create(
               {
-                vehicleId,
+                vehicleMasterId,
                 eventType: action,
                 fromUser: fromUserId,
+                metadata,
                 createdBy,
               },
               entityManager,
             );
-            //TODO: Wether to add image while deallocation or not let me know
             return deallocationEvent;
-
           default:
-            throw new BadRequestException(VEHICLE_ERRORS.INVALID_ACTION);
+            throw new BadRequestException(VEHICLE_EVENTS_ERRORS.INVALID_ACTION);
         }
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findAll(vehicleMasterId: string, query: VehicleEventsQueryDto) {
+    try {
+      return await this.vehicleEventsRepository.findAll({
+        where: {
+          vehicleMasterId,
+        },
+        ...query,
+        relations: ['vehicleFiles'],
       });
     } catch (error) {
       throw error;

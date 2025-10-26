@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
-export class CreateVehicleFileDto {
+export class UpdateVehicleFileDto {
   @ApiProperty({
     description: 'The ID of the vehicle',
     example: '123e4567-e89b-12d3-a456-426614174000',

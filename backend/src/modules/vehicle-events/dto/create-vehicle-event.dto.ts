@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
-import { VehicleEventTypes } from 'src/modules/vehicles/constants/vehicle.constants';
+import { IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { VehicleEventTypes } from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
 
 export class CreateVehicleEventDto {
   @ApiProperty({
@@ -9,7 +9,7 @@ export class CreateVehicleEventDto {
   })
   @IsNotEmpty()
   @IsUUID()
-  vehicleId: string;
+  vehicleMasterId: string;
 
   @ApiProperty({
     description: 'The type of the event',
@@ -35,4 +35,14 @@ export class CreateVehicleEventDto {
   @IsOptional()
   @IsUUID()
   toUser?: string;
+
+  @ApiProperty({
+    description: 'The metadata of the event',
+    example: {
+      reason: 'Vehicle is not in good condition',
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, any>;
 }
