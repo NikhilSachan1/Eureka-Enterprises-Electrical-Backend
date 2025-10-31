@@ -55,6 +55,7 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   document: [ALLOWED_FILE_CATEGORY.PDF],
   files: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   vehicleFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  assetFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -64,6 +65,7 @@ export const FIELD_NAMES = {
   FILES: 'files',
   DOCUMENT: 'document',
   VEHICLE_FILES: 'vehicleFiles',
+  ASSET_FILES: 'assetFiles',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -79,6 +81,7 @@ export const DATABASE_FIELD_NAMES = {
   file: 'file', // This is generic, not a db column
   files: 'fileKeys',
   vehicleFiles: 'vehicleFiles',
+  assetFiles: 'assetFiles',
 };
 
 export const FILE_ERRORS = {
@@ -91,4 +94,5 @@ export const FILE_ERRORS = {
 export const FILE_UPLOAD_FOLDER_NAMES = {
   EXPENSE_FILES: 'expense-files',
   VEHICLE_FILES: 'vehicle-files',
+  ASSET_FILES: 'asset-files',
 };

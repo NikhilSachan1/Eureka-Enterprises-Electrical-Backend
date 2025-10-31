@@ -29,6 +29,10 @@ import { VehicleMastersModule } from 'src/modules/vehicle-masters/vehicle-master
 import { VehicleEventsModule } from 'src/modules/vehicle-events/vehicle-events.module';
 import { VehicleVersionsModule } from 'src/modules/vehicle-versions/vehicle-versions.module';
 import { VehicleFilesModule } from 'src/modules/vehicle-files/vehicle-files.module';
+import { AssetMastersModule } from 'src/modules/asset-masters/asset-masters.module';
+import { AssetEventsModule } from 'src/modules/asset-events/asset-events.module';
+import { AssetVersionsModule } from 'src/modules/asset-versions/asset-versions.module';
+import { AssetFilesModule } from 'src/modules/asset-files/asset-files.module';
 
 @Module({
   imports: [
@@ -53,6 +57,10 @@ import { VehicleFilesModule } from 'src/modules/vehicle-files/vehicle-files.modu
     VehicleVersionsModule,
     VehicleEventsModule,
     VehicleFilesModule,
+    AssetMastersModule,
+    AssetVersionsModule,
+    AssetEventsModule,
+    AssetFilesModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],
