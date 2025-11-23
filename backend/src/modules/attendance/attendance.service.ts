@@ -550,8 +550,7 @@ export class AttendanceService {
               AttendanceStatus.CHECKED_IN,
             ].includes(existingAttendance.status as AttendanceStatus)
           ) {
-            // TODO: apply leave and mark leave in attendance -> only leave credit is pending
-
+            // TODO: apply leave and mark leave in attendance -> only leave debit is pending (force leavve)
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
@@ -586,7 +585,7 @@ export class AttendanceService {
           break;
         case AttendanceStatus.HOLIDAY:
           if (existingAttendance.status === AttendanceStatus.PRESENT) {
-            // TODO: MARK HOLIDAY
+            // TODO: MARK HOLIDAY, force leave
 
             await this.attendanceRepository.update(
               { id: attendanceId },
