@@ -1254,7 +1254,10 @@ export class AttendanceService {
         email: record.approvalByEmail,
         employeeId: record.approvalByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
       },
-      attendanceDate: record.attendanceDate,
+      // Format attendanceDate to return only date without timestamp
+      attendanceDate: record.attendanceDate
+        ? new Date(record.attendanceDate).toISOString().split('T')[0]
+        : record.attendanceDate,
       checkInTime: record.checkInTime,
       checkOutTime: record.checkOutTime,
       status: record.status,
