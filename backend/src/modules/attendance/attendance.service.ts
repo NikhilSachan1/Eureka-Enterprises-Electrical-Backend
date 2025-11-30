@@ -1244,15 +1244,15 @@ export class AttendanceService {
         id: record.createdBy,
         firstName: record.createdByFirstName,
         lastName: record.createdByLastName,
-        email: record.email,
-        employeeId: 'EE-10001', // TODO: get employee id from user table
+        email: record.createdByEmail,
+        employeeId: record.createdByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
       },
       approvalBy: {
         id: record.approvalBy,
         firstName: record.approvalByFirstName,
         lastName: record.approvalByLastName,
-        email: record.email,
-        employeeId: 'EE-10001', // TODO: get employee id from user table
+        email: record.approvalByEmail,
+        employeeId: record.approvalByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
       },
       attendanceDate: record.attendanceDate,
       checkInTime: record.checkInTime,
@@ -1354,21 +1354,21 @@ export class AttendanceService {
           user: record.user
             ? {
                 ...record.user,
-                employeeId: 'EE-10001', // TODO: get employee id from user table
+                employeeId: record.user.email ? 'EE-10001' : null, // TODO: get employee id from user table
               }
             : undefined,
           // Add employeeId to approvalByUser object if it exists
           approvalByUser: record.approvalByUser
             ? {
                 ...record.approvalByUser,
-                employeeId: 'EE-10001', // TODO: get employee id from user table
+                employeeId: record.approvalByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
               }
             : undefined,
           // Add employeeId to createdByUser object if it exists (renamed from regularizedByUser)
           regularizedByUser: record.regularizedByUser
             ? {
                 ...record.regularizedByUser,
-                employeeId: 'EE-10001', // TODO: get employee id from user table
+                employeeId: record.regularizedByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
               }
             : undefined,
           workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),

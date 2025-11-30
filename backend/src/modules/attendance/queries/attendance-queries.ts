@@ -107,8 +107,10 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       u."email",
       cb."firstName" as "createdByFirstName",
       cb."lastName" as "createdByLastName",
+      cb."email" as "createdByEmail",
       ab."firstName" as "approvalByFirstName",
-      ab."lastName" as "approvalByLastName"
+      ab."lastName" as "approvalByLastName",
+      ab."email" as "approvalByEmail"
     FROM "attendances" a
     LEFT JOIN "users" u ON a."userId" = u."id"
     LEFT JOIN "users" cb ON a."createdBy" = cb."id"
