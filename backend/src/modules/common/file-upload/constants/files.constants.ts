@@ -56,6 +56,7 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   files: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   vehicleFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   assetFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  fuelExpenseFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -95,4 +96,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   EXPENSE_FILES: 'expense-files',
   VEHICLE_FILES: 'vehicle-files',
   ASSET_FILES: 'asset-files',
+  FUEL_EXPENSE_FILES: 'fuel-expense-files',
 };

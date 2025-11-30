@@ -14,6 +14,7 @@ export const CONFIGURATION_KEYS = {
   PAYMENT_MODES: 'payment_modes',
   TRANSACTION_TYPES: 'transaction_types',
   EXPENSE_DATE_VALIDATION: 'expense_date_validation',
+  FUEL_EXPENSE_DATE_VALIDATION: 'fuel_expense_date_validation',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -21,6 +22,7 @@ export const CONFIGURATION_MODULES = {
   ATTENDANCE: 'attendance',
   LEAVE: 'leave',
   EXPENSE: 'expense',
+  FUEL_EXPENSE: 'fuel_expense',
 };
 
 export enum LeaveCycleType {

@@ -33,6 +33,7 @@ import { AssetMastersModule } from 'src/modules/asset-masters/asset-masters.modu
 import { AssetEventsModule } from 'src/modules/asset-events/asset-events.module';
 import { AssetVersionsModule } from 'src/modules/asset-versions/asset-versions.module';
 import { AssetFilesModule } from 'src/modules/asset-files/asset-files.module';
+import { FuelExpenseModule } from 'src/modules/fuel-expense/fuel-expense.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { AssetFilesModule } from 'src/modules/asset-files/asset-files.module';
     AssetVersionsModule,
     AssetEventsModule,
     AssetFilesModule,
+    FuelExpenseModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],
