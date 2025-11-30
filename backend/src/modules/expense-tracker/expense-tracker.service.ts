@@ -465,7 +465,7 @@ export class ExpenseTrackerService {
           firstName: record.firstName,
           lastName: record.lastName,
           email: record.email,
-          employeeId: record.employeeId,
+          employeeId: 'EE-10001', // TODO: get employee id from user table
         },
         approvalByUser: record.approvalBy
           ? {
@@ -538,6 +538,7 @@ export class ExpenseTrackerService {
             firstName: record.user.firstName,
             lastName: record.user.lastName,
             email: record.user.email,
+            employeeId: 'EE-10001', // TODO: get employee id from user table
           },
         })),
       };

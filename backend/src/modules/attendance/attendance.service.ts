@@ -1350,6 +1350,27 @@ export class AttendanceService {
       return attendance.records.map((record) => {
         return {
           ...record,
+          // TODO: Later to remove the below thing once in db Add employeeId to user object if it exists
+          user: record.user
+            ? {
+                ...record.user,
+                employeeId: 'EE-10001', // TODO: get employee id from user table
+              }
+            : undefined,
+          // Add employeeId to approvalByUser object if it exists
+          approvalByUser: record.approvalByUser
+            ? {
+                ...record.approvalByUser,
+                employeeId: 'EE-10001', // TODO: get employee id from user table
+              }
+            : undefined,
+          // Add employeeId to createdByUser object if it exists (renamed from regularizedByUser)
+          regularizedByUser: record.regularizedByUser
+            ? {
+                ...record.regularizedByUser,
+                employeeId: 'EE-10001', // TODO: get employee id from user table
+              }
+            : undefined,
           workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
         };
       });
@@ -1389,6 +1410,7 @@ export class AttendanceService {
           firstName: attendance.user.firstName,
           lastName: attendance.user.lastName,
           email: attendance.user.email,
+          employeeId: 'EE-10001', // TODO: get employee id from user table
         },
       };
     } catch (error) {
