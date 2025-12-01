@@ -1233,27 +1233,33 @@ export class AttendanceService {
   private transformRawRecord(record: any): AttendanceRecordDto {
     return {
       id: record.attendanceId,
-      user: {
-        id: record.userId,
-        firstName: record.firstName,
-        lastName: record.lastName,
-        email: record.email,
-        employeeId: 'EE-10001', // TODO: get employee id from user table
-      },
-      createdBy: {
-        id: record.createdBy,
-        firstName: record.createdByFirstName,
-        lastName: record.createdByLastName,
-        email: record.createdByEmail,
-        employeeId: record.createdByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
-      },
-      approvalBy: {
-        id: record.approvalBy,
-        firstName: record.approvalByFirstName,
-        lastName: record.approvalByLastName,
-        email: record.approvalByEmail,
-        employeeId: record.approvalByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
-      },
+      user: record.userId
+        ? {
+            id: record.userId,
+            firstName: record.firstName,
+            lastName: record.lastName,
+            email: record.email,
+            employeeId: 'EE-10001', // TODO: get employee id from user table
+          }
+        : null,
+      createdBy: record.createdBy
+        ? {
+            id: record.createdBy,
+            firstName: record.createdByFirstName,
+            lastName: record.createdByLastName,
+            email: record.createdByEmail,
+            employeeId: record.createdByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
+          }
+        : null,
+      approvalBy: record.approvalBy
+        ? {
+            id: record.approvalBy,
+            firstName: record.approvalByFirstName,
+            lastName: record.approvalByLastName,
+            email: record.approvalByEmail,
+            employeeId: record.approvalByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
+          }
+        : null,
       // Format attendanceDate to return only date without timestamp
       attendanceDate: record.attendanceDate
         ? new Date(record.attendanceDate).toISOString().split('T')[0]
