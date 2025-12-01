@@ -1374,6 +1374,12 @@ export class AttendanceService {
                 employeeId: record.regularizedByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
               }
             : undefined,
+          createdByUser: record.createdByUser
+            ? {
+                ...record.createdByUser,
+                employeeId: record.createdByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
+              }
+            : undefined,
           workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
         };
       });
