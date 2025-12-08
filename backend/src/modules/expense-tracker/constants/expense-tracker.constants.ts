@@ -36,12 +36,19 @@ export const EXPENSE_TRACKER_ERRORS = {
     'Expense cannot be approved by the creator, only the manager, admin or HR can approve',
   EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR:
     'Expense cannot be rejected by the creator, only the manager, admin or HR can reject',
+  EXPENSE_CANNOT_DELETE_OTHERS: 'You can only delete your own expenses',
+  EXPENSE_CANNOT_DELETE_NON_PENDING:
+    'Only pending expenses can be deleted. This expense is already {status}',
+  EXPENSE_ALREADY_DELETED: 'Expense is already deleted',
 };
 
 export const EXPENSE_TRACKER_SUCCESS_MESSAGES = {
   EXPENSE_APPROVAL_PROCESSED:
     'Expense approval processed successfully. {success} out of {length} expenses approved, {error} errors occurred',
   EXPENSE_APPROVAL_SUCCESS: 'Expense approval processed successfully for {status}',
+  EXPENSE_DELETE_PROCESSED:
+    'Bulk delete processed. {success} out of {length} expenses deleted, {error} errors occurred',
+  EXPENSE_DELETE_SUCCESS: 'Expense deleted successfully',
 };
 
 export const DEFAULT_EXPENSE = {

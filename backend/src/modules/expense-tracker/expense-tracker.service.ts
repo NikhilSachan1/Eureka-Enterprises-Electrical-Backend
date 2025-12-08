@@ -9,7 +9,9 @@ import {
   ExpenseListResponseDto,
   ExpenseQueryDto,
   ForceExpenseDto,
+  BulkDeleteExpenseDto,
 } from './dto';
+import { Roles } from '../roles/constants/role.constants';
 import {
   CONFIGURATION_MODULES,
   CONFIGURATION_KEYS,
@@ -937,6 +939,98 @@ export class ExpenseTrackerService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async bulkDeleteExpenses(bulkDeleteDto: BulkDeleteExpenseDto) {
+    const { expenseIds, deletedBy, userRole } = bulkDeleteDto;
+    const result = [];
+    const errors = [];
+
+    // Check if user is admin or HR (can delete anyone's expense)
+    const isAdminOrHR = userRole === Roles.ADMIN || userRole === Roles.HR;
+
+    for (const expenseId of expenseIds) {
+      try {
+        const deletedExpense = await this.validateAndDeleteExpense(
+          expenseId,
+          deletedBy,
+          isAdminOrHR,
+        );
+        result.push(deletedExpense);
+      } catch (error) {
+        errors.push({
+          expenseId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_DELETE_PROCESSED.replace(
+        '{length}',
+        expenseIds.length.toString(),
+      )
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateAndDeleteExpense(
+    expenseId: string,
+    deletedBy: string,
+    isAdminOrHR: boolean,
+  ) {
+    // Find the expense
+    const expense = await this.expenseTrackerRepository.findOne({
+      where: { id: expenseId },
+    });
+
+    // Check if expense exists
+    if (!expense) {
+      throw new NotFoundException(EXPENSE_TRACKER_ERRORS.NOT_FOUND);
+    }
+
+    // Check if expense is already deleted
+    if (!expense.isActive) {
+      throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_ALREADY_DELETED);
+    }
+
+    // If not admin/HR, apply additional validations
+    if (!isAdminOrHR) {
+      // Check if user owns the expense
+      if (expense.userId !== deletedBy) {
+        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_OTHERS);
+      }
+
+      // Check if expense is pending (only pending expenses can be deleted by non-admin)
+      if (expense.approvalStatus !== ApprovalStatus.PENDING) {
+        throw new BadRequestException(
+          EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
+            '{status}',
+            expense.approvalStatus,
+          ),
+        );
+      }
+    }
+
+    // Perform soft delete
+    await this.expenseTrackerRepository.update(
+      { id: expenseId },
+      {
+        isActive: false,
+        updatedBy: deletedBy,
+        deletedBy,
+        deletedAt: new Date(),
+      },
+    );
+
+    return {
+      expenseId,
+      message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_DELETE_SUCCESS,
+      previousStatus: expense.approvalStatus,
+    };
   }
 }
 

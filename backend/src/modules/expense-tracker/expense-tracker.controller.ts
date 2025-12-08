@@ -29,6 +29,7 @@ import {
   ExpenseListResponseDto,
   ExpenseHistoryResponseDto,
   ExpenseBulkApprovalDto,
+  BulkDeleteExpenseDto,
 } from './dto';
 import { ExpenseUserInterceptor } from './interceptors/expense-user.interceptor';
 
@@ -160,5 +161,18 @@ export class ExpenseTrackerController {
     @Param('id') id: string,
   ) {
     return this.expenseTrackerService.deleteExpense(id, deletedBy);
+  }
+
+  @Delete()
+  @ApiBody({ type: BulkDeleteExpenseDto })
+  async bulkDeleteExpenses(
+    @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },
+    @Body() bulkDeleteDto: BulkDeleteExpenseDto,
+  ) {
+    return this.expenseTrackerService.bulkDeleteExpenses({
+      ...bulkDeleteDto,
+      deletedBy,
+      userRole,
+    });
   }
 }
