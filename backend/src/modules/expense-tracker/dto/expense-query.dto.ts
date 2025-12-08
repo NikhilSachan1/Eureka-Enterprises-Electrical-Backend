@@ -56,6 +56,18 @@ export class ExpenseQueryDto extends BaseGetDto {
   approvalStatuses?: ApprovalStatus[];
 
   @ApiProperty({
+    description: 'Expense categories (e.g., Hotel, Flight, Food, Transport)',
+    type: [String],
+    example: ['Hotel', 'Flight'],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  categories?: string[];
+
+  @ApiProperty({
     description: 'Search by name/email/employee ID',
     example: 'john',
     required: false,

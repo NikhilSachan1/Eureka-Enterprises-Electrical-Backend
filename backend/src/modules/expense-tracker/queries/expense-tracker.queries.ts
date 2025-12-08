@@ -12,6 +12,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     date,
     userIds,
     approvalStatuses,
+    categories,
     search,
     sortField,
     page,
@@ -57,6 +58,13 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
   if (approvalStatuses && approvalStatuses.length > 0) {
     whereConditions.push(`e."approvalStatus" = ANY($${paramIndex})`);
     params.push(approvalStatuses);
+    paramIndex++;
+  }
+
+  // Categories filter (e.g., Hotel, Flight, Food, Transport)
+  if (categories && categories.length > 0) {
+    whereConditions.push(`e."category" = ANY($${paramIndex})`);
+    params.push(categories);
     paramIndex++;
   }
 
@@ -127,7 +135,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
 };
 
 export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, approvalStatuses, search } = filters;
+  const { startDate, endDate, date, userIds, approvalStatuses, categories, search } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -166,6 +174,13 @@ export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
   if (approvalStatuses && approvalStatuses.length > 0) {
     whereConditions.push(`e."approvalStatus" = ANY($${paramIndex})`);
     params.push(approvalStatuses);
+    paramIndex++;
+  }
+
+  // Categories filter
+  if (categories && categories.length > 0) {
+    whereConditions.push(`e."category" = ANY($${paramIndex})`);
+    params.push(categories);
     paramIndex++;
   }
 
@@ -245,7 +260,7 @@ export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
 };
 
 export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, approvalStatuses, search } = filters;
+  const { startDate, endDate, date, userIds, approvalStatuses, categories, search } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -285,6 +300,13 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
   if (approvalStatuses && approvalStatuses.length > 0) {
     whereConditions.push(`e."approvalStatus" = ANY($${paramIndex})`);
     params.push(approvalStatuses);
+    paramIndex++;
+  }
+
+  // Categories filter
+  if (categories && categories.length > 0) {
+    whereConditions.push(`e."category" = ANY($${paramIndex})`);
+    params.push(categories);
     paramIndex++;
   }
 
