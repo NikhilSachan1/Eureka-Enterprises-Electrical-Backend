@@ -63,4 +63,17 @@ export enum ExpenseTrackerSortableFields {
   APPROVAL_STATUS = 'approvalStatus',
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',
+  USER_NAME = 'userName',
 }
+
+// Mapping of sort fields to SQL expressions
+export const EXPENSE_SORT_FIELD_MAPPING: Record<string, string> = {
+  expenseDate: 'e."expenseDate"',
+  amount: 'e."amount"',
+  category: 'e."category"',
+  description: 'e."description"',
+  approvalStatus: 'e."approvalStatus"',
+  createdAt: 'e."createdAt"',
+  updatedAt: 'e."updatedAt"',
+  userName: 'LOWER(CONCAT(u."firstName", \' \', u."lastName"))',
+};

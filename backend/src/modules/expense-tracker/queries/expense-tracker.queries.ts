@@ -1,5 +1,8 @@
 import { ExpenseQueryDto } from '../dto/expense-query.dto';
-import { TransactionType } from '../constants/expense-tracker.constants';
+import {
+  EXPENSE_SORT_FIELD_MAPPING,
+  TransactionType,
+} from '../constants/expense-tracker.constants';
 import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
 
 export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
@@ -99,7 +102,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     LEFT JOIN "users" ab ON e."approvalBy" = ab."id"
     LEFT JOIN "expense_files" ef ON e."id" = ef."expenseId"
     ${whereClause}
-    ORDER BY e."${sortField}" ${sortOrder}
+    ORDER BY ${EXPENSE_SORT_FIELD_MAPPING[sortField] || 'e."createdAt"'} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
   `;
 
