@@ -624,7 +624,7 @@ export class ExpenseTrackerService {
             approvalStatus,
           ),
           expenseId,
-          newStatus: expense.approvalStatus,
+          previousStatus: expense.approvalStatus,
           approvalStatus,
         };
       });
