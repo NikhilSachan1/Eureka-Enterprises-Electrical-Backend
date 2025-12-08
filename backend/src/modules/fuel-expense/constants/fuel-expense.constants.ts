@@ -55,6 +55,10 @@ export const FUEL_EXPENSE_ERRORS = {
     'Fuel expense is already in {status} state, cannot be processed. Reach out to the manager, admin or HR for assistance',
   FUEL_EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR: 'Fuel expense cannot be rejected by the creator',
   COULD_NOT_CALCULATE_VEHICLE_AVERAGE: 'Could not calculate vehicle average: {error}',
+  FUEL_EXPENSE_CANNOT_DELETE_OTHERS: 'You can only delete your own fuel expenses',
+  FUEL_EXPENSE_CANNOT_DELETE_NON_PENDING:
+    'Only pending fuel expenses can be deleted. This fuel expense is already {status}',
+  FUEL_EXPENSE_ALREADY_DELETED: 'Fuel expense is already deleted',
 };
 
 export const FUEL_EXPENSE_SUCCESS_MESSAGES = {
@@ -65,6 +69,8 @@ export const FUEL_EXPENSE_SUCCESS_MESSAGES = {
   FUEL_EXPENSE_REJECTED: 'Fuel expense rejected successfully',
   BULK_APPROVAL_SUCCESS:
     'Bulk approval processed: {length} total, {success} successful, {error} failed',
+  BULK_DELETE_SUCCESS:
+    'Bulk delete processed: {length} total, {success} successful, {error} failed',
 };
 
 export const DEFAULT_FUEL_EXPENSE = {

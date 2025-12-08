@@ -24,6 +24,7 @@ import {
   FuelExpenseQueryDto,
   FuelExpenseBulkApprovalDto,
   FuelExpenseListResponseDto,
+  BulkDeleteFuelExpenseDto,
 } from './dto';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators/source-detector.decorator';
@@ -143,5 +144,18 @@ export class FuelExpenseController {
     @Param('id') id: string,
   ) {
     return this.fuelExpenseService.delete(id, deletedBy);
+  }
+
+  @Delete()
+  @ApiBody({ type: BulkDeleteFuelExpenseDto })
+  async bulkDeleteFuelExpenses(
+    @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },
+    @Body() bulkDeleteDto: BulkDeleteFuelExpenseDto,
+  ) {
+    return this.fuelExpenseService.bulkDeleteFuelExpenses({
+      ...bulkDeleteDto,
+      deletedBy,
+      userRole,
+    });
   }
 }

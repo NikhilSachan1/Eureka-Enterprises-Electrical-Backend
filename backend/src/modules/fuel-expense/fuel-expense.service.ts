@@ -7,7 +7,9 @@ import {
   FuelExpenseApprovalDto,
   FuelExpenseBulkApprovalDto,
   FuelExpenseListResponseDto,
+  BulkDeleteFuelExpenseDto,
 } from './dto';
+import { Roles } from '../roles/constants/role.constants';
 import {
   FUEL_EXPENSE_ERRORS,
   FUEL_EXPENSE_SUCCESS_MESSAGES,
@@ -606,6 +608,98 @@ export class FuelExpenseService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async bulkDeleteFuelExpenses(bulkDeleteDto: BulkDeleteFuelExpenseDto) {
+    const { fuelExpenseIds, deletedBy, userRole } = bulkDeleteDto;
+    const result = [];
+    const errors = [];
+
+    // Check if user is admin or HR (can delete anyone's fuel expense)
+    const isAdminOrHR = userRole === Roles.ADMIN || userRole === Roles.HR;
+
+    for (const fuelExpenseId of fuelExpenseIds) {
+      try {
+        const deletedFuelExpense = await this.validateAndDeleteFuelExpense(
+          fuelExpenseId,
+          deletedBy,
+          isAdminOrHR,
+        );
+        result.push(deletedFuelExpense);
+      } catch (error) {
+        errors.push({
+          fuelExpenseId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: FUEL_EXPENSE_SUCCESS_MESSAGES.BULK_DELETE_SUCCESS.replace(
+        '{length}',
+        fuelExpenseIds.length.toString(),
+      )
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateAndDeleteFuelExpense(
+    fuelExpenseId: string,
+    deletedBy: string,
+    isAdminOrHR: boolean,
+  ) {
+    // Find the fuel expense
+    const fuelExpense = await this.fuelExpenseRepository.findOne({
+      where: { id: fuelExpenseId },
+    });
+
+    // Check if fuel expense exists
+    if (!fuelExpense) {
+      throw new NotFoundException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_NOT_FOUND);
+    }
+
+    // Check if fuel expense is already deleted
+    if (!fuelExpense.isActive) {
+      throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_ALREADY_DELETED);
+    }
+
+    // If not admin/HR, apply additional validations
+    if (!isAdminOrHR) {
+      // Check if user owns the fuel expense
+      if (fuelExpense.userId !== deletedBy) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_OTHERS);
+      }
+
+      // Check if fuel expense is pending (only pending can be deleted by non-admin)
+      if (fuelExpense.approvalStatus !== ApprovalStatus.PENDING) {
+        throw new BadRequestException(
+          FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
+            '{status}',
+            fuelExpense.approvalStatus,
+          ),
+        );
+      }
+    }
+
+    // Perform soft delete
+    await this.fuelExpenseRepository.update(
+      { id: fuelExpenseId },
+      {
+        isActive: false,
+        updatedBy: deletedBy,
+        deletedBy,
+        deletedAt: new Date(),
+      },
+    );
+
+    return {
+      fuelExpenseId,
+      message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_DELETED,
+      previousStatus: fuelExpense.approvalStatus,
+    };
   }
 
   async handleSingleFuelExpenseApproval(
