@@ -90,6 +90,7 @@ export const FILE_ERRORS = {
   GET: 'Failed to get file from S3:',
   GENERATE_S3_URL: 'Failed to generate S3 URL:',
   DELETE: 'Failed to delete file from S3:',
+  FILE_NOT_FOUND: 'File not found in S3 for the given key.',
 };
 
 export const FILE_UPLOAD_FOLDER_NAMES = {

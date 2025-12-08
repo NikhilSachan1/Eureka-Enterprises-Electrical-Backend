@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { DeleteObjectCommand, GetObjectCommand, S3 } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, S3 } from '@aws-sdk/client-s3';
 import { Environments } from '../../../../env-configs';
 import { validateFileUploads } from './validators/files.validator';
 import { DATABASE_FIELD_NAMES, FILE_ERRORS } from './constants/files.constants';
@@ -73,11 +73,21 @@ export class FilesService {
       Bucket: this.bucketName,
       Key: key,
     };
+
     try {
+      // First, check if the file exists in S3 using HeadObjectCommand
+      const headCommand = new HeadObjectCommand(params);
+      await this.s3.send(headCommand);
+
+      // If file exists, generate the presigned URL
       const command = new GetObjectCommand(params);
       const preSignedUrl = await getSignedUrl(this.s3, command);
       return { url: preSignedUrl, key };
     } catch (error) {
+      // If the error is "NotFound" or "NoSuchKey", the file doesn't exist
+      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+        throw new NotFoundException(FILE_ERRORS.FILE_NOT_FOUND);
+      }
       throw new NotFoundException(`${FILE_ERRORS.GET} ${error.message}`);
     }
   }
