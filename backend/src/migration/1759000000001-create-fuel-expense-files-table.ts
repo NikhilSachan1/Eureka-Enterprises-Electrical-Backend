@@ -58,13 +58,13 @@ export class CreateFuelExpenseFilesTable1759000000001 implements MigrationInterf
       true,
     );
 
-    // Foreign key to fuel_expense
+    // Foreign key to fuel_expenses
     await queryRunner.createForeignKey(
       'fuel_expense_files',
       new TableForeignKey({
         columnNames: ['fuelExpenseId'],
         referencedColumnNames: ['id'],
-        referencedTableName: 'fuel_expense',
+        referencedTableName: 'fuel_expenses',
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',
       }),

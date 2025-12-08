@@ -449,7 +449,7 @@ export class FuelExpenseService {
           id: record.id,
           userId: record.userId,
           user: {
-            id: record.id,
+            id: record.userId,
             firstName: record.firstName,
             lastName: record.lastName,
             email: record.email,

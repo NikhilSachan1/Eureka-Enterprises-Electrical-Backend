@@ -39,16 +39,20 @@ export enum EntrySourceType {
 export const USER_RESPONSE_FIELDS = ['id', 'firstName', 'lastName', 'email', 'employeeId'] as const;
 
 export const getUserSelectFields = (alias: string, prefix?: string): string => {
-  const fields = USER_RESPONSE_FIELDS;
-  if (prefix) {
-    return fields
-      .map(
-        (field) =>
-          `${alias}."${field}" as "${prefix}${field.charAt(0).toUpperCase() + field.slice(1)}"`,
-      )
-      .join(', ');
-  }
-  return fields.map((field) => `${alias}."${field}"`).join(', ');
+  // Skip 'id' when no prefix to avoid overwriting main table's id field
+  // The user id is already available via foreign key column (e.g., userId, approvalBy)
+  const fieldsToSelect = prefix
+    ? USER_RESPONSE_FIELDS
+    : USER_RESPONSE_FIELDS.filter((f) => f !== 'id');
+
+  return fieldsToSelect
+    .map((field) => {
+      const aliasName = prefix
+        ? `${prefix}${field.charAt(0).toUpperCase() + field.slice(1)}`
+        : field;
+      return `${alias}."${field}" as "${aliasName}"`;
+    })
+    .join(', ');
 };
 
 export const getUserJsonBuildObject = (alias: string): string => {

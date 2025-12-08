@@ -125,7 +125,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
         PARTITION BY fe."vehicleId" 
         ORDER BY fe."fillDate" ASC, fe."odometerKm" ASC
       ) as "previousOdometerKm"
-    FROM "fuel_expense" fe
+    FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "users" ab ON fe."approvalBy" = ab."id"
     LEFT JOIN "vehicle_master" v ON fe."vehicleId" = v."id"
@@ -140,7 +140,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
   // Count query for pagination
   const countQuery = `
     SELECT COUNT(*) as total
-    FROM "fuel_expense" fe
+    FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_master" v ON fe."vehicleId" = v."id"
     ${whereClause}
@@ -228,7 +228,7 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
       SELECT 
         COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
         COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
-      FROM "fuel_expense" fe
+      FROM "fuel_expenses" fe
       LEFT JOIN "users" u ON fe."userId" = u."id"
       LEFT JOIN "vehicle_master" v ON fe."vehicleId" = v."id"
       WHERE ${baseWhereClause} AND fe."fillDate" < $${openingBalanceParamIndex}
@@ -239,7 +239,7 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
       SELECT 
         COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
         COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
-      FROM "fuel_expense" fe
+      FROM "fuel_expenses" fe
       LEFT JOIN "users" u ON fe."userId" = u."id"
       LEFT JOIN "vehicle_master" v ON fe."vehicleId" = v."id"
       WHERE ${baseWhereClause} AND fe."fillDate" < $${openingBalanceParamIndex}
@@ -280,7 +280,7 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
     SELECT 
       COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodCredit",
       COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodDebit"
-    FROM "fuel_expense" fe
+    FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_master" v ON fe."vehicleId" = v."id"
     WHERE ${periodWhereClause}
@@ -376,7 +376,7 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
       COUNT(CASE WHEN fe."approvalStatus" = 'pending' THEN 1 END) as "pendingCount",
       COUNT(CASE WHEN fe."approvalStatus" = 'approved' THEN 1 END) as "approvedCount",
       COUNT(CASE WHEN fe."approvalStatus" = 'rejected' THEN 1 END) as "rejectedCount"
-    FROM "fuel_expense" fe
+    FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_master" v ON fe."vehicleId" = v."id"
     ${whereClause}

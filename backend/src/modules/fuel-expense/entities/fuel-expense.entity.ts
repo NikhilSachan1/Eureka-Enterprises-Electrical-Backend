@@ -5,7 +5,7 @@ import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicl
 import { CardsEntity } from 'src/modules/cards/entities/card.entity';
 import { FuelExpenseFilesEntity } from '../../fuel-expense-files/entities/fuel-expense-files.entity';
 
-@Entity('fuel_expense')
+@Entity('fuel_expenses')
 @Index('idx_fuel_expense_vehicle_id', ['vehicleId'])
 @Index('idx_fuel_expense_card_id', ['cardId'])
 @Index('idx_fuel_expense_user_id', ['userId'])
