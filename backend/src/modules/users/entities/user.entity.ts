@@ -31,6 +31,10 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 50, default: 'ACTIVE' })
   status: string;
 
+  @Index('IDX_USER_EMPLOYEE_ID')
+  @Column({ type: 'varchar', length: 50, nullable: true, unique: true })
+  employeeId: string;
+
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.user)
   userRoles: UserRoleEntity[];
 

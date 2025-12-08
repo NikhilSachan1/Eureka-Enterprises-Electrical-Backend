@@ -1,5 +1,6 @@
 import { ExpenseQueryDto } from '../dto/expense-query.dto';
 import { TransactionType } from '../constants/expense-tracker.constants';
+import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
 
 export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
   const {
@@ -91,11 +92,8 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       e."expenseEntryType",
       e."createdAt",
       e."updatedAt",
-      u."firstName",
-      u."lastName",
-      u."email",
-      ab."firstName" as "approvalByFirstName",
-      ab."lastName" as "approvalByLastName"
+      ${getUserSelectFields('u')},
+      ${getUserSelectFields('ab', 'approvalBy')}
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
     LEFT JOIN "users" ab ON e."approvalBy" = ab."id"

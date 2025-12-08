@@ -35,3 +35,24 @@ export enum EntrySourceType {
   APP = 'app',
   BIOMETRIC = 'biometric',
 }
+
+export const USER_RESPONSE_FIELDS = ['id', 'firstName', 'lastName', 'email', 'employeeId'] as const;
+
+export const getUserSelectFields = (alias: string, prefix?: string): string => {
+  const fields = USER_RESPONSE_FIELDS;
+  if (prefix) {
+    return fields
+      .map(
+        (field) =>
+          `${alias}."${field}" as "${prefix}${field.charAt(0).toUpperCase() + field.slice(1)}"`,
+      )
+      .join(', ');
+  }
+  return fields.map((field) => `${alias}."${field}"`).join(', ');
+};
+
+export const getUserJsonBuildObject = (alias: string): string => {
+  const fields = USER_RESPONSE_FIELDS;
+  const jsonFields = fields.map((field) => `'${field}', ${alias}."${field}"`).join(', ');
+  return `json_build_object(${jsonFields})`;
+};

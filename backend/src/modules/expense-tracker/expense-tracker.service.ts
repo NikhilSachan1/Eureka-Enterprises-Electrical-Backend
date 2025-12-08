@@ -462,15 +462,19 @@ export class ExpenseTrackerService {
           .filter((file) => file.expenseId === record.id)
           .map((file) => file.fileKey),
         user: {
+          id: record.userId,
           firstName: record.firstName,
           lastName: record.lastName,
           email: record.email,
-          employeeId: 'EE-10001', // TODO: get employee id from user table
+          employeeId: record.employeeId,
         },
         approvalByUser: record.approvalBy
           ? {
+              id: record.approvalBy,
               firstName: record.approvalByFirstName,
               lastName: record.approvalByLastName,
+              email: record.approvalByEmail,
+              employeeId: record.approvalByEmployeeId,
             }
           : null,
       }));
@@ -535,10 +539,11 @@ export class ExpenseTrackerService {
           createdBy: record.createdBy,
           updatedBy: record.updatedBy,
           user: {
+            id: record.user.id,
             firstName: record.user.firstName,
             lastName: record.user.lastName,
             email: record.user.email,
-            employeeId: 'EE-10001', // TODO: get employee id from user table
+            employeeId: record.user.employeeId,
           },
         })),
       };

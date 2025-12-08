@@ -77,8 +77,11 @@ export class FuelExpenseRecordDto {
 
   @ApiProperty({ description: 'User who approved/rejected the expense' })
   approvalByUser?: {
+    id: string;
     firstName: string;
     lastName: string;
+    email: string;
+    employeeId: string;
   };
 
   @ApiProperty({ description: 'Date when fuel was filled' })

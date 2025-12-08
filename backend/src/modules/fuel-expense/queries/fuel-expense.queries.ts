@@ -1,5 +1,6 @@
 import { FuelExpenseQueryDto } from '../dto/fuel-expense-query.dto';
 import { TransactionType } from '../constants/fuel-expense.constants';
+import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
 
 export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
   const {
@@ -113,12 +114,8 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       fe."approvalReason",
       fe."createdAt",
       fe."updatedAt",
-      u."firstName",
-      u."lastName",
-      u."email",
-      u."employeeId",
-      ab."firstName" as "approvalByFirstName",
-      ab."lastName" as "approvalByLastName",
+      ${getUserSelectFields('u')},
+      ${getUserSelectFields('ab', 'approvalBy')},
       v."registrationNumber",
       v."vehicleType",
       v."vehicleModel",

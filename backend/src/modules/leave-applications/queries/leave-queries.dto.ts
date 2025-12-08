@@ -1,5 +1,6 @@
 import { GetLeaveApplicationsDto } from '../dto';
 import { LEAVE_APPLICATION_SORTABLE_FIELDS } from '../constants/leave-application.constants';
+import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
 
 export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto) => {
   const {
@@ -37,19 +38,13 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
         la."updatedAt",
         la."createdBy",
         la."updatedBy",
-        -- User information
-        u."firstName",
-        u."lastName",
-        u."email",
+        -- User information (id, firstName, lastName, email, employeeId)
+        ${getUserSelectFields('u')},
         u."contactNumber",
-        -- Approver information
-        approver."firstName" as "approvalByFirstName",
-        approver."lastName" as "approvalByLastName",
-        approver."email" as "approvalByEmail",
-        -- Created by
-        creator."firstName" as "createdByFirstName",
-        creator."lastName" as "createdByLastName",
-        creator."email" as "createdByEmail"
+        -- Approver information (id, firstName, lastName, email, employeeId with prefix)
+        ${getUserSelectFields('approver', 'approvalBy')},
+        -- Created by (id, firstName, lastName, email, employeeId with prefix)
+        ${getUserSelectFields('creator', 'createdBy')}
     FROM leave_applications la
     INNER JOIN users u ON la."userId" = u."id"
     LEFT JOIN users approver ON la."approvalBy" = approver."id"

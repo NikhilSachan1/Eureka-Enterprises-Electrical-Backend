@@ -447,10 +447,11 @@ export class FuelExpenseService {
           id: record.id,
           userId: record.userId,
           user: {
+            id: record.id,
             firstName: record.firstName,
             lastName: record.lastName,
             email: record.email,
-            employeeId: 'EE-10001', // TODO: get employee id from user table
+            employeeId: record.employeeId,
           },
           vehicle: {
             id: record.vehicleId,
@@ -467,8 +468,11 @@ export class FuelExpenseService {
             : null,
           approvalByUser: record.approvalBy
             ? {
+                id: record.approvalBy,
                 firstName: record.approvalByFirstName,
                 lastName: record.approvalByLastName,
+                email: record.approvalByEmail,
+                employeeId: record.approvalByEmployeeId,
               }
             : null,
           fillDate: record.fillDate,
@@ -567,12 +571,15 @@ export class FuelExpenseService {
             firstName: record.user?.firstName,
             lastName: record.user?.lastName,
             email: record.user?.email,
-            employeeId: 'EE-10001', // TODO: get employee id from user table
+            employeeId: record.user?.employeeId,
           },
           approvalByUser: record.approvalByUser
             ? {
+                id: record.approvalByUser.id,
                 firstName: record.approvalByUser.firstName,
                 lastName: record.approvalByUser.lastName,
+                email: record.approvalByUser.email,
+                employeeId: record.approvalByUser.employeeId,
               }
             : null,
         })),

@@ -67,25 +67,55 @@ export class LeaveApplicationResponseDto {
   @ApiProperty()
   entrySourceType: string;
 
-  @ApiProperty({ example: { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com' } })
+  @ApiProperty({
+    example: {
+      id: 'uuid',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@example.com',
+      employeeId: 'EMP001',
+    },
+  })
   approvalByUser: {
+    id: string;
     firstName: string;
     lastName: string;
     email: string;
+    employeeId: string;
   };
 
-  @ApiProperty({ example: { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com' } })
+  @ApiProperty({
+    example: {
+      id: 'uuid',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@example.com',
+      employeeId: 'EMP001',
+    },
+  })
   user: {
+    id: string;
     firstName: string;
     lastName: string;
     email: string;
+    employeeId: string;
   };
 
-  @ApiProperty({ example: { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com' } })
+  @ApiProperty({
+    example: {
+      id: 'uuid',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@example.com',
+      employeeId: 'EMP001',
+    },
+  })
   createdByUser: {
+    id: string;
     firstName: string;
     lastName: string;
     email: string;
+    employeeId: string;
   };
 }
 

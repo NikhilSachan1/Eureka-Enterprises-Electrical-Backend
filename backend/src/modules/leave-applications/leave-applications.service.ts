@@ -699,23 +699,31 @@ export class LeaveApplicationsService {
         entrySourceType: leaveApplication.entrySourceType,
         approvalByUser: leaveApplication.approvalBy
           ? {
+              id: leaveApplication.approvalBy,
               firstName: leaveApplication.approvalByFirstName,
               lastName: leaveApplication.approvalByLastName,
               email: leaveApplication.approvalByEmail,
+              employeeId: leaveApplication.approvalByEmployeeId,
             }
           : null,
         user: leaveApplication.userId
           ? {
+              id: leaveApplication.userId,
               firstName: leaveApplication.firstName,
               lastName: leaveApplication.lastName,
               email: leaveApplication.email,
+              employeeId: leaveApplication.employeeId,
             }
           : null,
-        createdByUser: {
-          firstName: leaveApplication.createdByFirstName,
-          lastName: leaveApplication.createdByLastName,
-          email: leaveApplication.createdByEmail,
-        },
+        createdByUser: leaveApplication.createdBy
+          ? {
+              id: leaveApplication.createdBy,
+              firstName: leaveApplication.createdByFirstName,
+              lastName: leaveApplication.createdByLastName,
+              email: leaveApplication.createdByEmail,
+              employeeId: leaveApplication.createdByEmployeeId,
+            }
+          : null,
       };
     });
   }

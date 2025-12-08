@@ -1239,7 +1239,7 @@ export class AttendanceService {
             firstName: record.firstName,
             lastName: record.lastName,
             email: record.email,
-            employeeId: 'EE-10001', // TODO: get employee id from user table
+            employeeId: record.employeeId,
           }
         : null,
       createdBy: record.createdBy
@@ -1248,7 +1248,7 @@ export class AttendanceService {
             firstName: record.createdByFirstName,
             lastName: record.createdByLastName,
             email: record.createdByEmail,
-            employeeId: record.createdByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
+            employeeId: record.createdByEmployeeId,
           }
         : null,
       approvalBy: record.approvalBy
@@ -1257,7 +1257,7 @@ export class AttendanceService {
             firstName: record.approvalByFirstName,
             lastName: record.approvalByLastName,
             email: record.approvalByEmail,
-            employeeId: record.approvalByEmail ? 'EE-10001' : null, // TODO: get employee id from user table
+            employeeId: record.approvalByEmployeeId,
           }
         : null,
       // Format attendanceDate to return only date without timestamp
@@ -1340,18 +1340,21 @@ export class AttendanceService {
             firstName: true,
             lastName: true,
             email: true,
+            employeeId: true,
           },
           approvalByUser: {
             id: true,
             firstName: true,
             lastName: true,
             email: true,
+            employeeId: true,
           },
           createdByUser: {
             id: true,
             firstName: true,
             lastName: true,
             email: true,
+            employeeId: true,
           },
         },
       });
@@ -1359,31 +1362,41 @@ export class AttendanceService {
       return attendance.records.map((record) => {
         return {
           ...record,
-          // TODO: Later to remove the below thing once in db Add employeeId to user object if it exists
+          // User with standard fields (id, firstName, lastName, email, employeeId)
           user: record.user
             ? {
-                ...record.user,
-                employeeId: record.user.email ? 'EE-10001' : null, // TODO: get employee id from user table
+                id: record.user.id,
+                firstName: record.user.firstName,
+                lastName: record.user.lastName,
+                email: record.user.email,
+                employeeId: record.user.employeeId,
               }
             : undefined,
-          // Add employeeId to approvalByUser object if it exists
           approvalByUser: record.approvalByUser
             ? {
-                ...record.approvalByUser,
-                employeeId: record.approvalByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
+                id: record.approvalByUser.id,
+                firstName: record.approvalByUser.firstName,
+                lastName: record.approvalByUser.lastName,
+                email: record.approvalByUser.email,
+                employeeId: record.approvalByUser.employeeId,
               }
             : undefined,
-          // Add employeeId to createdByUser object if it exists (renamed from regularizedByUser)
           regularizedByUser: record.regularizedByUser
             ? {
-                ...record.regularizedByUser,
-                employeeId: record.regularizedByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
+                id: record.regularizedByUser.id,
+                firstName: record.regularizedByUser.firstName,
+                lastName: record.regularizedByUser.lastName,
+                email: record.regularizedByUser.email,
+                employeeId: record.regularizedByUser.employeeId,
               }
             : undefined,
           createdByUser: record.createdByUser
             ? {
-                ...record.createdByUser,
-                employeeId: record.createdByUser.email ? 'EE-10001' : null, // TODO: get employee id from user table
+                id: record.createdByUser.id,
+                firstName: record.createdByUser.firstName,
+                lastName: record.createdByUser.lastName,
+                email: record.createdByUser.email,
+                employeeId: record.createdByUser.employeeId,
               }
             : undefined,
           workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
@@ -1408,6 +1421,7 @@ export class AttendanceService {
             firstName: true,
             lastName: true,
             email: true,
+            employeeId: true,
           },
         },
       });
@@ -1425,7 +1439,7 @@ export class AttendanceService {
           firstName: attendance.user.firstName,
           lastName: attendance.user.lastName,
           email: attendance.user.email,
-          employeeId: 'EE-10001', // TODO: get employee id from user table
+          employeeId: attendance.user.employeeId,
         },
       };
     } catch (error) {

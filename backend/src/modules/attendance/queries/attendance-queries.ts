@@ -1,5 +1,6 @@
 import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { ATTENDANCE_SORTABLE_FIELDS } from '../constants/attendance.constants';
+import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
 
 export function buildAttendanceListQuery(query: AttendanceQueryDto) {
   const {
@@ -102,15 +103,9 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       a."createdAt",
       a."updatedAt",
       a."createdBy",
-      u."firstName",
-      u."lastName",
-      u."email",
-      cb."firstName" as "createdByFirstName",
-      cb."lastName" as "createdByLastName",
-      cb."email" as "createdByEmail",
-      ab."firstName" as "approvalByFirstName",
-      ab."lastName" as "approvalByLastName",
-      ab."email" as "approvalByEmail"
+      ${getUserSelectFields('u')},
+      ${getUserSelectFields('cb', 'createdBy')},
+      ${getUserSelectFields('ab', 'approvalBy')}
     FROM "attendances" a
     LEFT JOIN "users" u ON a."userId" = u."id"
     LEFT JOIN "users" cb ON a."createdBy" = cb."id"
