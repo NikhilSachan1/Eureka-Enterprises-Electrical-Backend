@@ -65,13 +65,14 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
     paramIndex++;
   }
 
-  // Search filter
+  // Search filter (search by name, email, or employeeId)
   if (search) {
     whereConditions.push(`(
       u."firstName" ILIKE $${paramIndex} OR 
       u."lastName" ILIKE $${paramIndex} OR 
       u."email" ILIKE $${paramIndex} OR 
-      u."id" ILIKE $${paramIndex}
+      u."employeeId" ILIKE $${paramIndex} OR
+      CONCAT(u."firstName", ' ', u."lastName") ILIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
@@ -182,12 +183,14 @@ export function buildAttendanceStatsQuery(query: AttendanceQueryDto) {
     paramIndex++;
   }
 
+  // Search filter (search by name, email, or employeeId)
   if (search) {
     whereConditions.push(`(
       u."firstName" ILIKE $${paramIndex} OR 
       u."lastName" ILIKE $${paramIndex} OR 
       u."email" ILIKE $${paramIndex} OR 
-      u."id" ILIKE $${paramIndex}
+      u."employeeId" ILIKE $${paramIndex} OR
+      CONCAT(u."firstName", ' ', u."lastName") ILIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
