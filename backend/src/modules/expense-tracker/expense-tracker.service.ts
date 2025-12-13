@@ -323,17 +323,34 @@ export class ExpenseTrackerService {
     },
   ) {
     try {
-      const { id, updatedBy, entrySourceType, editReason, fileKeys } = editExpenseDto;
+      const {
+        id,
+        updatedBy,
+        entrySourceType,
+        editReason,
+        fileKeys,
+        category,
+        paymentMode,
+        expenseDate,
+      } = editExpenseDto;
       const expense = await this.findOneOrFail({ where: { id, isActive: true } });
 
+      // Only creator can edit their own expense
       if (expense.createdBy !== updatedBy) {
         throw new BadRequestException(
           EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED_BY_OTHER_USER,
         );
       }
+
+      // Only pending expenses can be edited
       if (expense.approvalStatus !== ApprovalStatus.PENDING) {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_EDITED);
       }
+
+      // Validate category, payment mode, and expense date
+      await this.validateExpenseCategory(category);
+      await this.validatePaymentMode(paymentMode);
+      await this.validateExpenseDate(expenseDate);
 
       return await this.dataSource.transaction(async (entityManager) => {
         await this.expenseTrackerRepository.update(
