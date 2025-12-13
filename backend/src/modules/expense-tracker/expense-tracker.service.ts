@@ -534,20 +534,39 @@ export class ExpenseTrackerService {
           category: record.category,
           description: record.description,
           expenseDate: record.expenseDate,
+          transactionId: record.transactionId,
+          transactionType: record.transactionType,
+          paymentMode: record.paymentMode,
+          entrySourceType: record.entrySourceType,
+          expenseEntryType: record.expenseEntryType,
           approvalStatus: record.approvalStatus,
+          approvalAt: record.approvalAt,
+          approvalReason: record.approvalReason,
           isActive: record.isActive,
           editReason: record.editReason,
+          parentExpenseId: record.parentExpenseId,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
           createdBy: record.createdBy,
           updatedBy: record.updatedBy,
-          user: {
-            id: record.user.id,
-            firstName: record.user.firstName,
-            lastName: record.user.lastName,
-            email: record.user.email,
-            employeeId: record.user.employeeId,
-          },
+          user: record.user
+            ? {
+                id: record.user.id,
+                firstName: record.user.firstName,
+                lastName: record.user.lastName,
+                email: record.user.email,
+                employeeId: record.user.employeeId,
+              }
+            : null,
+          approvalByUser: record.approvalByUser
+            ? {
+                id: record.approvalByUser.id,
+                firstName: record.approvalByUser.firstName,
+                lastName: record.approvalByUser.lastName,
+                email: record.approvalByUser.email,
+                employeeId: record.approvalByUser.employeeId,
+              }
+            : null,
         })),
       };
     } catch (error) {
