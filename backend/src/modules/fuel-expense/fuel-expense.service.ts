@@ -72,7 +72,6 @@ export class FuelExpenseService {
         userId,
         createdBy,
         fileKeys,
-        entrySourceType,
         transactionType = TransactionType.DEBIT,
         expenseEntryType = ExpenseEntryType.SELF,
       } = createFuelExpenseDto;
@@ -102,7 +101,6 @@ export class FuelExpenseService {
             createdBy,
             transactionType,
             expenseEntryType,
-            entrySourceType,
           },
           entityManager,
         );
@@ -119,13 +117,7 @@ export class FuelExpenseService {
           );
         }
 
-        // Calculate and return vehicle average
-        const vehicleAverage = await this.calculateVehicleAverage(vehicleId, entityManager);
-
-        return {
-          ...fuelExpense,
-          vehicleAverage,
-        };
+        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREATED };
       });
     } catch (error) {
       throw error;
@@ -149,7 +141,6 @@ export class FuelExpenseService {
         userId,
         createdBy,
         fileKeys,
-        entrySourceType,
         expenseEntryType = ExpenseEntryType.FORCED,
         transactionType = TransactionType.DEBIT,
       } = createFuelExpenseDto;
@@ -185,7 +176,6 @@ export class FuelExpenseService {
             createdBy,
             transactionType,
             expenseEntryType,
-            entrySourceType,
           },
           entityManager,
         );
@@ -202,13 +192,7 @@ export class FuelExpenseService {
           );
         }
 
-        // Calculate and return vehicle average
-        const vehicleAverage = await this.calculateVehicleAverage(vehicleId, entityManager);
-
-        return {
-          ...fuelExpense,
-          vehicleAverage,
-        };
+        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_FORCE_CREATED };
       });
     } catch (error) {
       throw error;

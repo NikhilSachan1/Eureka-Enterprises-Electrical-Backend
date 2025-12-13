@@ -43,6 +43,9 @@ export const EXPENSE_TRACKER_ERRORS = {
 };
 
 export const EXPENSE_TRACKER_SUCCESS_MESSAGES = {
+  EXPENSE_CREATED: 'Expense added successfully',
+  EXPENSE_FORCE_CREATED: 'Expense forced successfully',
+  CREDIT_SETTLED: 'Credit settled successfully',
   EXPENSE_APPROVAL_PROCESSED:
     'Expense approval processed successfully. {success} out of {length} expenses approved, {error} errors occurred',
   EXPENSE_APPROVAL_SUCCESS: 'Expense approval processed successfully for {status}',

@@ -59,8 +59,7 @@ export class ExpenseTrackerService {
     },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, userId, sourceType, fileKeys } =
-        createExpenseDto;
+      const { category, paymentMode, amount, expenseDate, userId, fileKeys } = createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate);
@@ -74,7 +73,6 @@ export class ExpenseTrackerService {
             approvalStatus: ApprovalStatus.PENDING,
             transactionType: TransactionType.DEBIT,
             expenseEntryType: ExpenseEntryType.SELF,
-            entrySourceType: sourceType,
             createdBy: userId,
           },
           entityManager,
@@ -91,7 +89,7 @@ export class ExpenseTrackerService {
           );
         }
 
-        return expense;
+        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_CREATED };
       });
     } catch (error) {
       throw error;
@@ -179,8 +177,7 @@ export class ExpenseTrackerService {
     },
   ) {
     try {
-      const { category, paymentMode, amount, createdBy, sourceType, expenseDate, fileKeys } =
-        forceExpenseDto;
+      const { category, paymentMode, amount, createdBy, expenseDate, fileKeys } = forceExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
       if (new Date(expenseDate) > new Date()) {
@@ -198,7 +195,6 @@ export class ExpenseTrackerService {
           approvalReason: DEFAULT_EXPENSE.FORCE_APPROVAL_REASON,
           transactionType: TransactionType.DEBIT,
           expenseEntryType: ExpenseEntryType.FORCED,
-          entrySourceType: sourceType,
           createdBy,
         });
 
@@ -212,7 +208,7 @@ export class ExpenseTrackerService {
             entityManager,
           );
         }
-        return expense;
+        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_FORCE_CREATED };
       });
     } catch (error) {
       throw error;
@@ -265,7 +261,7 @@ export class ExpenseTrackerService {
           );
         }
 
-        return expense;
+        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.CREDIT_SETTLED };
       });
     } catch (error) {
       throw error;
