@@ -351,7 +351,7 @@ export class ExpenseTrackerService {
         const parentExpenseId = expense.id;
         const versionNumber = expense.versionNumber + 1;
 
-        await this.expenseTrackerRepository.create(
+        const newExpense = await this.expenseTrackerRepository.create(
           {
             ...expenseData,
             ...editData,
@@ -366,10 +366,10 @@ export class ExpenseTrackerService {
           entityManager,
         );
 
-        if (fileKeys) {
+        if (fileKeys && fileKeys.length > 0) {
           await this.expenseFilesService.create(
             {
-              expenseId: expense.id,
+              expenseId: newExpense.id,
               fileKeys,
               createdBy: updatedBy,
             },
