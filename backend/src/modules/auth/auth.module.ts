@@ -6,7 +6,6 @@ import { AuthController } from './auth.controller';
 import { Environments } from 'env-configs';
 import { SharedModule } from '../shared/shared.module';
 import { MailModule } from '../common/email/email.module';
-import { RolesModule } from '../roles/role.module';
 import { UserRoleModule } from '../user-roles/user-role.module';
 
 @Module({
@@ -19,7 +18,6 @@ import { UserRoleModule } from '../user-roles/user-role.module';
     }),
     SharedModule,
     MailModule,
-    RolesModule,
     UserRoleModule,
   ],
   providers: [AuthService],

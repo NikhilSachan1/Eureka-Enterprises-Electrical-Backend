@@ -1,13 +1,11 @@
 import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
-
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Public } from './decorators/public.decorator';
 import { Response } from 'express';
-import { SignupDto } from './dto/signup.dto';
 import { SignInDto, ForgetPasswordDto, ResetPasswordDto } from './dto';
 import { AUTH_RESPONSES } from './constants/auth.constants';
-import { ApiBearerAuth } from '@nestjs/swagger';
+
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
@@ -17,12 +15,6 @@ export class AuthController {
   @Post('sign-in')
   async signIn(@Body() body: SignInDto) {
     return this.authService.signIn(body);
-  }
-
-  @Public()
-  @Post('sign-up')
-  async signUp(@Body() body: SignupDto) {
-    return this.authService.signUp(body);
   }
 
   @ApiBearerAuth('JWT-auth')

@@ -57,6 +57,10 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   vehicleFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   assetFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   fuelExpenseFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  esicDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  aadharDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  panDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  dlDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -67,6 +71,10 @@ export const FIELD_NAMES = {
   DOCUMENT: 'document',
   VEHICLE_FILES: 'vehicleFiles',
   ASSET_FILES: 'assetFiles',
+  ESIC_DOC: 'esicDoc',
+  AADHAR_DOC: 'aadharDoc',
+  PAN_DOC: 'panDoc',
+  DL_DOC: 'dlDoc',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -77,12 +85,17 @@ export const FIELD_NAME_REFORMED = {
 };
 
 export const DATABASE_FIELD_NAMES = {
-  profilePicture: 'profilePictureUrl',
+  profilePicture: 'profilePicture',
   document: 'fileKey',
   file: 'file', // This is generic, not a db column
   files: 'fileKeys',
   vehicleFiles: 'vehicleFiles',
   assetFiles: 'assetFiles',
+  // Employee document database field names
+  esicDoc: 'esicDoc',
+  aadharDoc: 'aadharDoc',
+  panDoc: 'panDoc',
+  dlDoc: 'dlDoc',
 };
 
 export const FILE_ERRORS = {
@@ -98,4 +111,6 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   VEHICLE_FILES: 'vehicle-files',
   ASSET_FILES: 'asset-files',
   FUEL_EXPENSE_FILES: 'fuel-expense-files',
+  EMPLOYEE_FILES: 'employee-files',
+  PROFILE_PICTURES: 'profile-pictures',
 };

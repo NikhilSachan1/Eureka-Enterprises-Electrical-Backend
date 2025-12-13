@@ -17,6 +17,15 @@ export const USERS_ERRORS = {
   USER_NOT_ARCHIVED_TO_DELETE: 'User is not archived to delete.',
   CHANGE_PASSWORD_CURRENT_PASSWORD: 'Current password is incorrect.',
   PASSWORDS_DO_NOT_MATCH: 'New password and confirm password do not match.',
+  INVALID_AADHAR: 'Invalid Aadhar number. Must be 12 digits.',
+  INVALID_PAN: 'Invalid PAN number. Format: ABCDE1234F',
+  INVALID_IFSC: 'Invalid IFSC code. Format: ABCD0123456',
+  INVALID_PINCODE: 'Invalid pincode. Must be 6 digits.',
+  INVALID_PHONE: 'Invalid phone number format.',
+  INVALID_ACCOUNT_NUMBER: 'Invalid account number. Must be 9-18 digits.',
+  INVALID_PASSOUT_YEAR: 'Invalid passout year.',
+  FUTURE_DATE_NOT_ALLOWED: 'Future date is not allowed.',
+  DOB_MUST_BE_18_YEARS: 'Employee must be at least 18 years old.',
 };
 
 export const USER_DTO_ERRORS = {
@@ -36,13 +45,22 @@ export enum UserStatus {
 
 export const USERS_RESPONSES = {
   PASSWORD_UPDATED: 'Password updated successfully.',
+  EMPLOYEE_CREATED: 'Employee created successfully.',
+  EMAIL_ALREADY_EXISTS: 'An account with this email address already exists.',
+  ROLE_NOT_FOUND: 'Role not found.',
 };
 
 export enum UserSortFields {
   CREATED_AT = 'createdAt',
 }
 
-export enum UserRecordType {
-  USER = 'user',
-  INVITATION = 'invitation',
-}
+export const VALIDATION_PATTERNS = {
+  AADHAR: /^\d{12}$/,
+  PAN: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+  IFSC: /^[A-Z]{4}0[A-Z0-9]{6}$/,
+  PINCODE: /^\d{6}$/,
+  PHONE: /^(\+91)?[6-9]\d{9}$/,
+  ACCOUNT_NUMBER: /^\d{9,18}$/,
+  ESIC: /^\d{17}$/,
+  DL: /^[A-Z]{2}[\-]?\d{2}[\-]?\d{4}[\-]?\d{7}$/,
+};

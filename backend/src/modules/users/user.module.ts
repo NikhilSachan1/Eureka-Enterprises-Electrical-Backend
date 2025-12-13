@@ -7,9 +7,20 @@ import { UserRepository } from './user.repository';
 import { SharedModule } from '../shared/shared.module';
 import { RolesModule } from '../roles/role.module';
 import { UserRoleModule } from '../user-roles/user-role.module';
+import { ConfigurationsModule } from '../configurations/configuration.module';
+import { ConfigSettingsModule } from '../config-settings/config-setting.module';
+import { FilesModule } from '../common/file-upload/files.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserEntity]), SharedModule, RolesModule, UserRoleModule],
+  imports: [
+    TypeOrmModule.forFeature([UserEntity]),
+    SharedModule,
+    RolesModule,
+    UserRoleModule,
+    ConfigurationsModule,
+    ConfigSettingsModule,
+    FilesModule,
+  ],
   providers: [UserService, UserRepository],
   exports: [UserService],
   controllers: [UserController],

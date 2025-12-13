@@ -11,15 +11,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../users/user.service';
 import { Environments } from '../../../env-configs';
-import { SignInDto, ResetPasswordDto, SignupDto } from './dto';
+import { SignInDto, ResetPasswordDto } from './dto';
 import { AUTH_ERRORS, AUTH_RESPONSES, AUTH_REDIRECT_ROUTES } from './constants/auth.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { MailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
-import { RoleService } from '../roles/role.service';
 import { UserRoleService } from '../user-roles/user-role.service';
-import { DataSource } from 'typeorm';
-import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class AuthService {
@@ -29,9 +26,7 @@ export class AuthService {
     private jwtService: JwtService,
     private utilityService: UtilityService,
     private mailService: MailService,
-    private roleService: RoleService,
     private userRoleService: UserRoleService,
-    @InjectDataSource() private dataSource: DataSource,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -56,7 +51,15 @@ export class AuthService {
     const { email, password } = user;
     const validatedUser = await this.validateUser(email, password);
     if (!validatedUser) throw new BadRequestException(AUTH_ERRORS.INVALID_CREDENTIALS);
-    const { id, firstName, lastName, email: userEmail, role } = validatedUser;
+    const {
+      id,
+      firstName,
+      lastName,
+      email: userEmail,
+      role,
+      designation,
+      profilePicture,
+    } = validatedUser;
     const tokenPayload = { id, email: userEmail, role };
     return {
       token: this.jwtService.sign(tokenPayload),
@@ -64,18 +67,8 @@ export class AuthService {
       email: userEmail,
       firstName,
       lastName,
-      designation: [
-        'Senior Software Engineer',
-        'Software Engineer',
-        'Electrical Engineer',
-        'Site Manager',
-        'Human Resources',
-      ][Math.floor(Math.random() * 5)], //TODO: Configure this with the actual designation
-      profilePicture: [
-        'https://images.unsplash.com/photo-1628563694622-5a76957fd09c?q=80&w=387&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-        null,
-        '',
-      ][Math.floor(Math.random() * 3)], //TODO: Configure this with the actual profile picture
+      designation: designation,
+      profilePicture: profilePicture || null,
       role,
     };
   }
@@ -179,59 +172,5 @@ export class AuthService {
     } catch (error) {
       return false;
     }
-  }
-
-  async signUp(signupDto: SignupDto) {
-    const { email, password, confirmPassword, role } = signupDto;
-
-    // Input validation
-    if (password !== confirmPassword) {
-      throw new BadRequestException(AUTH_ERRORS.PASSWORDS_DO_NOT_MATCH);
-    }
-
-    // Pre-transaction checks
-    const [existingUser, roleEntity] = await Promise.all([
-      this.userService.findOne({ email }),
-      this.roleService.findOne({ where: { name: role } }),
-    ]);
-
-    if (existingUser) {
-      throw new BadRequestException(AUTH_ERRORS.EMAIL_ALREADY_EXISTS);
-    }
-
-    if (!roleEntity) {
-      throw new NotFoundException(AUTH_ERRORS.ROLE_NOT_FOUND);
-    }
-
-    // Execute in transaction
-    return await this.dataSource.transaction(async (entityManager) => {
-      try {
-        // Create user
-        const userData = {
-          ...signupDto,
-          password: this.utilityService.createHash(password),
-          status: UserStatus.ACTIVE,
-        };
-
-        const user = await this.userService.create(userData, entityManager);
-
-        // Create user role assignment
-        await this.userRoleService.create(
-          {
-            userId: user.id,
-            roleId: roleEntity.id,
-          },
-          entityManager,
-        );
-
-        return {
-          id: user.id,
-          message: AUTH_RESPONSES.SIGNUP_SUCCESS,
-        };
-      } catch (error) {
-        Logger.error('SignUp transaction failed:', error);
-        throw error;
-      }
-    });
   }
 }

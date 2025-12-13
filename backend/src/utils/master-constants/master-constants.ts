@@ -15,6 +15,13 @@ export const CONFIGURATION_KEYS = {
   TRANSACTION_TYPES: 'transaction_types',
   EXPENSE_DATE_VALIDATION: 'expense_date_validation',
   FUEL_EXPENSE_DATE_VALIDATION: 'fuel_expense_date_validation',
+  //EMPLOYEE
+  GENDERS: 'genders',
+  BLOOD_GROUPS: 'blood_groups',
+  EMPLOYEE_TYPES: 'employee_types',
+  DESIGNATIONS: 'designations',
+  DEGREES: 'degrees',
+  BRANCHES: 'branches',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -23,6 +30,7 @@ export const CONFIGURATION_MODULES = {
   LEAVE: 'leave',
   EXPENSE: 'expense',
   FUEL_EXPENSE: 'fuel_expense',
+  EMPLOYEE: 'employee',
 };
 
 export enum LeaveCycleType {

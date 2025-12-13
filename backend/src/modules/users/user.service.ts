@@ -1,15 +1,37 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { UserEntity } from './entities/user.entity';
 import { UserRepository } from './user.repository';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { USERS_ERRORS, USER_FIELD_NAMES } from './constants/user.constants';
+import {
+  USERS_ERRORS,
+  USER_FIELD_NAMES,
+  UserStatus,
+  USERS_RESPONSES,
+} from './constants/user.constants';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
-import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
-import { GetUsersDto } from './dto';
+import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import { CreateEmployeeDto, GetUsersDto } from './dto';
+import { ConfigurationService } from '../configurations/configuration.service';
+import { ConfigSettingService } from '../config-settings/config-setting.service';
+import { CONFIGURATION_KEYS } from 'src/utils/master-constants/master-constants';
+import { RoleService } from '../roles/role.service';
+import { UserRoleService } from '../user-roles/user-role.service';
+import { FilesService } from '../common/file-upload/files.service';
+import { FILE_UPLOAD_FOLDER_NAMES } from '../common/file-upload/constants/files.constants';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class UserService {
-  constructor(private userRepository: UserRepository, private utilityService: UtilityService) {}
+  constructor(
+    private userRepository: UserRepository,
+    private utilityService: UtilityService,
+    private configurationService: ConfigurationService,
+    private configSettingService: ConfigSettingService,
+    private roleService: RoleService,
+    private userRoleService: UserRoleService,
+    private filesService: FilesService,
+    @InjectDataSource() private dataSource: DataSource,
+  ) {}
 
   async findAll(
     options: GetUsersDto,
@@ -52,16 +74,104 @@ export class UserService {
     }
   }
 
+  async createEmployee(
+    createEmployeeDto: CreateEmployeeDto,
+    files?: {
+      profilePicture?: Express.Multer.File[];
+      esicDoc?: Express.Multer.File[];
+      aadharDoc?: Express.Multer.File[];
+      panDoc?: Express.Multer.File[];
+      dlDoc?: Express.Multer.File[];
+    },
+    createdBy?: string,
+  ) {
+    const { email, role } = createEmployeeDto;
+
+    await this.validateDropdownFields(createEmployeeDto);
+
+    const existingUser = await this.findOne({ email });
+    if (existingUser) {
+      throw new BadRequestException(USERS_RESPONSES.EMAIL_ALREADY_EXISTS);
+    }
+
+    const roleEntity = await this.roleService.findOne({ where: { name: role } });
+    if (!roleEntity) {
+      throw new NotFoundException(USERS_RESPONSES.ROLE_NOT_FOUND);
+    }
+
+    const generatedPassword = this.utilityService.generateSecurePassword();
+
+    let uploadedFiles: Record<string, string> = {};
+    if (files && Object.keys(files).length > 0) {
+      uploadedFiles = await this.handleFileUploads(files, email);
+    }
+
+    return await this.dataSource.transaction(async (entityManager) => {
+      try {
+        const userData: any = this.utilityService.convertEmptyStringsToNull({
+          ...createEmployeeDto,
+          password: this.utilityService.createHash(generatedPassword),
+          status: UserStatus.ACTIVE,
+          createdBy,
+          ...uploadedFiles,
+        });
+
+        if (userData.dateOfBirth) {
+          userData.dateOfBirth = new Date(userData.dateOfBirth);
+        }
+        if (userData.dateOfJoining) {
+          userData.dateOfJoining = new Date(userData.dateOfJoining);
+        }
+
+        delete userData.role;
+
+        const user = await this.create(userData, entityManager);
+
+        await this.userRoleService.create(
+          { userId: user.id, roleId: roleEntity.id },
+          entityManager,
+        );
+
+        // TODO: Send welcome email with credentials to the employee
+        // await this.sendWelcomeEmail(email, generatedPassword, createEmployeeDto.firstName);
+        Logger.log(`TODO: Send welcome email to ${email} with generated password`);
+
+        return {
+          id: user.id,
+          message: USERS_RESPONSES.EMPLOYEE_CREATED,
+        };
+      } catch (error) {
+        Logger.error('Create employee failed:', error);
+        // Cleanup uploaded files on failure
+        if (Object.keys(uploadedFiles).length > 0) {
+          await this.cleanupUploadedFiles(uploadedFiles);
+        }
+        throw error;
+      }
+    });
+  }
+
   async update(
     identifierConditions: FindOptionsWhere<UserEntity>,
-    updateData: Partial<UserEntity>,
+    updateData: Record<string, any>,
   ) {
     try {
       const user = await this.userRepository.findOne({
         where: identifierConditions,
       });
       if (!user) throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
-      await this.userRepository.update(identifierConditions, updateData);
+
+      await this.validateDropdownFields(updateData);
+
+      const processedData: any = this.utilityService.convertEmptyStringsToNull(updateData);
+      if (processedData.dateOfBirth && typeof processedData.dateOfBirth === 'string') {
+        processedData.dateOfBirth = new Date(processedData.dateOfBirth);
+      }
+      if (processedData.dateOfJoining && typeof processedData.dateOfJoining === 'string') {
+        processedData.dateOfJoining = new Date(processedData.dateOfJoining);
+      }
+
+      await this.userRepository.update(identifierConditions, processedData);
       return this.utilityService.getSuccessMessage(
         USER_FIELD_NAMES.USER,
         DataSuccessOperationType.UPDATE,
@@ -71,16 +181,221 @@ export class UserService {
     }
   }
 
+  async updateEmployee(
+    id: string,
+    updateData: Record<string, any>,
+    files?: {
+      profilePicture?: Express.Multer.File[];
+      esicDoc?: Express.Multer.File[];
+      aadharDoc?: Express.Multer.File[];
+      panDoc?: Express.Multer.File[];
+      dlDoc?: Express.Multer.File[];
+    },
+    updatedBy?: string,
+  ) {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
+    }
+    await this.validateDropdownFields(updateData);
+
+    let uploadedFiles: Record<string, string> = {};
+    if (files && Object.keys(files).length > 0) {
+      uploadedFiles = await this.handleFileUploads(files, user.email);
+
+      const oldFilesToDelete: string[] = [];
+      if (uploadedFiles.profilePicture && user.profilePicture) {
+        oldFilesToDelete.push(user.profilePicture);
+      }
+      if (uploadedFiles.esicDoc && user.esicDoc) {
+        oldFilesToDelete.push(user.esicDoc);
+      }
+      if (uploadedFiles.aadharDoc && user.aadharDoc) {
+        oldFilesToDelete.push(user.aadharDoc);
+      }
+      if (uploadedFiles.panDoc && user.panDoc) {
+        oldFilesToDelete.push(user.panDoc);
+      }
+      if (uploadedFiles.dlDoc && user.dlDoc) {
+        oldFilesToDelete.push(user.dlDoc);
+      }
+
+      if (oldFilesToDelete.length > 0) {
+        this.cleanupUploadedFiles(
+          oldFilesToDelete.reduce((acc, key, idx) => {
+            acc[`old_${idx}`] = key;
+            return acc;
+          }, {} as Record<string, string>),
+        ).catch((err) => Logger.error('Failed to cleanup old files:', err));
+      }
+    }
+
+    const processedData: any = this.utilityService.convertEmptyStringsToNull({
+      ...updateData,
+      ...uploadedFiles,
+      updatedBy,
+    });
+
+    if (processedData.dateOfBirth && typeof processedData.dateOfBirth === 'string') {
+      processedData.dateOfBirth = new Date(processedData.dateOfBirth);
+    }
+    if (processedData.dateOfJoining && typeof processedData.dateOfJoining === 'string') {
+      processedData.dateOfJoining = new Date(processedData.dateOfJoining);
+    }
+
+    await this.userRepository.update({ id }, processedData);
+    return this.utilityService.getSuccessMessage(
+      USER_FIELD_NAMES.USER,
+      DataSuccessOperationType.UPDATE,
+    );
+  }
+
   async delete(id: string, deletedBy: string) {
     try {
       await this.userRepository.delete(id, deletedBy);
-
       return this.utilityService.getSuccessMessage(
         USER_FIELD_NAMES.USER,
         DataSuccessOperationType.DELETE,
       );
     } catch (error) {
       throw error;
+    }
+  }
+
+  async getDropdownOptions() {
+    const configKeys = [
+      { key: CONFIGURATION_KEYS.GENDERS, field: 'genders' },
+      { key: CONFIGURATION_KEYS.BLOOD_GROUPS, field: 'bloodGroups' },
+      { key: CONFIGURATION_KEYS.EMPLOYEE_TYPES, field: 'employeeTypes' },
+      { key: CONFIGURATION_KEYS.DESIGNATIONS, field: 'designations' },
+      { key: CONFIGURATION_KEYS.DEGREES, field: 'degrees' },
+      { key: CONFIGURATION_KEYS.BRANCHES, field: 'branches' },
+    ];
+
+    const dropdownOptions: Record<string, any[]> = {};
+
+    for (const { key, field } of configKeys) {
+      try {
+        const configuration = await this.configurationService.findOne({ where: { key } });
+        if (configuration) {
+          const configSetting = await this.configSettingService.findOne({
+            where: { configId: configuration.id, isActive: true },
+          });
+          dropdownOptions[field] = configSetting?.value || [];
+        } else {
+          dropdownOptions[field] = [];
+        }
+      } catch (error) {
+        Logger.error(`Failed to fetch config for ${key}:`, error);
+        dropdownOptions[field] = [];
+      }
+    }
+
+    return dropdownOptions;
+  }
+
+  private async validateDropdownFields(data: Record<string, any>): Promise<void> {
+    const fieldsToValidate = [
+      { field: 'gender', configKey: CONFIGURATION_KEYS.GENDERS, label: 'Gender' },
+      { field: 'bloodGroup', configKey: CONFIGURATION_KEYS.BLOOD_GROUPS, label: 'Blood Group' },
+      {
+        field: 'employeeType',
+        configKey: CONFIGURATION_KEYS.EMPLOYEE_TYPES,
+        label: 'Employee Type',
+      },
+      { field: 'designation', configKey: CONFIGURATION_KEYS.DESIGNATIONS, label: 'Designation' },
+      { field: 'degree', configKey: CONFIGURATION_KEYS.DEGREES, label: 'Degree' },
+      { field: 'branch', configKey: CONFIGURATION_KEYS.BRANCHES, label: 'Branch' },
+    ];
+
+    const errors: string[] = [];
+
+    for (const { field, configKey, label } of fieldsToValidate) {
+      const value = data[field];
+      if (!value) continue;
+
+      const validValues = await this.getValidValuesForConfig(configKey);
+      if (validValues.length > 0 && !validValues.includes(value as string)) {
+        errors.push(`Invalid ${label}: "${value}". Valid options: ${validValues.join(', ')}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(errors.join('; '));
+    }
+  }
+
+  private async getValidValuesForConfig(configKey: string): Promise<string[]> {
+    try {
+      const configuration = await this.configurationService.findOne({ where: { key: configKey } });
+      if (!configuration) {
+        Logger.warn(`Configuration not found for key: ${configKey}`);
+        return [];
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: { configId: configuration.id, isActive: true },
+      });
+
+      if (!configSetting || !configSetting.value) return [];
+      return configSetting.value.map((option: { value: string }) => option.value);
+    } catch (error) {
+      Logger.error(`Failed to get valid values for ${configKey}:`, error);
+      return [];
+    }
+  }
+
+  private async handleFileUploads(
+    files: {
+      profilePicture?: Express.Multer.File[];
+      esicDoc?: Express.Multer.File[];
+      aadharDoc?: Express.Multer.File[];
+      panDoc?: Express.Multer.File[];
+      dlDoc?: Express.Multer.File[];
+    },
+    userEmail: string,
+  ): Promise<Record<string, string>> {
+    const uploadedPaths: Record<string, string> = {};
+    const timestamp = Date.now();
+    const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const fileFieldMappings = [
+      { field: 'profilePicture', folder: FILE_UPLOAD_FOLDER_NAMES.PROFILE_PICTURES },
+      { field: 'esicDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'aadharDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'panDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'dlDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+    ];
+
+    for (const mapping of fileFieldMappings) {
+      const fileArray = files[mapping.field as keyof typeof files];
+      if (fileArray && fileArray.length > 0) {
+        const file = fileArray[0];
+        const extension = file.originalname.split('.').pop();
+        const key = `${mapping.folder}/${sanitizedEmail}/${mapping.field}_${timestamp}.${extension}`;
+
+        try {
+          await this.filesService.uploadFile(file.buffer, key, file.mimetype);
+          uploadedPaths[mapping.field] = key;
+          Logger.log(`Uploaded ${mapping.field} to ${key}`);
+        } catch (error) {
+          Logger.error(`Failed to upload ${mapping.field}:`, error);
+          throw error;
+        }
+      }
+    }
+
+    return uploadedPaths;
+  }
+
+  private async cleanupUploadedFiles(uploadedFiles: Record<string, string>): Promise<void> {
+    for (const [field, key] of Object.entries(uploadedFiles)) {
+      try {
+        await this.filesService.deleteFile(key);
+        Logger.log(`Cleaned up ${field}: ${key}`);
+      } catch (error) {
+        Logger.error(`Failed to cleanup ${field}: ${key}`, error);
+      }
     }
   }
 }

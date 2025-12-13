@@ -1,28 +1,235 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsEnum, IsString } from 'class-validator';
-import { USER_DTO_ERRORS, UserStatus } from '../constants/user.constants';
+import {
+  IsOptional,
+  IsEnum,
+  IsString,
+  IsInt,
+  IsDateString,
+  Min,
+  Max,
+  MaxLength,
+  Matches,
+} from 'class-validator';
+import {
+  USER_DTO_ERRORS,
+  UserStatus,
+  VALIDATION_PATTERNS,
+  USERS_ERRORS,
+} from '../constants/user.constants';
+import { Type } from 'class-transformer';
 
 export class UpdateUserDto {
-  @ApiProperty({ description: 'First name to be updated of the user.', required: false })
+  // ==================== Basic Information ====================
+  @ApiProperty({ description: 'First name', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   firstName?: string;
 
-  @ApiProperty({ description: 'Last name to be updated of the user.', required: false })
+  @ApiProperty({ description: 'Last name', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   lastName?: string;
 
-  @ApiProperty({ description: 'Contact number to be updated of the user.', required: false })
+  @ApiProperty({ description: 'Contact number', required: false })
   @IsOptional()
   @IsString()
+  @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
   contactNumber?: string;
 
-  @ApiProperty({ description: 'Status to be updated of the user.', required: false })
+  @ApiProperty({ description: 'User status', required: false, enum: UserStatus })
   @IsOptional()
   @IsString()
   @IsEnum(UserStatus, {
     message: `${USER_DTO_ERRORS.INVALID_STATUS} ${Object.values(UserStatus).join(', ')}`,
   })
   status?: string;
+
+  @ApiProperty({ description: 'Profile picture S3 key', required: false })
+  @IsOptional()
+  @IsString()
+  profilePicture?: string;
+
+  @ApiProperty({ description: 'Employee ID', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  employeeId?: string;
+
+  // ==================== Personal Information ====================
+  @ApiProperty({ description: "Father's name", required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fatherName?: string;
+
+  @ApiProperty({ description: 'Emergency contact number', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
+  emergencyContactNumber?: string;
+
+  @ApiProperty({ description: 'Gender (from config_settings)', required: false })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiProperty({ description: 'Date of birth (YYYY-MM-DD)', required: false })
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
+
+  @ApiProperty({ description: 'Blood group (from config_settings)', required: false })
+  @IsOptional()
+  @IsString()
+  bloodGroup?: string;
+
+  // ==================== Address Information ====================
+  @ApiProperty({ description: 'House number', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  houseNumber?: string;
+
+  @ApiProperty({ description: 'Street name', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  streetName?: string;
+
+  @ApiProperty({ description: 'Landmark', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  landmark?: string;
+
+  @ApiProperty({ description: 'City', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @ApiProperty({ description: 'State', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  state?: string;
+
+  @ApiProperty({ description: 'Pincode (6 digits)', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.PINCODE, { message: USERS_ERRORS.INVALID_PINCODE })
+  pincode?: string;
+
+  // ==================== Employment Details ====================
+  @ApiProperty({ description: 'Date of joining (YYYY-MM-DD)', required: false })
+  @IsOptional()
+  @IsDateString()
+  dateOfJoining?: string;
+
+  @ApiProperty({ description: 'Previous experience', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  previousExperience?: string;
+
+  @ApiProperty({ description: 'Employee type (from config_settings)', required: false })
+  @IsOptional()
+  @IsString()
+  employeeType?: string;
+
+  @ApiProperty({ description: 'Designation (from config_settings)', required: false })
+  @IsOptional()
+  @IsString()
+  designation?: string;
+
+  // ==================== Education Details ====================
+  @ApiProperty({ description: 'Degree (from config_settings)', required: false })
+  @IsOptional()
+  @IsString()
+  degree?: string;
+
+  @ApiProperty({ description: 'Branch (from config_settings)', required: false })
+  @IsOptional()
+  @IsString()
+  branch?: string;
+
+  @ApiProperty({ description: 'Passout year', required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1950, { message: USERS_ERRORS.INVALID_PASSOUT_YEAR })
+  @Max(new Date().getFullYear() + 5, { message: USERS_ERRORS.INVALID_PASSOUT_YEAR })
+  @Type(() => Number)
+  passoutYear?: number;
+
+  // ==================== Banking Details ====================
+  @ApiProperty({ description: 'Bank account holder name', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bankHolderName?: string;
+
+  @ApiProperty({ description: 'Bank account number', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.ACCOUNT_NUMBER, { message: USERS_ERRORS.INVALID_ACCOUNT_NUMBER })
+  accountNumber?: string;
+
+  @ApiProperty({ description: 'Bank name', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bankName?: string;
+
+  @ApiProperty({ description: 'IFSC code', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.IFSC, { message: USERS_ERRORS.INVALID_IFSC })
+  ifscCode?: string;
+
+  // ==================== Government IDs and Documents ====================
+  @ApiProperty({ description: 'ESIC number', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 17 digits.' })
+  esicNumber?: string;
+
+  @ApiProperty({ description: 'ESIC document S3 key', required: false })
+  @IsOptional()
+  @IsString()
+  esicDoc?: string;
+
+  @ApiProperty({ description: 'Aadhar number', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.AADHAR, { message: USERS_ERRORS.INVALID_AADHAR })
+  aadharNumber?: string;
+
+  @ApiProperty({ description: 'Aadhar document S3 key', required: false })
+  @IsOptional()
+  @IsString()
+  aadharDoc?: string;
+
+  @ApiProperty({ description: 'PAN number', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.PAN, { message: USERS_ERRORS.INVALID_PAN })
+  panNumber?: string;
+
+  @ApiProperty({ description: 'PAN document S3 key', required: false })
+  @IsOptional()
+  @IsString()
+  panDoc?: string;
+
+  @ApiProperty({ description: 'Driving license number', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  dlNumber?: string;
+
+  @ApiProperty({ description: 'DL document S3 key', required: false })
+  @IsOptional()
+  @IsString()
+  dlDoc?: string;
 }
