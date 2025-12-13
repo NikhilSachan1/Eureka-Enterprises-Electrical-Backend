@@ -59,7 +59,8 @@ export class ExpenseTrackerService {
     },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, userId, fileKeys } = createExpenseDto;
+      const { category, paymentMode, amount, expenseDate, userId, sourceType, fileKeys } =
+        createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate);
@@ -73,6 +74,7 @@ export class ExpenseTrackerService {
             approvalStatus: ApprovalStatus.PENDING,
             transactionType: TransactionType.DEBIT,
             expenseEntryType: ExpenseEntryType.SELF,
+            entrySourceType: sourceType,
             createdBy: userId,
           },
           entityManager,
@@ -177,7 +179,8 @@ export class ExpenseTrackerService {
     },
   ) {
     try {
-      const { category, paymentMode, amount, createdBy, expenseDate, fileKeys } = forceExpenseDto;
+      const { category, paymentMode, amount, createdBy, sourceType, expenseDate, fileKeys } =
+        forceExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
       if (new Date(expenseDate) > new Date()) {
@@ -195,6 +198,7 @@ export class ExpenseTrackerService {
           approvalReason: DEFAULT_EXPENSE.FORCE_APPROVAL_REASON,
           transactionType: TransactionType.DEBIT,
           expenseEntryType: ExpenseEntryType.FORCED,
+          entrySourceType: sourceType,
           createdBy,
         });
 
