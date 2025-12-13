@@ -536,7 +536,7 @@ export class ExpenseTrackerService {
           { id: originalExpenseId }, // The original expense itself
           { originalExpenseId }, // All subsequent versions
         ],
-        relations: ['user', 'approvalByUser'],
+        relations: ['user', 'approvalByUser', 'createdByUser', 'updatedByUser'],
         order: { versionNumber: SortOrder.ASC },
       });
 
@@ -598,6 +598,24 @@ export class ExpenseTrackerService {
                 lastName: record.approvalByUser.lastName,
                 email: record.approvalByUser.email,
                 employeeId: record.approvalByUser.employeeId,
+              }
+            : null,
+          createdByUser: record.createdByUser
+            ? {
+                id: record.createdByUser.id,
+                firstName: record.createdByUser.firstName,
+                lastName: record.createdByUser.lastName,
+                email: record.createdByUser.email,
+                employeeId: record.createdByUser.employeeId,
+              }
+            : null,
+          updatedByUser: record.updatedByUser
+            ? {
+                id: record.updatedByUser.id,
+                firstName: record.updatedByUser.firstName,
+                lastName: record.updatedByUser.lastName,
+                email: record.updatedByUser.email,
+                employeeId: record.updatedByUser.employeeId,
               }
             : null,
         })),
