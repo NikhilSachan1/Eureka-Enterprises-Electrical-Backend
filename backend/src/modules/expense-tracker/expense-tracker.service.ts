@@ -513,9 +513,10 @@ export class ExpenseTrackerService {
       // Get the original expense ID (could be this expense or an ancestor)
       const originalExpenseId = expense.originalExpenseId || expense.id;
 
-      // Find all versions of this expense
+      // Find all versions of this expense (including the original)
       const history = await this.expenseTrackerRepository.findAll({
         where: [
+          { id: originalExpenseId }, // The original expense itself
           { originalExpenseId }, // All subsequent versions
         ],
         relations: ['user', 'approvalByUser'],

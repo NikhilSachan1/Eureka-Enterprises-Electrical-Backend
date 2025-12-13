@@ -33,7 +33,7 @@ import { AttendanceEntity } from './entities/attendance.entity';
 import { UtilityService } from '../../utils/utility/utility.service';
 import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/attendance-queries';
 import { AttendanceHistoryDto } from './dto/attendance-history.dto';
-import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
+import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class AttendanceService {
@@ -1334,6 +1334,7 @@ export class AttendanceService {
           attendanceDate: new Date(date),
         },
         relations: ['user', 'approvalByUser', 'createdByUser'],
+        order: { createdAt: SortOrder.DESC },
         select: {
           user: {
             id: true,
