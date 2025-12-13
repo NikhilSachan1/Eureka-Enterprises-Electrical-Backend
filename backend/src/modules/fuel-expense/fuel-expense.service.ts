@@ -72,11 +72,13 @@ export class FuelExpenseService {
         userId,
         createdBy,
         fileKeys,
+        paymentMode,
         transactionType = TransactionType.DEBIT,
         expenseEntryType = ExpenseEntryType.SELF,
       } = createFuelExpenseDto;
 
       await this.validateFillDate(fillDate);
+      await this.validatePaymentMode(paymentMode);
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
@@ -141,6 +143,7 @@ export class FuelExpenseService {
         userId,
         createdBy,
         fileKeys,
+        paymentMode,
         expenseEntryType = ExpenseEntryType.FORCED,
         transactionType = TransactionType.DEBIT,
       } = createFuelExpenseDto;
@@ -149,6 +152,9 @@ export class FuelExpenseService {
       if (new Date(fillDate) > new Date()) {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.INVALID_FILL_DATE);
       }
+
+      // Validate payment mode
+      await this.validatePaymentMode(paymentMode);
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
@@ -223,10 +229,13 @@ export class FuelExpenseService {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_BE_EDITED);
       }
 
-      const { vehicleId, cardId, fillDate, odometerKm } = editFuelExpenseDto;
+      const { vehicleId, cardId, fillDate, odometerKm, paymentMode } = editFuelExpenseDto;
 
       // Validate fill date
       await this.validateFillDate(fillDate);
+
+      // Validate payment mode
+      await this.validatePaymentMode(paymentMode);
 
       // Validate vehicle exists
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
@@ -1143,6 +1152,28 @@ export class FuelExpenseService {
     if (fillDate < allowedDate) {
       throw new BadRequestException(
         FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_DATE_TOO_OLD.replace('{days}', allowedDays.toString()),
+      );
+    }
+  }
+
+  private async validatePaymentMode(paymentMode: string) {
+    const paymentModeSetting = await this.configurationService.findOneOrFail({
+      where: { module: CONFIGURATION_MODULES.FUEL_EXPENSE, key: CONFIGURATION_KEYS.PAYMENT_MODES },
+    });
+
+    const configSetting = await this.configSettingService.findOneOrFail({
+      where: { configId: paymentModeSetting.id, isActive: true },
+    });
+
+    const isValidPaymentMode = configSetting.value.some((item: any) => item.name === paymentMode);
+
+    if (!isValidPaymentMode) {
+      const availablePaymentModes = configSetting.value.map((item: any) => item.name);
+      throw new BadRequestException(
+        FUEL_EXPENSE_ERRORS.PAYMENT_MODE_NOT_FOUND.replace(
+          '{paymentModes}',
+          availablePaymentModes.join(', '),
+        ),
       );
     }
   }
