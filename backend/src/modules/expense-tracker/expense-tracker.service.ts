@@ -540,6 +540,21 @@ export class ExpenseTrackerService {
         order: { versionNumber: SortOrder.ASC },
       });
 
+      // Fetch file keys for all expense versions
+      const expenseIds = history.map((record) => record.id);
+      const allFiles = await this.expenseFilesService.findAll({
+        where: { expenseId: In(expenseIds) },
+      });
+
+      // Group files by expenseId
+      const filesByExpenseId = allFiles.reduce((acc, file) => {
+        if (!acc[file.expenseId]) {
+          acc[file.expenseId] = [];
+        }
+        acc[file.expenseId].push(file.fileKey);
+        return acc;
+      }, {} as Record<string, string[]>);
+
       return {
         originalExpenseId,
         currentVersion: expense.versionNumber,
@@ -566,6 +581,7 @@ export class ExpenseTrackerService {
           updatedAt: record.updatedAt,
           createdBy: record.createdBy,
           updatedBy: record.updatedBy,
+          fileKeys: filesByExpenseId[record.id] || [],
           user: record.user
             ? {
                 id: record.user.id,
