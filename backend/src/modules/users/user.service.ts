@@ -197,6 +197,15 @@ export class UserService {
     if (!user) {
       throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
     }
+
+    // Check if email is being updated and if it's already taken by another user
+    if (updateData.email && updateData.email !== user.email) {
+      const existingUserWithEmail = await this.findOne({ email: updateData.email });
+      if (existingUserWithEmail && existingUserWithEmail.id !== id) {
+        throw new BadRequestException(USERS_RESPONSES.EMAIL_ALREADY_EXISTS);
+      }
+    }
+
     await this.validateDropdownFields(updateData);
 
     let uploadedFiles: Record<string, string> = {};
