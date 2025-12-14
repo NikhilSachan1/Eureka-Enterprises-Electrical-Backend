@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { CreatePermissionDto } from './dto/permission.dto';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class PermissionRepository {
@@ -40,7 +41,7 @@ export class PermissionRepository {
     try {
       const [permissions, totalRecords] = await this.repository.findAndCount({
         where: { deletedAt: null, ...options.where },
-        order: { name: 'ASC' },
+        order: { name: SortOrder.ASC },
       });
       return this.utilityService.listResponse(permissions, totalRecords);
     } catch (error) {

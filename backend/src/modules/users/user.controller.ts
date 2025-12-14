@@ -33,6 +33,11 @@ export class UserController {
     return { success: true, data };
   }
 
+  @Get(':id')
+  async findById(@Param('id') id: string) {
+    return await this.userService.findOneOrFail({ where: { id } }, true);
+  }
+
   @Post()
   @UseInterceptors(
     FileFieldsInterceptor([

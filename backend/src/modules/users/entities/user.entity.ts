@@ -107,30 +107,19 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 20, nullable: true })
   ifscCode: string;
 
-  // ==================== Government IDs and Documents ====================
+  // ==================== Government IDs ====================
+  // Note: Document files are stored in user_documents table
   @Column({ type: 'varchar', length: 50, nullable: true })
   esicNumber: string;
-
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  esicDoc: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   aadharNumber: string;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  aadharDoc: string;
-
   @Column({ type: 'varchar', length: 20, nullable: true })
   panNumber: string;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  panDoc: string;
-
   @Column({ type: 'varchar', length: 50, nullable: true })
   dlNumber: string;
-
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  dlDoc: string;
 
   // ==================== Relations ====================
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.user)

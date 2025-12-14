@@ -20,6 +20,13 @@ import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-fi
 import { VehicleEventEntity } from 'src/modules/vehicle-events/entities/vehicle-event.entity';
 import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicle-master.entity';
 import { VehicleVersionEntity } from 'src/modules/vehicle-versions/entities/vehicle-versions.entity';
+import { UserDocumentEntity } from 'src/modules/user-documents/entities/user-document.entity';
+import { FuelExpenseEntity } from 'src/modules/fuel-expense/entities/fuel-expense.entity';
+import { FuelExpenseFilesEntity } from 'src/modules/fuel-expense-files/entities/fuel-expense-files.entity';
+import { AssetMasterEntity } from 'src/modules/asset-masters/entities/asset-master.entity';
+import { AssetVersionEntity } from 'src/modules/asset-versions/entities/asset-versions.entity';
+import { AssetFileEntity } from 'src/modules/asset-files/entities/asset-file.entity';
+import { AssetEventEntity } from 'src/modules/asset-events/entities/asset-event.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -65,6 +72,13 @@ export class ConfigService {
         VehicleVersionEntity,
         VehicleFileEntity,
         VehicleEventEntity,
+        UserDocumentEntity,
+        FuelExpenseEntity,
+        FuelExpenseFilesEntity,
+        AssetMasterEntity,
+        AssetVersionEntity,
+        AssetFileEntity,
+        AssetEventEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

@@ -195,7 +195,8 @@ export class CreateEmployeeDto {
   @Matches(VALIDATION_PATTERNS.IFSC, { message: USERS_ERRORS.INVALID_IFSC })
   ifscCode?: string;
 
-  // ==================== Government IDs and Documents ====================
+  // ==================== Government IDs ====================
+  // Note: Document files are uploaded separately and stored in user_documents table
 
   @ApiProperty({ description: 'ESIC number (17 digits)', required: false })
   @IsString()
@@ -203,21 +204,11 @@ export class CreateEmployeeDto {
   @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 17 digits.' })
   esicNumber?: string;
 
-  @ApiProperty({ description: 'ESIC document S3 key', required: false })
-  @IsString()
-  @IsOptional()
-  esicDoc?: string;
-
   @ApiProperty({ description: 'Aadhar number (12 digits)', required: false })
   @IsString()
   @IsOptional()
   @Matches(VALIDATION_PATTERNS.AADHAR, { message: USERS_ERRORS.INVALID_AADHAR })
   aadharNumber?: string;
-
-  @ApiProperty({ description: 'Aadhar document S3 key', required: false })
-  @IsString()
-  @IsOptional()
-  aadharDoc?: string;
 
   @ApiProperty({ description: 'PAN number', required: false, example: 'ABCDE1234F' })
   @IsString()
@@ -225,19 +216,9 @@ export class CreateEmployeeDto {
   @Matches(VALIDATION_PATTERNS.PAN, { message: USERS_ERRORS.INVALID_PAN })
   panNumber?: string;
 
-  @ApiProperty({ description: 'PAN document S3 key', required: false })
-  @IsString()
-  @IsOptional()
-  panDoc?: string;
-
   @ApiProperty({ description: 'DL number', required: false, example: 'MH01-2020-1234567' })
   @IsString()
   @IsOptional()
   @MaxLength(50)
   dlNumber?: string;
-
-  @ApiProperty({ description: 'DL document S3 key', required: false })
-  @IsString()
-  @IsOptional()
-  dlDoc?: string;
 }

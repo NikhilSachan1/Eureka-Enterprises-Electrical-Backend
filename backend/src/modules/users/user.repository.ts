@@ -26,16 +26,18 @@ export class UserRepository {
         .leftJoinAndSelect('user-roles.role', 'role')
         .select([
           'users.id',
+          'users.employeeId',
           'users.firstName',
           'users.lastName',
           'users.email',
           'users.contactNumber',
           'users.status',
           'users.profilePicture',
-          'users.passwordUpdatedAt',
+          'users.designation',
+          'users.employeeType',
+          'users.dateOfJoining',
           'users.createdAt',
           'users.updatedAt',
-          'users.deletedAt',
           'user-roles.id',
           'role.name',
         ]);
@@ -43,7 +45,12 @@ export class UserRepository {
       if (Object.keys(whereCondition).length > 0) {
         Object.entries(whereCondition).forEach(([key, value]) => {
           if (value) {
-            queryBuilder.andWhere(`users.${key} = :${key}`, { [key]: value });
+            // Handle array values with IN clause (e.g., status filter)
+            if (Array.isArray(value)) {
+              queryBuilder.andWhere(`users.${key} IN (:...${key})`, { [key]: value });
+            } else {
+              queryBuilder.andWhere(`users.${key} = :${key}`, { [key]: value });
+            }
           }
         });
       }

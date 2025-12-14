@@ -8,7 +8,7 @@ import {
   UserStatus,
   USERS_RESPONSES,
 } from './constants/user.constants';
-import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
+import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { CreateEmployeeDto, GetUsersDto } from './dto';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -19,6 +19,11 @@ import { UserRoleService } from '../user-roles/user-role.service';
 import { FilesService } from '../common/file-upload/files.service';
 import { FILE_UPLOAD_FOLDER_NAMES } from '../common/file-upload/constants/files.constants';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { UserDocumentService } from '../user-documents/user-document.service';
+import {
+  USER_DOCUMENT_TYPES,
+  USER_DOCUMENT_ERRORS,
+} from '../user-documents/constants/user-document.constants';
 
 @Injectable()
 export class UserService {
@@ -30,6 +35,7 @@ export class UserService {
     private roleService: RoleService,
     private userRoleService: UserRoleService,
     private filesService: FilesService,
+    private userDocumentService: UserDocumentService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
 
@@ -53,10 +59,53 @@ export class UserService {
     }
   }
 
-  async findOneOrFail(options: FindOneOptions<UserEntity>): Promise<UserEntity> {
+  async findOneOrFail(options: FindOneOptions<UserEntity>, includeDocuments = false) {
     try {
       const user = await this.userRepository.findOne(options);
       if (!user) throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
+
+      if (includeDocuments) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password: _password, ...userWithoutPassword } = user;
+        const documents = await this.getUserDocuments(user.id);
+
+        // Fetch createdBy and updatedBy user details
+        let createdByUser = null;
+        let updatedByUser = null;
+
+        if (user.createdBy) {
+          const createdByData = await this.userRepository.findOne({
+            where: { id: user.createdBy },
+          });
+          if (createdByData) {
+            createdByUser = {
+              id: createdByData.id,
+              firstName: createdByData.firstName,
+              lastName: createdByData.lastName,
+              email: createdByData.email,
+              employeeId: createdByData.employeeId,
+            };
+          }
+        }
+
+        if (user.updatedBy) {
+          const updatedByData = await this.userRepository.findOne({
+            where: { id: user.updatedBy },
+          });
+          if (updatedByData) {
+            updatedByUser = {
+              id: updatedByData.id,
+              firstName: updatedByData.firstName,
+              lastName: updatedByData.lastName,
+              email: updatedByData.email,
+              employeeId: updatedByData.employeeId,
+            };
+          }
+        }
+
+        return { ...userWithoutPassword, documents, createdByUser, updatedByUser };
+      }
+
       return user;
     } catch (error) {
       throw error;
@@ -108,12 +157,13 @@ export class UserService {
 
     return await this.dataSource.transaction(async (entityManager) => {
       try {
+        // Only profilePicture goes to user table, other docs go to user_documents
         const userData: any = this.utilityService.convertEmptyStringsToNull({
           ...createEmployeeDto,
           password: this.utilityService.createHash(generatedPassword),
           status: UserStatus.ACTIVE,
           createdBy,
-          ...uploadedFiles,
+          profilePicture: uploadedFiles.profilePicture || null,
         });
 
         if (userData.dateOfBirth) {
@@ -126,6 +176,9 @@ export class UserService {
         delete userData.role;
 
         const user = await this.create(userData, entityManager);
+
+        // Create user documents for identity docs (isUpdate = false for new employee)
+        await this.createUserDocuments(user.id, uploadedFiles, createdBy, entityManager, false);
 
         await this.userRoleService.create(
           { userId: user.id, roleId: roleEntity.id },
@@ -149,6 +202,50 @@ export class UserService {
         throw error;
       }
     });
+  }
+
+  private async createUserDocuments(
+    userId: string,
+    uploadedFiles: Record<string, string>,
+    createdBy: string,
+    entityManager?: EntityManager,
+    isUpdate = false,
+  ): Promise<void> {
+    // Mapping of file field names to document types
+    // Document types must exist in configurations (document_types)
+    const documentMappings = [
+      { key: 'aadharDoc', type: USER_DOCUMENT_TYPES.AADHAR },
+      { key: 'panDoc', type: USER_DOCUMENT_TYPES.PAN },
+      { key: 'esicDoc', type: USER_DOCUMENT_TYPES.ESIC },
+      { key: 'dlDoc', type: USER_DOCUMENT_TYPES.DRIVING_LICENSE },
+    ];
+
+    for (const { key, type } of documentMappings) {
+      if (uploadedFiles[key]) {
+        // Validate document type against configuration
+        await this.validateDocumentType(type);
+
+        // Delete existing documents only on update (replace, not append)
+        if (isUpdate) {
+          await this.userDocumentService.deleteByCondition(
+            { userId, documentType: type },
+            createdBy,
+            entityManager,
+          );
+        }
+
+        // Create new document record
+        await this.userDocumentService.create(
+          {
+            userId,
+            documentType: type,
+            fileKeys: [uploadedFiles[key]],
+            createdBy,
+          },
+          entityManager,
+        );
+      }
+    }
   }
 
   async update(
@@ -206,61 +303,75 @@ export class UserService {
       }
     }
 
+    // Validate status change
+    if (updateData.status) {
+      if (updateData.status === UserStatus.ARCHIVED && user.status === UserStatus.ARCHIVED) {
+        throw new BadRequestException(USERS_ERRORS.USER_ALREADY_ARCHIVED);
+      }
+      if (updateData.status === UserStatus.ACTIVE && user.status === UserStatus.ACTIVE) {
+        throw new BadRequestException(USERS_ERRORS.USER_ALREADY_ACTIVE);
+      }
+    }
+
     await this.validateDropdownFields(updateData);
 
     let uploadedFiles: Record<string, string> = {};
     if (files && Object.keys(files).length > 0) {
       uploadedFiles = await this.handleFileUploads(files, user.email);
 
-      const oldFilesToDelete: string[] = [];
+      // Only cleanup old profile picture from user table
       if (uploadedFiles.profilePicture && user.profilePicture) {
-        oldFilesToDelete.push(user.profilePicture);
-      }
-      if (uploadedFiles.esicDoc && user.esicDoc) {
-        oldFilesToDelete.push(user.esicDoc);
-      }
-      if (uploadedFiles.aadharDoc && user.aadharDoc) {
-        oldFilesToDelete.push(user.aadharDoc);
-      }
-      if (uploadedFiles.panDoc && user.panDoc) {
-        oldFilesToDelete.push(user.panDoc);
-      }
-      if (uploadedFiles.dlDoc && user.dlDoc) {
-        oldFilesToDelete.push(user.dlDoc);
-      }
-
-      if (oldFilesToDelete.length > 0) {
-        this.cleanupUploadedFiles(
-          oldFilesToDelete.reduce((acc, key, idx) => {
-            acc[`old_${idx}`] = key;
-            return acc;
-          }, {} as Record<string, string>),
-        ).catch((err) => Logger.error('Failed to cleanup old files:', err));
+        this.cleanupUploadedFiles({ profilePicture: user.profilePicture }).catch((err) =>
+          Logger.error('Failed to cleanup old profile picture:', err),
+        );
       }
     }
 
-    const processedData: any = this.utilityService.convertEmptyStringsToNull({
-      ...updateData,
-      ...uploadedFiles,
-      updatedBy,
+    return await this.dataSource.transaction(async (entityManager) => {
+      // Only profilePicture goes to user table
+      const processedData: any = this.utilityService.convertEmptyStringsToNull({
+        ...updateData,
+        profilePicture: uploadedFiles.profilePicture || undefined,
+        updatedBy,
+      });
+
+      // Remove document fields from user update (they go to user_documents)
+      delete processedData.aadharDoc;
+      delete processedData.panDoc;
+      delete processedData.esicDoc;
+      delete processedData.dlDoc;
+
+      if (processedData.dateOfBirth && typeof processedData.dateOfBirth === 'string') {
+        processedData.dateOfBirth = new Date(processedData.dateOfBirth);
+      }
+      if (processedData.dateOfJoining && typeof processedData.dateOfJoining === 'string') {
+        processedData.dateOfJoining = new Date(processedData.dateOfJoining);
+      }
+
+      await this.userRepository.update({ id }, processedData);
+
+      // Handle document updates - replaces old documents of the same type (isUpdate = true)
+      await this.createUserDocuments(id, uploadedFiles, updatedBy, entityManager, true);
+
+      return this.utilityService.getSuccessMessage(
+        USER_FIELD_NAMES.USER,
+        DataSuccessOperationType.UPDATE,
+      );
     });
-
-    if (processedData.dateOfBirth && typeof processedData.dateOfBirth === 'string') {
-      processedData.dateOfBirth = new Date(processedData.dateOfBirth);
-    }
-    if (processedData.dateOfJoining && typeof processedData.dateOfJoining === 'string') {
-      processedData.dateOfJoining = new Date(processedData.dateOfJoining);
-    }
-
-    await this.userRepository.update({ id }, processedData);
-    return this.utilityService.getSuccessMessage(
-      USER_FIELD_NAMES.USER,
-      DataSuccessOperationType.UPDATE,
-    );
   }
 
   async delete(id: string, deletedBy: string) {
     try {
+      const user = await this.userRepository.findOne({ where: { id } });
+      if (!user) {
+        throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
+      }
+
+      // Only archived users can be deleted
+      if (user.status !== UserStatus.ARCHIVED) {
+        throw new BadRequestException(USERS_ERRORS.USER_NOT_ARCHIVED_TO_DELETE);
+      }
+
       await this.userRepository.delete(id, deletedBy);
       return this.utilityService.getSuccessMessage(
         USER_FIELD_NAMES.USER,
@@ -271,6 +382,28 @@ export class UserService {
     }
   }
 
+  async getUserDocuments(userId: string) {
+    const documents = await this.userDocumentService.findAll({
+      where: { userId },
+      order: { documentType: SortOrder.ASC, createdAt: SortOrder.DESC },
+    });
+
+    // Group documents by type
+    const groupedDocs: Record<string, { id: string; fileKey: string; fileName: string }[]> = {};
+    for (const doc of documents) {
+      if (!groupedDocs[doc.documentType]) {
+        groupedDocs[doc.documentType] = [];
+      }
+      groupedDocs[doc.documentType].push({
+        id: doc.id,
+        fileKey: doc.fileKey,
+        fileName: doc.fileName,
+      });
+    }
+
+    return groupedDocs;
+  }
+
   async getDropdownOptions() {
     const configKeys = [
       { key: CONFIGURATION_KEYS.GENDERS, field: 'genders' },
@@ -279,6 +412,7 @@ export class UserService {
       { key: CONFIGURATION_KEYS.DESIGNATIONS, field: 'designations' },
       { key: CONFIGURATION_KEYS.DEGREES, field: 'degrees' },
       { key: CONFIGURATION_KEYS.BRANCHES, field: 'branches' },
+      { key: CONFIGURATION_KEYS.DOCUMENT_TYPES, field: 'documentTypes' },
     ];
 
     const dropdownOptions: Record<string, any[]> = {};
@@ -351,6 +485,18 @@ export class UserService {
     } catch (error) {
       Logger.error(`Failed to get valid values for ${configKey}:`, error);
       return [];
+    }
+  }
+
+  async validateDocumentType(documentType: string): Promise<void> {
+    const validTypes = await this.getValidValuesForConfig(CONFIGURATION_KEYS.DOCUMENT_TYPES);
+    if (validTypes.length > 0 && !validTypes.includes(documentType)) {
+      throw new BadRequestException(
+        USER_DOCUMENT_ERRORS.INVALID_DOCUMENT_TYPE.replace(
+          '{documentTypes}',
+          validTypes.join(', '),
+        ),
+      );
     }
   }
 

@@ -188,17 +188,13 @@ export class UpdateUserDto {
   @Matches(VALIDATION_PATTERNS.IFSC, { message: USERS_ERRORS.INVALID_IFSC })
   ifscCode?: string;
 
-  // ==================== Government IDs and Documents ====================
+  // ==================== Government IDs ====================
+  // Note: Document files are uploaded separately and stored in user_documents table
   @ApiProperty({ description: 'ESIC number', required: false })
   @IsOptional()
   @IsString()
   @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 17 digits.' })
   esicNumber?: string;
-
-  @ApiProperty({ description: 'ESIC document S3 key', required: false })
-  @IsOptional()
-  @IsString()
-  esicDoc?: string;
 
   @ApiProperty({ description: 'Aadhar number', required: false })
   @IsOptional()
@@ -206,30 +202,15 @@ export class UpdateUserDto {
   @Matches(VALIDATION_PATTERNS.AADHAR, { message: USERS_ERRORS.INVALID_AADHAR })
   aadharNumber?: string;
 
-  @ApiProperty({ description: 'Aadhar document S3 key', required: false })
-  @IsOptional()
-  @IsString()
-  aadharDoc?: string;
-
   @ApiProperty({ description: 'PAN number', required: false })
   @IsOptional()
   @IsString()
   @Matches(VALIDATION_PATTERNS.PAN, { message: USERS_ERRORS.INVALID_PAN })
   panNumber?: string;
 
-  @ApiProperty({ description: 'PAN document S3 key', required: false })
-  @IsOptional()
-  @IsString()
-  panDoc?: string;
-
   @ApiProperty({ description: 'Driving license number', required: false })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   dlNumber?: string;
-
-  @ApiProperty({ description: 'DL document S3 key', required: false })
-  @IsOptional()
-  @IsString()
-  dlDoc?: string;
 }

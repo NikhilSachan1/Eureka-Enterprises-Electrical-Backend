@@ -10,6 +10,7 @@ import { UserRoleModule } from '../user-roles/user-role.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { FilesModule } from '../common/file-upload/files.module';
+import { UserDocumentModule } from '../user-documents/user-document.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { FilesModule } from '../common/file-upload/files.module';
     ConfigurationsModule,
     ConfigSettingsModule,
     FilesModule,
+    UserDocumentModule,
   ],
   providers: [UserService, UserRepository],
   exports: [UserService],

@@ -14,7 +14,9 @@ export const USERS_ERRORS = {
   NOT_FOUND: 'User not found',
   GOOGLE_PROFILE_CHANGE:
     'Changing profile picture is not supported for accounts signed in with Google.',
-  USER_NOT_ARCHIVED_TO_DELETE: 'User is not archived to delete.',
+  USER_NOT_ARCHIVED_TO_DELETE: 'User must be archived before deletion.',
+  USER_ALREADY_ARCHIVED: 'User is already archived.',
+  USER_ALREADY_ACTIVE: 'User is already active.',
   CHANGE_PASSWORD_CURRENT_PASSWORD: 'Current password is incorrect.',
   PASSWORDS_DO_NOT_MATCH: 'New password and confirm password do not match.',
   INVALID_AADHAR: 'Invalid Aadhar number. Must be 12 digits.',

@@ -119,6 +119,25 @@ export class SeedEmployeeConfigurations1760000000001 implements MigrationInterfa
           { value: 'OTHER', label: 'Other' },
         ],
       },
+      {
+        module: 'employee',
+        key: 'document_types',
+        label: 'Document Types',
+        valueType: 'array',
+        description: 'Available document types for employee identity verification',
+        values: [
+          { value: 'AADHAR', label: 'Aadhar Card' },
+          { value: 'PAN', label: 'PAN Card' },
+          { value: 'DRIVING_LICENSE', label: 'Driving License' },
+          { value: 'ESIC', label: 'ESIC Document' },
+          { value: 'PASSPORT', label: 'Passport' },
+          { value: 'VOTER_ID', label: 'Voter ID' },
+          { value: 'OFFER_LETTER', label: 'Offer Letter' },
+          { value: 'EXPERIENCE_LETTER', label: 'Experience Letter' },
+          { value: 'EDUCATION_CERTIFICATE', label: 'Education Certificate' },
+          { value: 'OTHER', label: 'Other' },
+        ],
+      },
     ];
 
     // Insert configurations and their settings
@@ -157,6 +176,7 @@ export class SeedEmployeeConfigurations1760000000001 implements MigrationInterfa
       'designations',
       'degrees',
       'branches',
+      'document_types',
     ];
 
     // Delete config_settings first (due to foreign key)

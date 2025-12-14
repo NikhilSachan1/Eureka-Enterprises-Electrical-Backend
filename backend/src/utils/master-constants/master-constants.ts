@@ -22,6 +22,7 @@ export const CONFIGURATION_KEYS = {
   DESIGNATIONS: 'designations',
   DEGREES: 'degrees',
   BRANCHES: 'branches',
+  DOCUMENT_TYPES: 'document_types',
 };
 
 export const CONFIGURATION_MODULES = {

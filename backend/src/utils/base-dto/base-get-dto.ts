@@ -8,7 +8,7 @@ export class BaseGetDto {
   @ApiProperty({
     description: 'Order of sorting',
     enum: SortOrder,
-    example: 'ASC',
+    example: SortOrder.ASC,
     required: false,
   })
   @IsOptional()
