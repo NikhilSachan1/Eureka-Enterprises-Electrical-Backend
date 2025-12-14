@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { FuelExpenseRepository } from './fuel-expense.repository';
 import {
   CreateFuelExpenseDto,
+  CreateCreditFuelExpenseDto,
   EditFuelExpenseDto,
   FuelExpenseQueryDto,
   FuelExpenseApprovalDto,
@@ -199,6 +200,66 @@ export class FuelExpenseService {
         }
 
         return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_FORCE_CREATED };
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async createCreditFuelExpense(
+    createCreditFuelExpenseDto: CreateCreditFuelExpenseDto & {
+      createdBy: string;
+      fileKeys: string[];
+      entrySourceType: string;
+    },
+  ) {
+    try {
+      const { fillDate, userId, createdBy, fileKeys, paymentMode, entrySourceType } =
+        createCreditFuelExpenseDto;
+
+      // Validate settlement date (no future dates)
+      if (new Date(fillDate) > new Date()) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.INVALID_FILL_DATE);
+      }
+
+      // Validate payment mode
+      await this.validatePaymentMode(paymentMode);
+
+      // Validate user exists
+      await this.userService.findOneOrFail({ where: { id: userId } });
+
+      return await this.dataSource.transaction(async (entityManager) => {
+        // Create fuel expense credit/settlement record (auto-approved)
+        const fuelExpense = await this.fuelExpenseRepository.create(
+          {
+            ...createCreditFuelExpenseDto,
+            approvalStatus: ApprovalStatus.APPROVED,
+            approvalAt: new Date(),
+            approvalBy: createdBy,
+            approvalReason: DEFAULT_FUEL_EXPENSE.CREDIT_APPROVAL_REASON,
+            isActive: true,
+            versionNumber: 1,
+            createdBy,
+            transactionType: TransactionType.CREDIT,
+            expenseEntryType: ExpenseEntryType.SELF,
+            entrySourceType,
+          },
+          entityManager,
+        );
+
+        // Create file attachments if provided
+        if (fileKeys && fileKeys.length > 0) {
+          await this.fuelExpenseFilesService.create(
+            {
+              fuelExpenseId: fuelExpense.id,
+              fileKeys,
+              createdBy,
+            },
+            entityManager,
+          );
+        }
+
+        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREDIT_SETTLED };
       });
     } catch (error) {
       throw error;

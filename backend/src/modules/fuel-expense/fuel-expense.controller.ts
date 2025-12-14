@@ -20,6 +20,7 @@ import {
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import {
   CreateFuelExpenseDto,
+  CreateCreditFuelExpenseDto,
   EditFuelExpenseDto,
   FuelExpenseQueryDto,
   FuelExpenseBulkApprovalDto,
@@ -77,6 +78,28 @@ export class FuelExpenseController {
       ...createFuelExpenseDto,
       userId: createFuelExpenseDto.userId || userId,
       createdBy: userId,
+      fileKeys,
+      entrySourceType: sourceType,
+    });
+  }
+
+  @Post('credit')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    type: CreateCreditFuelExpenseDto,
+    required: true,
+  })
+  async createCreditFuelExpense(
+    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Body() createCreditFuelExpenseDto: CreateCreditFuelExpenseDto,
+    @DetectSource() sourceType: EntrySourceType,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
+    { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
+  ) {
+    return this.fuelExpenseService.createCreditFuelExpense({
+      ...createCreditFuelExpenseDto,
+      createdBy,
       fileKeys,
       entrySourceType: sourceType,
     });

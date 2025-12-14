@@ -64,6 +64,7 @@ export const FUEL_EXPENSE_ERRORS = {
 export const FUEL_EXPENSE_SUCCESS_MESSAGES = {
   FUEL_EXPENSE_CREATED: 'Fuel expense added successfully',
   FUEL_EXPENSE_FORCE_CREATED: 'Fuel expense forced successfully',
+  FUEL_EXPENSE_CREDIT_SETTLED: 'Fuel expense credit settled successfully',
   FUEL_EXPENSE_UPDATED: 'Fuel expense updated successfully',
   FUEL_EXPENSE_DELETED: 'Fuel expense deleted successfully',
   FUEL_EXPENSE_APPROVED: 'Fuel expense approved successfully',
