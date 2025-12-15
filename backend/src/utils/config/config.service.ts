@@ -27,6 +27,9 @@ import { AssetMasterEntity } from 'src/modules/asset-masters/entities/asset-mast
 import { AssetVersionEntity } from 'src/modules/asset-versions/entities/asset-versions.entity';
 import { AssetFileEntity } from 'src/modules/asset-files/entities/asset-file.entity';
 import { AssetEventEntity } from 'src/modules/asset-events/entities/asset-event.entity';
+import { AnnouncementEntity } from 'src/modules/announcements/entities/announcement.entity';
+import { AnnouncementTargetEntity } from 'src/modules/announcements/entities/announcement-target.entity';
+import { UserAnnouncementAckEntity } from 'src/modules/announcements/entities/user-announcement-ack.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -79,6 +82,9 @@ export class ConfigService {
         AssetVersionEntity,
         AssetFileEntity,
         AssetEventEntity,
+        AnnouncementEntity,
+        AnnouncementTargetEntity,
+        UserAnnouncementAckEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

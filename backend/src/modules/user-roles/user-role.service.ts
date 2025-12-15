@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserRoleRepository } from './user-role.repository';
-import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { UserRoleEntity } from './entities/user-role.entity';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UtilityService } from '../../utils/utility/utility.service';
@@ -51,5 +51,13 @@ export class UserRoleService {
         DataSuccessOperationType.UPDATE,
       ),
     };
+  }
+
+  async findAll(options: FindManyOptions<UserRoleEntity>): Promise<UserRoleEntity[]> {
+    try {
+      return await this.userRoleRepository.findAll(options);
+    } catch (error) {
+      throw error;
+    }
   }
 }

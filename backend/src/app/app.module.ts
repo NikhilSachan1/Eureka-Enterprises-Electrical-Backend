@@ -34,6 +34,7 @@ import { AssetEventsModule } from 'src/modules/asset-events/asset-events.module'
 import { AssetVersionsModule } from 'src/modules/asset-versions/asset-versions.module';
 import { AssetFilesModule } from 'src/modules/asset-files/asset-files.module';
 import { FuelExpenseModule } from 'src/modules/fuel-expense/fuel-expense.module';
+import { AnnouncementsModule } from 'src/modules/announcements/announcement.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { FuelExpenseModule } from 'src/modules/fuel-expense/fuel-expense.module'
     AssetEventsModule,
     AssetFilesModule,
     FuelExpenseModule,
+    AnnouncementsModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],

@@ -23,6 +23,9 @@ export const CONFIGURATION_KEYS = {
   DEGREES: 'degrees',
   BRANCHES: 'branches',
   DOCUMENT_TYPES: 'document_types',
+  //ANNOUNCEMENTS
+  ANNOUNCEMENT_TARGET_TYPES: 'announcement_target_types',
+  ANNOUNCEMENT_STATUSES: 'announcement_statuses',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -32,6 +35,7 @@ export const CONFIGURATION_MODULES = {
   EXPENSE: 'expense',
   FUEL_EXPENSE: 'fuel_expense',
   EMPLOYEE: 'employee',
+  ANNOUNCEMENTS: 'announcements',
 };
 
 export enum LeaveCycleType {
