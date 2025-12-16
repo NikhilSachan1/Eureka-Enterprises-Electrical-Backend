@@ -336,6 +336,7 @@ export class AnnouncementService {
 
   async expireAnnouncements() {
     try {
+      // TODO: Write cron
       const { query, params } = buildExpireAnnouncementsQuery();
       await this.announcementRepository.executeRawQuery(query, params);
     } catch (error) {
