@@ -1333,7 +1333,7 @@ export class AttendanceService {
           userId,
           attendanceDate: new Date(date),
         },
-        relations: ['user', 'approvalByUser', 'createdByUser'],
+        relations: ['user', 'approvalByUser', 'createdByUser', 'updatedByUser'],
         order: { createdAt: SortOrder.DESC },
         select: {
           user: {
@@ -1351,6 +1351,13 @@ export class AttendanceService {
             employeeId: true,
           },
           createdByUser: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            employeeId: true,
+          },
+          updatedByUser: {
             id: true,
             firstName: true,
             lastName: true,
@@ -1398,6 +1405,15 @@ export class AttendanceService {
                 lastName: record.createdByUser.lastName,
                 email: record.createdByUser.email,
                 employeeId: record.createdByUser.employeeId,
+              }
+            : undefined,
+          updatedByUser: record.updatedByUser
+            ? {
+                id: record.updatedByUser.id,
+                firstName: record.updatedByUser.firstName,
+                lastName: record.updatedByUser.lastName,
+                email: record.updatedByUser.email,
+                employeeId: record.updatedByUser.employeeId,
               }
             : undefined,
           workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
