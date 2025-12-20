@@ -1,5 +1,30 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+export class UserInfoDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  firstName: string;
+
+  @ApiProperty()
+  lastName: string;
+
+  @ApiProperty()
+  email: string;
+
+  @ApiProperty()
+  employeeId: string;
+}
+
+export class DateRangeDto {
+  @ApiProperty({ example: '2025-12-10' })
+  from: string;
+
+  @ApiProperty({ example: '2025-12-14' })
+  to: string;
+}
+
 export class LeaveApplicationStatsDto {
   @ApiProperty({ example: { total: 100, pending: 10, approved: 80, rejected: 5, cancelled: 5 } })
   approval: {
@@ -67,56 +92,57 @@ export class LeaveApplicationResponseDto {
   @ApiProperty()
   entrySourceType: string;
 
-  @ApiProperty({
-    example: {
-      id: 'uuid',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-      employeeId: 'EMP001',
-    },
-  })
-  approvalByUser: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    employeeId: string;
-  };
+  @ApiProperty({ type: UserInfoDto, nullable: true })
+  approvalByUser: UserInfoDto | null;
+
+  @ApiProperty({ type: UserInfoDto, nullable: true })
+  user: UserInfoDto | null;
+
+  @ApiProperty({ type: UserInfoDto, nullable: true })
+  createdByUser: UserInfoDto | null;
+}
+
+export class LeaveGroupDto {
+  @ApiProperty({ type: DateRangeDto, description: 'Date range for this group' })
+  dateRange: DateRangeDto;
+
+  @ApiProperty({ example: 'pending', description: 'Approval status for all records in this group' })
+  approvalStatus: string;
 
   @ApiProperty({
-    example: {
-      id: 'uuid',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-      employeeId: 'EMP001',
-    },
+    example: 'Sick Leave',
+    description: 'Leave category for all records in this group',
   })
-  user: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    employeeId: string;
-  };
+  leaveCategory: string;
+
+  @ApiProperty({ example: 'fullDay', description: 'Leave type for all records in this group' })
+  leaveType: string;
+
+  @ApiProperty({ example: 5, description: 'Number of leave days in this group' })
+  count: number;
+
+  @ApiProperty({ example: 'Not feeling well', description: 'Reason from the first record' })
+  reason: string;
+
+  @ApiProperty({ example: '2025-12-05T10:30:00Z', description: 'Earliest createdAt in the group' })
+  createdAt: string;
 
   @ApiProperty({
-    example: {
-      id: 'uuid',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-      employeeId: 'EMP001',
-    },
+    type: [LeaveApplicationResponseDto],
+    description: 'Individual leave records in this group',
   })
-  createdByUser: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    employeeId: string;
-  };
+  records: LeaveApplicationResponseDto[];
+}
+
+export class UserLeaveGroupDto {
+  @ApiProperty({ description: 'User ID' })
+  userId: string;
+
+  @ApiProperty({ type: UserInfoDto, description: 'User information' })
+  user: UserInfoDto;
+
+  @ApiProperty({ type: [LeaveGroupDto], description: 'Leave groups for this user' })
+  leaveGroups: LeaveGroupDto[];
 }
 
 export class LeaveApplicationListResponseDto {
@@ -127,5 +153,19 @@ export class LeaveApplicationListResponseDto {
   records: LeaveApplicationResponseDto[];
 
   @ApiProperty({ example: 100 })
+  totalRecords: number;
+}
+
+export class GroupedLeaveApplicationListResponseDto {
+  @ApiProperty({ type: LeaveApplicationStatsDto })
+  stats?: LeaveApplicationStatsDto;
+
+  @ApiProperty({
+    description:
+      'Leave applications grouped. For all users: UserLeaveGroupDto[]. For single user: LeaveGroupDto[]',
+  })
+  groupedRecords: UserLeaveGroupDto[] | LeaveGroupDto[];
+
+  @ApiProperty({ example: 100, description: 'Total number of individual leave records' })
   totalRecords: number;
 }

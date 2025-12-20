@@ -5,7 +5,8 @@ import {
   CreateLeaveApplicationDto,
   ForceLeaveApplicationDto,
   GetLeaveApplicationsDto,
-  LeaveApplicationResponseDto,
+  LeaveApplicationListResponseDto,
+  GroupedLeaveApplicationListResponseDto,
   LeaveBulkApprovalDto,
 } from './dto';
 import { LeaveApplicationType } from './constants/leave-application.constants';
@@ -50,8 +51,20 @@ export class LeaveApplicationsController {
 
   @Get()
   @UseInterceptors(LeaveUserInterceptor)
-  @ApiResponse({ status: 200, type: LeaveApplicationResponseDto })
-  async getLeaveApplications(@Query() filters: GetLeaveApplicationsDto) {
+  @ApiResponse({
+    status: 200,
+    description:
+      'Returns grouped or flat leave applications based on "grouped" query param. Default is grouped=true.',
+    schema: {
+      oneOf: [
+        { $ref: '#/components/schemas/GroupedLeaveApplicationListResponseDto' },
+        { $ref: '#/components/schemas/LeaveApplicationListResponseDto' },
+      ],
+    },
+  })
+  async getLeaveApplications(
+    @Query() filters: GetLeaveApplicationsDto,
+  ): Promise<LeaveApplicationListResponseDto | GroupedLeaveApplicationListResponseDto> {
     return this.leaveApplicationsService.getLeaveApplications(filters);
   }
 

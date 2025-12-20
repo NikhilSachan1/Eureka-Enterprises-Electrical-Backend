@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsArray, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
   ApprovalStatus,
@@ -81,4 +89,16 @@ export class GetLeaveApplicationsDto extends BaseGetDto {
   @IsEnum(Object.keys(LEAVE_APPLICATION_SORTABLE_FIELDS), { each: true })
   @IsString()
   sortField?: string;
+
+  @ApiProperty({
+    description:
+      'Return grouped response (by user, date range, approval status, leave category, leave type). Default: true',
+    example: true,
+    required: false,
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  grouped?: boolean = true;
 }

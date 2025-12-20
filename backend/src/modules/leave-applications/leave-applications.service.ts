@@ -36,6 +36,8 @@ import {
   LeaveBulkApprovalDto,
   CreateLeaveApplicationDto,
   LeaveApprovalDto,
+  LeaveGroupDto,
+  UserLeaveGroupDto,
 } from './dto';
 import {
   buildLeaveApplicationCountQuery,
@@ -632,11 +634,12 @@ export class LeaveApplicationsService {
     }
   }
 
-  async getLeaveApplications(filters: GetLeaveApplicationsDto): Promise<{
-    records: LeaveApplicationResponseDto[];
-    totalRecords: number;
-    stats: any;
-  }> {
+  async getLeaveApplications(
+    filters: GetLeaveApplicationsDto,
+  ): Promise<
+    | { records: LeaveApplicationResponseDto[]; totalRecords: number; stats: any }
+    | { groupedRecords: UserLeaveGroupDto[] | LeaveGroupDto[]; totalRecords: number; stats: any }
+  > {
     // Build all queries
     const { query, params } = buildLeaveApplicationListQuery(filters);
     const { query: countQuery, params: countParams } = buildLeaveApplicationCountQuery(filters);
@@ -671,10 +674,161 @@ export class LeaveApplicationsService {
     const transformedLeaveBalances = this.transformLeaveBalanceRecords(leaveBalances);
     const stats = this.calculateStatsFromResults(statsResults, transformedLeaveBalances);
 
+    const grouped = filters.grouped !== false;
+
+    if (grouped) {
+      const isSingleUser = filters.userIds && filters.userIds.length === 1;
+      const groupedRecords = this.groupLeaveApplications(transformedRecords, isSingleUser);
+
+      return {
+        stats,
+        groupedRecords,
+        totalRecords: parseInt(totalRecords),
+      };
+    }
+
     return {
       stats,
       records: transformedRecords,
       totalRecords: parseInt(totalRecords),
+    };
+  }
+
+  private groupLeaveApplications(
+    records: LeaveApplicationResponseDto[],
+    isSingleUser: boolean,
+  ): UserLeaveGroupDto[] | LeaveGroupDto[] {
+    if (records.length === 0) {
+      return [];
+    }
+
+    const userGroups = new Map<string, LeaveApplicationResponseDto[]>();
+
+    for (const record of records) {
+      const userId = record.userId;
+      if (!userGroups.has(userId)) {
+        userGroups.set(userId, []);
+      }
+      userGroups.get(userId)!.push(record);
+    }
+
+    const result: UserLeaveGroupDto[] = [];
+
+    for (const [userId, userRecords] of userGroups) {
+      const leaveGroups = this.createLeaveGroups(userRecords);
+      const firstRecord = userRecords[0];
+
+      result.push({
+        userId,
+        user: firstRecord.user!,
+        leaveGroups,
+      });
+    }
+
+    result.sort((a, b) => {
+      const aEarliest = a.leaveGroups[0]?.dateRange.from || '';
+      const bEarliest = b.leaveGroups[0]?.dateRange.from || '';
+      // Convert to string in case it's a Date object
+      const aStr = typeof aEarliest === 'string' ? aEarliest : String(aEarliest);
+      const bStr = typeof bEarliest === 'string' ? bEarliest : String(bEarliest);
+      return bStr.localeCompare(aStr);
+    });
+
+    if (isSingleUser && result.length === 1) {
+      return result[0].leaveGroups;
+    }
+
+    return result;
+  }
+
+  private createLeaveGroups(records: LeaveApplicationResponseDto[]): LeaveGroupDto[] {
+    if (records.length === 0) {
+      return [];
+    }
+
+    const sortedRecords = [...records].sort((a, b) => {
+      return new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime();
+    });
+
+    const groups: LeaveGroupDto[] = [];
+    let currentGroup: LeaveApplicationResponseDto[] = [sortedRecords[0]];
+
+    for (let i = 1; i < sortedRecords.length; i++) {
+      const prevRecord = sortedRecords[i - 1];
+      const currRecord = sortedRecords[i];
+
+      if (this.shouldBeInSameGroup(prevRecord, currRecord)) {
+        currentGroup.push(currRecord);
+      } else {
+        groups.push(this.finalizeGroup(currentGroup));
+        currentGroup = [currRecord];
+      }
+    }
+
+    if (currentGroup.length > 0) {
+      groups.push(this.finalizeGroup(currentGroup));
+    }
+
+    groups.sort((a, b) => {
+      return new Date(b.dateRange.from).getTime() - new Date(a.dateRange.from).getTime();
+    });
+
+    return groups;
+  }
+
+  private shouldBeInSameGroup(
+    prev: LeaveApplicationResponseDto,
+    curr: LeaveApplicationResponseDto,
+  ): boolean {
+    if (
+      prev.approvalStatus !== curr.approvalStatus ||
+      prev.leaveCategory !== curr.leaveCategory ||
+      prev.leaveType !== curr.leaveType
+    ) {
+      return false;
+    }
+
+    const prevDate = new Date(prev.fromDate);
+    const currDate = new Date(curr.fromDate);
+
+    const diffTime = currDate.getTime() - prevDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return diffDays === 1;
+  }
+
+  private finalizeGroup(records: LeaveApplicationResponseDto[]): LeaveGroupDto {
+    records.sort((a, b) => new Date(a.fromDate).getTime() - new Date(b.fromDate).getTime());
+
+    const firstRecord = records[0];
+    const lastRecord = records[records.length - 1];
+
+    const earliestCreatedAt = records.reduce((earliest, record) => {
+      const recordDate = new Date(record.createdAt);
+      return recordDate < earliest ? recordDate : earliest;
+    }, new Date(firstRecord.createdAt));
+
+    const fromDate =
+      typeof firstRecord.fromDate === 'string'
+        ? firstRecord.fromDate
+        : new Date(firstRecord.fromDate).toISOString().split('T')[0];
+    const toDate =
+      typeof lastRecord.toDate === 'string'
+        ? lastRecord.toDate
+        : new Date(lastRecord.toDate).toISOString().split('T')[0];
+
+    return {
+      dateRange: {
+        from: fromDate,
+        to: toDate,
+      },
+      approvalStatus: firstRecord.approvalStatus,
+      leaveCategory: firstRecord.leaveCategory,
+      leaveType: firstRecord.leaveType,
+      count: records.length,
+      reason: firstRecord.reason,
+      createdAt: earliestCreatedAt.toISOString(),
+      records,
     };
   }
 

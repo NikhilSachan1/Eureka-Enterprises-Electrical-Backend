@@ -15,6 +15,7 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
     pageSize = 10,
     sortField,
     sortOrder,
+    grouped = true,
   } = filters;
 
   // Base query with joins
@@ -120,10 +121,12 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
 
   query += ` ORDER BY ${validSortField} ${sortOrder}`;
 
-  // Pagination
-  const offset = (page - 1) * pageSize;
-  query += ` LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
-  params.push(pageSize, offset);
+  // Pagination - Skip when grouped=true to ensure complete groups
+  if (!grouped) {
+    const offset = (page - 1) * pageSize;
+    query += ` LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+    params.push(pageSize, offset);
+  }
 
   return { query, params };
 };
