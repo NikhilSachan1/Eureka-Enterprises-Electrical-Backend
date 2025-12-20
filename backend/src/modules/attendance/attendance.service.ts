@@ -1268,6 +1268,7 @@ export class AttendanceService {
       checkOutTime: record.checkOutTime,
       status: record.status,
       approvalStatus: record.approvalStatus,
+      attendanceType: record.attendanceType,
       workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
       notes: record.notes,
     };

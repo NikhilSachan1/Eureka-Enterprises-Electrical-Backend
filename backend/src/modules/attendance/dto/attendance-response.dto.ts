@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { AttendanceStatus, ApprovalStatus } from '../constants/attendance.constants';
+import {
+  AttendanceStatus,
+  ApprovalStatus,
+  AttendanceType,
+} from '../constants/attendance.constants';
 
 export class AttendanceStatsDto {
   @ApiProperty({ example: { present: 5, absent: 2, leave: 1, halfDay: 0, total: 8 } })
@@ -54,6 +58,9 @@ export class AttendanceRecordDto {
 
   @ApiProperty()
   approvalStatus: ApprovalStatus;
+
+  @ApiProperty({ enum: AttendanceType, description: 'Type: self, regularized, or forced' })
+  attendanceType: AttendanceType;
 
   @ApiProperty()
   workDuration?: number;
