@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreateAssetDto } from './dto';
+import { CreateAssetVersionDto } from './dto';
 import { AssetVersionsRepository } from './asset-versions.repository';
 import { AssetVersionEntity } from './entities/asset-versions.entity';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
@@ -18,16 +18,43 @@ export class AssetVersionsService {
   ) {}
 
   async create(
-    createAssetDto: CreateAssetDto & { createdBy: string },
+    createAssetVersionDto: CreateAssetVersionDto & { createdBy: string },
     entityManager?: EntityManager,
   ) {
     try {
-      const { createdBy, number, assetMasterId } = createAssetDto;
-      await this.update({ number, assetMasterId }, { isActive: false, updatedBy: createdBy });
-      return await this.assetVersionsRepository.create(
-        { ...createAssetDto, createdBy },
+      const { createdBy, assetMasterId } = createAssetVersionDto;
+
+      // Deactivate previous active version
+      await this.update(
+        { assetMasterId, isActive: true },
+        { isActive: false, updatedBy: createdBy },
         entityManager,
       );
+
+      // Convert date strings to Date objects for entity
+      const entityData: Partial<AssetVersionEntity> = {
+        ...createAssetVersionDto,
+        isActive: true,
+        createdBy,
+        calibrationStartDate: createAssetVersionDto.calibrationStartDate
+          ? new Date(createAssetVersionDto.calibrationStartDate)
+          : undefined,
+        calibrationEndDate: createAssetVersionDto.calibrationEndDate
+          ? new Date(createAssetVersionDto.calibrationEndDate)
+          : undefined,
+        purchaseDate: createAssetVersionDto.purchaseDate
+          ? new Date(createAssetVersionDto.purchaseDate)
+          : undefined,
+        warrantyStartDate: createAssetVersionDto.warrantyStartDate
+          ? new Date(createAssetVersionDto.warrantyStartDate)
+          : undefined,
+        warrantyEndDate: createAssetVersionDto.warrantyEndDate
+          ? new Date(createAssetVersionDto.warrantyEndDate)
+          : undefined,
+      };
+
+      // Create new active version
+      return await this.assetVersionsRepository.create(entityData, entityManager);
     } catch (error) {
       throw error;
     }
@@ -36,6 +63,16 @@ export class AssetVersionsService {
   async findOne(findOptions: FindOneOptions<AssetVersionEntity>) {
     try {
       return await this.assetVersionsRepository.findOne(findOptions);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findActiveVersion(assetMasterId: string): Promise<AssetVersionEntity | null> {
+    try {
+      return await this.assetVersionsRepository.findOne({
+        where: { assetMasterId, isActive: true },
+      });
     } catch (error) {
       throw error;
     }
@@ -51,11 +88,11 @@ export class AssetVersionsService {
 
   async findOneOrFail(findOptions: FindOneOptions<AssetVersionEntity>) {
     try {
-      const asset = await this.assetVersionsRepository.findOne(findOptions);
-      if (!asset) {
-        throw new NotFoundException(ASSET_VERSION_ERRORS.ASSET_NOT_FOUND);
+      const assetVersion = await this.assetVersionsRepository.findOne(findOptions);
+      if (!assetVersion) {
+        throw new NotFoundException(ASSET_VERSION_ERRORS.ASSET_VERSION_NOT_FOUND);
       }
-      return asset;
+      return assetVersion;
     } catch (error) {
       throw error;
     }
@@ -69,7 +106,7 @@ export class AssetVersionsService {
     try {
       await this.assetVersionsRepository.update(identifierConditions, updateData, entityManager);
       return this.utilityService.getSuccessMessage(
-        AssetVersionEntityFields.ASSET,
+        AssetVersionEntityFields.ASSET_VERSION,
         DataSuccessOperationType.UPDATE,
       );
     } catch (error) {
@@ -88,7 +125,7 @@ export class AssetVersionsService {
         entityManager,
       );
       return this.utilityService.getSuccessMessage(
-        AssetVersionEntityFields.ASSET,
+        AssetVersionEntityFields.ASSET_VERSION,
         DataSuccessOperationType.DELETE,
       );
     } catch (error) {

@@ -18,7 +18,7 @@ export class AssetActionDto {
       AssetEventTypes.HANDOVER_ACCEPTED,
       AssetEventTypes.HANDOVER_REJECTED,
       AssetEventTypes.HANDOVER_CANCELLED,
-      AssetEventTypes.MAINTENANCE,
+      AssetEventTypes.UNDER_MAINTENANCE,
       AssetEventTypes.DEALLOCATED,
       AssetEventTypes.AVAILABLE,
     ],
@@ -30,7 +30,7 @@ export class AssetActionDto {
     AssetEventTypes.HANDOVER_ACCEPTED,
     AssetEventTypes.HANDOVER_REJECTED,
     AssetEventTypes.HANDOVER_CANCELLED,
-    AssetEventTypes.MAINTENANCE,
+    AssetEventTypes.UNDER_MAINTENANCE,
     AssetEventTypes.DEALLOCATED,
     AssetEventTypes.AVAILABLE,
   ])

@@ -1,23 +1,22 @@
 export const ASSET_VERSION_ERRORS = {
-  ASSET_ALREADY_EXISTS: 'Asset already exists',
-  ASSET_NOT_FOUND: 'Asset not found',
+  ASSET_VERSION_NOT_FOUND: 'Asset version not found',
   INVALID_ACTION: 'Invalid action',
 };
 
 export enum AssetVersionEntityFields {
-  NUMBER = 'number',
-  BRAND = 'brand',
+  NAME = 'name',
   MODEL = 'model',
   CATEGORY = 'category',
-  ASSET = 'Asset',
+  ASSET_TYPE = 'assetType',
+  ASSET_VERSION = 'Asset Version',
 }
 
 export enum AssetVersionSortFields {
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',
-  DELETED_AT = 'deletedAt',
-  NUMBER = 'number',
-  BRAND = 'brand',
+  NAME = 'name',
   MODEL = 'model',
   CATEGORY = 'category',
+  ASSET_TYPE = 'assetType',
+  STATUS = 'status',
 }

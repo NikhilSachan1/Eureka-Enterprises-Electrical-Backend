@@ -26,6 +26,13 @@ export const CONFIGURATION_KEYS = {
   //ANNOUNCEMENTS
   ANNOUNCEMENT_TARGET_TYPES: 'announcement_target_types',
   ANNOUNCEMENT_STATUSES: 'announcement_statuses',
+  //ASSETS
+  ASSET_CATEGORIES: 'asset_categories',
+  ASSET_TYPES: 'asset_types',
+  ASSET_STATUSES: 'asset_statuses',
+  ASSET_FILE_TYPES: 'asset_file_types',
+  CALIBRATION_SOURCES: 'calibration_sources',
+  CALIBRATION_FREQUENCIES: 'calibration_frequencies',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -35,7 +42,8 @@ export const CONFIGURATION_MODULES = {
   EXPENSE: 'expense',
   FUEL_EXPENSE: 'fuel_expense',
   EMPLOYEE: 'employee',
-  ANNOUNCEMENTS: 'announcements',
+  ANNOUNCEMENTS: 'announcement',
+  ASSET: 'asset',
 };
 
 export enum LeaveCycleType {

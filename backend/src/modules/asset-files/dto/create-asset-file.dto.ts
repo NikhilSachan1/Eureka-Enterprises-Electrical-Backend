@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateAssetFileDto {
   @ApiProperty({
@@ -13,10 +13,11 @@ export class CreateAssetFileDto {
   @ApiProperty({
     description: 'The ID of the asset event',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID()
-  assetEventsId: string;
+  assetEventsId?: string;
 
   @ApiProperty({
     description: 'The keys of the files in the file storage',
@@ -28,12 +29,23 @@ export class CreateAssetFileDto {
   fileKeys: string[];
 
   @ApiProperty({
-    description: 'The type of the file',
-    example: 'image',
+    description:
+      'The type of the file (from config: ASSET_IMAGE, CALIBRATION_CERTIFICATE, WARRANTY_DOCUMENT, PURCHASE_INVOICE, AMC, REPAIR_REPORT, OTHER)',
+    example: 'CALIBRATION_CERTIFICATE',
   })
   @IsNotEmpty()
   @IsString()
   fileType: string;
+
+  @ApiProperty({
+    description: 'Optional label/description for the file',
+    example: 'Calibration certificate Aug 2024',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  label?: string;
 
   @ApiProperty({
     description: 'Files to be uploaded.',
@@ -41,7 +53,7 @@ export class CreateAssetFileDto {
     format: 'binary',
     isArray: true,
     maxItems: 10,
-    required: true,
+    required: false,
   })
   @IsOptional()
   files?: any;

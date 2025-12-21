@@ -74,13 +74,24 @@ export class AssetMastersController {
     return await this.assetMastersService.findAll(query);
   }
 
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return await this.assetMastersService.findOneWithDetails(id);
+  }
+
   @Patch(':id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.ASSET_FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    type: UpdateAssetDto,
+    required: true,
+  })
   update(
-    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Param('id') id: string,
     @Body() updateAssetDto: UpdateAssetDto,
   ) {
-    return this.assetMastersService.update({ id }, { ...updateAssetDto, updatedBy });
+    return this.assetMastersService.update({ id }, { ...updateAssetDto, createdBy });
   }
 
   @Delete(':id')
