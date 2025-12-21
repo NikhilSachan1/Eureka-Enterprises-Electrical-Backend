@@ -29,11 +29,20 @@ export class CreateVehicleFileDto {
 
   @ApiProperty({
     description: 'The type of the file',
-    example: 'image',
+    example: 'VEHICLE_IMAGE',
   })
   @IsNotEmpty()
   @IsString()
   fileType: string;
+
+  @ApiProperty({
+    description: 'Label/description for the file',
+    example: 'Front view of vehicle',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  label?: string;
 
   @ApiProperty({
     description: 'Files to be uploaded.',

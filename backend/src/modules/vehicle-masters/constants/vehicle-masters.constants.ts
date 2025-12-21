@@ -2,6 +2,7 @@ export const VEHICLE_MASTERS_ERRORS = {
   VEHICLE_ALREADY_EXISTS: 'Vehicle with this registration number already exists',
   VEHICLE_NOT_FOUND: 'Vehicle not found',
   INVALID_ACTION: 'Invalid action',
+  INVALID_DATE_RANGE: 'End date must be after start date',
 };
 
 export enum VehicleMasterEntityFields {
@@ -9,20 +10,54 @@ export enum VehicleMasterEntityFields {
   VEHICLE = 'Vehicle',
 }
 
-export const DEFAULT_VEHICLE_FILE_TYPES = {
-  VEHICLE_IMAGE_DOC: 'vehicle_image_doc',
-};
+export enum VehicleStatus {
+  AVAILABLE = 'AVAILABLE',
+  ASSIGNED = 'ASSIGNED',
+  UNDER_MAINTENANCE = 'UNDER_MAINTENANCE',
+  DAMAGED = 'DAMAGED',
+  RETIRED = 'RETIRED',
+}
 
-//TODO: These vehicle event types need to be seed in database
+export enum VehicleFuelType {
+  PETROL = 'PETROL',
+  DIESEL = 'DIESEL',
+  CNG = 'CNG',
+  ELECTRIC = 'ELECTRIC',
+  HYBRID = 'HYBRID',
+}
+
+export enum VehicleFileTypes {
+  RC = 'RC',
+  INSURANCE = 'INSURANCE',
+  PUC = 'PUC',
+  FITNESS = 'FITNESS',
+  PERMIT = 'PERMIT',
+  INVOICE = 'INVOICE',
+  SERVICE_BILL = 'SERVICE_BILL',
+  VEHICLE_IMAGE = 'VEHICLE_IMAGE',
+  OTHER = 'OTHER',
+}
+
 export enum VehicleEventTypes {
-  VEHICLE_ADDED = 'vehicle_added',
-  AVAILABLE = 'available',
-  DEALLOCATED = 'deallocated',
-  MAINTENANCE = 'maintenance',
-  HANDOVER_INITIATED = 'handover_initiated',
-  HANDOVER_ACCEPTED = 'handover_accepted',
-  HANDOVER_REJECTED = 'handover_rejected',
-  HANDOVER_CANCELLED = 'handover_cancelled',
+  VEHICLE_ADDED = 'VEHICLE_ADDED',
+  AVAILABLE = 'AVAILABLE',
+  ASSIGNED = 'ASSIGNED',
+  DEALLOCATED = 'DEALLOCATED',
+  UNDER_MAINTENANCE = 'UNDER_MAINTENANCE',
+  DAMAGED = 'DAMAGED',
+  RETIRED = 'RETIRED',
+  UPDATED = 'UPDATED',
+  HANDOVER_INITIATED = 'HANDOVER_INITIATED',
+  HANDOVER_ACCEPTED = 'HANDOVER_ACCEPTED',
+  HANDOVER_REJECTED = 'HANDOVER_REJECTED',
+  HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
+}
+
+export enum DocumentStatus {
+  ACTIVE = 'ACTIVE',
+  EXPIRING_SOON = 'EXPIRING_SOON',
+  EXPIRED = 'EXPIRED',
+  NOT_APPLICABLE = 'NOT_APPLICABLE',
 }
 
 export enum VehicleMasterSortFields {
@@ -33,4 +68,12 @@ export enum VehicleMasterSortFields {
   BRAND = 'brand',
   MODEL = 'model',
   MILEAGE = 'mileage',
+  FUEL_TYPE = 'fuelType',
+  STATUS = 'status',
+  PURCHASE_DATE = 'purchaseDate',
+  INSURANCE_END_DATE = 'insuranceEndDate',
+  PUC_END_DATE = 'pucEndDate',
+  FITNESS_END_DATE = 'fitnessEndDate',
 }
+
+export const DEFAULT_EXPIRING_SOON_DAYS = 30;

@@ -12,7 +12,7 @@ export class VehicleFilesService {
     entityManager?: EntityManager,
   ) {
     try {
-      const { vehicleMasterId, fileType, fileKeys, createdBy, vehicleEventsId } =
+      const { vehicleMasterId, fileType, fileKeys, createdBy, vehicleEventsId, label } =
         createVehicleFileDto;
       if (fileKeys) {
         for (const fileKey of fileKeys) {
@@ -21,6 +21,7 @@ export class VehicleFilesService {
               vehicleMasterId,
               fileType,
               fileKey,
+              label,
               createdBy,
               vehicleEventsId,
               updatedBy: createdBy,

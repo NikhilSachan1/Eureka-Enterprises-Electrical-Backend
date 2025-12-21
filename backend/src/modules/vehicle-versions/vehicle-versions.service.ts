@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreateVehicleDto } from './dto';
+import { CreateVehicleVersionDto } from './dto/create-vehicle.dto';
 import { VehicleVersionsRepository } from './vehicle-versions.repository';
 import { VehicleVersionEntity } from './entities/vehicle-versions.entity';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
@@ -18,16 +18,53 @@ export class VehicleVersionsService {
   ) {}
 
   async create(
-    createVehicleDto: CreateVehicleDto & { createdBy: string },
+    createVehicleDto: Partial<CreateVehicleVersionDto> & {
+      vehicleMasterId: string;
+      number: string;
+      brand: string;
+      model: string;
+      mileage: string;
+      createdBy: string;
+    },
     entityManager?: EntityManager,
   ) {
     try {
-      const { createdBy, number, vehicleMasterId } = createVehicleDto;
-      await this.update({ number, vehicleMasterId }, { isActive: false, updatedBy: createdBy });
-      return await this.vehicleVersionsRepository.create(
-        { ...createVehicleDto, createdBy },
+      const { createdBy, vehicleMasterId } = createVehicleDto;
+
+      // Deactivate previous active version for this vehicle master
+      await this.update(
+        { vehicleMasterId, isActive: true },
+        { isActive: false, updatedBy: createdBy },
         entityManager,
       );
+
+      // Convert date strings to Date objects for entity compatibility
+      const entityData: Partial<VehicleVersionEntity> = {
+        ...createVehicleDto,
+        isActive: true,
+        createdBy,
+        purchaseDate: createVehicleDto.purchaseDate
+          ? new Date(createVehicleDto.purchaseDate)
+          : undefined,
+        insuranceStartDate: createVehicleDto.insuranceStartDate
+          ? new Date(createVehicleDto.insuranceStartDate)
+          : undefined,
+        insuranceEndDate: createVehicleDto.insuranceEndDate
+          ? new Date(createVehicleDto.insuranceEndDate)
+          : undefined,
+        pucStartDate: createVehicleDto.pucStartDate
+          ? new Date(createVehicleDto.pucStartDate)
+          : undefined,
+        pucEndDate: createVehicleDto.pucEndDate ? new Date(createVehicleDto.pucEndDate) : undefined,
+        fitnessStartDate: createVehicleDto.fitnessStartDate
+          ? new Date(createVehicleDto.fitnessStartDate)
+          : undefined,
+        fitnessEndDate: createVehicleDto.fitnessEndDate
+          ? new Date(createVehicleDto.fitnessEndDate)
+          : undefined,
+      };
+
+      return await this.vehicleVersionsRepository.create(entityData, entityManager);
     } catch (error) {
       throw error;
     }

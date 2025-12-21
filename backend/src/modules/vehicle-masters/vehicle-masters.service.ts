@@ -1,13 +1,21 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateVehicleDto, UpdateVehicleDto, VehicleActionDto, VehicleQueryDto } from './dto';
 import { VehicleMastersRepository } from './vehicle-masters.repository';
 import { VehicleMasterEntity } from './entities/vehicle-master.entity';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import {
-  DEFAULT_VEHICLE_FILE_TYPES,
   VEHICLE_MASTERS_ERRORS,
   VehicleMasterEntityFields,
   VehicleEventTypes,
+  VehicleStatus,
+  VehicleFileTypes,
+  DocumentStatus,
+  DEFAULT_EXPIRING_SOON_DAYS,
 } from './constants/vehicle-masters.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
@@ -29,13 +37,67 @@ export class VehicleMastersService {
     private readonly dataSource: DataSource,
   ) {}
 
+  getDocumentStatus(
+    startDate: Date | string | null | undefined,
+    endDate: Date | string | null | undefined,
+    expiringSoonDays: number = DEFAULT_EXPIRING_SOON_DAYS,
+  ): DocumentStatus {
+    if (!endDate) {
+      return DocumentStatus.NOT_APPLICABLE;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+
+    if (end < today) {
+      return DocumentStatus.EXPIRED;
+    }
+
+    const expiringSoonDate = new Date(today);
+    expiringSoonDate.setDate(expiringSoonDate.getDate() + expiringSoonDays);
+
+    if (end <= expiringSoonDate) {
+      return DocumentStatus.EXPIRING_SOON;
+    }
+
+    return DocumentStatus.ACTIVE;
+  }
+
+  private validateDates(dto: CreateVehicleDto | UpdateVehicleDto): void {
+    const dateRanges = [
+      { start: dto.insuranceStartDate, end: dto.insuranceEndDate, name: 'Insurance' },
+      { start: dto.pucStartDate, end: dto.pucEndDate, name: 'PUC' },
+      { start: dto.fitnessStartDate, end: dto.fitnessEndDate, name: 'Fitness' },
+    ];
+
+    for (const range of dateRanges) {
+      if (range.start && range.end) {
+        const start = new Date(range.start);
+        const end = new Date(range.end);
+        if (end < start) {
+          throw new BadRequestException(
+            `${range.name}: ${VEHICLE_MASTERS_ERRORS.INVALID_DATE_RANGE}`,
+          );
+        }
+      }
+    }
+  }
+
   async create(createVehicleDto: CreateVehicleDto & { createdBy: string }, vehicleFiles: string[]) {
     try {
       const { registrationNo, createdBy } = createVehicleDto;
+
+      // Validate dates
+      this.validateDates(createVehicleDto);
+
       const vehicle = await this.findOne({ where: { registrationNo } });
       if (vehicle) {
         throw new ConflictException(VEHICLE_MASTERS_ERRORS.VEHICLE_ALREADY_EXISTS);
       }
+
       return await this.dataSource.transaction(async (entityManager) => {
         const vehicleMaster = await this.vehicleMastersRepository.create(
           { ...createVehicleDto, createdBy },
@@ -44,10 +106,25 @@ export class VehicleMastersService {
 
         await this.vehicleVersionsService.create(
           {
-            ...createVehicleDto,
-            createdBy,
             vehicleMasterId: vehicleMaster.id,
             number: registrationNo,
+            brand: createVehicleDto.brand,
+            model: createVehicleDto.model,
+            mileage: createVehicleDto.mileage,
+            fuelType: createVehicleDto.fuelType,
+            purchaseDate: createVehicleDto.purchaseDate,
+            dealerName: createVehicleDto.dealerName,
+            insuranceStartDate: createVehicleDto.insuranceStartDate,
+            insuranceEndDate: createVehicleDto.insuranceEndDate,
+            pucStartDate: createVehicleDto.pucStartDate,
+            pucEndDate: createVehicleDto.pucEndDate,
+            fitnessStartDate: createVehicleDto.fitnessStartDate,
+            fitnessEndDate: createVehicleDto.fitnessEndDate,
+            status: createVehicleDto.status || VehicleStatus.AVAILABLE,
+            assignedTo: createVehicleDto.assignedTo,
+            remarks: createVehicleDto.remarks,
+            additionalData: createVehicleDto.additionalData,
+            createdBy,
           },
           entityManager,
         );
@@ -70,16 +147,18 @@ export class VehicleMastersService {
           entityManager,
         );
 
-        await this.vehicleFilesService.create(
-          {
-            vehicleMasterId: vehicleMaster.id,
-            fileType: DEFAULT_VEHICLE_FILE_TYPES.VEHICLE_IMAGE_DOC,
-            fileKeys: vehicleFiles,
-            vehicleEventsId: vehicleAddedEvent.id,
-            createdBy,
-          },
-          entityManager,
-        );
+        if (vehicleFiles && vehicleFiles.length > 0) {
+          await this.vehicleFilesService.create(
+            {
+              vehicleMasterId: vehicleMaster.id,
+              fileType: VehicleFileTypes.VEHICLE_IMAGE,
+              fileKeys: vehicleFiles,
+              vehicleEventsId: vehicleAddedEvent.id,
+              createdBy,
+            },
+            entityManager,
+          );
+        }
 
         return vehicleMaster;
       });
@@ -116,14 +195,24 @@ export class VehicleMastersService {
     try {
       const { dataQuery, countQuery, params } = await getVehicleQuery(findOptions);
       const [vehicles, total] = await Promise.all([
-        this.vehicleMastersRepository.executeRawQuery(dataQuery, params) as Promise<
-          VehicleMasterEntity[]
-        >,
+        this.vehicleMastersRepository.executeRawQuery(dataQuery, params) as Promise<any[]>,
         this.vehicleMastersRepository.executeRawQuery(countQuery, params) as Promise<{
           total: number;
         }>,
       ]);
-      return this.utilityService.listResponse(vehicles, total[0].total);
+
+      // Add computed statuses to each vehicle
+      const vehiclesWithComputedStatus = vehicles.map((vehicle) => ({
+        ...vehicle,
+        insuranceStatus: this.getDocumentStatus(
+          vehicle.insuranceStartDate,
+          vehicle.insuranceEndDate,
+        ),
+        pucStatus: this.getDocumentStatus(vehicle.pucStartDate, vehicle.pucEndDate),
+        fitnessStatus: this.getDocumentStatus(vehicle.fitnessStartDate, vehicle.fitnessEndDate),
+      }));
+
+      return this.utilityService.listResponse(vehiclesWithComputedStatus, total[0].total);
     } catch (error) {
       throw error;
     }
@@ -143,27 +232,125 @@ export class VehicleMastersService {
 
   async update(
     identifierConditions: FindOptionsWhere<VehicleMasterEntity>,
-    updateData: Partial<VehicleMasterEntity> | (UpdateVehicleDto & { createdBy: string }),
+    updateData: UpdateVehicleDto & { updatedBy: string },
     entityManager?: EntityManager,
   ) {
     try {
       const vehicle = await this.findOneOrFail({ where: identifierConditions });
-      if (vehicle.registrationNo === updateData.registrationNo) {
-        throw new ConflictException(VEHICLE_MASTERS_ERRORS.VEHICLE_ALREADY_EXISTS);
+
+      // Validate dates
+      this.validateDates(updateData);
+
+      // Get current active version
+      const currentVersion = await this.vehicleVersionsService.findOne({
+        where: { vehicleMasterId: vehicle.id, isActive: true },
+      });
+
+      return await this.dataSource.transaction(async (txManager) => {
+        const manager = entityManager || txManager;
+
+        // Deactivate current version
+        if (currentVersion) {
+          await this.vehicleVersionsService.update(
+            { id: currentVersion.id },
+            { isActive: false, updatedBy: updateData.updatedBy },
+            manager,
+          );
+        }
+
+        // Helper to convert Date to string
+        const toDateString = (date: Date | string | null | undefined): string | undefined => {
+          if (!date) return undefined;
+          if (date instanceof Date) return date.toISOString().split('T')[0];
+          return date;
+        };
+
+        // Create new version with merged data
+        await this.vehicleVersionsService.create(
+          {
+            vehicleMasterId: vehicle.id,
+            number: updateData.number || currentVersion?.number || vehicle.registrationNo,
+            brand: updateData.brand || currentVersion?.brand || '',
+            model: updateData.model || currentVersion?.model || '',
+            mileage: updateData.mileage || currentVersion?.mileage || '',
+            fuelType: updateData.fuelType || currentVersion?.fuelType,
+            purchaseDate:
+              toDateString(updateData.purchaseDate) || toDateString(currentVersion?.purchaseDate),
+            dealerName: updateData.dealerName || currentVersion?.dealerName,
+            insuranceStartDate:
+              toDateString(updateData.insuranceStartDate) ||
+              toDateString(currentVersion?.insuranceStartDate),
+            insuranceEndDate:
+              toDateString(updateData.insuranceEndDate) ||
+              toDateString(currentVersion?.insuranceEndDate),
+            pucStartDate:
+              toDateString(updateData.pucStartDate) || toDateString(currentVersion?.pucStartDate),
+            pucEndDate:
+              toDateString(updateData.pucEndDate) || toDateString(currentVersion?.pucEndDate),
+            fitnessStartDate:
+              toDateString(updateData.fitnessStartDate) ||
+              toDateString(currentVersion?.fitnessStartDate),
+            fitnessEndDate:
+              toDateString(updateData.fitnessEndDate) ||
+              toDateString(currentVersion?.fitnessEndDate),
+            status: (updateData.status ||
+              currentVersion?.status ||
+              VehicleStatus.AVAILABLE) as VehicleStatus,
+            assignedTo: updateData.assignedTo || currentVersion?.assignedTo,
+            remarks:
+              updateData.remarks !== undefined ? updateData.remarks : currentVersion?.remarks,
+            additionalData: updateData.additionalData || currentVersion?.additionalData,
+            createdBy: updateData.updatedBy,
+          },
+          manager,
+        );
+
+        // Create update event
+        await this.vehicleEventsService.create(
+          {
+            vehicleMasterId: vehicle.id,
+            eventType: VehicleEventTypes.UPDATED,
+            createdBy: updateData.updatedBy,
+          },
+          manager,
+        );
+
+        return vehicle;
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findById(id: string) {
+    try {
+      const vehicle = await this.findOneOrFail({ where: { id } });
+
+      // Get active version
+      const activeVersion = await this.vehicleVersionsService.findOne({
+        where: { vehicleMasterId: id, isActive: true },
+      });
+
+      if (!activeVersion) {
+        return vehicle;
       }
-      await this.vehicleMastersRepository.update(
-        identifierConditions,
-        updateData as Partial<VehicleMasterEntity>,
-        entityManager,
-      );
-      await this.vehicleVersionsService.create(
-        {
-          ...(updateData as any),
-          vehicleMasterId: vehicle.id,
-          createdBy: updateData.createdBy,
+
+      // Add computed statuses
+      return {
+        ...vehicle,
+        currentVersion: {
+          ...activeVersion,
+          insuranceStatus: this.getDocumentStatus(
+            activeVersion.insuranceStartDate,
+            activeVersion.insuranceEndDate,
+          ),
+          pucStatus: this.getDocumentStatus(activeVersion.pucStartDate, activeVersion.pucEndDate),
+          fitnessStatus: this.getDocumentStatus(
+            activeVersion.fitnessStartDate,
+            activeVersion.fitnessEndDate,
+          ),
         },
-        entityManager,
-      );
+      };
     } catch (error) {
       throw error;
     }
