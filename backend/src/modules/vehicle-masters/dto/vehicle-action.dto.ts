@@ -18,7 +18,7 @@ export class VehicleActionDto {
       VehicleEventTypes.HANDOVER_ACCEPTED,
       VehicleEventTypes.HANDOVER_REJECTED,
       VehicleEventTypes.HANDOVER_CANCELLED,
-      VehicleEventTypes.MAINTENANCE,
+      VehicleEventTypes.UNDER_MAINTENANCE,
       VehicleEventTypes.DEALLOCATED,
       VehicleEventTypes.AVAILABLE,
     ],
@@ -30,7 +30,7 @@ export class VehicleActionDto {
     VehicleEventTypes.HANDOVER_ACCEPTED,
     VehicleEventTypes.HANDOVER_REJECTED,
     VehicleEventTypes.HANDOVER_CANCELLED,
-    VehicleEventTypes.MAINTENANCE,
+    VehicleEventTypes.UNDER_MAINTENANCE,
     VehicleEventTypes.DEALLOCATED,
     VehicleEventTypes.AVAILABLE,
   ])

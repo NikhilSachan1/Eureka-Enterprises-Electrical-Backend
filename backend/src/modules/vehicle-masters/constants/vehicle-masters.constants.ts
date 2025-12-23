@@ -60,6 +60,12 @@ export enum DocumentStatus {
   NOT_APPLICABLE = 'NOT_APPLICABLE',
 }
 
+export enum ServiceDueStatus {
+  OK = 'OK',
+  DUE_SOON = 'DUE_SOON',
+  OVERDUE = 'OVERDUE',
+}
+
 export enum VehicleMasterSortFields {
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',

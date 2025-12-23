@@ -7,6 +7,7 @@ import { VehicleFilesModule } from '../vehicle-files/vehicle-files.module';
 import { VehicleEventsModule } from '../vehicle-events/vehicle-events.module';
 import { VehicleVersionsModule } from '../vehicle-versions/vehicle-versions.module';
 import { SharedModule } from '../shared/shared.module';
+import { ConfigurationsModule } from '../configurations/configuration.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { SharedModule } from '../shared/shared.module';
     VehicleEventsModule,
     VehicleVersionsModule,
     SharedModule,
+    ConfigurationsModule,
   ],
   providers: [VehicleMastersService, VehicleMastersRepository],
   exports: [VehicleMastersService],

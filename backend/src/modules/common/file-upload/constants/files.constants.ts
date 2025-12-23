@@ -57,6 +57,7 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   vehicleFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   assetFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   fuelExpenseFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  serviceFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   esicDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   aadharDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   panDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
@@ -71,6 +72,7 @@ export const FIELD_NAMES = {
   DOCUMENT: 'document',
   VEHICLE_FILES: 'vehicleFiles',
   ASSET_FILES: 'assetFiles',
+  SERVICE_FILES: 'serviceFiles',
   ESIC_DOC: 'esicDoc',
   AADHAR_DOC: 'aadharDoc',
   PAN_DOC: 'panDoc',
@@ -91,6 +93,7 @@ export const DATABASE_FIELD_NAMES = {
   files: 'fileKeys',
   vehicleFiles: 'vehicleFiles',
   assetFiles: 'assetFiles',
+  serviceFiles: 'serviceFiles',
   // Employee document database field names
   esicDoc: 'esicDoc',
   aadharDoc: 'aadharDoc',
@@ -113,4 +116,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   FUEL_EXPENSE_FILES: 'fuel-expense-files',
   EMPLOYEE_FILES: 'employee-files',
   PROFILE_PICTURES: 'profile-pictures',
+  VEHICLE_SERVICE_FILES: 'vehicle-service-files',
 };

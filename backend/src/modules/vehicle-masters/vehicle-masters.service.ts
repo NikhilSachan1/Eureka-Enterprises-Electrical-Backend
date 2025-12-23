@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateVehicleDto, UpdateVehicleDto, VehicleActionDto, VehicleQueryDto } from './dto';
@@ -15,6 +16,7 @@ import {
   VehicleStatus,
   VehicleFileTypes,
   DocumentStatus,
+  ServiceDueStatus,
   DEFAULT_EXPIRING_SOON_DAYS,
 } from './constants/vehicle-masters.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
@@ -23,7 +25,15 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
 import { VehicleEventsService } from '../vehicle-events/vehicle-events.service';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
+import { ConfigurationService } from '../configurations/configuration.service';
+import {
+  CONFIGURATION_KEYS,
+  CONFIGURATION_MODULES,
+} from 'src/utils/master-constants/master-constants';
 import { getVehicleQuery } from './queries/get-vehicle.query';
+
+const DEFAULT_SERVICE_INTERVAL_KM = 10000;
+const DEFAULT_SERVICE_WARNING_KM = 1000;
 
 @Injectable()
 export class VehicleMastersService {
@@ -32,10 +42,96 @@ export class VehicleMastersService {
     private readonly vehicleFilesService: VehicleFilesService,
     private readonly vehicleEventsService: VehicleEventsService,
     private readonly vehicleVersionsService: VehicleVersionsService,
+    private readonly configurationService: ConfigurationService,
     private readonly utilityService: UtilityService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
+
+  private async getServiceIntervalKm(): Promise<number> {
+    try {
+      const config = await this.configurationService.findOne({
+        where: {
+          key: CONFIGURATION_KEYS.VEHICLE_SERVICE_INTERVAL_KM,
+          module: CONFIGURATION_MODULES.VEHICLE,
+        },
+        relations: ['configSettings'],
+      });
+
+      if (config?.configSettings?.length > 0) {
+        const activeSetting = config.configSettings.find((s) => s.isActive);
+        if (activeSetting?.value) {
+          return parseInt(activeSetting.value, 10);
+        }
+      }
+    } catch (error) {
+      Logger.error('Error fetching service interval km:', error.message);
+    }
+    return DEFAULT_SERVICE_INTERVAL_KM;
+  }
+
+  private async getServiceWarningKm(): Promise<number> {
+    try {
+      const config = await this.configurationService.findOne({
+        where: {
+          key: CONFIGURATION_KEYS.VEHICLE_SERVICE_WARNING_KM,
+          module: CONFIGURATION_MODULES.VEHICLE,
+        },
+        relations: ['configSettings'],
+      });
+
+      if (config?.configSettings?.length > 0) {
+        const activeSetting = config.configSettings.find((s) => s.isActive);
+        if (activeSetting?.value) {
+          return parseInt(activeSetting.value, 10);
+        }
+      }
+    } catch (error) {
+      Logger.error('Error fetching service warning km:', error.message);
+    }
+    return DEFAULT_SERVICE_WARNING_KM;
+  }
+
+  getServiceDueStatus(
+    lastServiceKm: number | null,
+    currentOdometerKm: number | null,
+    serviceIntervalKm: number,
+    warningThresholdKm: number,
+  ): {
+    serviceDueStatus: ServiceDueStatus;
+    nextServiceDueKm: number | null;
+    kmToNextService: number | null;
+    kmSinceLastService: number | null;
+  } {
+    if (!lastServiceKm) {
+      return {
+        serviceDueStatus: ServiceDueStatus.OK,
+        nextServiceDueKm: null,
+        kmToNextService: null,
+        kmSinceLastService: null,
+      };
+    }
+
+    const nextServiceDueKm = lastServiceKm + serviceIntervalKm;
+    const kmSinceLastService = currentOdometerKm ? currentOdometerKm - lastServiceKm : null;
+    const kmToNextService = currentOdometerKm ? nextServiceDueKm - currentOdometerKm : null;
+
+    let serviceDueStatus: ServiceDueStatus = ServiceDueStatus.OK;
+    if (currentOdometerKm && kmToNextService !== null) {
+      if (kmToNextService <= 0) {
+        serviceDueStatus = ServiceDueStatus.OVERDUE;
+      } else if (kmToNextService <= warningThresholdKm) {
+        serviceDueStatus = ServiceDueStatus.DUE_SOON;
+      }
+    }
+
+    return {
+      serviceDueStatus,
+      nextServiceDueKm,
+      kmToNextService,
+      kmSinceLastService,
+    };
+  }
 
   getDocumentStatus(
     startDate: Date | string | null | undefined,
@@ -201,18 +297,43 @@ export class VehicleMastersService {
         }>,
       ]);
 
-      // Add computed statuses to each vehicle
-      const vehiclesWithComputedStatus = vehicles.map((vehicle) => ({
-        ...vehicle,
-        insuranceStatus: this.getDocumentStatus(
-          vehicle.insuranceStartDate,
-          vehicle.insuranceEndDate,
-        ),
-        pucStatus: this.getDocumentStatus(vehicle.pucStartDate, vehicle.pucEndDate),
-        fitnessStatus: this.getDocumentStatus(vehicle.fitnessStartDate, vehicle.fitnessEndDate),
-      }));
+      // Fetch config values for service due calculation
+      const serviceIntervalKm = await this.getServiceIntervalKm();
+      const serviceWarningKm = await this.getServiceWarningKm();
 
-      return this.utilityService.listResponse(vehiclesWithComputedStatus, total[0].total);
+      // Add computed statuses to each vehicle
+      const vehiclesWithComputedStatus = vehicles.map((vehicle) => {
+        const serviceStatus = this.getServiceDueStatus(
+          vehicle.lastServiceKm,
+          vehicle.currentOdometerKm,
+          serviceIntervalKm,
+          serviceWarningKm,
+        );
+
+        return {
+          ...vehicle,
+          insuranceStatus: this.getDocumentStatus(
+            vehicle.insuranceStartDate,
+            vehicle.insuranceEndDate,
+          ),
+          pucStatus: this.getDocumentStatus(vehicle.pucStartDate, vehicle.pucEndDate),
+          fitnessStatus: this.getDocumentStatus(vehicle.fitnessStartDate, vehicle.fitnessEndDate),
+          ...serviceStatus,
+        };
+      });
+
+      // Filter by serviceDueStatus if provided
+      let filteredVehicles = vehiclesWithComputedStatus;
+      if (findOptions.serviceDueStatus) {
+        filteredVehicles = vehiclesWithComputedStatus.filter(
+          (v) => v.serviceDueStatus === findOptions.serviceDueStatus,
+        );
+      }
+
+      return this.utilityService.listResponse(
+        filteredVehicles,
+        findOptions.serviceDueStatus ? filteredVehicles.length : total[0].total,
+      );
     } catch (error) {
       throw error;
     }
@@ -322,6 +443,7 @@ export class VehicleMastersService {
     }
   }
 
+  //Created seperate method because we need to return the vehicle with the active version and the computed statuses
   async findById(id: string) {
     try {
       const vehicle = await this.findOneOrFail({ where: { id } });

@@ -30,6 +30,8 @@ import { AssetEventEntity } from 'src/modules/asset-events/entities/asset-event.
 import { AnnouncementEntity } from 'src/modules/announcements/entities/announcement.entity';
 import { AnnouncementTargetEntity } from 'src/modules/announcements/entities/announcement-target.entity';
 import { UserAnnouncementAckEntity } from 'src/modules/announcements/entities/user-announcement-ack.entity';
+import { VehicleServiceEntity } from 'src/modules/vehicle-services/entities/vehicle-service.entity';
+import { VehicleServiceFileEntity } from 'src/modules/vehicle-service-files/entities/vehicle-service-file.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -85,6 +87,8 @@ export class ConfigService {
         AnnouncementEntity,
         AnnouncementTargetEntity,
         UserAnnouncementAckEntity,
+        VehicleServiceEntity,
+        VehicleServiceFileEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

@@ -7,6 +7,7 @@ import {
   VehicleStatus,
   VehicleFuelType,
   DocumentStatus,
+  ServiceDueStatus,
 } from '../constants/vehicle-masters.constants';
 
 export class VehicleQueryDto extends BaseGetDto {
@@ -81,6 +82,14 @@ export class VehicleQueryDto extends BaseGetDto {
   @IsOptional()
   @IsEnum(DocumentStatus)
   fitnessStatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by service due status (computed)',
+    enum: ServiceDueStatus,
+  })
+  @IsOptional()
+  @IsEnum(ServiceDueStatus)
+  serviceDueStatus?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by assigned user ID',

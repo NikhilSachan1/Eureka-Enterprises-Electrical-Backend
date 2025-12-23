@@ -123,6 +123,8 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
       vv."remarks",
       vv."additionalData",
       vv."vehicleMasterId",
+      vv."lastServiceKm",
+      vv."lastServiceDate",
       CASE 
         WHEN vv."assignedTo" IS NOT NULL THEN json_build_object(
           'id', u."id",
@@ -132,7 +134,13 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
           'employeeId', u."employeeId"
         )
         ELSE NULL
-      END as "assignedToUser"
+      END as "assignedToUser",
+      -- Get current odometer reading from fuel_expenses or vehicle_services
+      COALESCE(
+        (SELECT MAX("odometerReading") FROM fuel_expenses WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
+        (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
+        0
+      ) as "currentOdometerKm"
     FROM vehicle_masters vm
     INNER JOIN LATERAL (
       SELECT *

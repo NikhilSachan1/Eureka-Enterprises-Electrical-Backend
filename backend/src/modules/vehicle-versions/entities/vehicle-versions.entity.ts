@@ -71,6 +71,13 @@ export class VehicleVersionEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   remarks: string;
 
+  // Service tracking
+  @Column({ type: 'integer', nullable: true })
+  lastServiceKm: number;
+
+  @Column({ type: 'date', nullable: true })
+  lastServiceDate: Date;
+
   // Version control
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

@@ -40,6 +40,12 @@ export const CONFIGURATION_KEYS = {
   VEHICLE_FILE_TYPES: 'vehicle_file_types',
   VEHICLE_EVENT_TYPES: 'vehicle_event_types',
   VEHICLE_EXPIRING_SOON_DAYS: 'vehicle_expiring_soon_days',
+  // VEHICLE SERVICES
+  VEHICLE_SERVICE_TYPES: 'vehicle_service_types',
+  VEHICLE_SERVICE_STATUSES: 'vehicle_service_statuses',
+  VEHICLE_SERVICE_FILE_TYPES: 'vehicle_service_file_types',
+  VEHICLE_SERVICE_INTERVAL_KM: 'vehicle_service_interval_km',
+  VEHICLE_SERVICE_WARNING_KM: 'vehicle_service_warning_km',
 };
 
 export const CONFIGURATION_MODULES = {
