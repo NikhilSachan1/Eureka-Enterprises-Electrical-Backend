@@ -8,6 +8,7 @@ import {
   UserStatus,
   USERS_RESPONSES,
 } from './constants/user.constants';
+import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { CreateEmployeeDto, GetUsersDto } from './dto';
@@ -41,10 +42,16 @@ export class UserService {
 
   async findAll(
     options: GetUsersDto,
-  ): Promise<{ records: UserEntity[]; totalRecords: number } | undefined> {
+  ): Promise<{ records: UserEntity[]; totalRecords: number; metrics: UserMetrics } | undefined> {
     try {
-      const users = await this.userRepository.findAll(options);
-      return users;
+      const [users, metrics] = await Promise.all([
+        this.userRepository.findAll(options),
+        this.userRepository.getMetrics(),
+      ]);
+      return {
+        ...users,
+        metrics,
+      };
     } catch (error) {
       throw error;
     }

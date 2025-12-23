@@ -5,6 +5,8 @@ import { UserEntity } from './entities/user.entity';
 import { GetUsersDto, CreateUserDto } from './dto';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { UserStatus } from './constants/user.constants';
+import { UserMetrics } from './user.types';
 
 @Injectable()
 export class UserRepository {
@@ -131,6 +133,78 @@ export class UserRepository {
   async rawQuery(query: any, params?: any | any[]) {
     try {
       return await this.repository.query(query, params);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async getMetrics(): Promise<UserMetrics> {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      // Get all counts in a single optimized query
+      const metricsQuery = this.repository
+        .createQueryBuilder('users')
+        .select([
+          'COUNT(*) as total',
+          `SUM(CASE WHEN users.status = '${UserStatus.ACTIVE}' THEN 1 ELSE 0 END) as active`,
+          `SUM(CASE WHEN users.status = '${UserStatus.ARCHIVED}' THEN 1 ELSE 0 END) as inactive`,
+          `SUM(CASE WHEN users.dateOfJoining >= :thirtyDaysAgo THEN 1 ELSE 0 END) as "newJoinersLast30Days"`,
+        ])
+        .setParameter('thirtyDaysAgo', thirtyDaysAgo);
+
+      const [mainMetrics] = await metricsQuery.getRawMany();
+
+      // Get counts by employee type
+      const employeeTypeMetrics = await this.repository
+        .createQueryBuilder('users')
+        .select(['users.employeeType as type', 'COUNT(*) as count'])
+        .where('users.employeeType IS NOT NULL')
+        .groupBy('users.employeeType')
+        .getRawMany();
+
+      // Get counts by designation
+      const designationMetrics = await this.repository
+        .createQueryBuilder('users')
+        .select(['users.designation as type', 'COUNT(*) as count'])
+        .where('users.designation IS NOT NULL')
+        .groupBy('users.designation')
+        .getRawMany();
+
+      // Get counts by gender
+      const genderMetrics = await this.repository
+        .createQueryBuilder('users')
+        .select(['users.gender as type', 'COUNT(*) as count'])
+        .where('users.gender IS NOT NULL')
+        .groupBy('users.gender')
+        .getRawMany();
+
+      // Transform array results to Record objects
+      const byEmployeeType: Record<string, number> = {};
+      employeeTypeMetrics.forEach((item) => {
+        byEmployeeType[item.type] = parseInt(item.count);
+      });
+
+      const byDesignation: Record<string, number> = {};
+      designationMetrics.forEach((item) => {
+        byDesignation[item.type] = parseInt(item.count);
+      });
+
+      const byGender: Record<string, number> = {};
+      genderMetrics.forEach((item) => {
+        byGender[item.type] = parseInt(item.count);
+      });
+
+      return {
+        total: parseInt(mainMetrics.total) || 0,
+        active: parseInt(mainMetrics.active) || 0,
+        inactive: parseInt(mainMetrics.inactive) || 0,
+        newJoinersLast30Days: parseInt(mainMetrics.newJoinersLast30Days) || 0,
+        byEmployeeType,
+        byDesignation,
+        byGender,
+      };
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
