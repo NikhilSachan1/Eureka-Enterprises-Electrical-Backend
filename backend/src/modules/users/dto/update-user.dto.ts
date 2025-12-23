@@ -213,4 +213,16 @@ export class UpdateUserDto {
   @IsString()
   @MaxLength(50)
   dlNumber?: string;
+
+  @ApiProperty({ description: 'UAN number (12 digits)', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.UAN, { message: USERS_ERRORS.INVALID_UAN })
+  uanNumber?: string;
+
+  @ApiProperty({ description: 'Passport number', required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(VALIDATION_PATTERNS.PASSPORT, { message: USERS_ERRORS.INVALID_PASSPORT })
+  passportNumber?: string;
 }

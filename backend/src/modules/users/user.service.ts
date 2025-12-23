@@ -225,6 +225,8 @@ export class UserService {
       { key: 'panDoc', type: USER_DOCUMENT_TYPES.PAN },
       { key: 'esicDoc', type: USER_DOCUMENT_TYPES.ESIC },
       { key: 'dlDoc', type: USER_DOCUMENT_TYPES.DRIVING_LICENSE },
+      { key: 'uanDoc', type: USER_DOCUMENT_TYPES.UAN },
+      { key: 'passportDoc', type: USER_DOCUMENT_TYPES.PASSPORT },
     ];
 
     for (const { key, type } of documentMappings) {
@@ -563,6 +565,8 @@ export class UserService {
       aadharDoc?: Express.Multer.File[];
       panDoc?: Express.Multer.File[];
       dlDoc?: Express.Multer.File[];
+      uanDoc?: Express.Multer.File[];
+      passportDoc?: Express.Multer.File[];
     },
     userEmail: string,
   ): Promise<Record<string, string>> {
@@ -576,6 +580,8 @@ export class UserService {
       { field: 'aadharDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
       { field: 'panDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
       { field: 'dlDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'uanDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'passportDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
     ];
 
     for (const mapping of fileFieldMappings) {

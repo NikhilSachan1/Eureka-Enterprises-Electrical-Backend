@@ -28,6 +28,8 @@ export const USERS_ERRORS = {
   INVALID_PASSOUT_YEAR: 'Invalid passout year.',
   FUTURE_DATE_NOT_ALLOWED: 'Future date is not allowed.',
   DOB_MUST_BE_18_YEARS: 'Employee must be at least 18 years old.',
+  INVALID_UAN: 'Invalid UAN number. Must be 12 digits.',
+  INVALID_PASSPORT: 'Invalid Passport number. Format: A1234567 (1 letter + 7 digits)',
 };
 
 export const USER_DTO_ERRORS = {
@@ -68,4 +70,6 @@ export const VALIDATION_PATTERNS = {
   ACCOUNT_NUMBER: /^\d{9,18}$/,
   ESIC: /^\d{17}$/,
   DL: /^[A-Z]{2}[\-]?\d{2}[\-]?\d{4}[\-]?\d{7}$/,
+  UAN: /^\d{12}$/,
+  PASSPORT: /^[A-Z][0-9]{7}$/,
 };

@@ -121,6 +121,12 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   dlNumber: string;
 
+  @Column({ type: 'varchar', length: 12, nullable: true })
+  uanNumber: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  passportNumber: string;
+
   // ==================== Relations ====================
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.user)
   userRoles: UserRoleEntity[];

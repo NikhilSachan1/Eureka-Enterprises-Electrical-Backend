@@ -46,6 +46,8 @@ export class UserController {
       { name: 'aadharDoc', maxCount: 1 },
       { name: 'panDoc', maxCount: 1 },
       { name: 'dlDoc', maxCount: 1 },
+      { name: 'uanDoc', maxCount: 1 },
+      { name: 'passportDoc', maxCount: 1 },
     ]),
   )
   @ApiConsumes('multipart/form-data')
@@ -85,11 +87,15 @@ export class UserController {
         aadharNumber: { type: 'string', example: '123456789012' },
         panNumber: { type: 'string', example: 'ABCDE1234F' },
         dlNumber: { type: 'string', example: 'MH01-2020-1234567' },
+        uanNumber: { type: 'string', example: '123456789012' },
+        passportNumber: { type: 'string', example: 'A1234567' },
         profilePicture: { type: 'string', format: 'binary' },
         esicDoc: { type: 'string', format: 'binary' },
         aadharDoc: { type: 'string', format: 'binary' },
         panDoc: { type: 'string', format: 'binary' },
         dlDoc: { type: 'string', format: 'binary' },
+        uanDoc: { type: 'string', format: 'binary' },
+        passportDoc: { type: 'string', format: 'binary' },
       },
       required: ['firstName', 'lastName', 'email', 'contactNumber', 'role'],
     },
@@ -104,6 +110,8 @@ export class UserController {
       aadharDoc?: Express.Multer.File[];
       panDoc?: Express.Multer.File[];
       dlDoc?: Express.Multer.File[];
+      uanDoc?: Express.Multer.File[];
+      passportDoc?: Express.Multer.File[];
     },
   ) {
     const createdBy = req?.user?.id;
@@ -118,6 +126,8 @@ export class UserController {
       { name: 'aadharDoc', maxCount: 1 },
       { name: 'panDoc', maxCount: 1 },
       { name: 'dlDoc', maxCount: 1 },
+      { name: 'uanDoc', maxCount: 1 },
+      { name: 'passportDoc', maxCount: 1 },
     ]),
   )
   @ApiConsumes('multipart/form-data')
@@ -155,12 +165,16 @@ export class UserController {
         aadharNumber: { type: 'string', example: '123456789012' },
         panNumber: { type: 'string', example: 'ABCDE1234F' },
         dlNumber: { type: 'string', example: 'MH01-2020-1234567' },
+        uanNumber: { type: 'string', example: '123456789012' },
+        passportNumber: { type: 'string', example: 'A1234567' },
         status: { type: 'string', example: 'ACTIVE' },
         profilePicture: { type: 'string', format: 'binary' },
         esicDoc: { type: 'string', format: 'binary' },
         aadharDoc: { type: 'string', format: 'binary' },
         panDoc: { type: 'string', format: 'binary' },
         dlDoc: { type: 'string', format: 'binary' },
+        uanDoc: { type: 'string', format: 'binary' },
+        passportDoc: { type: 'string', format: 'binary' },
       },
     },
   })
@@ -175,6 +189,8 @@ export class UserController {
       aadharDoc?: Express.Multer.File[];
       panDoc?: Express.Multer.File[];
       dlDoc?: Express.Multer.File[];
+      uanDoc?: Express.Multer.File[];
+      passportDoc?: Express.Multer.File[];
     },
   ) {
     const updatedBy = req?.user?.id;

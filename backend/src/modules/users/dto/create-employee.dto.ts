@@ -221,4 +221,16 @@ export class CreateEmployeeDto {
   @IsOptional()
   @MaxLength(50)
   dlNumber?: string;
+
+  @ApiProperty({ description: 'UAN number (12 digits)', required: false, example: '123456789012' })
+  @IsString()
+  @IsOptional()
+  @Matches(VALIDATION_PATTERNS.UAN, { message: USERS_ERRORS.INVALID_UAN })
+  uanNumber?: string;
+
+  @ApiProperty({ description: 'Passport number', required: false, example: 'A1234567' })
+  @IsString()
+  @IsOptional()
+  @Matches(VALIDATION_PATTERNS.PASSPORT, { message: USERS_ERRORS.INVALID_PASSPORT })
+  passportNumber?: string;
 }
