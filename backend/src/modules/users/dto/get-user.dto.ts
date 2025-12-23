@@ -80,13 +80,30 @@ export class GetUsersDto extends BaseGetDto {
   search?: string;
 
   @ApiProperty({
-    description: 'Role to be searched by',
-    example: 'ADMIN',
+    description: 'Role to filter by - can be a single role or multiple roles',
+    example: ['ADMIN', 'EMPLOYEE'],
     enum: Roles,
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsString()
-  @IsEnum(Roles, { message: `${USER_DTO_ERRORS.INVALID_ROLE} ${Object.values(Roles).join(', ')}` })
-  role?: string;
+  @IsArray()
+  @IsEnum(Roles, {
+    each: true,
+    message: `${USER_DTO_ERRORS.INVALID_ROLE} ${Object.values(Roles).join(', ')}`,
+  })
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value.split(',').map((role) => role.trim());
+      }
+    }
+    return [value];
+  })
+  role?: string[];
 }

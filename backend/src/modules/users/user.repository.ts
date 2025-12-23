@@ -64,8 +64,8 @@ export class UserRepository {
         );
       }
 
-      if (role) {
-        queryBuilder.andWhere('role.name = :roleName', { roleName: role });
+      if (role && role.length > 0) {
+        queryBuilder.andWhere('role.name IN (:...roleNames)', { roleNames: role });
       }
 
       const [users, count] = await queryBuilder
