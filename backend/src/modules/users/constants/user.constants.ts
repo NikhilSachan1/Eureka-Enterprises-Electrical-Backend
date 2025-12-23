@@ -50,6 +50,9 @@ export const USERS_RESPONSES = {
   EMPLOYEE_CREATED: 'Employee created successfully.',
   EMAIL_ALREADY_EXISTS: 'An account with this email address already exists.',
   ROLE_NOT_FOUND: 'Role not found.',
+  BULK_DELETE_PROCESSED:
+    'Bulk delete processed for {length} users. Success: {success}, Failed: {error}',
+  USER_DELETE_SUCCESS: 'User deleted successfully.',
 };
 
 export enum UserSortFields {

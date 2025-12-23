@@ -11,7 +11,7 @@ import {
 import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
-import { CreateEmployeeDto, GetUsersDto } from './dto';
+import { BulkDeleteUserDto, CreateEmployeeDto, GetUsersDto } from './dto';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { CONFIGURATION_KEYS } from 'src/utils/master-constants/master-constants';
@@ -387,6 +387,55 @@ export class UserService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async bulkDelete(bulkDeleteDto: BulkDeleteUserDto) {
+    const { userIds, deletedBy } = bulkDeleteDto;
+    const result: { userId: string; message: string }[] = [];
+    const errors: { userId: string; error: string }[] = [];
+
+    for (const userId of userIds) {
+      try {
+        await this.validateAndDeleteUser(userId, deletedBy);
+        result.push({
+          userId,
+          message: USERS_RESPONSES.USER_DELETE_SUCCESS,
+        });
+      } catch (error) {
+        errors.push({
+          userId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: USERS_RESPONSES.BULK_DELETE_PROCESSED.replace('{length}', userIds.length.toString())
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateAndDeleteUser(userId: string, deletedBy: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
+    }
+
+    // Only archived users can be deleted
+    if (user.status !== UserStatus.ARCHIVED) {
+      throw new BadRequestException(USERS_ERRORS.USER_NOT_ARCHIVED_TO_DELETE);
+    }
+
+    await this.userRepository.delete(userId, deletedBy);
+
+    return {
+      userId,
+      message: USERS_RESPONSES.USER_DELETE_SUCCESS,
+    };
   }
 
   async getUserDocuments(userId: string) {
