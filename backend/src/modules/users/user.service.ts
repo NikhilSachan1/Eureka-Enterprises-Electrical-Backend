@@ -146,6 +146,11 @@ export class UserService {
       aadharDoc?: Express.Multer.File[];
       panDoc?: Express.Multer.File[];
       dlDoc?: Express.Multer.File[];
+      uanDoc?: Express.Multer.File[];
+      passportDoc?: Express.Multer.File[];
+      degreeDoc?: Express.Multer.File[];
+      offerLetterDoc?: Express.Multer.File[];
+      experienceLetterDoc?: Express.Multer.File[];
     },
     createdBy?: string,
   ) {
@@ -248,6 +253,9 @@ export class UserService {
       { key: 'dlDoc', type: USER_DOCUMENT_TYPES.DRIVING_LICENSE },
       { key: 'uanDoc', type: USER_DOCUMENT_TYPES.UAN },
       { key: 'passportDoc', type: USER_DOCUMENT_TYPES.PASSPORT },
+      { key: 'degreeDoc', type: USER_DOCUMENT_TYPES.EDUCATION_CERTIFICATE },
+      { key: 'offerLetterDoc', type: USER_DOCUMENT_TYPES.OFFER_LETTER },
+      { key: 'experienceLetterDoc', type: USER_DOCUMENT_TYPES.EXPERIENCE_LETTER },
     ];
 
     for (const { key, type } of documentMappings) {
@@ -317,6 +325,11 @@ export class UserService {
       aadharDoc?: Express.Multer.File[];
       panDoc?: Express.Multer.File[];
       dlDoc?: Express.Multer.File[];
+      uanDoc?: Express.Multer.File[];
+      passportDoc?: Express.Multer.File[];
+      degreeDoc?: Express.Multer.File[];
+      offerLetterDoc?: Express.Multer.File[];
+      experienceLetterDoc?: Express.Multer.File[];
     },
     updatedBy?: string,
   ) {
@@ -604,6 +617,9 @@ export class UserService {
       dlDoc?: Express.Multer.File[];
       uanDoc?: Express.Multer.File[];
       passportDoc?: Express.Multer.File[];
+      degreeDoc?: Express.Multer.File[];
+      offerLetterDoc?: Express.Multer.File[];
+      experienceLetterDoc?: Express.Multer.File[];
     },
     userEmail: string,
   ): Promise<Record<string, string>> {
@@ -619,6 +635,9 @@ export class UserService {
       { field: 'dlDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
       { field: 'uanDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
       { field: 'passportDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'degreeDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'offerLetterDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
+      { field: 'experienceLetterDoc', folder: FILE_UPLOAD_FOLDER_NAMES.EMPLOYEE_FILES },
     ];
 
     for (const mapping of fileFieldMappings) {

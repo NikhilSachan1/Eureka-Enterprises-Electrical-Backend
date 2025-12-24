@@ -54,6 +54,9 @@ export class UserController {
       { name: 'dlDoc', maxCount: 1 },
       { name: 'uanDoc', maxCount: 1 },
       { name: 'passportDoc', maxCount: 1 },
+      { name: 'degreeDoc', maxCount: 1 },
+      { name: 'offerLetterDoc', maxCount: 1 },
+      { name: 'experienceLetterDoc', maxCount: 1 },
     ]),
   )
   @ApiConsumes('multipart/form-data')
@@ -107,6 +110,9 @@ export class UserController {
         dlDoc: { type: 'string', format: 'binary' },
         uanDoc: { type: 'string', format: 'binary' },
         passportDoc: { type: 'string', format: 'binary' },
+        degreeDoc: { type: 'string', format: 'binary' },
+        offerLetterDoc: { type: 'string', format: 'binary' },
+        experienceLetterDoc: { type: 'string', format: 'binary' },
       },
       required: ['firstName', 'lastName', 'email', 'contactNumber', 'role'],
     },
@@ -123,6 +129,9 @@ export class UserController {
       dlDoc?: Express.Multer.File[];
       uanDoc?: Express.Multer.File[];
       passportDoc?: Express.Multer.File[];
+      degreeDoc?: Express.Multer.File[];
+      offerLetterDoc?: Express.Multer.File[];
+      experienceLetterDoc?: Express.Multer.File[];
     },
   ) {
     const createdBy = req?.user?.id;
@@ -139,6 +148,9 @@ export class UserController {
       { name: 'dlDoc', maxCount: 1 },
       { name: 'uanDoc', maxCount: 1 },
       { name: 'passportDoc', maxCount: 1 },
+      { name: 'degreeDoc', maxCount: 1 },
+      { name: 'offerLetterDoc', maxCount: 1 },
+      { name: 'experienceLetterDoc', maxCount: 1 },
     ]),
   )
   @ApiConsumes('multipart/form-data')
@@ -186,6 +198,9 @@ export class UserController {
         dlDoc: { type: 'string', format: 'binary' },
         uanDoc: { type: 'string', format: 'binary' },
         passportDoc: { type: 'string', format: 'binary' },
+        degreeDoc: { type: 'string', format: 'binary' },
+        offerLetterDoc: { type: 'string', format: 'binary' },
+        experienceLetterDoc: { type: 'string', format: 'binary' },
       },
     },
   })
@@ -202,6 +217,9 @@ export class UserController {
       dlDoc?: Express.Multer.File[];
       uanDoc?: Express.Multer.File[];
       passportDoc?: Express.Multer.File[];
+      degreeDoc?: Express.Multer.File[];
+      offerLetterDoc?: Express.Multer.File[];
+      experienceLetterDoc?: Express.Multer.File[];
     },
   ) {
     const updatedBy = req?.user?.id;
