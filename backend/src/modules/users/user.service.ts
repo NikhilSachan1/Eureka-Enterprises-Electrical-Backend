@@ -154,7 +154,7 @@ export class UserService {
     },
     createdBy?: string,
   ) {
-    const { email, role, employeeId: providedEmployeeId } = createEmployeeDto;
+    const { email, roles, employeeId: providedEmployeeId } = createEmployeeDto;
 
     await this.validateDropdownFields(createEmployeeDto);
 
@@ -171,9 +171,14 @@ export class UserService {
       await this.validateEmployeeIdUniqueness(providedEmployeeId);
     }
 
-    const roleEntity = await this.roleService.findOne({ where: { name: role } });
-    if (!roleEntity) {
-      throw new NotFoundException(USERS_RESPONSES.ROLE_NOT_FOUND);
+    // Validate all roles exist
+    const roleEntities = [];
+    for (const roleName of roles) {
+      const roleEntity = await this.roleService.findOne({ where: { name: roleName } });
+      if (!roleEntity) {
+        throw new NotFoundException(`${USERS_RESPONSES.ROLE_NOT_FOUND}: ${roleName}`);
+      }
+      roleEntities.push(roleEntity);
     }
 
     const generatedPassword = this.utilityService.generateSecurePassword();
@@ -205,17 +210,20 @@ export class UserService {
           userData.dateOfJoining = new Date(userData.dateOfJoining);
         }
 
-        delete userData.role;
+        delete userData.roles;
 
         const user = await this.create(userData, entityManager);
 
         // Create user documents for identity docs (isUpdate = false for new employee)
         await this.createUserDocuments(user.id, uploadedFiles, createdBy, entityManager, false);
 
-        await this.userRoleService.create(
-          { userId: user.id, roleId: roleEntity.id },
-          entityManager,
-        );
+        // Create user roles for all assigned roles
+        for (const roleEntity of roleEntities) {
+          await this.userRoleService.create(
+            { userId: user.id, roleId: roleEntity.id },
+            entityManager,
+          );
+        }
 
         // TODO: Send welcome email with credentials to the employee
         // await this.sendWelcomeEmail(email, generatedPassword, createEmployeeDto.firstName);

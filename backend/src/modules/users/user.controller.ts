@@ -69,7 +69,12 @@ export class UserController {
         lastName: { type: 'string', example: 'Doe' },
         email: { type: 'string', format: 'email', example: 'john.doe@example.com' },
         contactNumber: { type: 'string', example: '+919876543210' },
-        role: { type: 'string', example: 'EMPLOYEE' },
+        roles: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['EMPLOYEE'],
+          description: 'One or more role names',
+        },
         employeeId: {
           type: 'string',
           example: 'EE-0001',
@@ -114,7 +119,7 @@ export class UserController {
         offerLetterDoc: { type: 'string', format: 'binary' },
         experienceLetterDoc: { type: 'string', format: 'binary' },
       },
-      required: ['firstName', 'lastName', 'email', 'contactNumber', 'role'],
+      required: ['firstName', 'lastName', 'email', 'contactNumber', 'roles'],
     },
   })
   async createEmployee(

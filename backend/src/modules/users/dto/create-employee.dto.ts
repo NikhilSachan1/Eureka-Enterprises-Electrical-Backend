@@ -10,6 +10,8 @@ import {
   Min,
   Max,
   MaxLength,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { USERS_ERRORS, VALIDATION_PATTERNS } from '../constants/user.constants';
 import { Type } from 'class-transformer';
@@ -41,10 +43,16 @@ export class CreateEmployeeDto {
   @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
   contactNumber: string;
 
-  @ApiProperty({ description: 'Role', required: true, example: 'EMPLOYEE' })
-  @IsString()
-  @IsNotEmpty()
-  role: string;
+  @ApiProperty({
+    description: 'Roles (one or more role names)',
+    required: true,
+    example: ['EMPLOYEE'],
+    type: [String],
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'At least one role is required' })
+  @IsString({ each: true })
+  roles: string[];
 
   @ApiProperty({
     description: 'Employee ID (format: EE-0000). Auto-generated if not provided.',
