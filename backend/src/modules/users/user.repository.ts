@@ -81,7 +81,7 @@ export class UserRepository {
 
         return {
           ...userWithoutRoles,
-          role: user.userRoles?.length > 0 ? { name: user.userRoles[0].role.name } : null,
+          roles: user.userRoles?.map((ur) => ({ name: ur.role?.name })).filter((r) => r.name) || [],
         };
       });
 
