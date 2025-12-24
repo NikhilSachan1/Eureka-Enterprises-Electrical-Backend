@@ -77,12 +77,12 @@ export class UserService {
         const { password: _password, ...userWithoutPassword } = user;
         const documents = await this.getUserDocuments(user.id);
 
-        // Fetch user role
-        const userRole = await this.userRoleService.findOne({
+        // Fetch user roles (a user can have multiple roles)
+        const userRoles = await this.userRoleService.findAll({
           where: { userId: user.id },
           relations: ['role'],
         });
-        const role = userRole?.role ? { name: userRole.role.name } : null;
+        const roles = userRoles?.map((ur) => ({ name: ur.role?.name })).filter((r) => r.name) || [];
 
         // Fetch createdBy and updatedBy user details
         let createdByUser = null;
@@ -118,7 +118,7 @@ export class UserService {
           }
         }
 
-        return { ...userWithoutPassword, role, documents, createdByUser, updatedByUser };
+        return { ...userWithoutPassword, roles, documents, createdByUser, updatedByUser };
       }
 
       return user;
