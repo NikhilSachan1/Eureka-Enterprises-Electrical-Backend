@@ -77,6 +77,13 @@ export class UserService {
         const { password: _password, ...userWithoutPassword } = user;
         const documents = await this.getUserDocuments(user.id);
 
+        // Fetch user role
+        const userRole = await this.userRoleService.findOne({
+          where: { userId: user.id },
+          relations: ['role'],
+        });
+        const role = userRole?.role ? { name: userRole.role.name } : null;
+
         // Fetch createdBy and updatedBy user details
         let createdByUser = null;
         let updatedByUser = null;
@@ -111,7 +118,7 @@ export class UserService {
           }
         }
 
-        return { ...userWithoutPassword, documents, createdByUser, updatedByUser };
+        return { ...userWithoutPassword, role, documents, createdByUser, updatedByUser };
       }
 
       return user;
