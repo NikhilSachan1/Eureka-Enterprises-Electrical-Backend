@@ -46,6 +46,16 @@ export class CreateEmployeeDto {
   @IsNotEmpty()
   role: string;
 
+  @ApiProperty({
+    description: 'Employee ID (format: EE-0000). Auto-generated if not provided.',
+    required: false,
+    example: 'EE-0001',
+  })
+  @IsString()
+  @IsOptional()
+  @Matches(VALIDATION_PATTERNS.EMPLOYEE_ID, { message: USERS_ERRORS.INVALID_EMPLOYEE_ID })
+  employeeId?: string;
+
   // ==================== Personal Information ====================
 
   @ApiProperty({ description: "Father's name", required: false, example: 'Robert Doe' })

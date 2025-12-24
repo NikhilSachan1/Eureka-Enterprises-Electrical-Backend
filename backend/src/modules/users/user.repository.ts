@@ -5,7 +5,7 @@ import { UserEntity } from './entities/user.entity';
 import { GetUsersDto, CreateUserDto } from './dto';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { UserStatus } from './constants/user.constants';
+import { UserStatus, EMPLOYEE_ID_PREFIX } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 
 @Injectable()
@@ -138,12 +138,36 @@ export class UserRepository {
     }
   }
 
+  async getNextEmployeeId(): Promise<string> {
+    try {
+      const result = await this.repository
+        .createQueryBuilder('users')
+        .select('users.employeeId')
+        .where('users.employeeId LIKE :prefix', { prefix: `${EMPLOYEE_ID_PREFIX}%` })
+        .withDeleted()
+        .orderBy('users.employeeId', 'DESC')
+        .limit(1)
+        .getOne();
+
+      let nextNumber = 1;
+      if (result?.employeeId) {
+        const currentNumber = parseInt(result.employeeId.replace(EMPLOYEE_ID_PREFIX, ''), 10);
+        if (!isNaN(currentNumber)) {
+          nextNumber = currentNumber + 1;
+        }
+      }
+
+      return `${EMPLOYEE_ID_PREFIX}${nextNumber.toString().padStart(4, '0')}`;
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
   async getMetrics(): Promise<UserMetrics> {
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Get all counts in a single optimized query
       const metricsQuery = this.repository
         .createQueryBuilder('users')
         .select([
@@ -156,7 +180,6 @@ export class UserRepository {
 
       const [mainMetrics] = await metricsQuery.getRawMany();
 
-      // Get counts by employee type
       const employeeTypeMetrics = await this.repository
         .createQueryBuilder('users')
         .select(['users.employeeType as type', 'COUNT(*) as count'])
@@ -164,7 +187,6 @@ export class UserRepository {
         .groupBy('users.employeeType')
         .getRawMany();
 
-      // Get counts by designation
       const designationMetrics = await this.repository
         .createQueryBuilder('users')
         .select(['users.designation as type', 'COUNT(*) as count'])
@@ -172,7 +194,6 @@ export class UserRepository {
         .groupBy('users.designation')
         .getRawMany();
 
-      // Get counts by gender
       const genderMetrics = await this.repository
         .createQueryBuilder('users')
         .select(['users.gender as type', 'COUNT(*) as count'])
@@ -180,7 +201,6 @@ export class UserRepository {
         .groupBy('users.gender')
         .getRawMany();
 
-      // Transform array results to Record objects
       const byEmployeeType: Record<string, number> = {};
       employeeTypeMetrics.forEach((item) => {
         byEmployeeType[item.type] = parseInt(item.count);

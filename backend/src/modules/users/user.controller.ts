@@ -33,6 +33,12 @@ export class UserController {
     return { success: true, data };
   }
 
+  @Get('next-employee-id')
+  async getNextEmployeeId() {
+    const data = await this.userService.getNextEmployeeId();
+    return { success: true, data };
+  }
+
   @Get(':id')
   async findById(@Param('id') id: string) {
     return await this.userService.findOneOrFail({ where: { id } }, true);
@@ -61,6 +67,11 @@ export class UserController {
         email: { type: 'string', format: 'email', example: 'john.doe@example.com' },
         contactNumber: { type: 'string', example: '+919876543210' },
         role: { type: 'string', example: 'EMPLOYEE' },
+        employeeId: {
+          type: 'string',
+          example: 'EE-0001',
+          description: 'Employee ID (format: EE-0000). Auto-generated if not provided.',
+        },
         fatherName: { type: 'string', example: 'Robert Doe' },
         emergencyContactNumber: { type: 'string', example: '+919876543211' },
         gender: { type: 'string', example: 'MALE' },

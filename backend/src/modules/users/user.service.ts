@@ -7,6 +7,7 @@ import {
   USER_FIELD_NAMES,
   UserStatus,
   USERS_RESPONSES,
+  VALIDATION_PATTERNS,
 } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
@@ -141,7 +142,7 @@ export class UserService {
     },
     createdBy?: string,
   ) {
-    const { email, role } = createEmployeeDto;
+    const { email, role, employeeId: providedEmployeeId } = createEmployeeDto;
 
     await this.validateDropdownFields(createEmployeeDto);
 
@@ -150,12 +151,23 @@ export class UserService {
       throw new BadRequestException(USERS_RESPONSES.EMAIL_ALREADY_EXISTS);
     }
 
+    // Validate employee ID format if provided
+    if (providedEmployeeId) {
+      if (!this.validateEmployeeIdFormat(providedEmployeeId)) {
+        throw new BadRequestException(USERS_ERRORS.INVALID_EMPLOYEE_ID);
+      }
+      await this.validateEmployeeIdUniqueness(providedEmployeeId);
+    }
+
     const roleEntity = await this.roleService.findOne({ where: { name: role } });
     if (!roleEntity) {
       throw new NotFoundException(USERS_RESPONSES.ROLE_NOT_FOUND);
     }
 
     const generatedPassword = this.utilityService.generateSecurePassword();
+
+    // Generate employee ID if not provided
+    const employeeId = providedEmployeeId || (await this.userRepository.getNextEmployeeId());
 
     let uploadedFiles: Record<string, string> = {};
     if (files && Object.keys(files).length > 0) {
@@ -167,6 +179,7 @@ export class UserService {
         // Only profilePicture goes to user table, other docs go to user_documents
         const userData: any = this.utilityService.convertEmptyStringsToNull({
           ...createEmployeeDto,
+          employeeId,
           password: this.utilityService.createHash(generatedPassword),
           status: UserStatus.ACTIVE,
           createdBy,
@@ -198,6 +211,7 @@ export class UserService {
 
         return {
           id: user.id,
+          employeeId: user.employeeId,
           message: USERS_RESPONSES.EMPLOYEE_CREATED,
         };
       } catch (error) {
@@ -493,6 +507,22 @@ export class UserService {
     }
 
     return dropdownOptions;
+  }
+
+  async getNextEmployeeId(): Promise<{ employeeId: string }> {
+    const employeeId = await this.userRepository.getNextEmployeeId();
+    return { employeeId };
+  }
+
+  validateEmployeeIdFormat(employeeId: string): boolean {
+    return VALIDATION_PATTERNS.EMPLOYEE_ID.test(employeeId);
+  }
+
+  async validateEmployeeIdUniqueness(employeeId: string, excludeUserId?: string): Promise<void> {
+    const existingUser = await this.userRepository.findOne({ where: { employeeId } });
+    if (existingUser && existingUser.id !== excludeUserId) {
+      throw new BadRequestException(USERS_ERRORS.EMPLOYEE_ID_ALREADY_EXISTS);
+    }
   }
 
   private async validateDropdownFields(data: Record<string, any>): Promise<void> {

@@ -30,6 +30,8 @@ export const USERS_ERRORS = {
   DOB_MUST_BE_18_YEARS: 'Employee must be at least 18 years old.',
   INVALID_UAN: 'Invalid UAN number. Must be 12 digits.',
   INVALID_PASSPORT: 'Invalid Passport number. Format: A1234567 (1 letter + 7 digits)',
+  INVALID_EMPLOYEE_ID: 'Invalid Employee ID. Format: EE-0000 (EE- followed by 4 digits)',
+  EMPLOYEE_ID_ALREADY_EXISTS: 'An employee with this Employee ID already exists.',
 };
 
 export const USER_DTO_ERRORS = {
@@ -72,4 +74,7 @@ export const VALIDATION_PATTERNS = {
   DL: /^[A-Z]{2}[\-]?\d{2}[\-]?\d{4}[\-]?\d{7}$/,
   UAN: /^\d{12}$/,
   PASSPORT: /^[A-Z][0-9]{7}$/,
+  EMPLOYEE_ID: /^EE-\d{4}$/,
 };
+
+export const EMPLOYEE_ID_PREFIX = 'EE-';
