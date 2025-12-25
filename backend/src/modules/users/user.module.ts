@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserEntity } from './entities/user.entity';
 import { UserService } from './user.service';
@@ -11,6 +11,7 @@ import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { FilesModule } from '../common/file-upload/files.module';
 import { UserDocumentModule } from '../user-documents/user-document.module';
+import { SalaryStructureModule } from '../salary-structures/salary-structure.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UserDocumentModule } from '../user-documents/user-document.module';
     ConfigSettingsModule,
     FilesModule,
     UserDocumentModule,
+    forwardRef(() => SalaryStructureModule),
   ],
   providers: [UserService, UserRepository],
   exports: [UserService],

@@ -37,6 +37,9 @@ import { FuelExpenseModule } from 'src/modules/fuel-expense/fuel-expense.module'
 import { AnnouncementsModule } from 'src/modules/announcements/announcement.module';
 import { VehicleServicesModule } from 'src/modules/vehicle-services/vehicle-services.module';
 import { VehicleServiceFilesModule } from 'src/modules/vehicle-service-files/vehicle-service-files.module';
+import { SalaryStructureModule } from 'src/modules/salary-structures/salary-structure.module';
+import { BonusModule } from 'src/modules/bonuses/bonus.module';
+import { PayrollModule } from 'src/modules/payroll/payroll.module';
 
 @Module({
   imports: [
@@ -69,6 +72,9 @@ import { VehicleServiceFilesModule } from 'src/modules/vehicle-service-files/veh
     AnnouncementsModule,
     VehicleServicesModule,
     VehicleServiceFilesModule,
+    SalaryStructureModule,
+    BonusModule,
+    PayrollModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
   ],

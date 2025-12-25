@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { UserEntity } from './entities/user.entity';
 import { UserRepository } from './user.repository';
 import { UtilityService } from 'src/utils/utility/utility.service';
@@ -12,7 +19,12 @@ import {
 import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
-import { BulkDeleteUserDto, CreateEmployeeDto, GetUsersDto } from './dto';
+import {
+  BulkDeleteUserDto,
+  CreateEmployeeDto,
+  CreateEmployeeWithSalaryDto,
+  GetUsersDto,
+} from './dto';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { CONFIGURATION_KEYS } from 'src/utils/master-constants/master-constants';
@@ -26,6 +38,7 @@ import {
   USER_DOCUMENT_TYPES,
   USER_DOCUMENT_ERRORS,
 } from '../user-documents/constants/user-document.constants';
+import { SalaryStructureService } from '../salary-structures/salary-structure.service';
 
 @Injectable()
 export class UserService {
@@ -38,6 +51,8 @@ export class UserService {
     private userRoleService: UserRoleService,
     private filesService: FilesService,
     private userDocumentService: UserDocumentService,
+    @Inject(forwardRef(() => SalaryStructureService))
+    private salaryStructureService: SalaryStructureService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
 
@@ -139,7 +154,7 @@ export class UserService {
   }
 
   async createEmployee(
-    createEmployeeDto: CreateEmployeeDto,
+    createEmployeeDto: CreateEmployeeDto | CreateEmployeeWithSalaryDto,
     files?: {
       profilePicture?: Express.Multer.File[];
       esicDoc?: Express.Multer.File[];
@@ -155,6 +170,7 @@ export class UserService {
     createdBy?: string,
   ) {
     const { email, roles, employeeId: providedEmployeeId } = createEmployeeDto;
+    const salaryDetails = (createEmployeeDto as CreateEmployeeWithSalaryDto).salary;
 
     await this.validateDropdownFields(createEmployeeDto);
 
@@ -203,6 +219,9 @@ export class UserService {
           profilePicture: uploadedFiles.profilePicture || null,
         });
 
+        // Remove salary from userData as it goes to separate table
+        delete userData.salary;
+
         if (userData.dateOfBirth) {
           userData.dateOfBirth = new Date(userData.dateOfBirth);
         }
@@ -225,6 +244,35 @@ export class UserService {
           );
         }
 
+        // Create salary structure if salary details provided
+        // Effective from = date of joining (or today if not provided)
+        if (salaryDetails) {
+          const effectiveFrom = userData.dateOfJoining
+            ? new Date(userData.dateOfJoining).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+
+          await this.salaryStructureService.create(
+            {
+              userId: user.id,
+              basic: salaryDetails.basic,
+              hra: salaryDetails.hra || 0,
+              foodAllowance: salaryDetails.foodAllowance || 0,
+              conveyanceAllowance: salaryDetails.conveyanceAllowance || 0,
+              medicalAllowance: salaryDetails.medicalAllowance || 0,
+              specialAllowance: salaryDetails.specialAllowance || 0,
+              employeePf: salaryDetails.employeePf || 0,
+              employerPf: salaryDetails.employerPf || 0,
+              tds: salaryDetails.tds || 0,
+              esic: salaryDetails.esic || 0,
+              professionalTax: salaryDetails.professionalTax || 0,
+              effectiveFrom,
+              remarks: 'Initial salary structure',
+            },
+            createdBy,
+            entityManager,
+          );
+        }
+
         // TODO: Send welcome email with credentials to the employee
         // await this.sendWelcomeEmail(email, generatedPassword, createEmployeeDto.firstName);
         Logger.log(`TODO: Send welcome email to ${email} with generated password`);
@@ -233,6 +281,7 @@ export class UserService {
           id: user.id,
           employeeId: user.employeeId,
           message: USERS_RESPONSES.EMPLOYEE_CREATED,
+          salaryCreated: !!salaryDetails,
         };
       } catch (error) {
         Logger.error('Create employee failed:', error);

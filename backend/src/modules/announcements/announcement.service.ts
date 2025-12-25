@@ -350,7 +350,7 @@ export class AnnouncementService {
       const roleIds = userRoles.map((ur) => ur.roleId);
       const { query, params } = buildUnacknowledgedAnnouncementsQuery(userId, roleIds);
       const records = await this.announcementRepository.executeRawQuery(query, params);
-      return { records, totalRecords: records.length };
+      return this.utilityService.listResponse(records, records.length);
     } catch (error) {
       throw error;
     }

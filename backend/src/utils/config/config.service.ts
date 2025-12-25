@@ -32,6 +32,10 @@ import { AnnouncementTargetEntity } from 'src/modules/announcements/entities/ann
 import { UserAnnouncementAckEntity } from 'src/modules/announcements/entities/user-announcement-ack.entity';
 import { VehicleServiceEntity } from 'src/modules/vehicle-services/entities/vehicle-service.entity';
 import { VehicleServiceFileEntity } from 'src/modules/vehicle-service-files/entities/vehicle-service-file.entity';
+import { SalaryStructureEntity } from 'src/modules/salary-structures/entities/salary-structure.entity';
+import { SalaryChangeLogEntity } from 'src/modules/salary-change-logs/entities/salary-change-log.entity';
+import { BonusEntity } from 'src/modules/bonuses/entities/bonus.entity';
+import { PayrollEntity } from 'src/modules/payroll/entities/payroll.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -89,6 +93,10 @@ export class ConfigService {
         UserAnnouncementAckEntity,
         VehicleServiceEntity,
         VehicleServiceFileEntity,
+        SalaryStructureEntity,
+        SalaryChangeLogEntity,
+        BonusEntity,
+        PayrollEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

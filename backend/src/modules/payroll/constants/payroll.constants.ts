@@ -1,0 +1,55 @@
+// ==================== Enums ====================
+export enum PayrollStatus {
+  DRAFT = 'DRAFT',
+  GENERATED = 'GENERATED',
+  APPROVED = 'APPROVED',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+}
+
+// ==================== Error Messages ====================
+export const PAYROLL_ERRORS = {
+  NOT_FOUND: 'Payroll record not found',
+  USER_NOT_FOUND: 'User not found',
+  NO_SALARY_STRUCTURE: 'No salary structure found for this user',
+  ALREADY_EXISTS: 'Payroll for this month/year already exists for this user',
+  ALREADY_APPROVED: 'Payroll has already been approved',
+  ALREADY_PAID: 'Payroll has already been paid',
+  ALREADY_CANCELLED: 'Payroll has been cancelled',
+  CANNOT_MODIFY_APPROVED: 'Cannot modify approved payroll',
+  CANNOT_MODIFY_PAID: 'Cannot modify paid payroll',
+  INVALID_MONTH: 'Month must be between 1 and 12',
+  INVALID_YEAR: 'Invalid year',
+  FUTURE_PAYROLL: 'Cannot generate payroll for future months',
+  MUST_BE_APPROVED_BEFORE_PAID: 'Payroll must be approved before marking as paid',
+  INVALID_STATUS_TRANSITION: 'Invalid status transition',
+  WORKING_DAYS_CONFIG_NOT_FOUND: 'Working days calculation configuration not found',
+  WORKING_DAYS_CONFIG_SETTING_NOT_FOUND: 'Working days calculation config setting not found',
+};
+
+// ==================== Success Messages ====================
+export const PAYROLL_RESPONSES = {
+  GENERATED: 'Payroll generated successfully',
+  APPROVED: 'Payroll approved successfully',
+  PAID: 'Payroll marked as paid',
+  CANCELLED: 'Payroll cancelled successfully',
+  UPDATED: 'Payroll updated successfully',
+  DELETED: 'Payroll deleted successfully',
+  BULK_GENERATED: 'Bulk payroll generation completed. Success: {success}, Failed: {failed}',
+};
+
+// ==================== Field Names ====================
+export const PAYROLL_FIELD_NAMES = {
+  PAYROLL: 'Payroll',
+};
+
+// ==================== Sort Field Mapping ====================
+export const PAYROLL_SORT_FIELD_MAPPING: Record<string, string> = {
+  month: 'p."month"',
+  year: 'p."year"',
+  grossEarnings: 'p."grossEarnings"',
+  netPayable: 'p."netPayable"',
+  status: 'p."status"',
+  createdAt: 'p."createdAt"',
+  updatedAt: 'p."updatedAt"',
+};

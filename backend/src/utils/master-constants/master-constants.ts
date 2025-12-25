@@ -46,6 +46,19 @@ export const CONFIGURATION_KEYS = {
   VEHICLE_SERVICE_FILE_TYPES: 'vehicle_service_file_types',
   VEHICLE_SERVICE_INTERVAL_KM: 'vehicle_service_interval_km',
   VEHICLE_SERVICE_WARNING_KM: 'vehicle_service_warning_km',
+  // SALARY
+  SALARY_INCREMENT_TYPES: 'salary_increment_types',
+  SALARY_COMPONENTS: 'salary_components',
+  ESIC_GROSS_LIMIT: 'esic_gross_limit',
+  PF_PERCENTAGE: 'pf_percentage',
+  PROFESSIONAL_TAX_SLABS: 'professional_tax_slabs',
+  // BONUS
+  BONUS_TYPES: 'bonus_types',
+  BONUS_STATUSES: 'bonus_statuses',
+  // PAYROLL
+  PAYROLL_STATUSES: 'payroll_statuses',
+  PAYROLL_GENERATION_DAY: 'payroll_generation_day',
+  PAYROLL_WORKING_DAYS_CALCULATION: 'payroll_working_days_calculation',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -58,6 +71,9 @@ export const CONFIGURATION_MODULES = {
   ANNOUNCEMENTS: 'announcement',
   ASSET: 'asset',
   VEHICLE: 'vehicle',
+  SALARY: 'salary',
+  BONUS: 'bonus',
+  PAYROLL: 'payroll',
 };
 
 export enum LeaveCycleType {
