@@ -81,6 +81,7 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Gender', required: false, example: 'MALE' })
   @IsString()
   @IsOptional()
+  @MaxLength(20)
   gender?: string;
 
   @ApiProperty({
@@ -95,6 +96,7 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Blood group', required: false, example: 'O+' })
   @IsString()
   @IsOptional()
+  @MaxLength(10)
   bloodGroup?: string;
 
   // ==================== Address Information ====================
@@ -155,11 +157,13 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Employee type', required: false, example: 'PERMANENT' })
   @IsString()
   @IsOptional()
+  @MaxLength(50)
   employeeType?: string;
 
   @ApiProperty({ description: 'Designation', required: false, example: 'DEVELOPER' })
   @IsString()
   @IsOptional()
+  @MaxLength(100)
   designation?: string;
 
   @ApiProperty({ description: 'Profile picture S3 key', required: false })
@@ -172,11 +176,13 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Degree', required: false, example: 'B.TECH' })
   @IsString()
   @IsOptional()
+  @MaxLength(100)
   degree?: string;
 
   @ApiProperty({ description: 'Branch', required: false, example: 'COMPUTER_SCIENCE' })
   @IsString()
   @IsOptional()
+  @MaxLength(100)
   branch?: string;
 
   @ApiProperty({ description: 'Passout year', required: false, example: 2020 })

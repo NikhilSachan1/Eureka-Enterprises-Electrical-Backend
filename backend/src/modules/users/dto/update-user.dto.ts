@@ -73,6 +73,7 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Gender (from config_settings)', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   gender?: string;
 
   @ApiProperty({ description: 'Date of birth (YYYY-MM-DD)', required: false })
@@ -83,6 +84,7 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Blood group (from config_settings)', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(10)
   bloodGroup?: string;
 
   // ==================== Address Information ====================
@@ -137,22 +139,26 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Employee type (from config_settings)', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   employeeType?: string;
 
   @ApiProperty({ description: 'Designation (from config_settings)', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   designation?: string;
 
   // ==================== Education Details ====================
   @ApiProperty({ description: 'Degree (from config_settings)', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   degree?: string;
 
   @ApiProperty({ description: 'Branch (from config_settings)', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   branch?: string;
 
   @ApiProperty({ description: 'Passout year', required: false })
