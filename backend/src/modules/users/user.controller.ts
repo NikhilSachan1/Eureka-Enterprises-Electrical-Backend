@@ -196,7 +196,7 @@ export class UserController {
   })
   async createEmployee(
     @Body() createEmployeeDto: CreateEmployeeWithSalaryDto,
-    @Request() req: any,
+    @Request() { user: { id: userId } }: { user: { id: string } },
     @UploadedFiles()
     files?: {
       profilePicture?: Express.Multer.File[];
@@ -211,8 +211,7 @@ export class UserController {
       experienceLetterDoc?: Express.Multer.File[];
     },
   ) {
-    const createdBy = req?.user?.id;
-    return await this.userService.createEmployee(createEmployeeDto, files, createdBy);
+    return await this.userService.createEmployee(createEmployeeDto, files, userId);
   }
 
   @Patch(':id')
@@ -284,7 +283,7 @@ export class UserController {
   })
   async update(
     @Param('id') id: string,
-    @Request() req: any,
+    @Request() { user: { id: userId } }: { user: { id: string } },
     @Body() updatedUser: UpdateUserDto,
     @UploadedFiles()
     files?: {
@@ -300,8 +299,7 @@ export class UserController {
       experienceLetterDoc?: Express.Multer.File[];
     },
   ) {
-    const updatedBy = req?.user?.id;
-    return await this.userService.updateEmployee(id, updatedUser, files, updatedBy);
+    return await this.userService.updateEmployee(id, updatedUser, files, userId);
   }
 
   @Post('resend-password-link')
