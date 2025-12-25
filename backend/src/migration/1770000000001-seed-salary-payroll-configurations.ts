@@ -186,27 +186,39 @@ export class SeedSalaryPayrollConfigurations1770000000001 implements MigrationIn
 
     // Insert configurations and their settings
     for (const config of allConfigs) {
-      // Insert configuration
-      await queryRunner.query(
-        `INSERT INTO configurations (module, key, label, "valueType", description, "isEditable", "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
-         ON CONFLICT (key) DO NOTHING`,
-        [config.module, config.key, config.label, config.valueType, config.description],
+      // Check if configuration already exists
+      const [existingConfig] = await queryRunner.query(
+        `SELECT id FROM configurations WHERE key = $1`,
+        [config.key],
       );
 
-      // Get the configuration id
-      const [configRow] = await queryRunner.query(
-        `SELECT id FROM configurations WHERE key = $1 AND module = $2`,
-        [config.key, config.module],
+      let configId: string;
+
+      if (existingConfig) {
+        configId = existingConfig.id;
+      } else {
+        // Insert configuration
+        const [insertedConfig] = await queryRunner.query(
+          `INSERT INTO configurations (module, key, label, "valueType", description, "isEditable", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
+           RETURNING id`,
+          [config.module, config.key, config.label, config.valueType, config.description],
+        );
+        configId = insertedConfig.id;
+      }
+
+      // Check if config setting already exists
+      const [existingSetting] = await queryRunner.query(
+        `SELECT id FROM config_settings WHERE "configId" = $1 AND "isActive" = true`,
+        [configId],
       );
 
-      if (configRow) {
+      if (!existingSetting) {
         // Insert config settings with the values
         await queryRunner.query(
           `INSERT INTO config_settings ("configId", value, "isActive", "createdAt", "updatedAt")
-           VALUES ($1, $2, true, NOW(), NOW())
-           ON CONFLICT DO NOTHING`,
-          [configRow.id, JSON.stringify(config.values)],
+           VALUES ($1, $2, true, NOW(), NOW())`,
+          [configId, JSON.stringify(config.values)],
         );
       }
     }
