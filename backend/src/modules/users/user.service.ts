@@ -6,6 +6,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { UserEntity } from './entities/user.entity';
 import { UserRepository } from './user.repository';
 import { UtilityService } from 'src/utils/utility/utility.service';
@@ -24,6 +25,7 @@ import {
   CreateEmployeeDto,
   CreateEmployeeWithSalaryDto,
   GetUsersDto,
+  ResendPasswordLinkDto,
 } from './dto';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
@@ -39,6 +41,8 @@ import {
   USER_DOCUMENT_ERRORS,
 } from '../user-documents/constants/user-document.constants';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
+import { Environments } from 'env-configs';
+import { AUTH_REDIRECT_ROUTES } from '../auth/constants/auth.constants';
 
 @Injectable()
 export class UserService {
@@ -54,6 +58,7 @@ export class UserService {
     @Inject(forwardRef(() => SalaryStructureService))
     private salaryStructureService: SalaryStructureService,
     @InjectDataSource() private dataSource: DataSource,
+    private jwtService: JwtService,
   ) {}
 
   async findAll(
@@ -727,5 +732,94 @@ export class UserService {
         Logger.error(`Failed to cleanup ${field}: ${key}`, error);
       }
     }
+  }
+
+  async resendPasswordLinks(dto: ResendPasswordLinkDto): Promise<{
+    message: string;
+    results: Array<{
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      resetLink: string;
+      status: 'success' | 'error';
+      error?: string;
+    }>;
+  }> {
+    const results: Array<{
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      resetLink: string;
+      status: 'success' | 'error';
+      error?: string;
+    }> = [];
+
+    for (const userId of dto.userIds) {
+      try {
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+
+        if (!user) {
+          results.push({
+            userId,
+            email: '',
+            firstName: '',
+            lastName: '',
+            resetLink: '',
+            status: 'error',
+            error: USERS_ERRORS.NOT_FOUND,
+          });
+          continue;
+        }
+
+        if (user.status === UserStatus.ARCHIVED) {
+          results.push({
+            userId,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            resetLink: '',
+            status: 'error',
+            error: 'User is archived',
+          });
+          continue;
+        }
+
+        // Generate token
+        const token = this.jwtService.sign(
+          { email: user.email },
+          { expiresIn: Environments.FORGET_PASSWORD_TOKEN_EXPIRY },
+        );
+        const encryptedToken = this.utilityService.encrypt(token);
+        const resetPasswordLink = `${Environments.API_BASE_URL}${AUTH_REDIRECT_ROUTES.TOKEN_VALIDATION}${encryptedToken}`;
+
+        results.push({
+          userId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          resetLink: resetPasswordLink,
+          status: 'success',
+        });
+
+        Logger.log(`Generated password reset link for user: ${user.email}`);
+      } catch (error) {
+        results.push({
+          userId,
+          email: '',
+          firstName: '',
+          lastName: '',
+          resetLink: '',
+          status: 'error',
+          error: error.message || 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      message: USERS_RESPONSES.PASSWORD_LINK_RESENT,
+      results,
+    };
   }
 }

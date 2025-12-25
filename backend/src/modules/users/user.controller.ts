@@ -13,7 +13,13 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
-import { BulkDeleteUserDto, CreateEmployeeWithSalaryDto, GetUsersDto, UpdateUserDto } from './dto';
+import {
+  BulkDeleteUserDto,
+  CreateEmployeeWithSalaryDto,
+  GetUsersDto,
+  ResendPasswordLinkDto,
+  UpdateUserDto,
+} from './dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('User')
@@ -296,6 +302,12 @@ export class UserController {
   ) {
     const updatedBy = req?.user?.id;
     return await this.userService.updateEmployee(id, updatedUser, files, updatedBy);
+  }
+
+  @Post('resend-password-link')
+  @ApiBody({ type: ResendPasswordLinkDto })
+  async resendPasswordLink(@Body() dto: ResendPasswordLinkDto) {
+    return await this.userService.resendPasswordLinks(dto);
   }
 
   @Delete()

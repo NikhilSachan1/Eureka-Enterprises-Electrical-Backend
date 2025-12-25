@@ -57,6 +57,7 @@ export const USERS_RESPONSES = {
   BULK_DELETE_PROCESSED:
     'Bulk delete processed for {length} users. Success: {success}, Failed: {error}',
   USER_DELETE_SUCCESS: 'User deleted successfully.',
+  PASSWORD_LINK_RESENT: 'Password reset links generated successfully.',
 };
 
 export enum UserSortFields {
