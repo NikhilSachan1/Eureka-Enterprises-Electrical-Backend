@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
-import { BulkDeleteUserDto, CreateEmployeeDto, GetUsersDto, UpdateUserDto } from './dto';
+import { BulkDeleteUserDto, CreateEmployeeWithSalaryDto, GetUsersDto, UpdateUserDto } from './dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('User')
@@ -108,6 +108,72 @@ export class UserController {
         dlNumber: { type: 'string', example: 'MH01-2020-1234567' },
         uanNumber: { type: 'string', example: '123456789012' },
         passportNumber: { type: 'string', example: 'A1234567' },
+        salary: {
+          type: 'object',
+          description: 'Salary details (optional)',
+          properties: {
+            basic: {
+              type: 'number',
+              example: 25000,
+              description: 'Basic salary (required if salary provided)',
+            },
+            hra: {
+              type: 'number',
+              example: 10000,
+              description: 'House Rent Allowance',
+              default: 0,
+            },
+            foodAllowance: {
+              type: 'number',
+              example: 2000,
+              description: 'Food Allowance',
+              default: 0,
+            },
+            conveyanceAllowance: {
+              type: 'number',
+              example: 1600,
+              description: 'Conveyance Allowance',
+              default: 0,
+            },
+            medicalAllowance: {
+              type: 'number',
+              example: 1250,
+              description: 'Medical Allowance',
+              default: 0,
+            },
+            specialAllowance: {
+              type: 'number',
+              example: 5000,
+              description: 'Special Allowance',
+              default: 0,
+            },
+            employeePf: {
+              type: 'number',
+              example: 3000,
+              description: 'Employee PF contribution',
+              default: 0,
+            },
+            employerPf: {
+              type: 'number',
+              example: 3000,
+              description: 'Employer PF contribution',
+              default: 0,
+            },
+            tds: { type: 'number', example: 2000, description: 'TDS', default: 0 },
+            esic: {
+              type: 'number',
+              example: 0,
+              description: 'ESIC (applicable if gross <= 21000)',
+              default: 0,
+            },
+            professionalTax: {
+              type: 'number',
+              example: 200,
+              description: 'Professional Tax',
+              default: 0,
+            },
+          },
+        },
         profilePicture: { type: 'string', format: 'binary' },
         esicDoc: { type: 'string', format: 'binary' },
         aadharDoc: { type: 'string', format: 'binary' },
@@ -119,11 +185,11 @@ export class UserController {
         offerLetterDoc: { type: 'string', format: 'binary' },
         experienceLetterDoc: { type: 'string', format: 'binary' },
       },
-      required: ['firstName', 'lastName', 'email', 'contactNumber', 'roles'],
+      required: ['firstName', 'lastName', 'email', 'contactNumber', 'roles', 'salary'],
     },
   })
   async createEmployee(
-    @Body() createEmployeeDto: CreateEmployeeDto,
+    @Body() createEmployeeDto: CreateEmployeeWithSalaryDto,
     @Request() req: any,
     @UploadedFiles()
     files?: {

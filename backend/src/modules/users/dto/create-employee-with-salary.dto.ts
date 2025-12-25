@@ -82,9 +82,8 @@ export class SalaryDetailsDto {
 }
 
 export class CreateEmployeeWithSalaryDto extends CreateEmployeeDto {
-  @ApiProperty({ description: 'Salary details', required: false, type: SalaryDetailsDto })
-  @IsOptional()
+  @ApiProperty({ description: 'Salary details', required: true, type: SalaryDetailsDto })
   @ValidateNested()
   @Type(() => SalaryDetailsDto)
-  salary?: SalaryDetailsDto;
+  salary: SalaryDetailsDto;
 }
