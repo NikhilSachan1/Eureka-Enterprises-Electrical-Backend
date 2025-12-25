@@ -30,3 +30,48 @@ export const buildActiveUsersWithSalaryQuery = (status: string) => {
 
   return { query, params: [status] };
 };
+
+export const buildAttendanceSummaryForPayrollQuery = (
+  userId: string,
+  startDate: string,
+  endDate: string,
+) => {
+  const query = `
+    SELECT
+      COUNT(CASE WHEN a."status" = 'present' THEN 1 END)::int as "presentDays",
+      COUNT(CASE WHEN a."status" = 'absent' THEN 1 END)::int as "absentDays",
+      COUNT(CASE WHEN a."status" = 'halfDay' THEN 1 END)::int as "halfDays",
+      COUNT(CASE WHEN a."status" = 'leave' THEN 1 END)::int as "paidLeaveDays",
+      COUNT(CASE WHEN a."status" = 'leaveWithoutPay' THEN 1 END)::int as "unpaidLeaveDays",
+      COUNT(CASE WHEN a."status" = 'holiday' THEN 1 END)::int as "holidays"
+    FROM "attendances" a
+    WHERE a."userId" = $1
+      AND a."attendanceDate" >= $2::date
+      AND a."attendanceDate" <= $3::date
+      AND a."isActive" = true
+      AND a."approvalStatus" = 'approved'
+  `;
+
+  return { query, params: [userId, startDate, endDate] };
+};
+
+export const buildLeaveSummaryForPayrollQuery = (
+  userId: string,
+  startDate: string,
+  endDate: string,
+) => {
+  const query = `
+    SELECT
+      la."leaveCategory",
+      la."leaveType",
+      COUNT(*)::int as "count"
+    FROM "leave_applications" la
+    WHERE la."userId" = $1
+      AND la."fromDate" >= $2::date
+      AND la."fromDate" <= $3::date
+      AND la."approvalStatus" = 'approved'
+    GROUP BY la."leaveCategory", la."leaveType"
+  `;
+
+  return { query, params: [userId, startDate, endDate] };
+};

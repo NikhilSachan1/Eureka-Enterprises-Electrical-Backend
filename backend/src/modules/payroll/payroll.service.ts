@@ -13,6 +13,8 @@ import { UserStatus } from '../users/constants/user.constants';
 import {
   buildPayrollSummaryQuery,
   buildActiveUsersWithSalaryQuery,
+  buildAttendanceSummaryForPayrollQuery,
+  buildLeaveSummaryForPayrollQuery,
 } from './queries/payroll.queries';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
@@ -20,7 +22,7 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
-import { WorkingDaysConfig } from './payroll.types';
+import { WorkingDaysConfig, AttendanceSummary, LeaveSummaryItem } from './payroll.types';
 
 @Injectable()
 export class PayrollService {
@@ -68,16 +70,41 @@ export class PayrollService {
       amount: Number(b.amount),
     }));
 
-    // Calculate attendance (default to full month for now)
-    // TODO: Integrate with attendance module
+    // Calculate attendance from actual data
     const daysInMonth = new Date(year, month, 0).getDate();
     const workingDays = await this.calculateWorkingDays(year, month);
-    const presentDays = workingDays; // Default to full attendance
-    const absentDays = 0;
-    const paidLeaveDays = 0;
-    const unpaidLeaveDays = 0;
-    const holidays = daysInMonth - workingDays;
-    const weekoffs = 0;
+
+    // Get attendance summary from actual attendance records
+    const attendanceSummary = await this.getAttendanceSummaryForPayroll(userId, month, year);
+    const leaveSummary = await this.getLeaveSummaryForPayroll(userId, month, year);
+
+    // Calculate present days (including half days as 0.5)
+    const fullPresentDays = attendanceSummary.presentDays;
+    const halfDayCount = attendanceSummary.halfDays;
+    const effectivePresentDays = fullPresentDays + halfDayCount * 0.5;
+
+    // Paid leave days from attendance (status = 'leave')
+    const paidLeaveDays = attendanceSummary.paidLeaveDays;
+
+    // Unpaid leave days (LOP) from attendance (status = 'leaveWithoutPay')
+    const unpaidLeaveDays = attendanceSummary.unpaidLeaveDays;
+
+    // Absent days from attendance
+    const absentDays = attendanceSummary.absentDays;
+
+    // Holidays from attendance records
+    const holidays = attendanceSummary.holidays;
+
+    // Calculate weekoffs (days in month - working days - holidays recorded in attendance)
+    const weekoffs = daysInMonth - workingDays - holidays;
+
+    // Total payable days = present + paid leave + holidays (weekoffs already excluded from working days)
+    // Deductible days = absent + unpaid leave + half of half-days
+    const totalPayableDays = effectivePresentDays + paidLeaveDays;
+    const lopDays = unpaidLeaveDays + absentDays + halfDayCount * 0.5;
+
+    // If no attendance records yet, fall back to full working days
+    const presentDays = totalPayableDays > 0 ? totalPayableDays : workingDays;
 
     // Calculate prorated salary (based on working days)
     const prorateMultiplier = presentDays / workingDays;
@@ -96,9 +123,9 @@ export class PayrollService {
       Number(salaryStructure.specialAllowance) * prorateMultiplier,
     );
 
-    // Calculate LOP deduction
+    // Calculate LOP deduction (for absent days + unpaid leave days + half of half-days)
     const dailySalary = Number(salaryStructure.grossSalary) / workingDays;
-    const lopDeduction = Math.round(dailySalary * unpaidLeaveDays);
+    const lopDeduction = Math.round(dailySalary * lopDays);
 
     // Calculate totals
     const grossEarnings =
@@ -135,6 +162,7 @@ export class PayrollService {
           unpaidLeaveDays,
           holidays,
           weekoffs,
+          halfDays: halfDayCount,
           basicProrated,
           hraProrated,
           foodAllowanceProrated,
@@ -149,6 +177,7 @@ export class PayrollService {
           lopDeduction,
           totalBonus,
           bonusDetails,
+          leaveDetails: leaveSummary,
           grossEarnings,
           totalDeductions,
           netPayable,
@@ -314,6 +343,58 @@ export class PayrollService {
   }
 
   // ==================== Private Helpers ====================
+
+  /**
+   * Get attendance summary for a user for a specific month
+   */
+  private async getAttendanceSummaryForPayroll(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<AttendanceSummary> {
+    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay
+      .toString()
+      .padStart(2, '0')}`;
+
+    const { query, params } = buildAttendanceSummaryForPayrollQuery(userId, startDate, endDate);
+    const results = await this.payrollRepository.executeRawQuery(query, params);
+
+    const result = results?.[0];
+    return {
+      presentDays: parseInt(result?.presentDays || '0'),
+      absentDays: parseInt(result?.absentDays || '0'),
+      halfDays: parseInt(result?.halfDays || '0'),
+      paidLeaveDays: parseInt(result?.paidLeaveDays || '0'),
+      unpaidLeaveDays: parseInt(result?.unpaidLeaveDays || '0'),
+      holidays: parseInt(result?.holidays || '0'),
+    };
+  }
+
+  /**
+   * Get leave summary for a user for a specific month
+   */
+  private async getLeaveSummaryForPayroll(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<LeaveSummaryItem[]> {
+    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay
+      .toString()
+      .padStart(2, '0')}`;
+
+    const { query, params } = buildLeaveSummaryForPayrollQuery(userId, startDate, endDate);
+    const results = await this.payrollRepository.executeRawQuery(query, params);
+
+    return (results || []).map((item: any) => ({
+      leaveCategory: item.leaveCategory,
+      leaveType: item.leaveType,
+      count: parseInt(item.count || '0'),
+    }));
+  }
 
   private validateNotFuture(month: number, year: number): void {
     const now = new Date();

@@ -4,3 +4,18 @@ export interface WorkingDaysConfig {
   useHolidayCalendar: boolean;
   defaultWorkingDays: number;
 }
+
+export interface AttendanceSummary {
+  presentDays: number;
+  absentDays: number;
+  halfDays: number;
+  paidLeaveDays: number;
+  unpaidLeaveDays: number;
+  holidays: number;
+}
+
+export interface LeaveSummaryItem {
+  leaveCategory: string;
+  leaveType: string;
+  count: number;
+}

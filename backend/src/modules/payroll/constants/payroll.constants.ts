@@ -1,4 +1,3 @@
-// ==================== Enums ====================
 export enum PayrollStatus {
   DRAFT = 'DRAFT',
   GENERATED = 'GENERATED',
@@ -7,7 +6,6 @@ export enum PayrollStatus {
   CANCELLED = 'CANCELLED',
 }
 
-// ==================== Error Messages ====================
 export const PAYROLL_ERRORS = {
   NOT_FOUND: 'Payroll record not found',
   USER_NOT_FOUND: 'User not found',
@@ -27,7 +25,6 @@ export const PAYROLL_ERRORS = {
   WORKING_DAYS_CONFIG_SETTING_NOT_FOUND: 'Working days calculation config setting not found',
 };
 
-// ==================== Success Messages ====================
 export const PAYROLL_RESPONSES = {
   GENERATED: 'Payroll generated successfully',
   APPROVED: 'Payroll approved successfully',
@@ -38,12 +35,10 @@ export const PAYROLL_RESPONSES = {
   BULK_GENERATED: 'Bulk payroll generation completed. Success: {success}, Failed: {failed}',
 };
 
-// ==================== Field Names ====================
 export const PAYROLL_FIELD_NAMES = {
   PAYROLL: 'Payroll',
 };
 
-// ==================== Sort Field Mapping ====================
 export const PAYROLL_SORT_FIELD_MAPPING: Record<string, string> = {
   month: 'p."month"',
   year: 'p."year"',
@@ -52,4 +47,8 @@ export const PAYROLL_SORT_FIELD_MAPPING: Record<string, string> = {
   status: 'p."status"',
   createdAt: 'p."createdAt"',
   updatedAt: 'p."updatedAt"',
+};
+
+export const PAYROLL_DTO_ERRORS = {
+  INVALID_PAYROLL_STATUS: 'Invalid payroll status. Please choose from: {payrollStatuses}',
 };
