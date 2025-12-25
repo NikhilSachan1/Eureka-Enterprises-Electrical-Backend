@@ -11,7 +11,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IncrementType } from '../entities/salary-structure.entity';
+import { IncrementType } from '../constants/salary-structure.constants';
 
 export class ApplyIncrementDto {
   @ApiProperty({ description: 'User ID', required: true })

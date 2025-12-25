@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNumber, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
-import { PayrollStatus } from '../entities/payroll.entity';
+import { PayrollStatus } from '../constants/payroll.constants';
 
 export class GetPayrollDto extends BaseGetDto {
   @ApiProperty({ description: 'Filter by user ID', required: false })

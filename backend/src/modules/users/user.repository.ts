@@ -69,9 +69,9 @@ export class UserRepository {
       }
 
       const [users, count] = await queryBuilder
-        .limit(pageSize)
-        .offset((page - 1) * pageSize)
         .orderBy(`users.${sortField}`, sortOrder as SortOrder)
+        .skip((page - 1) * pageSize)
+        .take(pageSize)
         .getManyAndCount();
 
       const transformedUsers = users.map((user) => {
