@@ -232,6 +232,7 @@ export class UserController {
       properties: {
         firstName: { type: 'string', example: 'John' },
         lastName: { type: 'string', example: 'Doe' },
+        email: { type: 'string', format: 'email', example: 'john.doe@example.com' },
         contactNumber: { type: 'string', example: '+919876543210' },
         fatherName: { type: 'string', example: 'Robert Doe' },
         emergencyContactNumber: { type: 'string', example: '+919876543211' },

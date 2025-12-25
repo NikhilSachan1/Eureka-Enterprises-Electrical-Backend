@@ -5,6 +5,7 @@ import {
   IsString,
   IsInt,
   IsDateString,
+  IsEmail,
   Min,
   Max,
   MaxLength,
@@ -31,6 +32,12 @@ export class UpdateUserDto {
   @IsString()
   @MaxLength(255)
   lastName?: string;
+
+  @ApiProperty({ description: 'Email address', required: false, example: 'user@example.com' })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(255)
+  email?: string;
 
   @ApiProperty({ description: 'Contact number', required: false })
   @IsOptional()
