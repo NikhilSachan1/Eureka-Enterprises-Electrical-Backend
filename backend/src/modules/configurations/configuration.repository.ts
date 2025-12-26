@@ -38,7 +38,27 @@ export class ConfigurationRepository {
     totalRecords: number;
   }> {
     try {
-      const [configurations, total] = await this.repository.findAndCount(options);
+      const [configurations, total] = await this.repository.findAndCount({
+        ...options,
+        relations: ['configSettings'],
+        select: {
+          id: true,
+          module: true,
+          key: true,
+          label: true,
+          valueType: true,
+          isEditable: true,
+          description: true,
+          configSettings: {
+            id: true,
+            contextKey: true,
+            value: true,
+            effectiveFrom: true,
+            effectiveTo: true,
+            isActive: true,
+          },
+        },
+      });
       return this.utilityService.listResponse(configurations, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
