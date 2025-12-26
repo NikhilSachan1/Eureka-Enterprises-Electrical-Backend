@@ -71,7 +71,7 @@ export const VALIDATION_PATTERNS = {
   PINCODE: /^\d{6}$/,
   PHONE: /^(\+91)?[6-9]\d{9}$/,
   ACCOUNT_NUMBER: /^\d{9,18}$/,
-  ESIC: /^\d{17}$/,
+  ESIC: /^\d{10}$/,
   DL: /^[A-Z]{2}[\-]?\d{2}[\-]?\d{4}[\-]?\d{7}$/,
   UAN: /^\d{12}$/,
   PASSPORT: /^[A-Z][0-9]{7}$/,

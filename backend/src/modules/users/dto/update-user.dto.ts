@@ -206,7 +206,7 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'ESIC number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 17 digits.' })
+  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 10 digits.' })
   esicNumber?: string;
 
   @ApiProperty({ description: 'Aadhar number', required: false })

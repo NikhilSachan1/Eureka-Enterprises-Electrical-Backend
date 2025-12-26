@@ -14,7 +14,7 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { USERS_ERRORS, VALIDATION_PATTERNS } from '../constants/user.constants';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class CreateEmployeeDto {
   // ==================== Basic Information (Required) ====================
@@ -49,6 +49,7 @@ export class CreateEmployeeDto {
     example: ['EMPLOYEE'],
     type: [String],
   })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   @IsArray()
   @ArrayMinSize(1, { message: 'At least one role is required' })
   @IsString({ each: true })
@@ -222,10 +223,10 @@ export class CreateEmployeeDto {
   // ==================== Government IDs ====================
   // Note: Document files are uploaded separately and stored in user_documents table
 
-  @ApiProperty({ description: 'ESIC number (17 digits)', required: false })
+  @ApiProperty({ description: 'ESIC number (10 digits)', required: false })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 17 digits.' })
+  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 10 digits.' })
   esicNumber?: string;
 
   @ApiProperty({ description: 'Aadhar number (12 digits)', required: false })
