@@ -1,3 +1,5 @@
+import { AttendanceStatus } from 'src/modules/attendance/constants/attendance.constants';
+
 export const buildPayrollSummaryQuery = (month: number, year: number) => {
   const query = `
     SELECT 
@@ -38,12 +40,12 @@ export const buildAttendanceSummaryForPayrollQuery = (
 ) => {
   const query = `
     SELECT
-      COUNT(CASE WHEN a."status" = 'present' THEN 1 END)::int as "presentDays",
-      COUNT(CASE WHEN a."status" = 'absent' THEN 1 END)::int as "absentDays",
-      COUNT(CASE WHEN a."status" = 'halfDay' THEN 1 END)::int as "halfDays",
-      COUNT(CASE WHEN a."status" = 'leave' THEN 1 END)::int as "paidLeaveDays",
-      COUNT(CASE WHEN a."status" = 'leaveWithoutPay' THEN 1 END)::int as "unpaidLeaveDays",
-      COUNT(CASE WHEN a."status" = 'holiday' THEN 1 END)::int as "holidays"
+      COUNT(CASE WHEN a."status" = '${AttendanceStatus.PRESENT} ' THEN 1 END)::int as "presentDays",
+      COUNT(CASE WHEN a."status" = '${AttendanceStatus.ABSENT}' THEN 1 END)::int as "absentDays",
+      COUNT(CASE WHEN a."status" = '${AttendanceStatus.HALF_DAY}' THEN 1 END)::int as "halfDays",
+      COUNT(CASE WHEN a."status" = '${AttendanceStatus.LEAVE}' THEN 1 END)::int as "paidLeaveDays",
+      COUNT(CASE WHEN a."status" = '${AttendanceStatus.LEAVE_WITHOUT_PAY}' THEN 1 END)::int as "unpaidLeaveDays",
+      COUNT(CASE WHEN a."status" = '${AttendanceStatus.HOLIDAY}' THEN 1 END)::int as "holidays"
     FROM "attendances" a
     WHERE a."userId" = $1
       AND a."attendanceDate" >= $2::date
