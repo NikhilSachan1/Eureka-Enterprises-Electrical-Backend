@@ -14,7 +14,7 @@ import { Environments } from '../../../env-configs';
 import { SignInDto, ResetPasswordDto } from './dto';
 import { AUTH_ERRORS, AUTH_RESPONSES, AUTH_REDIRECT_ROUTES } from './constants/auth.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { MailService } from '../common/email/email.service';
+import { EmailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
 import { UserRoleService } from '../user-roles/user-role.service';
 
@@ -25,7 +25,7 @@ export class AuthService {
     private userService: UserService,
     private jwtService: JwtService,
     private utilityService: UtilityService,
-    private mailService: MailService,
+    private emailService: EmailService,
     private userRoleService: UserRoleService,
   ) {}
 
@@ -88,7 +88,7 @@ export class AuthService {
       const resetPasswordLink = `${Environments.API_BASE_URL}${AUTH_REDIRECT_ROUTES.TOKEN_VALIDATION}${encryptedToken}`;
       Logger.log(resetPasswordLink);
       //TODO: Add template name and subject
-      await this.mailService.sendMail({
+      await this.emailService.sendMail({
         receiverEmails: [user.email],
         subject: 'Enter Subject',
         template: 'Enter template',

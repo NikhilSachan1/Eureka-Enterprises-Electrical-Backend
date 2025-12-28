@@ -5,7 +5,7 @@ import { Environments } from 'env-configs';
 import { ENVIRONMENT_CONFIG } from 'src/utils/config/constants/constants';
 
 @Injectable()
-export class MailService {
+export class EmailService {
   constructor(private readonly mailService: MailerService) {}
 
   async sendMail(emailContext: IMailOptions) {
