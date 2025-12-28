@@ -10,6 +10,9 @@ export const CRON_SCHEDULES = {
   // 11:59 PM IST = 6:29 PM UTC
   DAILY_END_OF_DAY_IST: '29 18 * * *',
 
+  // 9:00 PM IST = 3:30 PM UTC (typical shift end + buffer)
+  DAILY_SHIFT_END_IST: '30 15 * * *',
+
   // Every 10 minutes
   EVERY_10_MINUTES: '*/10 * * * *',
 
@@ -65,4 +68,6 @@ export const SYSTEM_NOTES = {
   AUTO_CREATED_BY_SYSTEM_CRON: 'Auto-created by system cron',
   HOLIDAY: 'Holiday - Auto-created by system cron',
   LEAVE: 'On leave ({leaveCategory}) - Auto-created by system cron',
+  AUTO_CHECKOUT: 'Auto-checkout by system - shift end',
+  MARKED_ABSENT: 'Marked absent by system - no check-in',
 };
