@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsUUID, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsDateString, IsBoolean } from 'class-validator';
 import { IsValidConfigValue, IsLeaveConfigValid } from '../decorators/config-value.decorator';
 
 export class CreateConfigSettingDto {
@@ -39,4 +39,13 @@ export class CreateConfigSettingDto {
   @IsOptional()
   @IsDateString()
   effectiveTo?: string;
+
+  // Internal flags for system/cron operations (not exposed in API)
+  @IsOptional()
+  @IsBoolean()
+  isSystemOperation?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

@@ -18,6 +18,7 @@ export interface FYLeaveConfigReminderResult {
  * Runs on April 1 at 12:00 AM IST
  *
  * If leave config for new FY is not updated, copies previous year's config
+ * Creates with isActive: false - activated by Config Activation Cron
  */
 export interface FYLeaveConfigAutoCopyResult {
   configsCopied: number;

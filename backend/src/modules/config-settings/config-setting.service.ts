@@ -108,17 +108,24 @@ export class ConfigSettingService {
     const configuration = await this.validateAndGetConfiguration(data.configId);
     const isCurrentFinancialYear =
       data.contextKey === this.utilityService.getCurrentFinancialYear();
-    switch (configuration.module) {
-      case CONFIGURATION_MODULES.LEAVE:
-        await this.validateLeaveConfig(data);
 
-        break;
+    // Skip validation for system/cron operations
+    if (!data.isSystemOperation) {
+      switch (configuration.module) {
+        case CONFIGURATION_MODULES.LEAVE:
+          await this.validateLeaveConfig(data);
+          break;
+      }
     }
+
+    // Determine isActive: use explicit value if provided, otherwise use FY logic
+    const shouldBeActive = data.isActive !== undefined ? data.isActive : isCurrentFinancialYear;
+
     // TODO: Actual value check for config setting with AJV.
     return await queryRunner.transaction(async (transactionManager) => {
       // Deactivate all existing active records for this configId
-      //NOTE: current financial year is not allowed to be updated
-      if (isCurrentFinancialYear) {
+      // NOTE: current financial year is not allowed to be updated (unless system operation)
+      if (isCurrentFinancialYear && !data.isSystemOperation) {
         await transactionManager
           .createQueryBuilder()
           .update(ConfigSettingEntity)
@@ -128,17 +135,17 @@ export class ConfigSettingService {
           .execute();
       }
 
-      // Create or update the record as active
+      // Create or update the record
       if (existingId) {
         await this.configSettingRepository.update(
           { id: existingId },
-          { ...data, isActive: isCurrentFinancialYear },
+          { ...data, isActive: shouldBeActive },
           transactionManager,
         );
         return await this.findOneOrFail({ where: { id: existingId } });
       } else {
         return await this.configSettingRepository.create(
-          { ...data, isActive: isCurrentFinancialYear },
+          { ...data, isActive: shouldBeActive },
           transactionManager,
         );
       }
