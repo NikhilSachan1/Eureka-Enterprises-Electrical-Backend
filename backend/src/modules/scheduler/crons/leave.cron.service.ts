@@ -10,7 +10,11 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from '../../../utils/master-constants/master-constants';
-import { FYLeaveConfigReminderResult, FYLeaveConfigAutoCopyResult } from '../types';
+import {
+  FYLeaveConfigReminderResult,
+  FYLeaveConfigAutoCopyResult,
+  LeaveCarryForwardResult,
+} from '../types';
 
 @Injectable()
 export class LeaveCronService {
@@ -303,5 +307,108 @@ This is an automated reminder. Please do not reply to this email.
     }
 
     return previousValue;
+  }
+
+  /**
+   * CRON 5: Leave Carry Forward
+   * Runs on April 1 at 1:00 AM IST (after config copy cron)
+   *
+   * Carries forward eligible leaves from previous FY to new FY
+   * Only processes leave types where carryForward: true in config
+   *
+   * NOTE: Currently a placeholder - actual carry forward logic not implemented
+   * as it's not required for the current org. Will be implemented when needed.
+   */
+  @Cron(CRON_SCHEDULES.APRIL_1_1AM_IST)
+  async handleLeaveCarryForward(): Promise<LeaveCarryForwardResult> {
+    const cronName = CRON_NAMES.LEAVE_CARRY_FORWARD;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: LeaveCarryForwardResult = {
+      usersProcessed: 0,
+      leavesCarriedForward: 0,
+      errors: [],
+    };
+
+    try {
+      const currentDate = this.schedulerService.getCurrentDateIST();
+      const { currentFY } = this.calculateFYDates(currentDate);
+
+      // Get leave categories config for current FY
+      const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(currentFY);
+
+      if (!leaveCategoriesConfig) {
+        this.logger.warn(`[${cronName}] No leave categories config found for ${currentFY}`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      // Check each leave category for carryForward flag
+      const leaveCategories = Object.keys(leaveCategoriesConfig);
+
+      for (const category of leaveCategories) {
+        const categoryConfig = leaveCategoriesConfig[category]?.actual;
+
+        if (!categoryConfig) {
+          this.logger.warn(`[${cronName}] No config found for category: ${category}`);
+          continue;
+        }
+
+        const isCarryForwardAllowed = categoryConfig.carryForward === true;
+
+        if (!isCarryForwardAllowed) {
+          this.logger.log(
+            `[${cronName}] Skipping ${category} - carryForward not allowed (carryForward: ${categoryConfig.carryForward})`,
+          );
+          continue;
+        }
+
+        // TODO: Implement actual carry forward logic when required
+        // This would involve:
+        // 1. Get all users' leave balances for previous FY
+        // 2. Calculate carry forward amount (respecting maxCarryForward limit if any)
+        // 3. Add to new FY balance
+        // 4. Create audit/history records
+
+        this.logger.log(
+          `[${cronName}] ${category} has carryForward: true - would carry forward (NOT IMPLEMENTED)`,
+        );
+      }
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private async getLeaveCategoriesConfig(financialYear: string): Promise<any | null> {
+    try {
+      const leaveCategoriesConfiguration = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.LEAVE,
+          key: CONFIGURATION_KEYS.LEAVE_CATEGORIES_CONFIG,
+        },
+      });
+
+      if (!leaveCategoriesConfiguration) {
+        return null;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: {
+          configId: leaveCategoriesConfiguration.id,
+          contextKey: financialYear,
+          isActive: true,
+        },
+      });
+
+      return configSetting?.value || null;
+    } catch (error) {
+      this.logger.error('Error fetching leave categories config', error);
+      return null;
+    }
   }
 }

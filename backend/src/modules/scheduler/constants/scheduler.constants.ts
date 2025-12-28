@@ -27,6 +27,9 @@ export const CRON_SCHEDULES = {
 
   // April 1 at 12:00 AM IST (FY start)
   APRIL_1_MIDNIGHT_IST: '30 18 1 4 *',
+
+  // April 1 at 1:00 AM IST (after config copy) = 7:30 PM UTC
+  APRIL_1_1AM_IST: '30 19 1 4 *',
 };
 
 export const CRON_NAMES = {
