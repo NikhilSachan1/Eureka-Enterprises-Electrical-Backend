@@ -87,6 +87,7 @@ export class AuthService {
       const encryptedToken = this.utilityService.encrypt(token);
       const resetPasswordLink = `${Environments.API_BASE_URL}${AUTH_REDIRECT_ROUTES.TOKEN_VALIDATION}${encryptedToken}`;
       Logger.log(resetPasswordLink);
+      //TODO: Add template name and subject
       await this.mailService.sendMail({
         receiverEmails: [user.email],
         subject: 'Enter Subject',
