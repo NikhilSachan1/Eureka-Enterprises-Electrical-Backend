@@ -22,6 +22,9 @@ export const CRON_SCHEDULES = {
   // 1st of every month at 12:00 AM IST
   MONTHLY_FIRST_MIDNIGHT_IST: '30 18 1 * *',
 
+  // 1st of every month at 12:30 AM IST = 7:00 PM UTC (prev day)
+  MONTHLY_FIRST_1230AM_IST: '0 19 1 * *',
+
   // March 15 at 9:00 AM IST (for FY reminders)
   MARCH_15_9AM_IST: '30 3 15 3 *',
 

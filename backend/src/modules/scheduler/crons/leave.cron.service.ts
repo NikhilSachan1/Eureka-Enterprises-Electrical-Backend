@@ -15,8 +15,17 @@ import {
   FYLeaveConfigAutoCopyResult,
   LeaveCarryForwardResult,
   AutoApproveLeavesResult,
+  MonthlyLeaveAccrualResult,
 } from '../types';
-import { getPendingLeavesForPeriodQuery, autoApproveLeaveQuery } from '../queries';
+import {
+  getPendingLeavesForPeriodQuery,
+  autoApproveLeaveQuery,
+  getActiveUsersQuery,
+  getUserLeaveBalanceQuery,
+  updateLeaveBalanceQuery,
+  createLeaveBalanceQuery,
+} from '../queries';
+import { UtilityService } from '../../../utils/utility/utility.service';
 
 @Injectable()
 export class LeaveCronService {
@@ -26,6 +35,7 @@ export class LeaveCronService {
     private readonly schedulerService: SchedulerService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly utilityService: UtilityService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -511,5 +521,246 @@ This is an automated reminder. Please do not reply to this email.
   ): Promise<Array<{ id: string; userId: string }>> {
     const { query, params } = getPendingLeavesForPeriodQuery(startDate, endDate);
     return await this.dataSource.query(query, params);
+  }
+
+  /**
+   * CRON 7: Monthly Leave Accrual
+   * Runs on 1st of every month at 12:30 AM IST (after auto-approve cron)
+   *
+   * Credits monthly leaves based on config. Uses cumulative calculation
+   * to ensure no decimals while totaling to annual quota.
+   *
+   * Formula: toCredit = floor(annualQuota * currentMonth / 12) - alreadyCredited
+   *
+   * Example for 52 leaves/year:
+   * - Month 1: floor(52 * 1/12) = 4
+   * - Month 2: floor(52 * 2/12) - 4 = 8 - 4 = 4
+   * - Month 3: floor(52 * 3/12) - 8 = 13 - 8 = 5
+   * - ...
+   * - Month 12: floor(52 * 12/12) - 48 = 52 - 48 = 4
+   */
+  @Cron(CRON_SCHEDULES.MONTHLY_FIRST_1230AM_IST)
+  async handleMonthlyLeaveAccrual(): Promise<MonthlyLeaveAccrualResult> {
+    const cronName = CRON_NAMES.MONTHLY_LEAVE_ACCRUAL;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: MonthlyLeaveAccrualResult = {
+      usersProcessed: 0,
+      categoriesProcessed: 0,
+      leavesCredited: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    try {
+      const currentDate = this.schedulerService.getCurrentDateIST();
+      const financialYear = this.utilityService.getFinancialYear(currentDate);
+      const currentMonth = this.getMonthInFinancialYear(currentDate);
+
+      this.logger.log(
+        `[${cronName}] Processing for FY: ${financialYear}, Month in FY: ${currentMonth}`,
+      );
+
+      const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(financialYear);
+
+      if (!leaveCategoriesConfig) {
+        this.logger.warn(`[${cronName}] No leave categories config found for ${financialYear}`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      const leaveConfigId = await this.getLeaveConfigSettingId(financialYear);
+
+      const { query: usersQuery, params: usersParams } = getActiveUsersQuery();
+      const activeUsers: Array<{ id: string }> = await this.dataSource.query(
+        usersQuery,
+        usersParams,
+      );
+
+      if (activeUsers.length === 0) {
+        this.logger.log(`[${cronName}] No active users found`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      this.logger.log(`[${cronName}] Processing ${activeUsers.length} active users`);
+
+      const leaveCategories = Object.keys(leaveCategoriesConfig);
+
+      await this.dataSource.transaction(async (entityManager) => {
+        for (const category of leaveCategories) {
+          const categoryConfig = leaveCategoriesConfig[category]?.actual;
+
+          if (!categoryConfig) {
+            this.logger.warn(`[${cronName}] No config found for category: ${category}`);
+            continue;
+          }
+
+          if (categoryConfig.creditFrequency !== 'monthly') {
+            this.logger.log(`[${cronName}] Skipping ${category} - creditFrequency is not monthly`);
+            result.skipped++;
+            continue;
+          }
+
+          const annualQuota = Number(categoryConfig.annualQuota) || 0;
+
+          if (annualQuota <= 0) {
+            this.logger.log(`[${cronName}] Skipping ${category} - annualQuota is 0 or invalid`);
+            result.skipped++;
+            continue;
+          }
+
+          const shouldHaveCreditedByNow = Math.floor((annualQuota * currentMonth) / 12);
+
+          this.logger.log(
+            `[${cronName}] ${category}: annualQuota=${annualQuota}, month=${currentMonth}, shouldHaveByNow=${shouldHaveCreditedByNow}`,
+          );
+
+          result.categoriesProcessed++;
+
+          for (const user of activeUsers) {
+            try {
+              const credited = await this.creditLeavesForUser(
+                user.id,
+                category,
+                financialYear,
+                leaveConfigId,
+                shouldHaveCreditedByNow,
+                currentMonth,
+                entityManager,
+                cronName,
+              );
+
+              if (credited > 0) {
+                result.leavesCredited += credited;
+              }
+            } catch (error) {
+              result.errors.push(`User ${user.id}, ${category}: ${error.message}`);
+              this.logger.error(
+                `[${cronName}] Error processing ${category} for user ${user.id}`,
+                error,
+              );
+            }
+          }
+        }
+
+        result.usersProcessed = activeUsers.length;
+      });
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private getMonthInFinancialYear(date: Date): number {
+    const month = date.getMonth(); // 0-indexed (0 = Jan)
+    // FY starts in April (month 3)
+    // April = month 1, May = month 2, ..., March = month 12
+    if (month >= 3) {
+      return month - 2; // April(3) -> 1, May(4) -> 2, etc.
+    } else {
+      return month + 10; // Jan(0) -> 10, Feb(1) -> 11, Mar(2) -> 12
+    }
+  }
+
+  private getMonthNameFromFYMonth(fyMonth: number): string {
+    const monthNames = [
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+    ];
+    return monthNames[fyMonth - 1] || 'Unknown';
+  }
+
+  private async getLeaveConfigSettingId(financialYear: string): Promise<string | null> {
+    try {
+      const config = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.LEAVE,
+          key: CONFIGURATION_KEYS.LEAVE_CATEGORIES_CONFIG,
+        },
+      });
+
+      if (!config) return null;
+
+      const configSetting = await this.configSettingService.findOne({
+        where: {
+          configId: config.id,
+          contextKey: financialYear,
+          isActive: true,
+        },
+      });
+
+      return configSetting?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async creditLeavesForUser(
+    userId: string,
+    leaveCategory: string,
+    financialYear: string,
+    leaveConfigId: string | null,
+    shouldHaveCreditedByNow: number,
+    currentMonth: number,
+    entityManager: any,
+    cronName: string,
+  ): Promise<number> {
+    const { query: balanceQuery, params: balanceParams } = getUserLeaveBalanceQuery(
+      userId,
+      leaveCategory,
+      financialYear,
+    );
+    const [existingBalance] = await entityManager.query(balanceQuery, balanceParams);
+
+    const currentlyAllocated = existingBalance ? Number(existingBalance.totalAllocated) || 0 : 0;
+    const toCredit = shouldHaveCreditedByNow - currentlyAllocated;
+
+    if (toCredit <= 0) {
+      return 0;
+    }
+
+    const monthName = this.getMonthNameFromFYMonth(currentMonth);
+    const note = `[${monthName}] +${toCredit} leaves credited (cumulative: ${shouldHaveCreditedByNow})`;
+
+    if (existingBalance) {
+      const { query: updateQuery, params: updateParams } = updateLeaveBalanceQuery(
+        existingBalance.id,
+        shouldHaveCreditedByNow,
+        note,
+      );
+      await entityManager.query(updateQuery, updateParams);
+    } else {
+      const { query: createQuery, params: createParams } = createLeaveBalanceQuery(
+        userId,
+        leaveConfigId || '',
+        leaveCategory,
+        financialYear,
+        shouldHaveCreditedByNow,
+        'monthly_accrual',
+        note,
+      );
+      await entityManager.query(createQuery, createParams);
+    }
+
+    this.logger.log(
+      `[${cronName}] Credited ${toCredit} ${leaveCategory} to user ${userId} (total: ${shouldHaveCreditedByNow})`,
+    );
+
+    return toCredit;
   }
 }
