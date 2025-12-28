@@ -20,7 +20,7 @@ import { PermissionsModule } from 'src/modules/permissions/permission.module';
 import { RolePermissionsModule } from 'src/modules/role-permissions/role-permission.module';
 import { UserPermissionsModule } from 'src/modules/user-permissions/user-permission.module';
 import { AttendanceModule } from 'src/modules/attendance/attendance.module';
-import { SchedulerModule } from 'src/modules/scheduler-temp/scheduler.module';
+import { SchedulerModule } from 'src/modules/scheduler/scheduler.module';
 import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.module';
 import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
 import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';

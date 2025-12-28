@@ -2,6 +2,7 @@ export enum AttendanceType {
   SELF = 'self',
   REGULARIZED = 'regularized',
   FORCED = 'forced',
+  SYSTEM = 'system',
 }
 
 export enum AttendanceAction {
@@ -40,6 +41,7 @@ export const ATTENDANCE_ERRORS = {
   NOT_CHECKED_IN: 'Not checked in yet',
   ALREADY_CHECKED_OUT: 'Already checked out',
   INVALID_ACTION: 'Invalid attendance action',
+  CHECK_IN_NOT_ALLOWED_ON_LEAVE: 'Check-in is not allowed on leave days.',
   SAME_DAY_REQUIRED: 'Check-in and check-out must be on the same day',
   SHIFT_TIMINGS_NOT_FOUND: 'Shift timings not found',
   INVALID_SHIFT_TIMING: 'Check-in and check-out allowed only between {start} and {end}',

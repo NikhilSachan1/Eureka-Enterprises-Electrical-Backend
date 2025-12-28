@@ -114,6 +114,14 @@ export class AttendanceService {
     await this.validateShiftTiming(shiftConfigs, currentTime);
 
     if (existingAttendance) {
+      // Block check-in on leave days
+      if (
+        existingAttendance.status === AttendanceStatus.LEAVE ||
+        existingAttendance.status === AttendanceStatus.LEAVE_WITHOUT_PAY
+      ) {
+        throw new BadRequestException(ATTENDANCE_ERRORS.CHECK_IN_NOT_ALLOWED_ON_LEAVE);
+      }
+
       const hasCheckedIn =
         existingAttendance.checkInTime && existingAttendance.status === AttendanceStatus.CHECKED_IN;
 
@@ -127,6 +135,32 @@ export class AttendanceService {
 
       if (existingAttendance.approvalStatus === ApprovalStatus.REJECTED) {
         throw new BadRequestException(ATTENDANCE_ERRORS.ATTENDANCE_REJECTED);
+      }
+
+      // UPDATE existing record if status is NOT_CHECKED_IN_YET or HOLIDAY
+      if (
+        existingAttendance.status === AttendanceStatus.NOT_CHECKED_IN_YET ||
+        existingAttendance.status === AttendanceStatus.HOLIDAY
+      ) {
+        await this.attendanceRepository.update(
+          { id: existingAttendance.id },
+          {
+            checkInTime: currentTime,
+            status: AttendanceStatus.CHECKED_IN,
+            entrySourceType,
+            attendanceType,
+            approvalStatus: ApprovalStatus.PENDING,
+            notes,
+            shiftConfigId: configSettingId,
+            updatedBy: userId,
+          },
+          entityManager,
+        );
+
+        return {
+          message: ATTENDANCE_RESPONSES.CHECK_IN_SUCCESS,
+          checkInTime: currentTime,
+        };
       }
 
       if (shiftConfigs.multiplePunchesInOneDay) {

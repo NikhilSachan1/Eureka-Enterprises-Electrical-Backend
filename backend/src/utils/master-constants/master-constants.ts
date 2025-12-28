@@ -89,6 +89,7 @@ export enum EntrySourceType {
   WEB = 'web',
   APP = 'app',
   BIOMETRIC = 'biometric',
+  SYSTEM = 'system',
 }
 
 export const USER_RESPONSE_FIELDS = ['id', 'firstName', 'lastName', 'email', 'employeeId'] as const;
