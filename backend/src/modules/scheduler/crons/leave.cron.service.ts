@@ -5,7 +5,7 @@ import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
 import { ConfigurationService } from '../../configurations/configuration.service';
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
-import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CRON_SCHEDULES, CRON_NAMES, SYSTEM_NOTES } from '../constants/scheduler.constants';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -14,7 +14,9 @@ import {
   FYLeaveConfigReminderResult,
   FYLeaveConfigAutoCopyResult,
   LeaveCarryForwardResult,
+  AutoApproveLeavesResult,
 } from '../types';
+import { getPendingLeavesForPeriodQuery, autoApproveLeaveQuery } from '../queries';
 
 @Injectable()
 export class LeaveCronService {
@@ -410,5 +412,104 @@ This is an automated reminder. Please do not reply to this email.
       this.logger.error('Error fetching leave categories config', error);
       return null;
     }
+  }
+
+  /**
+   * CRON 6: Auto Approve Pending Leaves
+   * Runs on 1st of every month at 12:00 AM IST (before payroll generation)
+   *
+   * Auto-approves all pending leave applications for the previous month
+   * This ensures leaves are counted in payroll even if admin forgot to approve
+   */
+  @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_IST)
+  async handleAutoApproveLeaves(): Promise<AutoApproveLeavesResult> {
+    const cronName = CRON_NAMES.AUTO_APPROVE_LEAVES;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: AutoApproveLeavesResult = {
+      leavesApproved: 0,
+      errors: [],
+    };
+
+    try {
+      const currentDate = this.schedulerService.getCurrentDateIST();
+
+      // Get previous month's date range
+      const { startDate, endDate } = this.getPreviousMonthDateRange(currentDate);
+
+      this.logger.log(
+        `[${cronName}] Auto-approving pending leaves from ${startDate} to ${endDate}`,
+      );
+
+      // Get all pending leave applications for the previous month
+      const pendingLeaves = await this.getPendingLeavesForPeriod(startDate, endDate);
+
+      if (pendingLeaves.length === 0) {
+        this.logger.log(`[${cronName}] No pending leaves found for previous month`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      this.logger.log(`[${cronName}] Found ${pendingLeaves.length} pending leaves to auto-approve`);
+
+      await this.dataSource.transaction(async (entityManager) => {
+        for (const leave of pendingLeaves) {
+          try {
+            const { query, params } = autoApproveLeaveQuery(
+              leave.id,
+              SYSTEM_NOTES.AUTO_APPROVED_LEAVE,
+            );
+            await entityManager.query(query, params);
+
+            result.leavesApproved++;
+            this.logger.log(
+              `[${cronName}] Auto-approved leave ${leave.id} for user ${leave.userId}`,
+            );
+          } catch (error) {
+            result.errors.push(`Failed to approve leave ${leave.id}: ${error.message}`);
+            this.logger.error(`[${cronName}] Failed to approve leave ${leave.id}`, error);
+          }
+        }
+      });
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private getPreviousMonthDateRange(currentDate: Date): { startDate: string; endDate: string } {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth(); // 0-indexed
+
+    // Previous month
+    let prevMonth = month - 1;
+    let prevYear = year;
+    if (prevMonth < 0) {
+      prevMonth = 11; // December
+      prevYear = year - 1;
+    }
+
+    // First day of previous month
+    const startDate = new Date(prevYear, prevMonth, 1);
+
+    // Last day of previous month
+    const endDate = new Date(year, month, 0);
+
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+    };
+  }
+
+  private async getPendingLeavesForPeriod(
+    startDate: string,
+    endDate: string,
+  ): Promise<Array<{ id: string; userId: string }>> {
+    const { query, params } = getPendingLeavesForPeriodQuery(startDate, endDate);
+    return await this.dataSource.query(query, params);
   }
 }

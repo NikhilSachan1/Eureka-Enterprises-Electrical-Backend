@@ -73,4 +73,5 @@ export const SYSTEM_NOTES = {
   LEAVE: 'On leave ({leaveCategory}) - Auto-created by system cron',
   AUTO_CHECKOUT: 'Auto-checkout by system - shift end',
   MARKED_ABSENT: 'Marked absent by system - no check-in',
+  AUTO_APPROVED_LEAVE: 'Auto-approved by system before payroll generation',
 };

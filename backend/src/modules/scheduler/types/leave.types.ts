@@ -41,10 +41,11 @@ export interface LeaveCarryForwardResult {
 
 /**
  * CRON 6
- * Auto Approve Leaves
- * Runs before payroll generation
+ * Auto Approve Pending Leaves
+ * Runs on 1st of every month at 12:00 AM IST (before payroll generation)
  *
- * Auto approves pending leaves that meet certain criteria
+ * Auto-approves all pending leave applications for the previous month
+ * This ensures leaves are counted in payroll even if admin forgot to approve
  */
 export interface AutoApproveLeavesResult {
   leavesApproved: number;
