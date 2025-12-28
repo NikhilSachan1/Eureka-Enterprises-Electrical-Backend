@@ -39,6 +39,7 @@ export class PayrollService {
   async generatePayroll(
     generateDto: GeneratePayrollDto,
     generatedBy: string,
+    initialStatus: PayrollStatus = PayrollStatus.GENERATED,
   ): Promise<PayrollEntity> {
     const { userId, month, year } = generateDto;
 
@@ -181,7 +182,7 @@ export class PayrollService {
           grossEarnings,
           totalDeductions,
           netPayable,
-          status: PayrollStatus.GENERATED,
+          status: initialStatus,
           generatedAt: new Date(),
           createdBy: generatedBy,
         },
@@ -204,6 +205,7 @@ export class PayrollService {
   async generateBulkPayroll(
     generateDto: GenerateBulkPayrollDto,
     generatedBy: string,
+    initialStatus: PayrollStatus = PayrollStatus.GENERATED,
   ): Promise<{ message: string; success: number; failed: number; errors: any[] }> {
     const { month, year } = generateDto;
 
@@ -220,7 +222,7 @@ export class PayrollService {
 
     for (const { userId } of usersWithSalary) {
       try {
-        await this.generatePayroll({ userId, month, year }, generatedBy);
+        await this.generatePayroll({ userId, month, year }, generatedBy, initialStatus);
         success++;
       } catch (error) {
         failed++;
