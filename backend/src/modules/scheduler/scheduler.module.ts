@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SchedulerService } from './scheduler.service';
 import { AttendanceCronService } from './crons/attendance.cron.service';
+import { LeaveCronService } from './crons/leave.cron.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { UsersModule } from '../users/user.module';
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
@@ -17,7 +18,7 @@ import { SharedModule } from '../shared/shared.module';
     ConfigurationsModule,
     ConfigSettingsModule,
   ],
-  providers: [SchedulerService, AttendanceCronService],
+  providers: [SchedulerService, AttendanceCronService, LeaveCronService],
   exports: [SchedulerService],
 })
 export class SchedulerModule {}
