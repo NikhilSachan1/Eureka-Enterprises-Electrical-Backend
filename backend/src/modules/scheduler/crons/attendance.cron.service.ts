@@ -135,9 +135,6 @@ export class AttendanceCronService {
     }
   }
 
-  /**
-   * Check if a date is a holiday from the holiday calendar config
-   */
   private async isHolidayDate(date: Date, financialYear: string): Promise<boolean> {
     try {
       const holidayCalendarConfig = await this.configurationService.findOne({
@@ -173,9 +170,6 @@ export class AttendanceCronService {
     }
   }
 
-  /**
-   * Get all active users eligible for attendance
-   */
   private async getActiveUsersForAttendance(
     today: Date,
   ): Promise<Array<{ id: string; dateOfJoining: Date }>> {
@@ -183,9 +177,6 @@ export class AttendanceCronService {
     return await this.dataSource.query(query, params);
   }
 
-  /**
-   * Get leave applications for users on a specific date
-   */
   private async getUserLeavesForDate(
     userIds: string[],
     date: Date,
@@ -200,18 +191,12 @@ export class AttendanceCronService {
     );
   }
 
-  /**
-   * Get user IDs who already have attendance records for today
-   */
   private async getExistingAttendanceUserIds(date: Date): Promise<Set<string>> {
     const { query, params } = getExistingAttendanceUserIdsQuery(date);
     const existing = await this.dataSource.query(query, params);
     return new Set(existing.map((attendance: { userId: string }) => attendance.userId));
   }
 
-  /**
-   * Build attendance record based on conditions
-   */
   private buildAttendanceRecord(
     userId: string,
     date: Date,
@@ -263,9 +248,6 @@ export class AttendanceCronService {
     };
   }
 
-  /**
-   * Check if leave category is Leave Without Pay
-   */
   private isLeaveWithoutPay(leaveCategory: string): boolean {
     const lwpCategories = ['LWP', 'LEAVE_WITHOUT_PAY', 'UNPAID', 'UNPAID_LEAVE'];
     return lwpCategories.includes(leaveCategory.toUpperCase());
