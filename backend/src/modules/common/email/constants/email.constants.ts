@@ -9,6 +9,8 @@ export const EMAIL_SUBJECT = {
   ASSET_CALIBRATION_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Asset Calibration Expired',
   ASSET_WARRANTY_EXPIRY: 'Eureka Enterprises - Asset Warranty Expiring Soon',
   ASSET_WARRANTY_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Asset Warranty Expired',
+  CARD_EXPIRY: 'Eureka Enterprises - Cards Expiring Soon',
+  CARD_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Cards Expired',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -18,6 +20,7 @@ export const EMAIL_TEMPLATE = {
   VEHICLE_SERVICE_DUE: 'vehicleServiceDue',
   ASSET_CALIBRATION_EXPIRY: 'assetCalibrationExpiry',
   ASSET_WARRANTY_EXPIRY: 'assetWarrantyExpiry',
+  CARD_EXPIRY: 'cardExpiry',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {};
