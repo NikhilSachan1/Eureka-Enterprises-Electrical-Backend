@@ -18,13 +18,21 @@ import {
   CalibrationExpiryCount,
   AssetCalibrationEmailData,
   AssetCalibrationEmailItem,
+  AssetWarrantyExpiryResult,
+  AssetWarrantyAlert,
+  WarrantyExpiryCount,
+  AssetWarrantyEmailData,
+  AssetWarrantyEmailItem,
 } from '../types/asset.types';
 import {
   getAssetsWithExpiringCalibrationQuery,
   getCalibrationAlertStatus,
+  getAssetsWithExpiringWarrantyQuery,
+  getWarrantyAlertStatus,
 } from '../queries/asset.queries';
 import {
   CalibrationStatus,
+  WarrantyStatus,
   EXPIRING_SOON_DAYS,
 } from '../../asset-masters/constants/asset-masters.constants';
 import { Environments } from '../../../../env-configs';
@@ -120,6 +128,96 @@ export class AssetCronService {
           asset.calibration.status === CalibrationStatus.EXPIRED ? '🔴 EXPIRED' : '🟡 EXPIRING';
         this.logger.debug(
           `[${cronName}] ${urgency}: ${asset.assetId} - ${asset.name} (${asset.calibration.daysUntilExpiry} days)`,
+        );
+      }
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  /**
+   * CRON 14: Asset Warranty Expiry Alerts
+   *
+   * Runs daily at 9:00 AM IST to check for expiring asset warranties.
+   *
+   * Scenarios Handled:
+   * 1. Warranty already EXPIRED (endDate < today) - Urgent alert
+   * 2. Warranty EXPIRING_SOON (endDate within warning days) - Warning alert
+   * 3. RETIRED assets - Skipped (no alerts needed)
+   * 4. Assets without warrantyEndDate - Skipped (no tracking possible)
+   * 5. UNDER_MAINTENANCE assets - Included (warranty still valid)
+   * 6. DAMAGED assets - Included (warranty claims may be needed)
+   *
+   * Recipients:
+   * - Asset Managers / Admins (all alerts)
+   * - Assigned users (only their assigned assets)
+   */
+  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  async handleAssetWarrantyExpiryAlerts(): Promise<AssetWarrantyExpiryResult> {
+    const cronName = CRON_NAMES.ASSET_WARRANTY_EXPIRY_ALERTS;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: AssetWarrantyExpiryResult = {
+      totalAssetsProcessed: 0,
+      expiredWarranties: this.initWarrantyCount(),
+      expiringSoonWarranties: this.initWarrantyCount(),
+      emailsSent: 0,
+      recipients: [],
+      errors: [],
+    };
+
+    try {
+      const warningDays = await this.getExpiryWarningDays();
+      this.logger.log(`[${cronName}] Using warning days: ${warningDays}`);
+
+      const { query, params } = getAssetsWithExpiringWarrantyQuery(warningDays);
+      const assetsRaw = await this.dataSource.query(query, params);
+
+      if (assetsRaw.length === 0) {
+        this.logger.log(`[${cronName}] No assets with expiring warranties found`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      this.logger.log(`[${cronName}] Found ${assetsRaw.length} assets with expiring warranties`);
+
+      const { assetAlerts, expiredCount, expiringSoonCount } =
+        this.processAssetWarranties(assetsRaw);
+
+      result.totalAssetsProcessed = assetAlerts.length;
+      result.expiredWarranties = expiredCount;
+      result.expiringSoonWarranties = expiringSoonCount;
+
+      const expiredAssets = assetAlerts.filter(
+        (asset) => asset.warranty.status === WarrantyStatus.EXPIRED,
+      );
+      const expiringSoonAssets = assetAlerts.filter(
+        (asset) => asset.warranty.status === WarrantyStatus.EXPIRING_SOON,
+      );
+
+      if (expiredCount.total > 0 || expiringSoonCount.total > 0) {
+        const emailResult = await this.sendWarrantyExpiryAlertEmails(
+          expiredAssets,
+          expiringSoonAssets,
+          expiredCount,
+          expiringSoonCount,
+          cronName,
+        );
+        result.emailsSent = emailResult.emailsSent;
+        result.recipients = emailResult.recipients;
+        result.errors.push(...emailResult.errors);
+      }
+
+      for (const asset of assetAlerts) {
+        const urgency =
+          asset.warranty.status === WarrantyStatus.EXPIRED ? '🔴 EXPIRED' : '🟡 EXPIRING';
+        this.logger.debug(
+          `[${cronName}] ${urgency}: ${asset.assetId} - ${asset.name} (${asset.warranty.daysUntilExpiry} days)`,
         );
       }
 
@@ -383,6 +481,204 @@ export class AssetCronService {
   }
 
   private initCalibrationCount(): CalibrationExpiryCount {
+    return { expired: 0, expiringSoon: 0, total: 0 };
+  }
+
+  private processAssetWarranties(assetsRaw: any[]): {
+    assetAlerts: AssetWarrantyAlert[];
+    expiredCount: WarrantyExpiryCount;
+    expiringSoonCount: WarrantyExpiryCount;
+  } {
+    const assetAlerts: AssetWarrantyAlert[] = [];
+    const expiredCount = this.initWarrantyCount();
+    const expiringSoonCount = this.initWarrantyCount();
+
+    for (const asset of assetsRaw) {
+      const status = getWarrantyAlertStatus(asset.daysUntilExpiry);
+
+      const alert: AssetWarrantyAlert = {
+        assetVersionId: asset.assetVersionId,
+        assetMasterId: asset.assetMasterId,
+        assetId: asset.assetId,
+        name: asset.name,
+        model: asset.model,
+        serialNumber: asset.serialNumber,
+        category: asset.category,
+        status: asset.status,
+        assignedTo: asset.assignedTo,
+        assignedUserName: asset.assignedFirstName
+          ? `${asset.assignedFirstName} ${asset.assignedLastName || ''}`.trim()
+          : null,
+        assignedUserEmail: asset.assignedUserEmail,
+        warranty: {
+          warrantyEndDate: asset.warrantyEndDate,
+          daysUntilExpiry: asset.daysUntilExpiry,
+          status,
+          warrantyStartDate: asset.warrantyStartDate,
+          vendorName: asset.vendorName,
+        },
+      };
+
+      assetAlerts.push(alert);
+
+      if (status === WarrantyStatus.EXPIRED) {
+        expiredCount.expired++;
+        expiredCount.total++;
+      } else {
+        expiringSoonCount.expiringSoon++;
+        expiringSoonCount.total++;
+      }
+    }
+
+    return { assetAlerts, expiredCount, expiringSoonCount };
+  }
+
+  private async sendWarrantyExpiryAlertEmails(
+    expiredAssets: AssetWarrantyAlert[],
+    expiringSoonAssets: AssetWarrantyAlert[],
+    expiredCount: WarrantyExpiryCount,
+    expiringSoonCount: WarrantyExpiryCount,
+    cronName: string,
+  ): Promise<{ emailsSent: number; recipients: string[]; errors: string[] }> {
+    const emailsSent = { count: 0 };
+    const recipients: string[] = [];
+    const errors: string[] = [];
+
+    const recipientEmails = await this.getRecipientEmails();
+
+    if (recipientEmails.length === 0) {
+      this.logger.warn(`[${cronName}] No recipient emails found`);
+      return { emailsSent: 0, recipients: [], errors: ['No recipient emails configured'] };
+    }
+
+    const emailData: AssetWarrantyEmailData = {
+      currentYear: new Date().getFullYear(),
+      adminPortalUrl: Environments.FE_BASE_URL || '#',
+      totalExpired: expiredCount.total,
+      totalExpiringSoon: expiringSoonCount.total,
+      expiredAssets: this.formatWarrantyAssetsForEmail(expiredAssets, WarrantyStatus.EXPIRED),
+      expiringSoonAssets: this.formatWarrantyAssetsForEmail(
+        expiringSoonAssets,
+        WarrantyStatus.EXPIRING_SOON,
+      ),
+      hasExpired: expiredCount.total > 0,
+      hasExpiringSoon: expiringSoonCount.total > 0,
+    };
+
+    // Send to asset managers/admins
+    for (const email of recipientEmails) {
+      try {
+        await this.emailService.sendMail({
+          receiverEmails: email,
+          subject: this.getWarrantyEmailSubject(expiredCount.total),
+          template: EMAIL_TEMPLATE.ASSET_WARRANTY_EXPIRY,
+          emailData,
+        });
+
+        this.logger.log(`[${cronName}] Email sent to admin: ${email}`);
+        recipients.push(email);
+        emailsSent.count++;
+      } catch (error) {
+        errors.push(`Failed to send email to ${email}: ${error.message}`);
+        this.logger.error(`[${cronName}] Failed to send email to ${email}`, error);
+      }
+    }
+
+    // Send individual alerts to assigned users
+    const assignedUserEmails = new Set<string>();
+    const allAssets = [...expiredAssets, ...expiringSoonAssets];
+
+    for (const asset of allAssets) {
+      if (asset.assignedUserEmail && !assignedUserEmails.has(asset.assignedUserEmail)) {
+        assignedUserEmails.add(asset.assignedUserEmail);
+
+        const userAssets = allAssets.filter(
+          (asset) => asset.assignedUserEmail === asset.assignedUserEmail,
+        );
+
+        const userExpiredAssets = userAssets.filter(
+          (asset) => asset.warranty.status === WarrantyStatus.EXPIRED,
+        );
+        const userExpiringSoonAssets = userAssets.filter(
+          (asset) => asset.warranty.status === WarrantyStatus.EXPIRING_SOON,
+        );
+
+        const userExpiredCount = userExpiredAssets.length;
+        const userExpiringSoonCount = userExpiringSoonAssets.length;
+
+        const userEmailData: AssetWarrantyEmailData = {
+          currentYear: new Date().getFullYear(),
+          adminPortalUrl: Environments.FE_BASE_URL || '#',
+          totalExpired: userExpiredCount,
+          totalExpiringSoon: userExpiringSoonCount,
+          expiredAssets: this.formatWarrantyAssetsForEmail(
+            userExpiredAssets,
+            WarrantyStatus.EXPIRED,
+          ),
+          expiringSoonAssets: this.formatWarrantyAssetsForEmail(
+            userExpiringSoonAssets,
+            WarrantyStatus.EXPIRING_SOON,
+          ),
+          hasExpired: userExpiredCount > 0,
+          hasExpiringSoon: userExpiringSoonCount > 0,
+        };
+
+        try {
+          await this.emailService.sendMail({
+            receiverEmails: asset.assignedUserEmail,
+            subject: this.getWarrantyEmailSubject(userExpiredCount),
+            template: EMAIL_TEMPLATE.ASSET_WARRANTY_EXPIRY,
+            emailData: userEmailData,
+          });
+
+          this.logger.log(`[${cronName}] Email sent to assigned user: ${asset.assignedUserEmail}`);
+          recipients.push(asset.assignedUserEmail);
+          emailsSent.count++;
+        } catch (error) {
+          errors.push(`Failed to send email to ${asset.assignedUserEmail}: ${error.message}`);
+          this.logger.error(
+            `[${cronName}] Failed to send email to ${asset.assignedUserEmail}`,
+            error,
+          );
+        }
+      }
+    }
+
+    return { emailsSent: emailsSent.count, recipients, errors };
+  }
+
+  private formatWarrantyAssetsForEmail(
+    assets: AssetWarrantyAlert[],
+    filterStatus: WarrantyStatus,
+  ): AssetWarrantyEmailItem[] {
+    return assets
+      .filter((asset) => asset.warranty.status === filterStatus)
+      .map((asset) => ({
+        assetId: asset.assetId,
+        name: asset.name,
+        model: asset.model || 'N/A',
+        serialNumber: asset.serialNumber || 'N/A',
+        category: asset.category,
+        assetStatus: this.formatAssetStatus(asset.status),
+        assignedTo: asset.assignedUserName || 'Unassigned',
+        warrantyEndDate: this.formatDate(asset.warranty.warrantyEndDate),
+        warrantyStartDate: asset.warranty.warrantyStartDate
+          ? this.formatDate(asset.warranty.warrantyStartDate)
+          : 'N/A',
+        vendorName: asset.warranty.vendorName || 'N/A',
+        daysText: this.getDaysText(asset.warranty.daysUntilExpiry),
+        statusClass: asset.warranty.status === WarrantyStatus.EXPIRED ? 'expired' : 'expiring-soon',
+      }));
+  }
+
+  private getWarrantyEmailSubject(expiredCount: number): string {
+    if (expiredCount > 0) {
+      return EMAIL_SUBJECT.ASSET_WARRANTY_EXPIRY_URGENT;
+    }
+    return EMAIL_SUBJECT.ASSET_WARRANTY_EXPIRY;
+  }
+
+  private initWarrantyCount(): WarrantyExpiryCount {
     return { expired: 0, expiringSoon: 0, total: 0 };
   }
 
