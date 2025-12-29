@@ -36,6 +36,10 @@ export interface IEmailDataValues {
   dueSoonVehicles?: VehicleServiceEmailItem[];
   hasOverdue?: boolean;
   hasDueSoon?: boolean;
+
+  // Asset Calibration & Warranty Expiry
+  expiredAssets?: AssetCalibrationEmailItem[] | AssetWarrantyEmailItem[];
+  expiringSoonAssets?: AssetCalibrationEmailItem[] | AssetWarrantyEmailItem[];
 }
 
 export interface VehicleDocumentEmailItem {
@@ -66,5 +70,35 @@ export interface VehicleServiceEmailItem {
   currentOdometerKm: string;
   nextServiceDueKm: string;
   kmStatus: string;
+  statusClass: string;
+}
+
+export interface AssetCalibrationEmailItem {
+  assetId: string;
+  name: string;
+  model: string;
+  serialNumber: string;
+  category: string;
+  assetStatus: string;
+  assignedTo: string;
+  calibrationEndDate: string;
+  calibrationFrom: string;
+  calibrationFrequency: string;
+  daysText: string;
+  statusClass: string;
+}
+
+export interface AssetWarrantyEmailItem {
+  assetId: string;
+  name: string;
+  model: string;
+  serialNumber: string;
+  category: string;
+  assetStatus: string;
+  assignedTo: string;
+  warrantyEndDate: string;
+  warrantyStartDate: string;
+  vendorName: string;
+  daysText: string;
   statusClass: string;
 }
