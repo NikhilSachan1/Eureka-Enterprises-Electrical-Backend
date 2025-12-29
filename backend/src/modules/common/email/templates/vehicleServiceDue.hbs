@@ -1,0 +1,291 @@
+<html lang='en' dir='ltr'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <meta name='color-scheme' content='light' />
+    <meta name='supported-color-schemes' content='light' />
+    <title>Eureka Enterprises - Vehicle Service Due Reminder</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
+      sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
+      .email-wrapper { padding: 40px 20px; background-color: #f7fafc; }
+      .email-container { max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07); overflow: hidden; }
+      .header { background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 32px 40px;
+      text-align: center; }
+      .logo { max-width: 120px; height: auto; display: block; margin: 0 auto 16px; border-radius: 8px; }
+      .company-name { color: #ffffff; font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.5px; }
+      .content { padding: 40px; }
+      .greeting { font-size: 16px; color: #1a365d; margin-bottom: 20px; }
+      .message-text { color: #4a5568; margin-bottom: 24px; line-height: 1.7; }
+      
+      /* Config Info Box */
+      .config-box { background: linear-gradient(135deg, #e6f4ff 0%, #d0ebff 100%); border: 1px solid #74c0fc;
+      border-radius: 8px; padding: 16px 20px; margin: 20px 0; display: flex; gap: 24px; flex-wrap: wrap; }
+      .config-item { flex: 1; min-width: 140px; }
+      .config-label { font-size: 11px; color: #1971c2; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 4px; font-weight: 600; }
+      .config-value { font-size: 18px; color: #1864ab; font-weight: 700; }
+      
+      /* Summary Cards */
+      .summary-card { padding: 20px; border-radius: 8px; text-align: center; }
+      .summary-card.overdue { background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
+      border: 1px solid #fc8181; }
+      .summary-card.due-soon { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 1px solid #f59e0b; }
+      .summary-count { font-size: 42px; font-weight: 700; line-height: 1; }
+      .summary-card.overdue .summary-count { color: #c53030; }
+      .summary-card.due-soon .summary-count { color: #92400e; }
+      .summary-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+      margin-top: 8px; }
+      .summary-card.overdue .summary-label { color: #c53030; }
+      .summary-card.due-soon .summary-label { color: #92400e; }
+      
+      /* Section Headers */
+      .section-header { display: flex; align-items: center; gap: 12px; margin: 32px 0 16px 0; }
+      .section-header.overdue { color: #c53030; }
+      .section-header.due-soon { color: #92400e; }
+      .section-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 16px; }
+      .section-header.overdue .section-icon { background-color: #fed7d7; color: #c53030; }
+      .section-header.due-soon .section-icon { background-color: #fef3c7; color: #92400e; }
+      .section-title { font-size: 16px; font-weight: 600; margin: 0; }
+      
+      /* Vehicle Cards */
+      .vehicle-card { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      margin-bottom: 16px; overflow: hidden; }
+      .vehicle-card.overdue { border-left: 4px solid #c53030; }
+      .vehicle-card.due-soon { border-left: 4px solid #f59e0b; }
+      .vehicle-header { padding: 16px 20px; background-color: #edf2f7; border-bottom: 1px solid #e2e8f0; }
+      .vehicle-reg { font-size: 18px; font-weight: 700; color: #1a365d; margin: 0 0 4px 0; }
+      .vehicle-info { font-size: 13px; color: #718096; margin: 0; }
+      .vehicle-body { padding: 16px 20px; }
+      
+      /* Service Info Grid */
+      .service-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .service-item { padding: 12px; background-color: #ffffff; border-radius: 6px; border: 1px solid #e2e8f0; }
+      .service-label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 4px; }
+      .service-value { font-size: 15px; color: #2d3748; font-weight: 600; }
+      .service-value.highlight { color: #1a365d; font-size: 16px; }
+      
+      /* Status Badge */
+      .status-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 12px;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 12px; }
+      .status-badge.overdue { background-color: #fed7d7; color: #c53030; }
+      .status-badge.due-soon { background-color: #fef3c7; color: #92400e; }
+      
+      /* Progress Bar */
+      .progress-container { margin-top: 16px; }
+      .progress-label { font-size: 11px; color: #718096; margin-bottom: 6px; display: flex;
+      justify-content: space-between; }
+      .progress-bar { height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden; }
+      .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+      .progress-fill.overdue { background: linear-gradient(90deg, #c53030, #e53e3e); width: 100%; }
+      .progress-fill.due-soon { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+      
+      /* Button */
+      .button-container { text-align: center; margin: 32px 0; }
+      .button { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #2d5a87 0%, #1e3a5f 100%);
+      color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: 600;
+      font-size: 14px; letter-spacing: 0.5px; }
+      
+      .divider { height: 1px; background-color: #e2e8f0; margin: 28px 0; }
+      .signature { margin-top: 28px; color: #4a5568; }
+      .signature-name { color: #1a365d; font-weight: 600; }
+      .footer { background-color: #f7fafc; text-align: center; padding: 24px 40px;
+      border-top: 1px solid #e2e8f0; }
+      .footer-text { color: #718096; font-size: 12px; margin: 0 0 8px 0; }
+      .footer-company { color: #a0aec0; font-size: 11px; margin: 0; }
+      
+      /* Tip Box */
+      .tip-box { background-color: #f0fdf4; border: 1px solid #86efac; border-left: 4px solid #22c55e;
+      padding: 16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; }
+      .tip-box p { margin: 0; color: #166534; font-size: 14px; }
+      .tip-box strong { color: #15803d; }
+      
+      @media screen and (max-width: 600px) {
+        .content { padding: 28px 24px; }
+        .header { padding: 24px; }
+        .footer { padding: 20px 24px; }
+        .summary-count { font-size: 32px; }
+        .vehicle-header { padding: 12px 16px; }
+        .vehicle-body { padding: 12px 16px; }
+        .service-grid { grid-template-columns: 1fr; }
+        .config-box { flex-direction: column; gap: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class='email-wrapper'>
+      <div class='email-container'>
+        <div class='header'>
+          <img
+            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+            alt='Eureka Enterprises'
+            class='logo'
+          />
+          <p class='company-name'>Eureka Enterprises</p>
+        </div>
+
+        <div class='content'>
+          <p class='greeting'><strong>🔧 Vehicle Service Due Reminder</strong></p>
+
+          <p class='message-text'>
+            This is an automated reminder about vehicles that require servicing. Regular maintenance
+            helps prevent breakdowns, reduces repair costs, and ensures vehicle safety.
+          </p>
+
+          <!-- Config Info -->
+          <div class='config-box'>
+            <div class='config-item'>
+              <div class='config-label'>Service Interval</div>
+              <div class='config-value'>{{serviceIntervalKm}} km</div>
+            </div>
+            <div class='config-item'>
+              <div class='config-label'>Warning Threshold</div>
+              <div class='config-value'>{{warningKm}} km</div>
+            </div>
+          </div>
+
+          <!-- Summary Cards -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
+            <tr>
+              {{#if hasOverdue}}
+              <td width="48%" style="padding-right: 8px;">
+                <div class='summary-card overdue'>
+                  <div class='summary-count'>{{totalOverdue}}</div>
+                  <div class='summary-label'>Service Overdue</div>
+                </div>
+              </td>
+              {{/if}}
+              {{#if hasDueSoon}}
+              <td width="{{#if hasOverdue}}48%{{else}}100%{{/if}}" style="{{#if hasOverdue}}padding-left: 8px;{{/if}}">
+                <div class='summary-card due-soon'>
+                  <div class='summary-count'>{{totalDueSoon}}</div>
+                  <div class='summary-label'>Service Due Soon</div>
+                </div>
+              </td>
+              {{/if}}
+            </tr>
+          </table>
+
+          {{#if hasOverdue}}
+          <!-- Overdue Vehicles Section -->
+          <div class='section-header overdue'>
+            <div class='section-icon'>⚠</div>
+            <h3 class='section-title'>Service Overdue ({{totalOverdue}})</h3>
+          </div>
+
+          {{#each overdueVehicles}}
+          <div class='vehicle-card overdue'>
+            <div class='vehicle-header'>
+              <p class='vehicle-reg'>{{registrationNo}}</p>
+              <p class='vehicle-info'>{{brand}} {{model}} • {{vehicleNumber}} • Assigned: {{assignedTo}}</p>
+            </div>
+            <div class='vehicle-body'>
+              <div class='service-grid'>
+                <div class='service-item'>
+                  <div class='service-label'>Last Service</div>
+                  <div class='service-value'>{{lastServiceKm}}</div>
+                </div>
+                <div class='service-item'>
+                  <div class='service-label'>Last Service Date</div>
+                  <div class='service-value'>{{lastServiceDate}}</div>
+                </div>
+                <div class='service-item'>
+                  <div class='service-label'>Current Odometer</div>
+                  <div class='service-value highlight'>{{currentOdometerKm}}</div>
+                </div>
+                <div class='service-item'>
+                  <div class='service-label'>Service Due At</div>
+                  <div class='service-value'>{{nextServiceDueKm}}</div>
+                </div>
+              </div>
+              <div style="text-align: center;">
+                <span class='status-badge {{statusClass}}'>{{kmStatus}}</span>
+              </div>
+              <div class='progress-container'>
+                <div class='progress-label'>
+                  <span>Last Service</span>
+                  <span>Next Due</span>
+                </div>
+                <div class='progress-bar'>
+                  <div class='progress-fill overdue'></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {{/each}}
+          {{/if}}
+
+          {{#if hasDueSoon}}
+          <!-- Due Soon Vehicles Section -->
+          <div class='section-header due-soon'>
+            <div class='section-icon'>🔔</div>
+            <h3 class='section-title'>Service Due Soon ({{totalDueSoon}})</h3>
+          </div>
+
+          {{#each dueSoonVehicles}}
+          <div class='vehicle-card due-soon'>
+            <div class='vehicle-header'>
+              <p class='vehicle-reg'>{{registrationNo}}</p>
+              <p class='vehicle-info'>{{brand}} {{model}} • {{vehicleNumber}} • Assigned: {{assignedTo}}</p>
+            </div>
+            <div class='vehicle-body'>
+              <div class='service-grid'>
+                <div class='service-item'>
+                  <div class='service-label'>Last Service</div>
+                  <div class='service-value'>{{lastServiceKm}}</div>
+                </div>
+                <div class='service-item'>
+                  <div class='service-label'>Last Service Date</div>
+                  <div class='service-value'>{{lastServiceDate}}</div>
+                </div>
+                <div class='service-item'>
+                  <div class='service-label'>Current Odometer</div>
+                  <div class='service-value highlight'>{{currentOdometerKm}}</div>
+                </div>
+                <div class='service-item'>
+                  <div class='service-label'>Service Due At</div>
+                  <div class='service-value'>{{nextServiceDueKm}}</div>
+                </div>
+              </div>
+              <div style="text-align: center;">
+                <span class='status-badge {{statusClass}}'>{{kmStatus}}</span>
+              </div>
+            </div>
+          </div>
+          {{/each}}
+          {{/if}}
+
+          <div class='tip-box'>
+            <p>
+              <strong>💡 Tip:</strong> Regular servicing at recommended intervals helps maintain
+              fuel efficiency, extends vehicle life, and prevents costly breakdowns.
+            </p>
+          </div>
+
+          <div class='button-container'>
+            <a href='{{adminPortalUrl}}' class='button'>View Vehicle Dashboard</a>
+          </div>
+
+          <div class='divider'></div>
+
+          <div class='signature'>
+            <p>
+              Best regards,<br />
+              <span class='signature-name'>Eureka HRMS</span>
+            </p>
+          </div>
+        </div>
+
+        <div class='footer'>
+          <p class='footer-text'>This is an automated reminder. Please do not reply directly to this email.</p>
+          <p class='footer-company'>&copy; {{currentYear}} Eureka Enterprises. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+

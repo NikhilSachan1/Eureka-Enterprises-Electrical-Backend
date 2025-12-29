@@ -102,3 +102,6 @@ export enum CronProcessStatus {
   SKIPPED = 'skipped',
   FAILED = 'failed',
 }
+
+export const DEFAULT_SERVICE_INTERVAL_KM = 10000;
+export const DEFAULT_SERVICE_WARNING_KM = 1000;

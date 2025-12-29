@@ -26,6 +26,16 @@ export interface IEmailDataValues {
   expiringSoonVehicles?: VehicleDocumentEmailItem[];
   hasExpired?: boolean;
   hasExpiringSoon?: boolean;
+
+  // Vehicle Service Due
+  serviceIntervalKm?: number;
+  warningKm?: number;
+  totalOverdue?: number;
+  totalDueSoon?: number;
+  overdueVehicles?: VehicleServiceEmailItem[];
+  dueSoonVehicles?: VehicleServiceEmailItem[];
+  hasOverdue?: boolean;
+  hasDueSoon?: boolean;
 }
 
 export interface VehicleDocumentEmailItem {
@@ -42,5 +52,19 @@ export interface DocumentEmailItem {
   label: string;
   endDate: string;
   daysText: string;
+  statusClass: string;
+}
+
+export interface VehicleServiceEmailItem {
+  registrationNo: string;
+  vehicleNumber: string;
+  brand: string;
+  model: string;
+  assignedTo: string;
+  lastServiceKm: string;
+  lastServiceDate: string;
+  currentOdometerKm: string;
+  nextServiceDueKm: string;
+  kmStatus: string;
   statusClass: string;
 }

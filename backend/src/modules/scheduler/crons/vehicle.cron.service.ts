@@ -21,14 +21,24 @@ import {
   VehicleDocumentEmailData,
   VehicleDocumentEmailItem,
   DocumentExpiryCount,
+  VehicleServiceDueResult,
+  VehicleServiceAlert,
+  ServiceDueAlertStatus,
+  VehicleServiceDueEmailData,
+  VehicleServiceEmailItem,
 } from '../types/vehicle.types';
 import {
   getVehiclesWithExpiringDocumentsQuery,
   getDocumentAlertStatus,
   getDocumentTypeLabel,
+  getVehiclesWithServiceDueQuery,
 } from '../queries/vehicle.queries';
 import { DEFAULT_EXPIRING_SOON_DAYS } from '../../vehicle-masters/constants/vehicle-masters.constants';
 import { Environments } from '../../../../env-configs';
+import {
+  DEFAULT_SERVICE_INTERVAL_KM,
+  DEFAULT_SERVICE_WARNING_KM,
+} from '../constants/scheduler.constants';
 
 @Injectable()
 export class VehicleCronService {
@@ -143,6 +153,354 @@ export class VehicleCronService {
       result.errors.push(error.message);
       return result;
     }
+  }
+
+  /**
+   * CRON 12: Vehicle Service Due Reminders
+   *
+   * Runs daily at 9:00 AM IST to check for vehicles with service due based on KM:
+   *
+   * Scenarios Handled:
+   * 1. OVERDUE - Vehicle has crossed service interval (kmToNextService <= 0)
+   * 2. DUE_SOON - Vehicle approaching service (0 < kmToNextService <= warningKm)
+   * 3. No service history - Skipped (lastServiceKm is null)
+   * 4. No odometer reading - Skipped (currentOdometerKm is 0)
+   * 5. Retired vehicles - Skipped (status = RETIRED)
+   *
+   * Configuration:
+   * - serviceIntervalKm: From config (default: 10000 km)
+   * - warningKm: From config (default: 1000 km)
+   *
+   * Recipients:
+   * - All Admins (TODO: Fetch dynamically from roles)
+   * - Assigned users (if vehicle is assigned to someone)
+   */
+  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  async handleVehicleServiceDueReminders(): Promise<VehicleServiceDueResult> {
+    const cronName = CRON_NAMES.VEHICLE_SERVICE_DUE_REMINDERS;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: VehicleServiceDueResult = {
+      totalVehiclesProcessed: 0,
+      overdueCount: 0,
+      dueSoonCount: 0,
+      skippedNoServiceHistory: 0,
+      skippedNoOdometer: 0,
+      emailsSent: 0,
+      recipients: [],
+      errors: [],
+    };
+
+    try {
+      const serviceIntervalKm = await this.getServiceIntervalKm();
+      const warningKm = await this.getServiceWarningKm();
+
+      this.logger.log(
+        `[${cronName}] Using service interval: ${serviceIntervalKm} km, warning threshold: ${warningKm} km`,
+      );
+
+      const { query, params } = getVehiclesWithServiceDueQuery(serviceIntervalKm, warningKm);
+      const vehiclesRaw = await this.dataSource.query(query, params);
+
+      if (vehiclesRaw.length === 0) {
+        this.logger.log(`[${cronName}] No vehicles with service due found`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      this.logger.log(`[${cronName}] Found ${vehiclesRaw.length} vehicles with service due`);
+
+      const { vehicleAlerts, overdueCount, dueSoonCount } =
+        this.processVehicleServiceData(vehiclesRaw);
+
+      result.totalVehiclesProcessed = vehicleAlerts.length;
+      result.overdueCount = overdueCount;
+      result.dueSoonCount = dueSoonCount;
+
+      const overdueVehicles = vehicleAlerts.filter(
+        (v) => v.status === ServiceDueAlertStatus.OVERDUE,
+      );
+      const dueSoonVehicles = vehicleAlerts.filter(
+        (v) => v.status === ServiceDueAlertStatus.DUE_SOON,
+      );
+
+      if (overdueCount > 0 || dueSoonCount > 0) {
+        const emailResult = await this.sendServiceDueAlertEmails(
+          overdueVehicles,
+          dueSoonVehicles,
+          serviceIntervalKm,
+          warningKm,
+          cronName,
+        );
+        result.emailsSent = emailResult.emailsSent;
+        result.recipients = emailResult.recipients;
+        result.errors.push(...emailResult.errors);
+      }
+
+      for (const vehicle of vehicleAlerts) {
+        const urgency = vehicle.status === ServiceDueAlertStatus.OVERDUE ? '🔴 OVERDUE' : '🟡 DUE';
+        this.logger.debug(
+          `[${cronName}] ${urgency}: ${vehicle.registrationNo} - ${Math.abs(
+            vehicle.kmToNextService,
+          )} km ${vehicle.kmToNextService < 0 ? 'overdue' : 'to service'}`,
+        );
+      }
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private async getServiceIntervalKm(): Promise<number> {
+    try {
+      const configuration = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.VEHICLE,
+          key: CONFIGURATION_KEYS.VEHICLE_SERVICE_INTERVAL_KM,
+        },
+      });
+
+      if (!configuration) {
+        this.logger.warn('Vehicle service interval config not found, using default');
+        return DEFAULT_SERVICE_INTERVAL_KM;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: { configId: configuration.id, isActive: true },
+      });
+
+      if (!configSetting?.value) {
+        this.logger.warn('Vehicle service interval setting not found, using default');
+        return DEFAULT_SERVICE_INTERVAL_KM;
+      }
+
+      return Number(configSetting.value);
+    } catch {
+      this.logger.warn('Error fetching vehicle service interval, using default');
+      return DEFAULT_SERVICE_INTERVAL_KM;
+    }
+  }
+
+  private async getServiceWarningKm(): Promise<number> {
+    try {
+      const configuration = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.VEHICLE,
+          key: CONFIGURATION_KEYS.VEHICLE_SERVICE_WARNING_KM,
+        },
+      });
+
+      if (!configuration) {
+        this.logger.warn('Vehicle service warning config not found, using default');
+        return DEFAULT_SERVICE_WARNING_KM;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: { configId: configuration.id, isActive: true },
+      });
+
+      if (!configSetting?.value) {
+        this.logger.warn('Vehicle service warning setting not found, using default');
+        return DEFAULT_SERVICE_WARNING_KM;
+      }
+
+      return Number(configSetting.value);
+    } catch {
+      this.logger.warn('Error fetching vehicle service warning, using default');
+      return DEFAULT_SERVICE_WARNING_KM;
+    }
+  }
+
+  private processVehicleServiceData(vehiclesRaw: any[]): {
+    vehicleAlerts: VehicleServiceAlert[];
+    overdueCount: number;
+    dueSoonCount: number;
+  } {
+    const vehicleAlerts: VehicleServiceAlert[] = [];
+    let overdueCount = 0;
+    let dueSoonCount = 0;
+
+    for (const vehicle of vehiclesRaw) {
+      const status =
+        vehicle.kmToNextService <= 0
+          ? ServiceDueAlertStatus.OVERDUE
+          : ServiceDueAlertStatus.DUE_SOON;
+
+      if (status === ServiceDueAlertStatus.OVERDUE) {
+        overdueCount++;
+      } else {
+        dueSoonCount++;
+      }
+
+      vehicleAlerts.push({
+        vehicleMasterId: vehicle.vehicleMasterId,
+        registrationNo: vehicle.registrationNo,
+        number: vehicle.number,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        assignedTo: vehicle.assignedTo,
+        assignedUserName: vehicle.assignedFirstName
+          ? `${vehicle.assignedFirstName} ${vehicle.assignedLastName || ''}`.trim()
+          : null,
+        assignedUserEmail: vehicle.assignedUserEmail,
+        lastServiceKm: vehicle.lastServiceKm,
+        lastServiceDate: vehicle.lastServiceDate,
+        currentOdometerKm: vehicle.currentOdometerKm,
+        nextServiceDueKm: vehicle.nextServiceDueKm,
+        kmToNextService: vehicle.kmToNextService,
+        kmSinceLastService: vehicle.kmSinceLastService,
+        status,
+      });
+    }
+
+    return { vehicleAlerts, overdueCount, dueSoonCount };
+  }
+
+  private async sendServiceDueAlertEmails(
+    overdueVehicles: VehicleServiceAlert[],
+    dueSoonVehicles: VehicleServiceAlert[],
+    serviceIntervalKm: number,
+    warningKm: number,
+    cronName: string,
+  ): Promise<{ emailsSent: number; recipients: string[]; errors: string[] }> {
+    const emailsSent = { count: 0 };
+    const recipients: string[] = [];
+    const errors: string[] = [];
+
+    const recipientEmails = await this.getRecipientEmails();
+
+    if (recipientEmails.length === 0) {
+      this.logger.warn(`[${cronName}] No recipient emails found`);
+      return { emailsSent: 0, recipients: [], errors: ['No recipient emails configured'] };
+    }
+
+    const emailData: VehicleServiceDueEmailData = {
+      currentYear: new Date().getFullYear(),
+      adminPortalUrl: Environments.FE_BASE_URL || '#',
+      serviceIntervalKm,
+      warningKm,
+      totalOverdue: overdueVehicles.length,
+      totalDueSoon: dueSoonVehicles.length,
+      overdueVehicles: this.formatServiceVehiclesForEmail(overdueVehicles),
+      dueSoonVehicles: this.formatServiceVehiclesForEmail(dueSoonVehicles),
+      hasOverdue: overdueVehicles.length > 0,
+      hasDueSoon: dueSoonVehicles.length > 0,
+    };
+
+    for (const email of recipientEmails) {
+      try {
+        await this.emailService.sendMail({
+          receiverEmails: email,
+          subject: this.getServiceEmailSubject(overdueVehicles.length),
+          template: EMAIL_TEMPLATE.VEHICLE_SERVICE_DUE,
+          emailData,
+        });
+
+        this.logger.log(`[${cronName}] Email sent to: ${email}`);
+        recipients.push(email);
+        emailsSent.count++;
+      } catch (error) {
+        errors.push(`Failed to send email to ${email}: ${error.message}`);
+        this.logger.error(`[${cronName}] Failed to send email to ${email}`, error);
+      }
+    }
+
+    // Send individual alerts to assigned users
+    const assignedUserEmails = new Set<string>();
+    const allVehicles = [...overdueVehicles, ...dueSoonVehicles];
+
+    for (const vehicle of allVehicles) {
+      if (vehicle.assignedUserEmail && !assignedUserEmails.has(vehicle.assignedUserEmail)) {
+        assignedUserEmails.add(vehicle.assignedUserEmail);
+
+        const userVehicles = allVehicles.filter(
+          (v) => v.assignedUserEmail === vehicle.assignedUserEmail,
+        );
+        const userOverdueVehicles = userVehicles.filter(
+          (v) => v.status === ServiceDueAlertStatus.OVERDUE,
+        );
+        const userDueSoonVehicles = userVehicles.filter(
+          (v) => v.status === ServiceDueAlertStatus.DUE_SOON,
+        );
+
+        const userEmailData: VehicleServiceDueEmailData = {
+          currentYear: new Date().getFullYear(),
+          adminPortalUrl: Environments.FE_BASE_URL || '#',
+          serviceIntervalKm,
+          warningKm,
+          totalOverdue: userOverdueVehicles.length,
+          totalDueSoon: userDueSoonVehicles.length,
+          overdueVehicles: this.formatServiceVehiclesForEmail(userOverdueVehicles),
+          dueSoonVehicles: this.formatServiceVehiclesForEmail(userDueSoonVehicles),
+          hasOverdue: userOverdueVehicles.length > 0,
+          hasDueSoon: userDueSoonVehicles.length > 0,
+        };
+
+        try {
+          await this.emailService.sendMail({
+            receiverEmails: vehicle.assignedUserEmail,
+            subject: this.getServiceEmailSubject(userOverdueVehicles.length),
+            template: EMAIL_TEMPLATE.VEHICLE_SERVICE_DUE,
+            emailData: userEmailData,
+          });
+
+          this.logger.log(
+            `[${cronName}] Email sent to assigned user: ${vehicle.assignedUserEmail}`,
+          );
+          recipients.push(vehicle.assignedUserEmail);
+          emailsSent.count++;
+        } catch (error) {
+          errors.push(`Failed to send email to ${vehicle.assignedUserEmail}: ${error.message}`);
+          this.logger.error(
+            `[${cronName}] Failed to send email to ${vehicle.assignedUserEmail}`,
+            error,
+          );
+        }
+      }
+    }
+
+    return { emailsSent: emailsSent.count, recipients, errors };
+  }
+
+  private formatServiceVehiclesForEmail(
+    vehicles: VehicleServiceAlert[],
+  ): VehicleServiceEmailItem[] {
+    return vehicles.map((vehicle) => ({
+      registrationNo: vehicle.registrationNo,
+      vehicleNumber: vehicle.number,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      assignedTo: vehicle.assignedUserName || 'Unassigned',
+      lastServiceKm: this.formatKm(vehicle.lastServiceKm),
+      lastServiceDate: vehicle.lastServiceDate ? this.formatDate(vehicle.lastServiceDate) : 'N/A',
+      currentOdometerKm: this.formatKm(vehicle.currentOdometerKm),
+      nextServiceDueKm: this.formatKm(vehicle.nextServiceDueKm),
+      kmStatus: this.getKmStatusText(vehicle.kmToNextService),
+      statusClass: vehicle.status === ServiceDueAlertStatus.OVERDUE ? 'overdue' : 'due-soon',
+    }));
+  }
+
+  private getServiceEmailSubject(overdueCount: number): string {
+    if (overdueCount > 0) {
+      return EMAIL_SUBJECT.VEHICLE_SERVICE_DUE_URGENT;
+    }
+    return EMAIL_SUBJECT.VEHICLE_SERVICE_DUE;
+  }
+
+  private getKmStatusText(kmToNextService: number): string {
+    if (kmToNextService <= 0) {
+      const overdueKm = Math.abs(kmToNextService);
+      return `${this.formatKm(overdueKm)} overdue`;
+    }
+    return `${this.formatKm(kmToNextService)} to service`;
+  }
+
+  private formatKm(km: number): string {
+    return km.toLocaleString('en-IN') + ' km';
   }
 
   private async getExpiryWarningDays(): Promise<number> {

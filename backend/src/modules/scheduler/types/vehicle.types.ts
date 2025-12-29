@@ -92,3 +92,80 @@ export interface DocumentEmailItem {
   daysText: string;
   statusClass: string;
 }
+
+/**
+ * Vehicle Service Due Reminder Types
+ *
+ * CRON 12: Vehicle Service Due Reminders
+ *
+ * Sends alerts for vehicles with service due based on KM:
+ * - OVERDUE: Current KM > Next Service Due KM
+ * - DUE_SOON: Current KM is within warning threshold of Next Service Due KM
+ *
+ * Calculation:
+ * - nextServiceDueKm = lastServiceKm + serviceIntervalKm (default: 10000)
+ * - kmToNextService = nextServiceDueKm - currentOdometerKm
+ * - If kmToNextService <= 0 → OVERDUE
+ * - If kmToNextService <= warningKm (default: 1000) → DUE_SOON
+ */
+
+export interface VehicleServiceDueResult {
+  totalVehiclesProcessed: number;
+  overdueCount: number;
+  dueSoonCount: number;
+  skippedNoServiceHistory: number;
+  skippedNoOdometer: number;
+  emailsSent: number;
+  recipients: string[];
+  errors: string[];
+}
+
+export interface VehicleServiceAlert {
+  vehicleMasterId: string;
+  registrationNo: string;
+  number: string;
+  brand: string;
+  model: string;
+  assignedTo: string | null;
+  assignedUserName: string | null;
+  assignedUserEmail: string | null;
+  lastServiceKm: number;
+  lastServiceDate: Date | null;
+  currentOdometerKm: number;
+  nextServiceDueKm: number;
+  kmToNextService: number;
+  kmSinceLastService: number;
+  status: ServiceDueAlertStatus;
+}
+
+export enum ServiceDueAlertStatus {
+  OVERDUE = 'OVERDUE',
+  DUE_SOON = 'DUE_SOON',
+}
+
+export interface VehicleServiceDueEmailData {
+  currentYear: number;
+  adminPortalUrl: string;
+  serviceIntervalKm: number;
+  warningKm: number;
+  totalOverdue: number;
+  totalDueSoon: number;
+  overdueVehicles: VehicleServiceEmailItem[];
+  dueSoonVehicles: VehicleServiceEmailItem[];
+  hasOverdue: boolean;
+  hasDueSoon: boolean;
+}
+
+export interface VehicleServiceEmailItem {
+  registrationNo: string;
+  vehicleNumber: string;
+  brand: string;
+  model: string;
+  assignedTo: string;
+  lastServiceKm: string;
+  lastServiceDate: string;
+  currentOdometerKm: string;
+  nextServiceDueKm: string;
+  kmStatus: string;
+  statusClass: string;
+}
