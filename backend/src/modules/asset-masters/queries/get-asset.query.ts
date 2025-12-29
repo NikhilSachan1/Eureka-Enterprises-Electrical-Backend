@@ -194,11 +194,16 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     ${whereClause}
   `;
 
+  // Keep filter params separate for count query
+  const countParams = [...params];
+
+  // Add pagination params for data query
   params.push(pageSize, offset);
 
   return {
     dataQuery,
     countQuery,
     params,
+    countParams,
   };
 };

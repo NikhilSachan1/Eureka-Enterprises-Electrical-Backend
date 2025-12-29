@@ -202,10 +202,10 @@ export class AssetMastersService {
 
   async findAll(findOptions: AssetQueryDto) {
     try {
-      const { dataQuery, countQuery, params } = await getAssetQuery(findOptions);
+      const { dataQuery, countQuery, params, countParams } = getAssetQuery(findOptions);
       const [assets, total] = await Promise.all([
         this.assetMastersRepository.executeRawQuery(dataQuery, params) as Promise<any[]>,
-        this.assetMastersRepository.executeRawQuery(countQuery, params) as Promise<{
+        this.assetMastersRepository.executeRawQuery(countQuery, countParams) as Promise<{
           total: number;
         }>,
       ]);
