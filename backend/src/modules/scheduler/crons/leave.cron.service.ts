@@ -5,6 +5,8 @@ import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
 import { ConfigurationService } from '../../configurations/configuration.service';
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
+import { EmailService } from '../../common/email/email.service';
+import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
 import { CRON_SCHEDULES, CRON_NAMES, SYSTEM_NOTES } from '../constants/scheduler.constants';
 import {
   CONFIGURATION_KEYS,
@@ -26,6 +28,7 @@ import {
   createLeaveBalanceQuery,
 } from '../queries';
 import { UtilityService } from '../../../utils/utility/utility.service';
+import { Environments } from '../../../../env-configs';
 
 @Injectable()
 export class LeaveCronService {
@@ -36,6 +39,7 @@ export class LeaveCronService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
+    private readonly emailService: EmailService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -74,27 +78,32 @@ export class LeaveCronService {
         (nextFYStart.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
       );
 
-      // TODO: Replace with actual email service integration
-      // TODO: Fetch HR/Admin emails from user roles
-      // TODO: Make email template configurable
-      const hrEmails = ['hr@company.com']; // Hardcoded for now
+      // TODO: Fetch HR/Admin emails from user roles dynamically
+      const hrEmails = await this.getHRAdminEmails();
 
-      const emailSubject = `[Action Required] Review Leave Configuration for FY ${this.getNextFinancialYearLabel()}`;
-      const emailBody = this.buildFYReminderEmailBody(daysRemaining);
+      if (hrEmails.length === 0) {
+        this.logger.warn(`[${cronName}] No HR/Admin emails found to send reminder`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      const emailData = {
+        daysRemaining,
+        nextFinancialYear: this.getNextFinancialYearLabel(),
+        adminPortalUrl: Environments.FE_BASE_URL || '#',
+        currentYear: currentDate.getFullYear(),
+      };
 
       for (const email of hrEmails) {
         try {
-          // TODO: Integrate with actual email service
-          // await this.emailService.sendEmail({
-          //   to: email,
-          //   subject: emailSubject,
-          //   body: emailBody,
-          // });
+          await this.emailService.sendMail({
+            receiverEmails: email,
+            subject: EMAIL_SUBJECT.FY_LEAVE_CONFIG_REMINDER,
+            template: EMAIL_TEMPLATE.FY_LEAVE_CONFIG_REMINDER,
+            emailData,
+          });
 
-          this.logger.log(`[${cronName}] Email would be sent to: ${email}`);
-          this.logger.log(`[${cronName}] Subject: ${emailSubject}`);
-          this.logger.log(`[${cronName}] Body: ${emailBody}`);
-
+          this.logger.log(`[${cronName}] Email sent to: ${email}`);
           result.recipients.push(email);
           result.emailsSent++;
         } catch (error) {
@@ -121,45 +130,21 @@ export class LeaveCronService {
     return `${fyStartYear}-${(fyStartYear + 1).toString().slice(-2)}`;
   }
 
-  private buildFYReminderEmailBody(daysRemaining: number): string {
-    const nextFY = this.getNextFinancialYearLabel();
+  /**
+   * Get HR/Admin emails for sending reminders
+   * TODO: Replace with dynamic fetching from user roles (HR, ADMIN roles)
+   */
+  private async getHRAdminEmails(): Promise<string[]> {
+    // TODO: Implement dynamic email fetching from users with HR/ADMIN roles
+    // Example query:
+    // SELECT DISTINCT u.email FROM users u
+    // INNER JOIN user_roles ur ON u.id = ur."userId"
+    // INNER JOIN roles r ON ur."roleId" = r.id
+    // WHERE r.name IN ('HR', 'ADMIN') AND u."deletedAt" IS NULL
 
-    // TODO: Replace with proper email template
-    return `
-Dear HR Team,
-
-This is a reminder that the new Financial Year (${nextFY}) will begin in ${daysRemaining} days.
-
-Please review and update the following leave configurations before April 1st:
-
-1. Leave Types & Quotas
-   - Review leave types (Casual Leave, Earned Leave, Sick Leave, etc.)
-   - Update annual quotas for each leave type
-   - Configure leave encashment policies
-
-2. Holiday Calendar
-   - Add holidays for the new financial year
-   - Review and update regional holidays if applicable
-
-3. Leave Policies
-   - Review carry forward limits
-   - Update leave accrual rules
-   - Configure leave approval workflows
-
-4. Leave Balance Carry Forward
-   - Verify carry forward settings for each leave type
-   - Set maximum carry forward limits
-
-If no changes are made by March 31st, the current year's configuration will be automatically copied to the new financial year.
-
-Please login to the admin portal to make necessary updates.
-
-Best regards,
-HR Management System
-
----
-This is an automated reminder. Please do not reply to this email.
-    `.trim();
+    // For now, return placeholder emails
+    // Replace this with actual query when role-based email fetching is implemented
+    return ['hr@company.com'];
   }
 
   /**

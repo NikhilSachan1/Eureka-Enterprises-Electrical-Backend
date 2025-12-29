@@ -10,6 +10,7 @@ import { LeaveApplicationsModule } from '../leave-applications/leave-application
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { PayrollModule } from '../payroll/payroll.module';
+import { EmailModule } from '../common/email/email.module';
 import { SharedModule } from '../shared/shared.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { SharedModule } from '../shared/shared.module';
     ConfigurationsModule,
     ConfigSettingsModule,
     PayrollModule,
+    EmailModule,
   ],
   providers: [
     SchedulerService,

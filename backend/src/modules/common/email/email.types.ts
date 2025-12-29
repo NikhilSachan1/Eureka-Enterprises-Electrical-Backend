@@ -6,8 +6,16 @@ export interface IMailOptions {
 }
 
 export interface IEmailDataValues {
+  // Common
+  currentYear?: number;
+
+  // Forget Password
   firstName?: string;
   lastName?: string;
   resetPasswordLink?: string;
-  currentYear?: number;
+
+  // FY Leave Config Reminder
+  daysRemaining?: number;
+  nextFinancialYear?: string;
+  adminPortalUrl?: string;
 }
