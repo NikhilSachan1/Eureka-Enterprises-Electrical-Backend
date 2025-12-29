@@ -7,6 +7,7 @@ import { AnnouncementCronService } from './crons/announcement.cron.service';
 import { VehicleCronService } from './crons/vehicle.cron.service';
 import { AssetCronService } from './crons/asset.cron.service';
 import { CardCronService } from './crons/card.cron.service';
+import { ExpenseCronService } from './crons/expense.cron.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { UsersModule } from '../users/user.module';
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
@@ -36,6 +37,7 @@ import { SharedModule } from '../shared/shared.module';
     VehicleCronService,
     AssetCronService,
     CardCronService,
+    ExpenseCronService,
   ],
   exports: [SchedulerService],
 })

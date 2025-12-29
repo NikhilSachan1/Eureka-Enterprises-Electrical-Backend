@@ -1,0 +1,471 @@
+<html lang='en' dir='ltr'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <meta name='color-scheme' content='light' />
+    <meta name='supported-color-schemes' content='light' />
+    <title>Eureka Enterprises - Pending Expense Approvals</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
+      sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
+      .email-wrapper { padding: 40px 20px; background-color: #f7fafc; } .email-container {
+      max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0
+      4px 6px rgba(0, 0, 0, 0.07); overflow: hidden; } .header { background: linear-gradient(135deg,
+      #1a365d 0%, #2c5282 100%); padding: 32px 40px; text-align: center; } .logo { max-width: 120px;
+      height: auto; display: block; margin: 0 auto 16px; border-radius: 8px; } .company-name {
+      color: #ffffff; font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.5px; }
+      .content { padding: 40px; } .greeting { font-size: 16px; color: #1a365d; margin-bottom: 20px;
+      } .message-text { color: #4a5568; margin-bottom: 24px; line-height: 1.7; } /* Section Headers
+      */ .section-header { display: flex; align-items: center; gap: 12px; margin: 32px 0 16px 0; }
+      .section-header.urgent { color: #c53030; } .section-header.pending { color: #2c5282; }
+      .section-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items:
+      center; justify-content: center; font-size: 14px; font-weight: bold; }
+      .section-header.urgent .section-icon { background-color: #fed7d7; color: #c53030; }
+      .section-header.pending .section-icon { background-color: #bee3f8; color: #2c5282; }
+      .section-title { font-size: 16px; font-weight: 600; margin: 0; } /* Expense Item */
+      .expense-item { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      margin-bottom: 12px; overflow: hidden; } .expense-item.urgent { border-left: 4px solid
+      #c53030; } .expense-item.pending { border-left: 4px solid #3182ce; } .expense-header {
+      padding: 14px 20px; background-color: #edf2f7; border-bottom: 1px solid #e2e8f0; }
+      .expense-employee { font-size: 15px; font-weight: 600; color: #1a365d; margin: 0; }
+      .expense-body { padding: 14px 20px; } /* Status Badge */ .status-badge { display: inline-block;
+      padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform:
+      uppercase; letter-spacing: 0.5px; margin-top: 10px; } .status-badge.urgent {
+      background-color: #fed7d7; color: #c53030; } .status-badge.pending { background-color:
+      #bee3f8; color: #2c5282; } /* Legend */ .legend { display: flex; gap: 24px; margin: 24px 0;
+      padding: 16px 20px; background-color: #f7fafc; border-radius: 6px; } .legend-item { display:
+      flex; align-items: center; gap: 8px; font-size: 12px; color: #4a5568; } .legend-dot { width:
+      12px; height: 12px; border-radius: 50%; } .legend-dot.urgent { background-color: #c53030; }
+      .legend-dot.pending { background-color: #3182ce; } /* Button */ .button-container {
+      text-align: center; margin: 32px 0; } .button { display: inline-block; padding: 14px 32px;
+      background: linear-gradient(135deg, #2c5282 0%, #1a365d 100%); color: #ffffff !important;
+      text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; letter-spacing:
+      0.5px; } .divider { height: 1px; background-color: #e2e8f0; margin: 28px 0; } .signature {
+      margin-top: 28px; color: #4a5568; } .signature-name { color: #1a365d; font-weight: 600; }
+      .footer { background-color: #f7fafc; text-align: center; padding: 24px 40px; border-top: 1px
+      solid #e2e8f0; } .footer-text { color: #718096; font-size: 12px; margin: 0 0 8px 0; }
+      .footer-company { color: #a0aec0; font-size: 11px; margin: 0; } /* Note Box */ .note-box {
+      background-color: #dcfce7; border: 1px solid #4ade80; border-left: 4px solid #16a34a; padding:
+      16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .note-box p { margin: 0; color:
+      #14532d; font-size: 14px; } .note-box strong { color: #166534; } /* Info Box */ .info-box {
+      background-color: #ebf8ff; border: 1px solid #90cdf4; border-left: 4px solid #3182ce; padding:
+      16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .info-box p { margin: 0; color:
+      #2c5282; font-size: 14px; } .info-box strong { color: #1a365d; } @media screen and (max-width:
+      600px) { .content { padding: 28px 24px; } .header { padding: 24px; } .footer { padding: 20px
+      24px; } .legend { flex-direction: column; gap: 12px; } }
+    </style>
+  </head>
+  <body>
+    <div class='email-wrapper'>
+      <div class='email-container'>
+        <div class='header'>
+          <img
+            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+            alt='Eureka Enterprises'
+            class='logo'
+          />
+          <p class='company-name'>Eureka Enterprises</p>
+        </div>
+
+        <div class='content'>
+          <p class='greeting'><strong>📋 Pending Expense Approvals</strong></p>
+
+          <p class='message-text'>
+            This is a reminder about expenses awaiting your approval. Timely approval ensures
+            employees receive their reimbursements promptly and helps maintain accurate financial
+            records.
+          </p>
+
+          <!-- Summary Cards - Table Based -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
+            <!-- Row 1: Total Pending | Total Amount -->
+            <tr>
+              <td style='padding-right: 8px; width: 50%;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%); border: 1px solid #90cdf4; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #2c5282;'
+                      >{{totalPending}}</div>
+                      <div
+                        style='font-size: 11px; color: #2b6cb0; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Total Pending</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+              <td style='padding-left: 8px; width: 50%;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%); border: 1px solid #68d391; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 24px; font-weight: 700; line-height: 1; color: #276749;'
+                      >{{totalAmount}}</div>
+                      <div
+                        style='font-size: 11px; color: #22543d; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Total Amount</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Row 2: Regular Expenses | Fuel Expenses -->
+            <tr>
+              <td colspan='2' style='padding-top: 16px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td style='padding-right: 8px; width: 50%;'>
+                      <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td
+                            style='background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; text-align: center;'
+                          >
+                            <div
+                              style='font-size: 32px; font-weight: 700; line-height: 1; color: #1a365d;'
+                            >{{totalRegular}}</div>
+                            <div
+                              style='font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                            >Regular Expenses</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td style='padding-left: 8px; width: 50%;'>
+                      <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td
+                            style='background-color: #fef3c7; border: 1px solid #f6e05e; border-radius: 8px; padding: 16px; text-align: center;'
+                          >
+                            <div
+                              style='font-size: 32px; font-weight: 700; line-height: 1; color: #92400e;'
+                            >{{totalFuel}}</div>
+                            <div
+                              style='font-size: 11px; color: #b45309; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                            >Fuel Expenses</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Row 3: Urgent Warning (only if overdue expenses exist) -->
+            {{#if hasUrgent}}
+            <tr>
+              <td colspan='2' style='padding-top: 16px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); border: 1px solid #fc8181; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #c53030;'
+                      >⚠️ {{totalUrgent}}</div>
+                      <div
+                        style='font-size: 11px; color: #9b2c2c; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Overdue Expenses (Pending {{urgentThresholdDays}}+ days)</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            {{/if}}
+          </table>
+
+          <!-- Legend -->
+          <div class='legend'>
+            <div class='legend-item'>
+              <span class='legend-dot urgent'></span>
+              <span>Overdue - Pending {{urgentThresholdDays}}+ days</span>
+            </div>
+            <div class='legend-item'>
+              <span class='legend-dot pending'></span>
+              <span>Pending - Awaiting approval</span>
+            </div>
+          </div>
+
+          {{#if hasUrgent}}
+            <!-- Urgent Expenses Section -->
+            <div class='section-header urgent'>
+              <div class='section-icon'>!</div>
+              <h3 class='section-title'>Overdue Expenses ({{totalUrgent}})</h3>
+            </div>
+
+            <div class='info-box'>
+              <p>
+                <strong>⚠️ Action Required:</strong>
+                These expenses have been pending for more than {{urgentThresholdDays}} days.
+                Please review and approve/reject them at your earliest convenience.
+              </p>
+            </div>
+
+            {{#each urgentExpenses}}
+              <div class='expense-item urgent'>
+                <div class='expense-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='expense-employee'>{{employeeName}}</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span
+                          style='padding: 3px 10px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; {{#if isFuelExpense}}background-color: #fef3c7; color: #92400e;{{else}}background-color: #e2e8f0; color: #4a5568;{{/if}}'
+                        >{{expenseTypeLabel}}</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='expense-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Category</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >{{category}}</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Amount</div>
+                          <div
+                            style='font-size: 15px; color: #276749; font-weight: 600;'
+                          >{{amount}}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Date</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >{{expenseDate}}</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Description</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >{{description}}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    {{#if isFuelExpense}}
+                      <tr>
+                        <td style='padding: 4px; width: 50%;'>
+                          <div
+                            style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                          >
+                            <div
+                              style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                            >Vehicle</div>
+                            <div
+                              style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                            >{{vehicleRegistrationNo}}</div>
+                          </div>
+                        </td>
+                        <td style='padding: 4px; width: 50%;'>
+                          <div
+                            style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                          >
+                            <div
+                              style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                            >Fuel Quantity</div>
+                            <div
+                              style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                            >{{fuelLiters}}</div>
+                          </div>
+                        </td>
+                      </tr>
+                    {{/if}}
+                  </table>
+                  <div style='text-align: center;'>
+                    <span class='status-badge urgent'>{{daysText}}</span>
+                  </div>
+                </div>
+              </div>
+            {{/each}}
+          {{/if}}
+
+          {{#if hasPending}}
+            <!-- Pending Expenses Section -->
+            <div class='section-header pending'>
+              <div class='section-icon'>⏳</div>
+              <h3 class='section-title'>Pending Expenses</h3>
+            </div>
+
+            {{#each pendingExpenses}}
+              <div class='expense-item pending'>
+                <div class='expense-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='expense-employee'>{{employeeName}}</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span
+                          style='padding: 3px 10px; border-radius: 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; {{#if isFuelExpense}}background-color: #fef3c7; color: #92400e;{{else}}background-color: #e2e8f0; color: #4a5568;{{/if}}'
+                        >{{expenseTypeLabel}}</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='expense-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Category</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >{{category}}</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Amount</div>
+                          <div
+                            style='font-size: 15px; color: #276749; font-weight: 600;'
+                          >{{amount}}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Date</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >{{expenseDate}}</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Description</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >{{description}}</div>
+                        </div>
+                      </td>
+                    </tr>
+                    {{#if isFuelExpense}}
+                      <tr>
+                        <td style='padding: 4px; width: 50%;'>
+                          <div
+                            style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                          >
+                            <div
+                              style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                            >Vehicle</div>
+                            <div
+                              style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                            >{{vehicleRegistrationNo}}</div>
+                          </div>
+                        </td>
+                        <td style='padding: 4px; width: 50%;'>
+                          <div
+                            style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                          >
+                            <div
+                              style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                            >Fuel Quantity</div>
+                            <div
+                              style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                            >{{fuelLiters}}</div>
+                          </div>
+                        </td>
+                      </tr>
+                    {{/if}}
+                  </table>
+                  <div style='text-align: center;'>
+                    <span class='status-badge pending'>{{daysText}}</span>
+                  </div>
+                </div>
+              </div>
+            {{/each}}
+          {{/if}}
+
+          <div class='note-box'>
+            <p>
+              <strong>💡 Tip:</strong>
+              Review expenses in bulk from the admin portal for faster processing. You can filter
+              by employee, date range, or expense type.
+            </p>
+          </div>
+
+          <div class='button-container'>
+            <a href='{{adminPortalUrl}}' class='button'>Review Pending Expenses</a>
+          </div>
+
+          <div class='divider'></div>
+
+          <p class='message-text' style='font-size: 13px;'>
+            <strong>Note:</strong>
+            Delayed expense approvals may result in:
+          </p>
+          <ul style='color: #4a5568; font-size: 13px; margin: 0 0 20px 0; padding-left: 20px;'>
+            <li>Employee dissatisfaction due to delayed reimbursements</li>
+            <li>Inaccurate monthly expense reports</li>
+            <li>Budget tracking discrepancies</li>
+            <li>Audit compliance issues</li>
+          </ul>
+
+          <div class='signature'>
+            <p>
+              Best regards,<br />
+              <span class='signature-name'>Eureka HRMS</span>
+            </p>
+          </div>
+        </div>
+
+        <div class='footer'>
+          <p class='footer-text'>This is an automated reminder. Please do not reply directly to
+            this email.</p>
+          <p class='footer-company'>&copy;
+            {{currentYear}}
+            Eureka Enterprises. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

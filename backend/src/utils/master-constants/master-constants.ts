@@ -15,6 +15,7 @@ export const CONFIGURATION_KEYS = {
   TRANSACTION_TYPES: 'transaction_types',
   EXPENSE_DATE_VALIDATION: 'expense_date_validation',
   FUEL_EXPENSE_DATE_VALIDATION: 'fuel_expense_date_validation',
+  EXPENSE_URGENT_THRESHOLD_DAYS: 'expense_urgent_threshold_days',
   //EMPLOYEE
   GENDERS: 'genders',
   BLOOD_GROUPS: 'blood_groups',
