@@ -42,6 +42,10 @@ export const CRON_SCHEDULES = {
   // For expiring announcements before work hours
   DAILY_6AM_IST: '30 0 * * *',
 
+  // Daily at 8:00 AM IST = 2:30 AM UTC
+  // For birthday and anniversary wishes before work hours
+  DAILY_8AM_IST: '30 2 * * *',
+
   // Every 30 minutes
   // For publishing scheduled announcements
   EVERY_30_MINUTES: '*/30 * * * *',

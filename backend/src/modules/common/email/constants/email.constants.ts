@@ -14,6 +14,10 @@ export const EMAIL_SUBJECT = {
   PENDING_EXPENSE_REMINDER: 'Eureka Enterprises - Pending Expense Approvals',
   PENDING_EXPENSE_REMINDER_URGENT:
     '🚨 ACTION REQUIRED: Eureka Enterprises - Overdue Expense Approvals',
+  // Celebration wishes
+  BIRTHDAY_WISH: '🎂 Happy Birthday from Eureka Enterprises!',
+  WORK_ANNIVERSARY: '🎉 Happy Work Anniversary - {years} at Eureka Enterprises!',
+  WORK_ANNIVERSARY_MILESTONE: '🌟 Celebrating {years} Milestone at Eureka Enterprises!',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -25,6 +29,8 @@ export const EMAIL_TEMPLATE = {
   ASSET_WARRANTY_EXPIRY: 'assetWarrantyExpiry',
   CARD_EXPIRY: 'cardExpiry',
   PENDING_EXPENSE_REMINDER: 'pendingExpenseReminder',
+  BIRTHDAY_WISH: 'birthdayWish',
+  WORK_ANNIVERSARY: 'workAnniversary',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {};
