@@ -19,3 +19,27 @@ export interface ExpireAnnouncementsResult {
   expiredIds: string[];
   errors: string[];
 }
+
+/**
+ * CRON 10
+ * Publish Scheduled Announcements
+ * Runs every 30 minutes
+ *
+ * Auto-publishes DRAFT announcements when their scheduled startAt time arrives.
+ * Only affects announcements that:
+ * - Have status = DRAFT
+ * - Have startAt date set and startAt <= NOW()
+ * - Are not already expired (expiryAt is null OR expiryAt > NOW())
+ *
+ * Does NOT affect:
+ * - DRAFT without startAt (not scheduled)
+ * - DRAFT with startAt in future (not yet time)
+ * - DRAFT that would be immediately expired
+ * - Already PUBLISHED / ARCHIVED / EXPIRED announcements
+ */
+export interface PublishScheduledAnnouncementsResult {
+  publishedCount: number;
+  publishedIds: string[];
+  skippedExpiredCount: number;
+  errors: string[];
+}

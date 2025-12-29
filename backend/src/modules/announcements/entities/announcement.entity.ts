@@ -24,6 +24,9 @@ export class AnnouncementEntity extends BaseEntity {
   expiryAt: Date;
 
   @Column({ type: 'timestamp', nullable: true })
+  publishedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
   expiredAt: Date;
 
   @OneToMany(() => AnnouncementTargetEntity, (target) => target.announcement)

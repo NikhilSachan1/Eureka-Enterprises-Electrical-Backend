@@ -5,6 +5,15 @@ export class AddExpiredAtToAnnouncements1772000000000 implements MigrationInterf
     await queryRunner.addColumn(
       'announcements',
       new TableColumn({
+        name: 'publishedAt',
+        type: 'timestamp',
+        isNullable: true,
+      }),
+    );
+
+    await queryRunner.addColumn(
+      'announcements',
+      new TableColumn({
         name: 'expiredAt',
         type: 'timestamp',
         isNullable: true,
@@ -14,5 +23,6 @@ export class AddExpiredAtToAnnouncements1772000000000 implements MigrationInterf
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropColumn('announcements', 'expiredAt');
+    // await queryRunner.dropColumn('announcements', 'publishedAt');
   }
 }

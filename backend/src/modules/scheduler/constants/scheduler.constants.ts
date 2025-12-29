@@ -41,6 +41,10 @@ export const CRON_SCHEDULES = {
   // Daily at 6:00 AM IST = 12:30 AM UTC
   // For expiring announcements before work hours
   DAILY_6AM_IST: '30 0 * * *',
+
+  // Every 30 minutes
+  // For publishing scheduled announcements
+  EVERY_30_MINUTES: '*/30 * * * *',
 };
 
 export const CRON_NAMES = {

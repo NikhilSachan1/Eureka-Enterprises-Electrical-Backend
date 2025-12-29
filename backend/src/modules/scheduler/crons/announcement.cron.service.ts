@@ -4,10 +4,15 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
-import { ExpireAnnouncementsResult } from '../types/announcement.types';
+import {
+  ExpireAnnouncementsResult,
+  PublishScheduledAnnouncementsResult,
+} from '../types/announcement.types';
 import {
   getAnnouncementsToExpireQuery,
   expireAnnouncementsByIdsQuery,
+  getScheduledAnnouncementsToPublishQuery,
+  publishAnnouncementsByIdsQuery,
 } from '../queries/announcement.queries';
 
 @Injectable()
@@ -74,6 +79,77 @@ export class AnnouncementCronService {
       }
 
       this.logger.log(`[${cronName}] Successfully expired ${result.expiredCount} announcements`);
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  /**
+   * CRON 10: Publish Scheduled Announcements
+   *
+   * Runs every 30 minutes
+   * Auto-publishes DRAFT announcements when their scheduled startAt time arrives.
+   *
+   * Process:
+   * 1. Find all DRAFT announcements with startAt <= NOW()
+   * 2. Exclude those that are already expired (expiryAt < NOW())
+   * 3. Update their status to PUBLISHED
+   * 4. Set publishedAt timestamp for audit
+   *
+   * Does NOT affect:
+   * - DRAFT without startAt (not scheduled)
+   * - DRAFT with startAt in future (not yet time)
+   * - DRAFT that would be immediately expired
+   * - Already PUBLISHED / ARCHIVED / EXPIRED announcements
+   */
+  @Cron(CRON_SCHEDULES.EVERY_30_MINUTES)
+  async handlePublishScheduledAnnouncements(): Promise<PublishScheduledAnnouncementsResult> {
+    const cronName = CRON_NAMES.PUBLISH_ANNOUNCEMENTS;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: PublishScheduledAnnouncementsResult = {
+      publishedCount: 0,
+      publishedIds: [],
+      skippedExpiredCount: 0,
+      errors: [],
+    };
+
+    try {
+      const { query: selectQuery, params: selectParams } =
+        getScheduledAnnouncementsToPublishQuery();
+      const announcementsToPublish = await this.dataSource.query(selectQuery, selectParams);
+
+      if (announcementsToPublish.length === 0) {
+        this.logger.log(`[${cronName}] No scheduled announcements to publish`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      const ids = announcementsToPublish.map((announcement: any) => announcement.id);
+      this.logger.log(`[${cronName}] Found ${ids.length} announcements to publish`);
+
+      for (const announcement of announcementsToPublish) {
+        this.logger.debug(
+          `[${cronName}] Publishing: "${announcement.title}" (ID: ${announcement.id}, startAt: ${announcement.startAt})`,
+        );
+      }
+
+      const { query: updateQuery, params: updateParams } = publishAnnouncementsByIdsQuery(ids);
+
+      if (updateQuery) {
+        await this.dataSource.query(updateQuery, updateParams);
+        result.publishedCount = ids.length;
+        result.publishedIds = ids;
+      }
+
+      this.logger.log(
+        `[${cronName}] Successfully published ${result.publishedCount} announcements`,
+      );
 
       this.schedulerService.logCronComplete(cronName, result);
       return result;
