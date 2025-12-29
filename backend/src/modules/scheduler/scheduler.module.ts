@@ -4,6 +4,7 @@ import { AttendanceCronService } from './crons/attendance.cron.service';
 import { LeaveCronService } from './crons/leave.cron.service';
 import { PayrollCronService } from './crons/payroll.cron.service';
 import { AnnouncementCronService } from './crons/announcement.cron.service';
+import { VehicleCronService } from './crons/vehicle.cron.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { UsersModule } from '../users/user.module';
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
@@ -30,6 +31,7 @@ import { SharedModule } from '../shared/shared.module';
     LeaveCronService,
     PayrollCronService,
     AnnouncementCronService,
+    VehicleCronService,
   ],
   exports: [SchedulerService],
 })

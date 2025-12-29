@@ -8,6 +8,7 @@ export interface IMailOptions {
 export interface IEmailDataValues {
   // Common
   currentYear?: number;
+  adminPortalUrl?: string;
 
   // Forget Password
   firstName?: string;
@@ -17,5 +18,29 @@ export interface IEmailDataValues {
   // FY Leave Config Reminder
   daysRemaining?: number;
   nextFinancialYear?: string;
-  adminPortalUrl?: string;
+
+  // Vehicle Document Expiry
+  totalExpired?: number;
+  totalExpiringSoon?: number;
+  expiredVehicles?: VehicleDocumentEmailItem[];
+  expiringSoonVehicles?: VehicleDocumentEmailItem[];
+  hasExpired?: boolean;
+  hasExpiringSoon?: boolean;
+}
+
+export interface VehicleDocumentEmailItem {
+  registrationNo: string;
+  vehicleNumber: string;
+  brand: string;
+  model: string;
+  assignedTo: string;
+  documents: DocumentEmailItem[];
+}
+
+export interface DocumentEmailItem {
+  type: string;
+  label: string;
+  endDate: string;
+  daysText: string;
+  statusClass: string;
 }

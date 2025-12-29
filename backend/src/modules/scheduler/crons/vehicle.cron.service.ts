@@ -1,0 +1,479 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { SchedulerService } from '../scheduler.service';
+import { EmailService } from '../../common/email/email.service';
+import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
+import { ConfigurationService } from '../../configurations/configuration.service';
+import { ConfigSettingService } from '../../config-settings/config-setting.service';
+import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import {
+  CONFIGURATION_KEYS,
+  CONFIGURATION_MODULES,
+} from '../../../utils/master-constants/master-constants';
+import {
+  VehicleDocumentExpiryResult,
+  VehicleDocumentAlert,
+  DocumentAlert,
+  VehicleDocumentType,
+  DocumentAlertStatus,
+  VehicleDocumentEmailData,
+  VehicleDocumentEmailItem,
+  DocumentExpiryCount,
+} from '../types/vehicle.types';
+import {
+  getVehiclesWithExpiringDocumentsQuery,
+  getDocumentAlertStatus,
+  getDocumentTypeLabel,
+} from '../queries/vehicle.queries';
+import { DEFAULT_EXPIRING_SOON_DAYS } from '../../vehicle-masters/constants/vehicle-masters.constants';
+import { Environments } from '../../../../env-configs';
+
+@Injectable()
+export class VehicleCronService {
+  private readonly logger = new Logger(VehicleCronService.name);
+
+  constructor(
+    private readonly schedulerService: SchedulerService,
+    private readonly emailService: EmailService,
+    private readonly configurationService: ConfigurationService,
+    private readonly configSettingService: ConfigSettingService,
+    @InjectDataSource() private readonly dataSource: DataSource,
+  ) {}
+
+  /**
+   * CRON 11: Vehicle Document Expiry Alerts
+   *
+   * Runs daily at 9:00 AM IST to check for expiring vehicle documents:
+   * - Insurance
+   * - PUC (Pollution Under Control)
+   * - Fitness Certificate
+   *
+   * Scenarios Handled:
+   * 1. Documents already EXPIRED (endDate < today) - Urgent alert
+   * 2. Documents EXPIRING_SOON (endDate within warning days) - Warning alert
+   * 3. Retired vehicles - Skipped (no alerts needed)
+   * 4. Documents without dates - Skipped (no expiry tracking)
+   * 5. Multiple documents expiring on same vehicle - Grouped in single email
+   *
+   * Recipients:
+   * - All Admins / Admin (TODO: Fetch dynamically from roles)
+   */
+  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  async handleVehicleDocumentExpiryAlerts(): Promise<VehicleDocumentExpiryResult> {
+    const cronName = CRON_NAMES.VEHICLE_DOCUMENT_EXPIRY_ALERTS;
+    this.schedulerService.logCronStart(cronName);
+
+    const result: VehicleDocumentExpiryResult = {
+      totalVehiclesProcessed: 0,
+      expiredDocuments: this.initDocumentCount(),
+      expiringSoonDocuments: this.initDocumentCount(),
+      emailsSent: 0,
+      recipients: [],
+      errors: [],
+    };
+
+    try {
+      const warningDays = await this.getExpiryWarningDays();
+      this.logger.log(`[${cronName}] Using warning days: ${warningDays}`);
+
+      const { query, params } = getVehiclesWithExpiringDocumentsQuery(warningDays);
+      const vehiclesRaw = await this.dataSource.query(query, params);
+
+      if (vehiclesRaw.length === 0) {
+        this.logger.log(`[${cronName}] No vehicles with expiring documents found`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      this.logger.log(`[${cronName}] Found ${vehiclesRaw.length} vehicles with expiring documents`);
+
+      const { vehicleAlerts, expiredCount, expiringSoonCount } = this.processVehicleDocuments(
+        vehiclesRaw,
+        warningDays,
+      );
+
+      result.totalVehiclesProcessed = vehicleAlerts.length;
+      result.expiredDocuments = expiredCount;
+      result.expiringSoonDocuments = expiringSoonCount;
+
+      const expiredVehicles = vehicleAlerts.filter((vehicle: VehicleDocumentAlert) =>
+        vehicle.documents.some(
+          (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRED,
+        ),
+      );
+      const expiringSoonVehicles = vehicleAlerts.filter(
+        (vehicle: VehicleDocumentAlert) =>
+          !vehicle.documents.some(
+            (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRED,
+          ) &&
+          vehicle.documents.some(
+            (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRING_SOON,
+          ),
+      );
+
+      // Send email alerts
+      if (expiredCount.total > 0 || expiringSoonCount.total > 0) {
+        const emailResult = await this.sendExpiryAlertEmails(
+          expiredVehicles,
+          expiringSoonVehicles,
+          expiredCount,
+          expiringSoonCount,
+          cronName,
+        );
+        result.emailsSent = emailResult.emailsSent;
+        result.recipients = emailResult.recipients;
+        result.errors.push(...emailResult.errors);
+      }
+
+      for (const vehicle of vehicleAlerts) {
+        for (const doc of vehicle.documents) {
+          const urgency = doc.status === DocumentAlertStatus.EXPIRED ? '🔴 EXPIRED' : '🟡 EXPIRING';
+          this.logger.debug(
+            `[${cronName}] ${urgency}: ${vehicle.registrationNo} - ${doc.label} (${doc.daysUntilExpiry} days)`,
+          );
+        }
+      }
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private async getExpiryWarningDays(): Promise<number> {
+    try {
+      const configuration = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.VEHICLE,
+          key: CONFIGURATION_KEYS.VEHICLE_EXPIRING_SOON_DAYS,
+        },
+      });
+
+      if (!configuration) {
+        this.logger.warn('Vehicle document expiry warning days config not found, using default');
+        return DEFAULT_EXPIRING_SOON_DAYS;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: { configId: configuration.id, isActive: true },
+      });
+
+      if (!configSetting?.value) {
+        this.logger.warn('Vehicle document expiry warning days setting not found, using default');
+        return DEFAULT_EXPIRING_SOON_DAYS;
+      }
+
+      return Number(configSetting.value);
+    } catch {
+      this.logger.warn('Error fetching vehicle expiry warning days, using default');
+      return DEFAULT_EXPIRING_SOON_DAYS;
+    }
+  }
+
+  private processVehicleDocuments(
+    vehiclesRaw: any[],
+    warningDays: number,
+  ): {
+    vehicleAlerts: VehicleDocumentAlert[];
+    expiredCount: DocumentExpiryCount;
+    expiringSoonCount: DocumentExpiryCount;
+  } {
+    const vehicleAlerts: VehicleDocumentAlert[] = [];
+    const expiredCount = this.initDocumentCount();
+    const expiringSoonCount = this.initDocumentCount();
+
+    for (const vehicle of vehiclesRaw) {
+      const documents: DocumentAlert[] = [];
+
+      // Check Insurance
+      if (
+        vehicle.insuranceDaysRemaining !== null &&
+        vehicle.insuranceDaysRemaining <= warningDays
+      ) {
+        const status = getDocumentAlertStatus(vehicle.insuranceDaysRemaining);
+        documents.push({
+          type: VehicleDocumentType.INSURANCE,
+          label: getDocumentTypeLabel(VehicleDocumentType.INSURANCE),
+          endDate: vehicle.insuranceEndDate,
+          daysUntilExpiry: vehicle.insuranceDaysRemaining,
+          status,
+        });
+
+        if (status === DocumentAlertStatus.EXPIRED) {
+          expiredCount.insurance++;
+          expiredCount.total++;
+        } else {
+          expiringSoonCount.insurance++;
+          expiringSoonCount.total++;
+        }
+      }
+
+      // Check PUC
+      if (vehicle.pucDaysRemaining !== null && vehicle.pucDaysRemaining <= warningDays) {
+        const status = getDocumentAlertStatus(vehicle.pucDaysRemaining);
+        documents.push({
+          type: VehicleDocumentType.PUC,
+          label: getDocumentTypeLabel(VehicleDocumentType.PUC),
+          endDate: vehicle.pucEndDate,
+          daysUntilExpiry: vehicle.pucDaysRemaining,
+          status,
+        });
+
+        if (status === DocumentAlertStatus.EXPIRED) {
+          expiredCount.puc++;
+          expiredCount.total++;
+        } else {
+          expiringSoonCount.puc++;
+          expiringSoonCount.total++;
+        }
+      }
+
+      // Check Fitness
+      if (vehicle.fitnessDaysRemaining !== null && vehicle.fitnessDaysRemaining <= warningDays) {
+        const status = getDocumentAlertStatus(vehicle.fitnessDaysRemaining);
+        documents.push({
+          type: VehicleDocumentType.FITNESS,
+          label: getDocumentTypeLabel(VehicleDocumentType.FITNESS),
+          endDate: vehicle.fitnessEndDate,
+          daysUntilExpiry: vehicle.fitnessDaysRemaining,
+          status,
+        });
+
+        if (status === DocumentAlertStatus.EXPIRED) {
+          expiredCount.fitness++;
+          expiredCount.total++;
+        } else {
+          expiringSoonCount.fitness++;
+          expiringSoonCount.total++;
+        }
+      }
+
+      if (documents.length > 0) {
+        vehicleAlerts.push({
+          vehicleId: vehicle.vehicleVersionId,
+          vehicleMasterId: vehicle.vehicleMasterId,
+          registrationNo: vehicle.registrationNo,
+          number: vehicle.number,
+          brand: vehicle.brand,
+          model: vehicle.model,
+          assignedTo: vehicle.assignedTo,
+          assignedUserName: vehicle.assignedFirstName
+            ? `${vehicle.assignedFirstName} ${vehicle.assignedLastName || ''}`.trim()
+            : null,
+          assignedUserEmail: vehicle.assignedUserEmail,
+          documents,
+        });
+      }
+    }
+
+    return { vehicleAlerts, expiredCount, expiringSoonCount };
+  }
+
+  private async sendExpiryAlertEmails(
+    expiredVehicles: VehicleDocumentAlert[],
+    expiringSoonVehicles: VehicleDocumentAlert[],
+    expiredCount: DocumentExpiryCount,
+    expiringSoonCount: DocumentExpiryCount,
+    cronName: string,
+  ): Promise<{ emailsSent: number; recipients: string[]; errors: string[] }> {
+    const emailsSent = { count: 0 };
+    const recipients: string[] = [];
+    const errors: string[] = [];
+
+    const recipientEmails = await this.getRecipientEmails();
+
+    if (recipientEmails.length === 0) {
+      this.logger.warn(`[${cronName}] No recipient emails found`);
+      return { emailsSent: 0, recipients: [], errors: ['No recipient emails configured'] };
+    }
+
+    const emailData: VehicleDocumentEmailData = {
+      currentYear: new Date().getFullYear(),
+      adminPortalUrl: Environments.FE_BASE_URL || '#',
+      totalExpired: expiredCount.total,
+      totalExpiringSoon: expiringSoonCount.total,
+      expiredVehicles: this.formatVehiclesForEmail(expiredVehicles, DocumentAlertStatus.EXPIRED),
+      expiringSoonVehicles: this.formatVehiclesForEmail(
+        expiringSoonVehicles,
+        DocumentAlertStatus.EXPIRING_SOON,
+      ),
+      hasExpired: expiredCount.total > 0,
+      hasExpiringSoon: expiringSoonCount.total > 0,
+    };
+
+    // Send to fleet managers
+    for (const email of recipientEmails) {
+      try {
+        await this.emailService.sendMail({
+          receiverEmails: email,
+          subject: this.getEmailSubject(expiredCount.total),
+          template: EMAIL_TEMPLATE.VEHICLE_DOCUMENT_EXPIRY,
+          emailData,
+        });
+
+        this.logger.log(`[${cronName}] Email sent to fleet manager: ${email}`);
+        recipients.push(email);
+        emailsSent.count++;
+      } catch (error) {
+        errors.push(`Failed to send email to ${email}: ${error.message}`);
+        this.logger.error(`[${cronName}] Failed to send email to ${email}`, error);
+      }
+    }
+
+    // Send individual alerts to assigned users (only for their vehicles)
+    const assignedUserEmails = new Set<string>();
+    const allVehicles = [...expiredVehicles, ...expiringSoonVehicles];
+
+    for (const vehicle of allVehicles) {
+      if (vehicle.assignedUserEmail && !assignedUserEmails.has(vehicle.assignedUserEmail)) {
+        assignedUserEmails.add(vehicle.assignedUserEmail);
+
+        // Filter vehicles for this user
+        const userVehicles = allVehicles.filter(
+          (userVehicle: VehicleDocumentAlert) =>
+            userVehicle.assignedUserEmail === vehicle.assignedUserEmail,
+        );
+
+        const userExpiredVehicles = userVehicles.filter((userVehicle: VehicleDocumentAlert) =>
+          userVehicle.documents.some(
+            (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRED,
+          ),
+        );
+        const userExpiringSoonVehicles = userVehicles.filter(
+          (userVehicle: VehicleDocumentAlert) =>
+            !userVehicle.documents.some(
+              (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRED,
+            ) &&
+            userVehicle.documents.some(
+              (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRING_SOON,
+            ),
+        );
+
+        const userExpiredCount = userExpiredVehicles.reduce(
+          (acc, userVehicle: VehicleDocumentAlert) =>
+            acc +
+            userVehicle.documents.filter(
+              (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRED,
+            ).length,
+          0,
+        );
+        const userExpiringSoonCount = userExpiringSoonVehicles.reduce(
+          (acc, userVehicle: VehicleDocumentAlert) =>
+            acc +
+            userVehicle.documents.filter(
+              (document: DocumentAlert) => document.status === DocumentAlertStatus.EXPIRING_SOON,
+            ).length,
+          0,
+        );
+
+        const userEmailData: VehicleDocumentEmailData = {
+          currentYear: new Date().getFullYear(),
+          adminPortalUrl: Environments.FE_BASE_URL || '#',
+          totalExpired: userExpiredCount,
+          totalExpiringSoon: userExpiringSoonCount,
+          expiredVehicles: this.formatVehiclesForEmail(
+            userExpiredVehicles,
+            DocumentAlertStatus.EXPIRED,
+          ),
+          expiringSoonVehicles: this.formatVehiclesForEmail(
+            userExpiringSoonVehicles,
+            DocumentAlertStatus.EXPIRING_SOON,
+          ),
+          hasExpired: userExpiredCount > 0,
+          hasExpiringSoon: userExpiringSoonCount > 0,
+        };
+
+        try {
+          await this.emailService.sendMail({
+            receiverEmails: vehicle.assignedUserEmail,
+            subject: this.getEmailSubject(userExpiredCount),
+            template: EMAIL_TEMPLATE.VEHICLE_DOCUMENT_EXPIRY,
+            emailData: userEmailData,
+          });
+
+          this.logger.log(
+            `[${cronName}] Email sent to assigned user: ${vehicle.assignedUserEmail}`,
+          );
+          recipients.push(vehicle.assignedUserEmail);
+          emailsSent.count++;
+        } catch (error) {
+          errors.push(`Failed to send email to ${vehicle.assignedUserEmail}: ${error.message}`);
+          this.logger.error(
+            `[${cronName}] Failed to send email to ${vehicle.assignedUserEmail}`,
+            error,
+          );
+        }
+      }
+    }
+
+    return { emailsSent: emailsSent.count, recipients, errors };
+  }
+
+  private formatVehiclesForEmail(
+    vehicles: VehicleDocumentAlert[],
+    filterStatus: DocumentAlertStatus,
+  ): VehicleDocumentEmailItem[] {
+    return vehicles.map((vehicle) => ({
+      registrationNo: vehicle.registrationNo,
+      vehicleNumber: vehicle.number,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      assignedTo: vehicle.assignedUserName || 'Unassigned',
+      documents: vehicle.documents
+        .filter((d) => d.status === filterStatus)
+        .map((doc) => ({
+          type: doc.type,
+          label: doc.label,
+          endDate: this.formatDate(doc.endDate),
+          daysText: this.getDaysText(doc.daysUntilExpiry),
+          statusClass: doc.status === DocumentAlertStatus.EXPIRED ? 'expired' : 'expiring-soon',
+        })),
+    }));
+  }
+
+  private getEmailSubject(expiredCount: number): string {
+    if (expiredCount > 0) {
+      return EMAIL_SUBJECT.VEHICLE_DOCUMENT_EXPIRY_URGENT;
+    }
+    return EMAIL_SUBJECT.VEHICLE_DOCUMENT_EXPIRY;
+  }
+
+  private getDaysText(days: number): string {
+    if (days < 0) {
+      const overdueDays = Math.abs(days);
+      return overdueDays === 1 ? '1 day overdue' : `${overdueDays} days overdue`;
+    } else if (days === 0) {
+      return 'Expires today';
+    } else if (days === 1) {
+      return 'Expires tomorrow';
+    }
+    return `${days} days remaining`;
+  }
+
+  private formatDate(date: Date): string {
+    return new Date(date).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  private initDocumentCount(): DocumentExpiryCount {
+    return { insurance: 0, puc: 0, fitness: 0, total: 0 };
+  }
+
+  /**
+   * TODO: Fetch dynamically from user roles (ADMIN)
+   */
+  private async getRecipientEmails(): Promise<string[]> {
+    // TODO: Implement dynamic fetching from user roles
+    // const users = await this.userService.findByRole(['ADMIN']);
+    // return users.map(u => u.email).filter(Boolean);
+    return ['akhil.sachan@coditas.com']; // Placeholder
+  }
+}
