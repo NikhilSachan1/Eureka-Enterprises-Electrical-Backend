@@ -11,9 +11,10 @@ import { Environments } from '../../../../env-configs';
       transport: {
         host: Environments.EMAIL_HOST,
         port: Environments.EMAIL_PORT,
+        secure: false,
         auth: {
           user: Environments.EMAIL_FROM,
-          pass: Environments.EMAIL_FROM,
+          pass: Environments.EMAIL_PASSWORD,
         },
       },
       defaults: {
@@ -31,4 +32,4 @@ import { Environments } from '../../../../env-configs';
   providers: [EmailService],
   exports: [EmailService],
 })
-export class MailModule {}
+export class EmailModule {}

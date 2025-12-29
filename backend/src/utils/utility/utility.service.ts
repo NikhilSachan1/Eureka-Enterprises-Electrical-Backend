@@ -121,4 +121,8 @@ export class UtilityService {
     }
     return result as T;
   }
+
+  getCurrentYear() {
+    return new Date().getFullYear();
+  }
 }

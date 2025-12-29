@@ -8,4 +8,6 @@ export interface IMailOptions {
 export interface IEmailDataValues {
   firstName?: string;
   lastName?: string;
+  resetPasswordLink?: string;
+  currentYear?: number;
 }

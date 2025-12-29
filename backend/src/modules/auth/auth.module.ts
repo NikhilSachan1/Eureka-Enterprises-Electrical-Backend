@@ -5,7 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { Environments } from 'env-configs';
 import { SharedModule } from '../shared/shared.module';
-import { MailModule } from '../common/email/email.module';
+import { EmailModule } from '../common/email/email.module';
 import { UserRoleModule } from '../user-roles/user-role.module';
 
 @Module({
@@ -17,7 +17,7 @@ import { UserRoleModule } from '../user-roles/user-role.module';
       signOptions: { expiresIn: Environments.JWT_AUTH_TOKEN_EXPIRY },
     }),
     SharedModule,
-    MailModule,
+    EmailModule,
     UserRoleModule,
   ],
   providers: [AuthService],

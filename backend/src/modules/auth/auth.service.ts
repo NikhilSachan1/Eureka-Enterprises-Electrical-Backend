@@ -6,7 +6,6 @@ import {
   Injectable,
   NotFoundException,
   forwardRef,
-  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../users/user.service';
@@ -17,6 +16,8 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 import { EmailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
 import { UserRoleService } from '../user-roles/user-role.service';
+import { EMAIL_SUBJECT } from '../common/email/constants/email.constants';
+import { EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
 
 @Injectable()
 export class AuthService {
@@ -86,15 +87,15 @@ export class AuthService {
       );
       const encryptedToken = this.utilityService.encrypt(token);
       const resetPasswordLink = `${Environments.API_BASE_URL}${AUTH_REDIRECT_ROUTES.TOKEN_VALIDATION}${encryptedToken}`;
-      Logger.log(resetPasswordLink);
-      //TODO: Add template name and subject
       await this.emailService.sendMail({
         receiverEmails: [user.email],
-        subject: 'Enter Subject',
-        template: 'Enter template',
+        subject: EMAIL_SUBJECT.FORGET_PASSWORD,
+        template: EMAIL_TEMPLATE.FORGET_PASSWORD,
         emailData: {
           firstName: user.firstName,
           lastName: user.lastName,
+          resetPasswordLink: resetPasswordLink,
+          currentYear: this.utilityService.getCurrentYear(),
         },
       });
 
