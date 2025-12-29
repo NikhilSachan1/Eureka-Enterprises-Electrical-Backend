@@ -37,6 +37,10 @@ export const CRON_SCHEDULES = {
   // 2nd of every month at 1:00 AM IST = 7:30 PM UTC (prev day)
   // Runs after leave accrual to ensure all leave/attendance data is finalized
   MONTHLY_SECOND_1AM_IST: '30 19 2 * *',
+
+  // Daily at 6:00 AM IST = 12:30 AM UTC
+  // For expiring announcements before work hours
+  DAILY_6AM_IST: '30 0 * * *',
 };
 
 export const CRON_NAMES = {
