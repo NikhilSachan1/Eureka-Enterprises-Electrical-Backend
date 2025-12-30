@@ -10,6 +10,7 @@ import { AssetMasterEntity } from './entities/asset-master.entity';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import {
   ASSET_MASTERS_ERRORS,
+  ASSET_MASTERS_SUCCESS_MESSAGES,
   AssetMasterEntityFields,
   AssetEventTypes,
   AssetType,
@@ -19,6 +20,8 @@ import {
   WarrantyStatus,
   EXPIRING_SOON_DAYS,
 } from './constants/asset-masters.constants';
+import { BulkDeleteAssetDto } from './dto/bulk-delete-asset.dto';
+import { Roles } from '../roles/constants/role.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -436,5 +439,71 @@ export class AssetMastersService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async bulkDeleteAssets(bulkDeleteDto: BulkDeleteAssetDto) {
+    const { assetIds, deletedBy, userRole } = bulkDeleteDto;
+    const result = [];
+    const errors = [];
+
+    const isAdminOrHR = userRole === Roles.ADMIN || userRole === Roles.HR;
+
+    for (const assetId of assetIds) {
+      try {
+        const deletedAsset = await this.validateAndDeleteAsset(assetId, deletedBy, isAdminOrHR);
+        result.push(deletedAsset);
+      } catch (error) {
+        errors.push({
+          assetId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: ASSET_MASTERS_SUCCESS_MESSAGES.ASSET_DELETE_PROCESSED.replace(
+        '{length}',
+        assetIds.length.toString(),
+      )
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateAndDeleteAsset(assetId: string, deletedBy: string, isAdminOrHR: boolean) {
+    const asset = await this.assetMastersRepository.findOne({
+      where: { id: assetId },
+    });
+
+    if (!asset) {
+      throw new NotFoundException(ASSET_MASTERS_ERRORS.ASSET_NOT_FOUND);
+    }
+
+    if (asset.deletedAt) {
+      throw new BadRequestException(ASSET_MASTERS_ERRORS.ASSET_ALREADY_DELETED);
+    }
+
+    const activeVersion = await this.assetVersionsService.findOne({
+      where: { assetMasterId: assetId, isActive: true },
+    });
+
+    if (!isAdminOrHR && activeVersion?.status !== AssetStatus.AVAILABLE) {
+      throw new BadRequestException(
+        ASSET_MASTERS_ERRORS.ASSET_CANNOT_DELETE_ASSIGNED.replace(
+          '{status}',
+          activeVersion?.status || 'UNKNOWN',
+        ),
+      );
+    }
+
+    await this.assetMastersRepository.delete({ id: assetId, deletedBy });
+
+    return {
+      assetId,
+      message: ASSET_MASTERS_SUCCESS_MESSAGES.ASSET_DELETE_SUCCESS,
+      previousStatus: activeVersion?.status,
+    };
   }
 }

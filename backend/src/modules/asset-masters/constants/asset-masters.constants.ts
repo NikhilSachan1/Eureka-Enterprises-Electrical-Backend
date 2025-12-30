@@ -1,6 +1,9 @@
 export const ASSET_MASTERS_ERRORS = {
   ASSET_ALREADY_EXISTS: 'Asset with this ID already exists',
   ASSET_NOT_FOUND: 'Asset not found',
+  ASSET_ALREADY_DELETED: 'Asset is already deleted',
+  ASSET_CANNOT_DELETE_ASSIGNED:
+    'Cannot delete asset with status: {status}. Only available assets can be deleted',
   INVALID_ACTION: 'Invalid action',
   INVALID_ASSET_TYPE: 'Invalid asset type',
   INVALID_CATEGORY: 'Invalid category',
@@ -13,6 +16,12 @@ export const ASSET_MASTERS_ERRORS = {
   CALIBRATION_END_BEFORE_START: 'Calibration end date must be after start date',
   WARRANTY_END_BEFORE_START: 'Warranty end date must be after start date',
   ASSIGNED_USER_NOT_FOUND: 'Assigned user not found',
+};
+
+export const ASSET_MASTERS_SUCCESS_MESSAGES = {
+  ASSET_DELETE_PROCESSED:
+    'Bulk delete processed: {length} assets requested, {success} deleted successfully, {error} failed',
+  ASSET_DELETE_SUCCESS: 'Asset deleted successfully',
 };
 
 export enum AssetMasterEntityFields {

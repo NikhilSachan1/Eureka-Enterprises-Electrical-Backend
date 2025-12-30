@@ -11,7 +11,7 @@ import {
   Get,
 } from '@nestjs/common';
 import { AssetMastersService } from './asset-masters.service';
-import { CreateAssetDto, UpdateAssetDto, AssetQueryDto } from './dto';
+import { CreateAssetDto, UpdateAssetDto, AssetQueryDto, BulkDeleteAssetDto } from './dto';
 import {
   FIELD_NAMES,
   FILE_UPLOAD_FOLDER_NAMES,
@@ -103,6 +103,17 @@ export class AssetMastersController {
   ) {
     return this.assetMastersService.delete({ id }, deletedBy);
   }
-}
 
-// TODO: If required then add multiple types of asset documents
+  @Delete()
+  @ApiBody({ type: BulkDeleteAssetDto })
+  bulkDeleteAssets(
+    @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },
+    @Body() bulkDeleteDto: BulkDeleteAssetDto,
+  ) {
+    return this.assetMastersService.bulkDeleteAssets({
+      ...bulkDeleteDto,
+      deletedBy,
+      userRole,
+    });
+  }
+}
