@@ -457,6 +457,7 @@ export class LeaveApplicationsService {
               leaveCategory,
               fromDate: new Date(date),
               toDate: new Date(date),
+              approvalStatus: In([ApprovalStatus.PENDING, ApprovalStatus.APPROVED]),
             },
           });
 
@@ -576,6 +577,7 @@ export class LeaveApplicationsService {
               leaveCategory,
               fromDate: new Date(date),
               toDate: new Date(date),
+              approvalStatus: In([ApprovalStatus.PENDING, ApprovalStatus.APPROVED]),
             },
           });
 
