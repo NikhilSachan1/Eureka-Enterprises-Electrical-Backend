@@ -115,7 +115,10 @@ export class UserRepository {
     updateData: Partial<UserEntity>,
   ) {
     try {
-      const updateResult = await this.repository.update(identifierConditions, updateData);
+      const updateResult = await this.repository.update(identifierConditions, {
+        ...updateData,
+        updatedAt: new Date(),
+      });
       return updateResult;
     } catch (error) {
       throw new InternalServerErrorException(error);
