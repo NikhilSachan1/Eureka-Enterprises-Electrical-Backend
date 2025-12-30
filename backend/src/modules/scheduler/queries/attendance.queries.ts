@@ -112,3 +112,74 @@ export const getUsersWithoutAttendanceQuery = (status: string, date: Date) => {
     params: [status, date],
   };
 };
+
+/**
+ * CRON 21
+ * Auto Approve Pending Attendance
+ * Get all pending attendance records for a date range (previous month)
+ */
+import { ApprovalStatus } from '../../attendance/constants/attendance.constants';
+
+export const getPendingAttendancesForPeriodQuery = (startDate: string, endDate: string) => {
+  return {
+    query: `
+      SELECT id, "userId", "status"
+      FROM attendances
+      WHERE "approvalStatus" = $1
+        AND "attendanceDate" >= $2::date
+        AND "attendanceDate" <= $3::date
+        AND "deletedAt" IS NULL
+        AND "isActive" = true
+    `,
+    params: [ApprovalStatus.PENDING, startDate, endDate],
+  };
+};
+
+/**
+ * Auto-approve attendance with conditional status change:
+ * - CHECKED_OUT, HALF_DAY → PRESENT (work done, approval confirms it)
+ * - ABSENT, LEAVE, LEAVE_WITHOUT_PAY → Keep original status (just approve)
+ */
+export const autoApproveAttendanceQuery = (
+  attendanceId: string,
+  currentStatus: string,
+  approvalReason: string,
+) => {
+  // Only change to PRESENT if it was a working day attendance
+  const shouldChangeToPRESENT =
+    currentStatus === AttendanceStatus.CHECKED_OUT || currentStatus === AttendanceStatus.HALF_DAY;
+
+  if (shouldChangeToPRESENT) {
+    return {
+      query: `
+        UPDATE attendances 
+        SET "approvalStatus" = $1, 
+            "status" = $2,
+            "approvalAt" = $3, 
+            "approvalComment" = $4,
+            "updatedAt" = $3
+        WHERE id = $5
+      `,
+      params: [
+        ApprovalStatus.APPROVED,
+        AttendanceStatus.PRESENT,
+        new Date(),
+        approvalReason,
+        attendanceId,
+      ],
+    };
+  }
+
+  // For ABSENT, LEAVE, LEAVE_WITHOUT_PAY - just update approval status, keep original status
+  return {
+    query: `
+      UPDATE attendances 
+      SET "approvalStatus" = $1, 
+          "approvalAt" = $2, 
+          "approvalComment" = $3,
+          "updatedAt" = $2
+      WHERE id = $4
+    `,
+    params: [ApprovalStatus.APPROVED, new Date(), approvalReason, attendanceId],
+  };
+};

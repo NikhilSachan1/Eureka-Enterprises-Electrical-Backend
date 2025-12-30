@@ -35,3 +35,31 @@ export interface EndOfDayAttendanceResult {
   newAbsentRecords: number;
   errors: string[];
 }
+
+/**
+ * CRON 21
+ * Auto Approve Pending Attendance
+ * Runs on 1st of every month at 12:00 AM IST (before payroll generation)
+ *
+ * Auto-approves all pending attendance records for the previous month
+ * This ensures attendance is counted in payroll even if admin forgot to approve
+ *
+ * Statuses eligible for auto-approval (when approvalStatus = PENDING):
+ * - ABSENT: Employee was marked absent
+ * - CHECKED_OUT: Normal attendance with check-in/out
+ * - HALF_DAY: Half day attendance
+ * - LEAVE: Leave attendance (approval mirrors leave approval)
+ * - LEAVE_WITHOUT_PAY: LWP attendance
+ */
+export interface AutoApproveAttendanceResult {
+  attendanceApproved: number;
+  byStatus: {
+    absent: number;
+    checkedOut: number;
+    halfDay: number;
+    leave: number;
+    leaveWithoutPay: number;
+    other: number;
+  };
+  errors: string[];
+}
