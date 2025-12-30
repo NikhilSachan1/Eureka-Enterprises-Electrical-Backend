@@ -10,3 +10,9 @@ export const ASSET_EVENTS_ERRORS = {
   NO_PENDING_HANDOVER: 'No pending handover found for this asset',
   UNAUTHORIZED_HANDOVER_ACTION: 'You are not authorized to perform this handover action',
 };
+
+export enum AssetEventsSortableFields {
+  CREATED_AT = 'createdAt',
+  UPDATED_AT = 'updatedAt',
+  EVENT_TYPE = 'eventType',
+}

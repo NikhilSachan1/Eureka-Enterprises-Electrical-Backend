@@ -200,4 +200,35 @@ export class DateTimeService {
     const today = this.getTodayString(timezone);
     return this.getDaysDifference(today, dateStr);
   }
+
+  /**
+   * Converts a date string in user's timezone to UTC Date object
+   */
+  getDateInUTC(dateStr: string, timezone: string, isEndOfDay: boolean): Date {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const tz = this.getSafeTimezone(timezone);
+
+    const targetDate = new Date(
+      year,
+      month - 1,
+      day,
+      isEndOfDay ? 23 : 0,
+      isEndOfDay ? 59 : 0,
+      isEndOfDay ? 59 : 0,
+    );
+    const utcDate = new Date(targetDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzDate = new Date(targetDate.toLocaleString('en-US', { timeZone: tz }));
+    const offsetMs = utcDate.getTime() - tzDate.getTime();
+
+    const localDate = new Date(
+      year,
+      month - 1,
+      day,
+      isEndOfDay ? 23 : 0,
+      isEndOfDay ? 59 : 0,
+      isEndOfDay ? 59 : 0,
+      isEndOfDay ? 999 : 0,
+    );
+    return new Date(localDate.getTime() + offsetMs);
+  }
 }
