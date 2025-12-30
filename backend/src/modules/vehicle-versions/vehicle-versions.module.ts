@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { VehicleVersionsService } from './vehicle-versions.service';
 import { VehicleFilesModule } from '../vehicle-files/vehicle-files.module';
 import { VehicleEventsModule } from '../vehicle-events/vehicle-events.module';
@@ -11,7 +11,7 @@ import { SharedModule } from '../shared/shared.module';
   imports: [
     TypeOrmModule.forFeature([VehicleVersionEntity]),
     VehicleFilesModule,
-    VehicleEventsModule,
+    forwardRef(() => VehicleEventsModule),
     SharedModule,
   ],
   providers: [VehicleVersionsService, VehicleVersionsRepository],

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AssetVersionsService } from './asset-versions.service';
 import { AssetVersionsController } from './asset-versions.controller';
 import { AssetFilesModule } from '../asset-files/asset-files.module';
@@ -12,7 +12,7 @@ import { SharedModule } from '../shared/shared.module';
   imports: [
     TypeOrmModule.forFeature([AssetVersionEntity]),
     AssetFilesModule,
-    AssetEventsModule,
+    forwardRef(() => AssetEventsModule),
     SharedModule,
   ],
   controllers: [AssetVersionsController],
