@@ -37,6 +37,8 @@ export const CONFIGURATION_KEYS = {
   CALIBRATION_SOURCES: 'calibration_sources',
   CALIBRATION_FREQUENCIES: 'calibration_frequencies',
   ASSET_EXPIRING_SOON_DAYS: 'asset_expiring_soon_days',
+  WARRANTY_STATUSES: 'warranty_statuses',
+  CALIBRATION_STATUSES: 'calibration_statuses',
   //VEHICLES
   VEHICLE_FUEL_TYPES: 'vehicle_fuel_types',
   VEHICLE_STATUSES: 'vehicle_statuses',
