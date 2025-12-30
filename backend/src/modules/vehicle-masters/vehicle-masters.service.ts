@@ -436,7 +436,10 @@ export class VehicleMastersService {
           manager,
         );
 
-        return vehicle;
+        return this.utilityService.getSuccessMessage(
+          VehicleMasterEntityFields.VEHICLE,
+          DataSuccessOperationType.UPDATE,
+        );
       });
     } catch (error) {
       throw error;

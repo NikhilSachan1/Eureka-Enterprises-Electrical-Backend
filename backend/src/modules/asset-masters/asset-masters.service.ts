@@ -355,12 +355,10 @@ export class AssetMastersService {
         entityManager,
       );
 
-      return {
-        message: this.utilityService.getSuccessMessage(
-          AssetMasterEntityFields.ASSET,
-          DataSuccessOperationType.UPDATE,
-        ),
-      };
+      return this.utilityService.getSuccessMessage(
+        AssetMasterEntityFields.ASSET,
+        DataSuccessOperationType.UPDATE,
+      );
     } catch (error) {
       throw error;
     }
@@ -377,12 +375,10 @@ export class AssetMastersService {
         { ...identifierConditions, deletedBy },
         entityManager,
       );
-      return {
-        message: this.utilityService.getSuccessMessage(
-          AssetMasterEntityFields.ASSET,
-          DataSuccessOperationType.DELETE,
-        ),
-      };
+      return this.utilityService.getSuccessMessage(
+        AssetMasterEntityFields.ASSET,
+        DataSuccessOperationType.DELETE,
+      );
     } catch (error) {
       throw error;
     }
