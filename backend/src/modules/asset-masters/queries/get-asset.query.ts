@@ -2,10 +2,81 @@ import { AssetQueryDto } from '../dto/asset-query.dto';
 import {
   ASSET_SORT_FIELD_MAPPING,
   AssetType,
+  AssetStatus,
   CalibrationStatus,
   WarrantyStatus,
   EXPIRING_SOON_DAYS,
 } from '../constants/asset-masters.constants';
+
+export const getAssetStatsQuery = () => {
+  return `
+    SELECT
+      -- Total count
+      COUNT(DISTINCT am."id") as "total",
+      
+      -- Status breakdown
+      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.AVAILABLE}' THEN am."id" END) as "available",
+      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.ASSIGNED}' THEN am."id" END) as "assigned",
+      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.UNDER_MAINTENANCE}' THEN am."id" END) as "underMaintenance",
+      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.DAMAGED}' THEN am."id" END) as "damaged",
+      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.RETIRED}' THEN am."id" END) as "retired",
+      
+      -- Asset type breakdown
+      COUNT(DISTINCT CASE WHEN av."assetType" = '${AssetType.CALIBRATED}' THEN am."id" END) as "calibrated",
+      COUNT(DISTINCT CASE WHEN av."assetType" = '${AssetType.NON_CALIBRATED}' THEN am."id" END) as "nonCalibrated",
+      
+      -- Calibration status breakdown (only for calibrated assets)
+      COUNT(DISTINCT CASE 
+        WHEN av."assetType" = '${AssetType.CALIBRATED}' 
+        AND av."calibrationEndDate" < NOW() 
+        THEN am."id" 
+      END) as "calibrationExpired",
+      COUNT(DISTINCT CASE 
+        WHEN av."assetType" = '${AssetType.CALIBRATED}' 
+        AND av."calibrationEndDate" >= NOW() 
+        AND av."calibrationEndDate" <= NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
+        THEN am."id" 
+      END) as "calibrationExpiringSoon",
+      COUNT(DISTINCT CASE 
+        WHEN av."assetType" = '${AssetType.CALIBRATED}' 
+        AND av."calibrationEndDate" > NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
+        THEN am."id" 
+      END) as "calibrationValid",
+      
+      -- Warranty status breakdown
+      COUNT(DISTINCT CASE 
+        WHEN av."warrantyEndDate" IS NOT NULL 
+        AND av."warrantyEndDate" < NOW() 
+        THEN am."id" 
+      END) as "warrantyExpired",
+      COUNT(DISTINCT CASE 
+        WHEN av."warrantyEndDate" IS NOT NULL 
+        AND av."warrantyEndDate" >= NOW() 
+        AND av."warrantyEndDate" <= NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
+        THEN am."id" 
+      END) as "warrantyExpiringSoon",
+      COUNT(DISTINCT CASE 
+        WHEN av."warrantyEndDate" IS NOT NULL 
+        AND av."warrantyEndDate" > NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
+        THEN am."id" 
+      END) as "warrantyValid",
+      COUNT(DISTINCT CASE 
+        WHEN av."warrantyEndDate" IS NULL 
+        THEN am."id" 
+      END) as "warrantyNotApplicable"
+      
+    FROM "asset_masters" am
+    INNER JOIN LATERAL (
+      SELECT *
+      FROM "asset_versions"
+      WHERE "assetMasterId" = am."id"
+        AND "isActive" = true
+        AND "deletedAt" IS NULL
+      LIMIT 1
+    ) av ON true
+    WHERE am."deletedAt" IS NULL
+  `;
+};
 
 export const getAssetQuery = (query: AssetQueryDto) => {
   const {

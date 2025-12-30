@@ -28,7 +28,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { AssetFilesService } from '../asset-files/asset-files.service';
 import { AssetEventsService } from '../asset-events/asset-events.service';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
-import { getAssetQuery } from './queries/get-asset.query';
+import { getAssetQuery, getAssetStatsQuery } from './queries/get-asset.query';
 
 @Injectable()
 export class AssetMastersService {
@@ -219,26 +219,54 @@ export class AssetMastersService {
   }
 
   async findAll(findOptions: AssetQueryDto) {
-    try {
-      const { dataQuery, countQuery, params, countParams } = getAssetQuery(findOptions);
-      const [assets, total] = await Promise.all([
-        this.assetMastersRepository.executeRawQuery(dataQuery, params) as Promise<any[]>,
-        this.assetMastersRepository.executeRawQuery(countQuery, countParams) as Promise<{
-          total: number;
-        }>,
-      ]);
+    const { dataQuery, countQuery, params, countParams } = getAssetQuery(findOptions);
+    const statsQuery = getAssetStatsQuery();
 
-      // Add computed statuses to each asset
-      const assetsWithStatus = assets.map((asset) => ({
-        ...asset,
-        calibrationStatus: this.getCalibrationStatus(asset.assetType, asset.calibrationEndDate),
-        warrantyStatus: this.getWarrantyStatus(asset.warrantyEndDate),
-      }));
+    const [assets, totalResult, statsResult] = await Promise.all([
+      this.assetMastersRepository.executeRawQuery(dataQuery, params) as Promise<any[]>,
+      this.assetMastersRepository.executeRawQuery(countQuery, countParams) as Promise<
+        { total: number }[]
+      >,
+      this.assetMastersRepository.executeRawQuery(statsQuery, []) as Promise<any[]>,
+    ]);
 
-      return this.utilityService.listResponse(assetsWithStatus, total[0].total);
-    } catch (error) {
-      throw error;
-    }
+    const assetsWithStatus = assets.map((asset) => ({
+      ...asset,
+      calibrationStatus: this.getCalibrationStatus(asset.assetType, asset.calibrationEndDate),
+      warrantyStatus: this.getWarrantyStatus(asset.warrantyEndDate),
+    }));
+
+    const stats = statsResult[0] || {};
+
+    return {
+      stats: {
+        total: Number(stats.total || 0),
+        byStatus: {
+          available: Number(stats.available || 0),
+          assigned: Number(stats.assigned || 0),
+          underMaintenance: Number(stats.underMaintenance || 0),
+          damaged: Number(stats.damaged || 0),
+          retired: Number(stats.retired || 0),
+        },
+        byAssetType: {
+          calibrated: Number(stats.calibrated || 0),
+          nonCalibrated: Number(stats.nonCalibrated || 0),
+        },
+        calibration: {
+          valid: Number(stats.calibrationValid || 0),
+          expiringSoon: Number(stats.calibrationExpiringSoon || 0),
+          expired: Number(stats.calibrationExpired || 0),
+        },
+        warranty: {
+          valid: Number(stats.warrantyValid || 0),
+          expiringSoon: Number(stats.warrantyExpiringSoon || 0),
+          expired: Number(stats.warrantyExpired || 0),
+          notApplicable: Number(stats.warrantyNotApplicable || 0),
+        },
+      },
+      records: assetsWithStatus,
+      totalRecords: Number(totalResult[0]?.total || 0),
+    };
   }
 
   async findOneOrFail(findOptions: FindOneOptions<AssetMasterEntity>) {

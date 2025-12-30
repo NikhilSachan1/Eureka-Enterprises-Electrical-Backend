@@ -11,12 +11,18 @@ import {
   Get,
 } from '@nestjs/common';
 import { AssetMastersService } from './asset-masters.service';
-import { CreateAssetDto, UpdateAssetDto, AssetQueryDto, BulkDeleteAssetDto } from './dto';
+import {
+  CreateAssetDto,
+  UpdateAssetDto,
+  AssetQueryDto,
+  BulkDeleteAssetDto,
+  AssetListResponseDto,
+} from './dto';
 import {
   FIELD_NAMES,
   FILE_UPLOAD_FOLDER_NAMES,
 } from '../common/file-upload/constants/files.constants';
-import { ApiBearerAuth, ApiBody, ApiTags, ApiConsumes } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiTags, ApiConsumes, ApiResponse } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { AssetActionDto } from './dto/asset-action.dto';
@@ -70,7 +76,8 @@ export class AssetMastersController {
   }
 
   @Get()
-  async findAll(@Query() query: AssetQueryDto) {
+  @ApiResponse({ status: 200, type: AssetListResponseDto })
+  async findAll(@Query() query: AssetQueryDto): Promise<AssetListResponseDto> {
     return await this.assetMastersService.findAll(query);
   }
 
