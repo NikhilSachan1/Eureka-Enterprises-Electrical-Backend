@@ -16,6 +16,7 @@ import {
   UserStatus,
   USERS_RESPONSES,
   VALIDATION_PATTERNS,
+  USER_DTO_ERRORS,
 } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
@@ -65,6 +66,10 @@ export class UserService {
     options: GetUsersDto,
   ): Promise<{ records: UserEntity[]; totalRecords: number; metrics: UserMetrics } | undefined> {
     try {
+      if (options.role && options.role.length > 0) {
+        await this.validateRolesFromDb(options.role);
+      }
+
       const [users, metrics] = await Promise.all([
         this.userRepository.findAll(options),
         this.userRepository.getMetrics(),
@@ -75,6 +80,22 @@ export class UserService {
       };
     } catch (error) {
       throw error;
+    }
+  }
+
+  private async validateRolesFromDb(roles: string[]): Promise<void> {
+    const validRolesResult = await this.roleService.findAll({});
+    const validRoleNames = validRolesResult.records.map((role) => role.name.toUpperCase());
+
+    const invalidRoles = roles.filter((role) => !validRoleNames.includes(role.toUpperCase()));
+
+    if (invalidRoles.length > 0) {
+      throw new BadRequestException(
+        USER_DTO_ERRORS.INVALID_ROLE.replace('{invalidRoles}', invalidRoles.join(', ')).replace(
+          '{validRoles}',
+          validRoleNames.join(', '),
+        ),
+      );
     }
   }
 

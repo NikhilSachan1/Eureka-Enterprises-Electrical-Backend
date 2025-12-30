@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsArray } from 'class-validator';
 import { UserSortFields, UserStatus, USER_DTO_ERRORS } from '../constants/user.constants';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
-import { Roles } from 'src/modules/roles/constants/role.constants';
 import { Transform } from 'class-transformer';
 
 export class GetUsersDto extends BaseGetDto {
@@ -80,30 +79,28 @@ export class GetUsersDto extends BaseGetDto {
   search?: string;
 
   @ApiProperty({
-    description: 'Role to filter by - can be a single role or multiple roles',
-    example: ['ADMIN', 'EMPLOYEE'],
-    enum: Roles,
+    description: 'Role to filter by - can be a single role or multiple roles (case-insensitive)',
+    example: ['admin', 'driver'],
     isArray: true,
     required: false,
   })
   @IsOptional()
   @IsArray()
-  @IsEnum(Roles, {
-    each: true,
-    message: `${USER_DTO_ERRORS.INVALID_ROLE} ${Object.values(Roles).join(', ')}`,
-  })
   @Transform(({ value }) => {
+    let roles: string[];
     if (Array.isArray(value)) {
-      return value;
-    }
-    if (typeof value === 'string') {
+      roles = value;
+    } else if (typeof value === 'string') {
       try {
-        return JSON.parse(value);
+        roles = JSON.parse(value);
       } catch {
-        return value.split(',').map((role) => role.trim());
+        roles = value.split(',').map((role) => role.trim());
       }
+    } else {
+      roles = [value];
     }
-    return [value];
+    // Convert to uppercase for consistent storage/comparison
+    return roles.map((role) => role.toUpperCase());
   })
   role?: string[];
 }

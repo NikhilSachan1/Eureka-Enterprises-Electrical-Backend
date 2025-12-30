@@ -65,7 +65,9 @@ export class UserRepository {
       }
 
       if (role && role.length > 0) {
-        queryBuilder.andWhere('role.name IN (:...roleNames)', { roleNames: role });
+        queryBuilder.andWhere('UPPER(role.name) IN (:...roleNames)', {
+          roleNames: role.map((r) => r.toUpperCase()),
+        });
       }
 
       const [users, count] = await queryBuilder

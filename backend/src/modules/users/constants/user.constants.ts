@@ -36,7 +36,7 @@ export const USERS_ERRORS = {
 
 export const USER_DTO_ERRORS = {
   INVALID_SORT_FIELD: 'The provided sort field is invalid. Please choose from the following:',
-  INVALID_ROLE: 'Invalid role. Please choose from the following:',
+  INVALID_ROLE: 'Invalid role(s): {invalidRoles}. Valid roles are: {validRoles}',
   INVALID_STATUS: 'The provided status is invalid. Please choose from the following:',
 };
 
