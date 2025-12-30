@@ -30,6 +30,7 @@ import {
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators/source-detector.decorator';
 import { FuelExpenseUserInterceptor } from './interceptors/fuel-expense-user.interceptor';
+import { RequestWithTimezone } from './fuel-expense.types';
 
 @ApiTags('Fuel Expense')
 @ApiBearerAuth('JWT-auth')
@@ -45,18 +46,20 @@ export class FuelExpenseController {
     required: true,
   })
   async createFuelExpense(
-    @Request() { user: { id: userId } }: { user: { id: string }; sourceType: string },
+    @Request() req: RequestWithTimezone,
     @Body() createFuelExpenseDto: CreateFuelExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
     { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
+    const userId = req.user.id;
     return this.fuelExpenseService.create({
       ...createFuelExpenseDto,
       userId,
       createdBy: userId,
       fileKeys,
       entrySourceType: sourceType,
+      timezone: req.timezone,
     });
   }
 
@@ -68,18 +71,20 @@ export class FuelExpenseController {
     required: true,
   })
   async forceFuelExpense(
-    @Request() { user: { id: userId } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() createFuelExpenseDto: CreateFuelExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
     { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
+    const userId = req.user.id;
     return this.fuelExpenseService.forceFuelExpense({
       ...createFuelExpenseDto,
       userId: createFuelExpenseDto.userId || userId,
       createdBy: userId,
       fileKeys,
       entrySourceType: sourceType,
+      timezone: req.timezone,
     });
   }
 
@@ -91,17 +96,19 @@ export class FuelExpenseController {
     required: true,
   })
   async createCreditFuelExpense(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() createCreditFuelExpenseDto: CreateCreditFuelExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
     { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
+    const createdBy = req.user.id;
     return this.fuelExpenseService.createCreditFuelExpense({
       ...createCreditFuelExpenseDto,
       createdBy,
       fileKeys,
       entrySourceType: sourceType,
+      timezone: req.timezone,
     });
   }
 
@@ -113,20 +120,21 @@ export class FuelExpenseController {
     required: true,
   })
   async editFuelExpense(
-    @Request()
-    { user: { id: updatedBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Param('id') id: string,
     @Body() editFuelExpenseDto: EditFuelExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
     { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
+    const updatedBy = req.user.id;
     return this.fuelExpenseService.editFuelExpense({
       ...editFuelExpenseDto,
       id,
       updatedBy,
       fileKeys,
       entrySourceType: sourceType,
+      timezone: req.timezone,
     });
   }
 

@@ -11,6 +11,7 @@ import { CardsModule } from '../cards/cards.module';
 import { UsersModule } from '../users/user.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
+import { DateTimeModule } from 'src/utils/datetime';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
     UsersModule,
     ConfigurationsModule,
     ConfigSettingsModule,
+    DateTimeModule,
     SharedModule,
   ],
   controllers: [FuelExpenseController],

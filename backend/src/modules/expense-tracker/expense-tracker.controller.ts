@@ -32,6 +32,7 @@ import {
   BulkDeleteExpenseDto,
 } from './dto';
 import { ExpenseUserInterceptor } from './interceptors/expense-user.interceptor';
+import { RequestWithTimezone } from './expense-tracker.types';
 
 @ApiTags('Expense Tracker')
 @ApiBearerAuth('JWT-auth')
@@ -47,7 +48,7 @@ export class ExpenseTrackerController {
     required: true,
   })
   async createDebitExpense(
-    @Request() { user: { id: userId } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() createExpenseDto: CreateDebitExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
@@ -56,8 +57,9 @@ export class ExpenseTrackerController {
     return this.expenseTrackerService.createDebitExpense({
       ...createExpenseDto,
       fileKeys,
-      userId,
+      userId: req.user.id,
       sourceType,
+      timezone: req.timezone,
     });
   }
 
@@ -69,7 +71,7 @@ export class ExpenseTrackerController {
     required: true,
   })
   async forceExpense(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() forceExpenseDto: ForceExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
@@ -77,9 +79,10 @@ export class ExpenseTrackerController {
   ) {
     return this.expenseTrackerService.forceExpense({
       ...forceExpenseDto,
-      createdBy,
+      createdBy: req.user.id,
       sourceType,
       fileKeys,
+      timezone: req.timezone,
     });
   }
 
@@ -91,7 +94,7 @@ export class ExpenseTrackerController {
     required: true,
   })
   async createCreditExpense(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() createExpenseDto: CreateCreditExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
@@ -99,9 +102,10 @@ export class ExpenseTrackerController {
   ) {
     return this.expenseTrackerService.createCreditExpense({
       ...createExpenseDto,
-      createdBy,
+      createdBy: req.user.id,
       sourceType,
       fileKeys,
+      timezone: req.timezone,
     });
   }
 
@@ -113,7 +117,7 @@ export class ExpenseTrackerController {
     required: true,
   })
   async editExpense(
-    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Param('id') id: string,
     @Body() editExpenseDto: EditExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
@@ -123,9 +127,10 @@ export class ExpenseTrackerController {
     return this.expenseTrackerService.editExpense({
       ...editExpenseDto,
       id,
-      updatedBy,
+      updatedBy: req.user.id,
       entrySourceType: sourceType,
       fileKeys,
+      timezone: req.timezone,
     });
   }
 

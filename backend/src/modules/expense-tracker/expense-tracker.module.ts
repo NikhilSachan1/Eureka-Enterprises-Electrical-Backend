@@ -8,6 +8,7 @@ import { SharedModule } from '../shared/shared.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ExpenseFilesModule } from '../expense-files/expense-files.module';
+import { DateTimeModule } from 'src/utils/datetime';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ExpenseFilesModule } from '../expense-files/expense-files.module';
     ConfigurationsModule,
     ConfigSettingsModule,
     ExpenseFilesModule,
+    DateTimeModule,
   ],
   controllers: [ExpenseTrackerController],
   providers: [ExpenseTrackerService, ExpenseTrackerRepository],

@@ -36,6 +36,7 @@ import {
 } from 'src/utils/master-constants/master-constants';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { DateTimeService } from 'src/utils/datetime';
 import {
   buildFuelExpenseListQuery,
   buildFuelExpenseBalanceQuery,
@@ -54,6 +55,7 @@ export class FuelExpenseService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   async create(
@@ -62,6 +64,7 @@ export class FuelExpenseService {
       createdBy: string;
       fileKeys: string[];
       entrySourceType: string;
+      timezone?: string;
     },
   ) {
     try {
@@ -76,9 +79,10 @@ export class FuelExpenseService {
         paymentMode,
         transactionType = TransactionType.DEBIT,
         expenseEntryType = ExpenseEntryType.SELF,
+        timezone,
       } = createFuelExpenseDto;
 
-      await this.validateFillDate(fillDate);
+      await this.validateFillDate(fillDate, timezone);
       await this.validatePaymentMode(paymentMode);
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
@@ -133,6 +137,7 @@ export class FuelExpenseService {
       createdBy: string;
       fileKeys: string[];
       entrySourceType: string;
+      timezone?: string;
     },
   ) {
     try {
@@ -147,10 +152,12 @@ export class FuelExpenseService {
         paymentMode,
         expenseEntryType = ExpenseEntryType.FORCED,
         transactionType = TransactionType.DEBIT,
+        timezone,
       } = createFuelExpenseDto;
 
-      // Validate fill date
-      if (new Date(fillDate) > new Date()) {
+      // Validate fill date - use timezone-aware comparison
+      const fillDateStr = this.dateTimeService.toDateString(new Date(fillDate));
+      if (this.dateTimeService.isFutureDate(fillDateStr, timezone)) {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.INVALID_FILL_DATE);
       }
 
@@ -211,14 +218,16 @@ export class FuelExpenseService {
       createdBy: string;
       fileKeys: string[];
       entrySourceType: string;
+      timezone?: string;
     },
   ) {
     try {
-      const { fillDate, userId, createdBy, fileKeys, paymentMode, entrySourceType } =
+      const { fillDate, userId, createdBy, fileKeys, paymentMode, entrySourceType, timezone } =
         createCreditFuelExpenseDto;
 
-      // Validate settlement date (no future dates)
-      if (new Date(fillDate) > new Date()) {
+      // Validate settlement date (no future dates) - use timezone-aware comparison
+      const fillDateStr = this.dateTimeService.toDateString(new Date(fillDate));
+      if (this.dateTimeService.isFutureDate(fillDateStr, timezone)) {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.INVALID_FILL_DATE);
       }
 
@@ -272,10 +281,11 @@ export class FuelExpenseService {
       updatedBy: string;
       fileKeys?: string[];
       entrySourceType: string;
+      timezone?: string;
     },
   ) {
     try {
-      const { id, updatedBy, editReason, fileKeys, entrySourceType } = editFuelExpenseDto;
+      const { id, updatedBy, editReason, fileKeys, entrySourceType, timezone } = editFuelExpenseDto;
       const fuelExpense = await this.findOneOrFail({ where: { id, isActive: true } });
 
       // Check if creator is editing
@@ -293,7 +303,7 @@ export class FuelExpenseService {
       const { vehicleId, cardId, fillDate, odometerKm, paymentMode } = editFuelExpenseDto;
 
       // Validate fill date
-      await this.validateFillDate(fillDate);
+      await this.validateFillDate(fillDate, timezone);
 
       // Validate payment mode
       await this.validatePaymentMode(paymentMode);
@@ -1188,8 +1198,10 @@ export class FuelExpenseService {
     }
   }
 
-  private async validateFillDate(fillDate: Date) {
-    if (new Date(fillDate) > new Date()) {
+  private async validateFillDate(fillDate: Date, timezone?: string) {
+    // Use timezone-aware date comparison for future date check
+    const fillDateStr = this.dateTimeService.toDateString(new Date(fillDate));
+    if (this.dateTimeService.isFutureDate(fillDateStr, timezone)) {
       throw new BadRequestException(FUEL_EXPENSE_ERRORS.INVALID_FILL_DATE);
     }
 
@@ -1207,10 +1219,10 @@ export class FuelExpenseService {
     });
 
     const allowedDays = Number(fuelExpenseCycleInDays);
-    const currentDate = new Date();
-    const allowedDate = new Date(currentDate.getTime() - allowedDays * 24 * 60 * 60 * 1000);
 
-    if (fillDate < allowedDate) {
+    // Use timezone-aware comparison for "too old" check
+    const daysSinceFillDate = this.dateTimeService.getDaysSince(fillDateStr, timezone);
+    if (daysSinceFillDate > allowedDays) {
       throw new BadRequestException(
         FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_DATE_TOO_OLD.replace('{days}', allowedDays.toString()),
       );

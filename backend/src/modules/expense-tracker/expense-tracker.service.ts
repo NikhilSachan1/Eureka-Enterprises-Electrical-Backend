@@ -39,6 +39,7 @@ import {
   buildExpenseSummaryQuery,
 } from './queries/expense-tracker.queries';
 import { ExpenseFilesService } from '../expense-files/expense-files.service';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -49,6 +50,7 @@ export class ExpenseTrackerService {
     private readonly utilityService: UtilityService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly expenseFilesService: ExpenseFilesService,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   async createDebitExpense(
@@ -56,14 +58,15 @@ export class ExpenseTrackerService {
       userId: string;
       sourceType: EntrySourceType;
       fileKeys: string[];
+      timezone?: string;
     },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, userId, sourceType, fileKeys } =
+      const { category, paymentMode, amount, expenseDate, userId, sourceType, fileKeys, timezone } =
         createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
-      await this.validateExpenseDate(expenseDate);
+      await this.validateExpenseDate(expenseDate, timezone);
 
       return await this.dataSource.transaction(async (entityManager) => {
         const expense = await this.expenseTrackerRepository.create(
@@ -142,8 +145,14 @@ export class ExpenseTrackerService {
     }
   }
 
-  private async validateExpenseDate(expenseDate: Date) {
-    if (new Date(expenseDate) > new Date()) {
+  private async validateExpenseDate(expenseDate: Date | string, timezone?: string) {
+    // Use timezone-aware date comparison
+    const expenseDateStr =
+      typeof expenseDate === 'string'
+        ? expenseDate.split('T')[0]
+        : this.dateTimeService.toDateString(new Date(expenseDate));
+
+    if (this.dateTimeService.isFutureDate(expenseDateStr, timezone)) {
       throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
     }
 
@@ -161,10 +170,9 @@ export class ExpenseTrackerService {
     });
 
     const allowedDays = Number(expenseCycleInDays);
-    const currentDate = new Date();
-    const allowedDate = new Date(currentDate.getTime() - allowedDays * 24 * 60 * 60 * 1000);
+    const daysSinceExpense = this.dateTimeService.getDaysSince(expenseDateStr, timezone);
 
-    if (expenseDate < allowedDate) {
+    if (daysSinceExpense > allowedDays) {
       throw new BadRequestException(
         EXPENSE_TRACKER_ERRORS.EXPENSE_DATE_TOO_OLD.replace('{days}', allowedDays.toString()),
       );
@@ -176,14 +184,26 @@ export class ExpenseTrackerService {
       createdBy: string;
       sourceType: EntrySourceType;
       fileKeys: string[];
+      timezone?: string;
     },
   ) {
     try {
-      const { category, paymentMode, amount, createdBy, sourceType, expenseDate, fileKeys } =
-        forceExpenseDto;
+      const {
+        category,
+        paymentMode,
+        amount,
+        createdBy,
+        sourceType,
+        expenseDate,
+        fileKeys,
+        timezone,
+      } = forceExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
-      if (new Date(expenseDate) > new Date()) {
+
+      // Use timezone-aware date comparison
+      const expenseDateStr = this.dateTimeService.toDateString(new Date(expenseDate));
+      if (this.dateTimeService.isFutureDate(expenseDateStr, timezone)) {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
       }
 
@@ -224,15 +244,26 @@ export class ExpenseTrackerService {
       createdBy: string;
       sourceType: EntrySourceType;
       fileKeys: string[];
+      timezone?: string;
     },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, createdBy, sourceType, fileKeys } =
-        createExpenseDto;
+      const {
+        category,
+        paymentMode,
+        amount,
+        expenseDate,
+        createdBy,
+        sourceType,
+        fileKeys,
+        timezone,
+      } = createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
 
-      if (new Date(expenseDate) > new Date()) {
+      // Use timezone-aware date comparison
+      const expenseDateStr = this.dateTimeService.toDateString(new Date(expenseDate));
+      if (this.dateTimeService.isFutureDate(expenseDateStr, timezone)) {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
       }
 
@@ -320,6 +351,7 @@ export class ExpenseTrackerService {
       updatedBy: string;
       entrySourceType: EntrySourceType;
       fileKeys: string[];
+      timezone?: string;
     },
   ) {
     try {
@@ -332,6 +364,7 @@ export class ExpenseTrackerService {
         category,
         paymentMode,
         expenseDate,
+        timezone,
       } = editExpenseDto;
       const expense = await this.findOneOrFail({ where: { id, isActive: true } });
 
@@ -350,7 +383,7 @@ export class ExpenseTrackerService {
       // Validate category, payment mode, and expense date
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
-      await this.validateExpenseDate(expenseDate);
+      await this.validateExpenseDate(expenseDate, timezone);
 
       return await this.dataSource.transaction(async (entityManager) => {
         await this.expenseTrackerRepository.update(
