@@ -90,8 +90,10 @@ export class AssetMastersController {
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Param('id') id: string,
     @Body() updateAssetDto: UpdateAssetDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.ASSET_FILES)
+    { assetFiles }: { assetFiles: string[] } = { assetFiles: [] },
   ) {
-    return this.assetMastersService.update({ id }, { ...updateAssetDto, createdBy });
+    return this.assetMastersService.update({ id }, { ...updateAssetDto, createdBy }, assetFiles);
   }
 
   @Delete(':id')

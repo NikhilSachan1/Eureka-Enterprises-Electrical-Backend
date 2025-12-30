@@ -306,7 +306,7 @@ export class AssetMastersService {
   async update(
     identifierConditions: FindOptionsWhere<AssetMasterEntity>,
     updateData: UpdateAssetDto & { createdBy: string },
-    entityManager?: EntityManager,
+    assetFiles: string[] = [],
   ) {
     try {
       const asset = await this.findOneOrFail({ where: identifierConditions });
@@ -324,55 +324,71 @@ export class AssetMastersService {
         return date.toISOString().split('T')[0];
       };
 
-      // Create new version with merged data
-      await this.assetVersionsService.create(
-        {
-          assetMasterId: asset.id,
-          name: updateData.name || currentVersion?.name,
-          model: updateData.model ?? currentVersion?.model,
-          serialNumber: updateData.serialNumber ?? currentVersion?.serialNumber,
-          category: updateData.category || currentVersion?.category,
-          assetType:
-            updateData.assetType ||
-            (currentVersion?.assetType as AssetType) ||
-            AssetType.NON_CALIBRATED,
-          calibrationFrom: updateData.calibrationFrom ?? currentVersion?.calibrationFrom,
-          calibrationFrequency:
-            updateData.calibrationFrequency ?? currentVersion?.calibrationFrequency,
-          calibrationStartDate:
-            updateData.calibrationStartDate ?? toDateString(currentVersion?.calibrationStartDate),
-          calibrationEndDate:
-            updateData.calibrationEndDate ?? toDateString(currentVersion?.calibrationEndDate),
-          purchaseDate: updateData.purchaseDate ?? toDateString(currentVersion?.purchaseDate),
-          vendorName: updateData.vendorName ?? currentVersion?.vendorName,
-          warrantyStartDate:
-            updateData.warrantyStartDate ?? toDateString(currentVersion?.warrantyStartDate),
-          warrantyEndDate:
-            updateData.warrantyEndDate ?? toDateString(currentVersion?.warrantyEndDate),
-          status:
-            updateData.status || (currentVersion?.status as AssetStatus) || AssetStatus.AVAILABLE,
-          assignedTo: updateData.assignedTo ?? currentVersion?.assignedTo,
-          remarks: updateData.remarks ?? currentVersion?.remarks,
-          additionalData: updateData.additionalData ?? currentVersion?.additionalData,
-          createdBy: updateData.createdBy,
-        },
-        entityManager,
-      );
+      return await this.dataSource.transaction(async (entityManager) => {
+        // Create new version with merged data
+        await this.assetVersionsService.create(
+          {
+            assetMasterId: asset.id,
+            name: updateData.name || currentVersion?.name,
+            model: updateData.model ?? currentVersion?.model,
+            serialNumber: updateData.serialNumber ?? currentVersion?.serialNumber,
+            category: updateData.category || currentVersion?.category,
+            assetType:
+              updateData.assetType ||
+              (currentVersion?.assetType as AssetType) ||
+              AssetType.NON_CALIBRATED,
+            calibrationFrom: updateData.calibrationFrom ?? currentVersion?.calibrationFrom,
+            calibrationFrequency:
+              updateData.calibrationFrequency ?? currentVersion?.calibrationFrequency,
+            calibrationStartDate:
+              updateData.calibrationStartDate ?? toDateString(currentVersion?.calibrationStartDate),
+            calibrationEndDate:
+              updateData.calibrationEndDate ?? toDateString(currentVersion?.calibrationEndDate),
+            purchaseDate: updateData.purchaseDate ?? toDateString(currentVersion?.purchaseDate),
+            vendorName: updateData.vendorName ?? currentVersion?.vendorName,
+            warrantyStartDate:
+              updateData.warrantyStartDate ?? toDateString(currentVersion?.warrantyStartDate),
+            warrantyEndDate:
+              updateData.warrantyEndDate ?? toDateString(currentVersion?.warrantyEndDate),
+            status:
+              updateData.status || (currentVersion?.status as AssetStatus) || AssetStatus.AVAILABLE,
+            assignedTo: updateData.assignedTo ?? currentVersion?.assignedTo,
+            remarks: updateData.remarks ?? currentVersion?.remarks,
+            additionalData: updateData.additionalData ?? currentVersion?.additionalData,
+            createdBy: updateData.createdBy,
+          },
+          entityManager,
+        );
 
-      // Create update event
-      await this.assetEventsService.create(
-        {
-          assetMasterId: asset.id,
-          eventType: AssetEventTypes.UPDATED,
-          createdBy: updateData.createdBy,
-        },
-        entityManager,
-      );
+        // Create update event
+        const updateEvent = await this.assetEventsService.create(
+          {
+            assetMasterId: asset.id,
+            eventType: AssetEventTypes.UPDATED,
+            createdBy: updateData.createdBy,
+          },
+          entityManager,
+        );
 
-      return this.utilityService.getSuccessMessage(
-        AssetMasterEntityFields.ASSET,
-        DataSuccessOperationType.UPDATE,
-      );
+        // Create asset files if provided - linked to UPDATED event
+        if (assetFiles && assetFiles.length > 0) {
+          await this.assetFilesService.create(
+            {
+              assetMasterId: asset.id,
+              fileType: AssetFileTypes.ASSET_IMAGE,
+              fileKeys: assetFiles,
+              assetEventsId: updateEvent.id,
+              createdBy: updateData.createdBy,
+            },
+            entityManager,
+          );
+        }
+
+        return this.utilityService.getSuccessMessage(
+          AssetMasterEntityFields.ASSET,
+          DataSuccessOperationType.UPDATE,
+        );
+      });
     } catch (error) {
       throw error;
     }
