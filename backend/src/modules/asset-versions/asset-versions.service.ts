@@ -68,16 +68,6 @@ export class AssetVersionsService {
     }
   }
 
-  async findActiveVersion(assetMasterId: string): Promise<AssetVersionEntity | null> {
-    try {
-      return await this.assetVersionsRepository.findOne({
-        where: { assetMasterId, isActive: true },
-      });
-    } catch (error) {
-      throw error;
-    }
-  }
-
   async findAll(findOptions: FindManyOptions<AssetVersionEntity>) {
     try {
       return await this.assetVersionsRepository.findAll(findOptions);

@@ -257,7 +257,9 @@ export class AssetMastersService {
         relations: ['assetVersions', 'assetFiles'],
       });
 
-      const activeVersion = await this.assetVersionsService.findActiveVersion(id);
+      const activeVersion = await this.assetVersionsService.findOne({
+        where: { assetMasterId: id, isActive: true },
+      });
 
       if (!activeVersion) {
         throw new NotFoundException(ASSET_MASTERS_ERRORS.ASSET_NOT_FOUND);
@@ -336,10 +338,10 @@ export class AssetMastersService {
       // Validate dates
       this.validateDates(updateData);
 
-      // Get current active version to merge with updates
-      const currentVersion = await this.assetVersionsService.findActiveVersion(asset.id);
+      const currentVersion = await this.assetVersionsService.findOne({
+        where: { assetMasterId: asset.id, isActive: true },
+      });
 
-      // Helper to convert Date to ISO string
       const toDateString = (date?: Date | string | null): string | undefined => {
         if (!date) return undefined;
         if (typeof date === 'string') return date;
@@ -347,7 +349,6 @@ export class AssetMastersService {
       };
 
       return await this.dataSource.transaction(async (entityManager) => {
-        // Create new version with merged data
         const newVersion = await this.assetVersionsService.create(
           {
             assetMasterId: asset.id,

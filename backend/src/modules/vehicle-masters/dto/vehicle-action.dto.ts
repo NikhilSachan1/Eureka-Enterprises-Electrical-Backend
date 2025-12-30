@@ -2,6 +2,22 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
 import { VehicleEventTypes } from '../constants/vehicle-masters.constants';
 
+/**
+ * Vehicle Action DTO
+ *
+ * Action-specific requirements:
+ * | Action              | toUserId           | Files      |
+ * |---------------------|-------------------|------------|
+ * | HANDOVER_INITIATED  | Required          | Required   |
+ * | HANDOVER_ACCEPTED   | Derived (JWT)     | Required   |
+ * | HANDOVER_REJECTED   | Derived (JWT)     | Optional   |
+ * | HANDOVER_CANCELLED  | Derived (JWT)     | Optional   |
+ * | DEALLOCATED         | Auto (assignedTo) | Optional   |
+ * | UNDER_MAINTENANCE   | Not needed        | Optional   |
+ * | AVAILABLE           | Not needed        | Not needed |
+ * | DAMAGED             | Not needed        | Optional   |
+ * | RETIRED             | Not needed        | Optional   |
+ */
 export class VehicleActionDto {
   @ApiProperty({
     description: 'The ID of the vehicle',
@@ -21,6 +37,8 @@ export class VehicleActionDto {
       VehicleEventTypes.UNDER_MAINTENANCE,
       VehicleEventTypes.DEALLOCATED,
       VehicleEventTypes.AVAILABLE,
+      VehicleEventTypes.DAMAGED,
+      VehicleEventTypes.RETIRED,
     ],
     example: VehicleEventTypes.HANDOVER_INITIATED,
   })
@@ -33,35 +51,38 @@ export class VehicleActionDto {
     VehicleEventTypes.UNDER_MAINTENANCE,
     VehicleEventTypes.DEALLOCATED,
     VehicleEventTypes.AVAILABLE,
+    VehicleEventTypes.DAMAGED,
+    VehicleEventTypes.RETIRED,
   ])
   action: VehicleEventTypes;
 
   @ApiProperty({
-    description: 'The ID of the user',
+    description: 'The ID of the target user (required only for HANDOVER_INITIATED)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID()
-  toUserId: string;
+  toUserId?: string;
 
   @ApiProperty({
-    description: 'The metadata of the vehicle event',
+    description: 'The metadata of the vehicle event (e.g., reason for action)',
     example: {
       reason: 'Vehicle is not in good condition',
     },
+    required: false,
   })
   @IsOptional()
-  metadata: Record<string, any>;
+  metadata?: Record<string, any>;
 
   @ApiProperty({
-    description: 'Files to be uploaded.',
+    description: 'Files to be uploaded (required for HANDOVER_INITIATED, HANDOVER_ACCEPTED)',
     type: 'string',
     format: 'binary',
     isArray: true,
     maxItems: 10,
-    required: true,
+    required: false,
   })
-  vehicleFiles: any;
-
-  //TODO: Vehicle file is only necessary for few vehicle events. Need to discuss
+  @IsOptional()
+  vehicleFiles?: any;
 }
