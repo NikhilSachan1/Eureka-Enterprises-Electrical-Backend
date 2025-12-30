@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, FindManyOptions, FindOneOptions, Repository } from 'typeorm';
+import { DataSource, EntityManager, FindManyOptions, FindOneOptions, Repository } from 'typeorm';
 import { AssetEventEntity } from './entities/asset-event.entity';
 import { UtilityService } from 'src/utils/utility/utility.service';
 
@@ -10,6 +10,7 @@ export class AssetEventsRepository {
     @InjectRepository(AssetEventEntity)
     private readonly repository: Repository<AssetEventEntity>,
     private readonly utilityService: UtilityService,
+    private readonly dataSource: DataSource,
   ) {}
   async create(assetEvents: Partial<AssetEventEntity>, entityManager?: EntityManager) {
     try {
@@ -40,6 +41,14 @@ export class AssetEventsRepository {
         ? entityManager.getRepository(AssetEventEntity)
         : this.repository;
       return await repository.findOne(options);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async executeRawQuery(query: string, params: any[]) {
+    try {
+      return await this.dataSource.query(query, params);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

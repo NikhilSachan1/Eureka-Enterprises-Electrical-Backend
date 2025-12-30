@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateAssetEventDto } from './dto/create-asset-event.dto';
-import { Between, DataSource, EntityManager, In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { AssetEventsRepository } from './asset-events.repository';
 import { AssetActionDto } from '../asset-versions/dto/asset-action.dto';
 import { AssetFilesService } from '../asset-files/asset-files.service';
@@ -8,11 +8,12 @@ import {
   AssetEventTypes,
   AssetFileTypes,
 } from '../asset-masters/constants/asset-masters.constants';
-import { ASSET_EVENTS_ERRORS, AssetEventsSortableFields } from './constants/asset-events.constants';
+import { ASSET_EVENTS_ERRORS } from './constants/asset-events.constants';
 import { AssetEventsQueryDto } from './dto/asset-events-query.dto';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
-import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
+import { buildAssetEventsQuery } from './queries/asset-events.queries';
+import { UtilityService } from 'src/utils/utility/utility.service';
 
 @Injectable()
 export class AssetEventsService {
@@ -22,6 +23,7 @@ export class AssetEventsService {
     private readonly assetFilesService: AssetFilesService,
     private readonly assetVersionsService: AssetVersionsService,
     private readonly dateTimeService: DateTimeService,
+    private readonly utilityService: UtilityService,
   ) {}
 
   async create(
@@ -333,58 +335,30 @@ export class AssetEventsService {
   }
 
   async findAll(assetMasterId: string, query: AssetEventsQueryDto, timezone: string) {
-    const {
-      startDate,
-      endDate,
-      eventTypes,
-      toUser,
-      fromUser,
-      createdBy,
-      sortField = AssetEventsSortableFields.CREATED_AT,
-      sortOrder = SortOrder.DESC,
-      page = 1,
-      pageSize = 10,
-    } = query;
+    const { startDate, endDate } = query;
 
-    const whereConditions: Record<string, any> = { assetMasterId };
+    let startDateUTC: Date | undefined;
+    let endDateUTC: Date | undefined;
 
-    if (startDate && endDate) {
-      whereConditions.createdAt = Between(
-        this.dateTimeService.getDateInUTC(startDate, timezone, false),
-        this.dateTimeService.getDateInUTC(endDate, timezone, true),
-      );
-    } else if (startDate) {
-      whereConditions.createdAt = MoreThanOrEqual(
-        this.dateTimeService.getDateInUTC(startDate, timezone, false),
-      );
-    } else if (endDate) {
-      whereConditions.createdAt = LessThanOrEqual(
-        this.dateTimeService.getDateInUTC(endDate, timezone, true),
-      );
+    if (startDate) {
+      startDateUTC = this.dateTimeService.getDateInUTC(startDate, timezone, false);
+    }
+    if (endDate) {
+      endDateUTC = this.dateTimeService.getDateInUTC(endDate, timezone, true);
     }
 
-    if (eventTypes?.length > 0) {
-      whereConditions.eventType = In(eventTypes);
-    }
-
-    if (toUser) {
-      whereConditions.toUser = toUser;
-    }
-
-    if (fromUser) {
-      whereConditions.fromUser = fromUser;
-    }
-
-    if (createdBy) {
-      whereConditions.createdBy = createdBy;
-    }
-
-    return await this.assetEventsRepository.findAll({
-      where: whereConditions,
-      relations: ['assetFiles'],
-      order: { [sortField]: sortOrder },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+    const { dataQuery, countQuery, params, countParams } = buildAssetEventsQuery({
+      assetMasterId,
+      query,
+      startDateUTC,
+      endDateUTC,
     });
+
+    const [events, totalResult] = await Promise.all([
+      this.assetEventsRepository.executeRawQuery(dataQuery, params),
+      this.assetEventsRepository.executeRawQuery(countQuery, countParams),
+    ]);
+
+    return this.utilityService.listResponse(events, Number(totalResult[0]?.total || 0));
   }
 }

@@ -16,3 +16,9 @@ export enum AssetEventsSortableFields {
   UPDATED_AT = 'updatedAt',
   EVENT_TYPE = 'eventType',
 }
+
+export const ASSET_EVENTS_SORT_FIELD_MAPPING: Record<string, string> = {
+  createdAt: 'ae."createdAt"',
+  updatedAt: 'ae."updatedAt"',
+  eventType: 'ae."eventType"',
+};
