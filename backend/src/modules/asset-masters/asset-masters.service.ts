@@ -84,6 +84,20 @@ export class AssetMastersService {
 
   // ==================== Validation Methods ====================
   private validateDates(dto: CreateAssetDto | UpdateAssetDto) {
+    // Validate calibration dates not allowed for non-calibrated assets
+    if (dto.assetType === AssetType.NON_CALIBRATED) {
+      if (
+        dto.calibrationStartDate ||
+        dto.calibrationEndDate ||
+        dto.calibrationFrom ||
+        dto.calibrationFrequency
+      ) {
+        throw new BadRequestException(
+          ASSET_MASTERS_ERRORS.CALIBRATION_NOT_ALLOWED_FOR_NON_CALIBRATED,
+        );
+      }
+    }
+
     // Validate calibration dates
     if (dto.calibrationStartDate && dto.calibrationEndDate) {
       const startDate = new Date(dto.calibrationStartDate);

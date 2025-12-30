@@ -8,6 +8,8 @@ export const ASSET_MASTERS_ERRORS = {
   INVALID_CALIBRATION_FREQUENCY: 'Invalid calibration frequency',
   INVALID_STATUS: 'Invalid asset status',
   CALIBRATION_DATES_REQUIRED: 'Calibration dates are required for calibrated assets',
+  CALIBRATION_NOT_ALLOWED_FOR_NON_CALIBRATED:
+    'Calibration dates are not allowed for non-calibrated assets',
   CALIBRATION_END_BEFORE_START: 'Calibration end date must be after start date',
   WARRANTY_END_BEFORE_START: 'Warranty end date must be after start date',
   ASSIGNED_USER_NOT_FOUND: 'Assigned user not found',
