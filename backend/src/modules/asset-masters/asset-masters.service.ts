@@ -200,6 +200,13 @@ export class AssetMastersService {
     createdBy: string,
   ) {
     try {
+      // Validate asset exists
+      const asset = await this.findOneOrFail({ where: { id: assetActionDto.assetId } });
+
+      if (!asset) {
+        throw new NotFoundException(ASSET_MASTERS_ERRORS.ASSET_NOT_FOUND);
+      }
+
       return await this.assetEventsService.action(
         { ...assetActionDto, assetMasterId: assetActionDto.assetId },
         assetFiles,
