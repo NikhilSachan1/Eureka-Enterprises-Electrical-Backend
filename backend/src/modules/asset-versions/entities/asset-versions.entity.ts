@@ -1,7 +1,8 @@
 import { AssetMasterEntity } from 'src/modules/asset-masters/entities/asset-master.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import { AssetFileEntity } from 'src/modules/asset-files/entities/asset-file.entity';
 
 @Entity('asset_versions')
 @Index('IDX_ASSET_VERSIONS_NAME', ['name'])
@@ -81,4 +82,7 @@ export class AssetVersionEntity extends BaseEntity {
   @ManyToOne(() => UserEntity, { nullable: true })
   @JoinColumn({ name: 'assignedTo' })
   assignedToUser: UserEntity;
+
+  @OneToMany(() => AssetFileEntity, (assetFile) => assetFile.assetVersion)
+  assetFiles: AssetFileEntity[];
 }

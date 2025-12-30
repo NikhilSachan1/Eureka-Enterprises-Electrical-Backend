@@ -12,13 +12,14 @@ export class AssetFilesService {
     entityManager?: EntityManager,
   ) {
     try {
-      const { assetMasterId, fileType, fileKeys, createdBy, assetEventsId, label } =
+      const { assetMasterId, assetVersionId, fileType, fileKeys, createdBy, assetEventsId, label } =
         createAssetFileDto;
       if (fileKeys) {
         for (const fileKey of fileKeys) {
           await this.assetFilesRepository.create(
             {
               assetMasterId,
+              assetVersionId,
               fileType,
               fileKey,
               label,

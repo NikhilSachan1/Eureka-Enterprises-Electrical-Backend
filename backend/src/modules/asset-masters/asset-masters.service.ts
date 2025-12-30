@@ -139,7 +139,7 @@ export class AssetMastersService {
         );
 
         // Create initial version
-        await this.assetVersionsService.create(
+        const initialVersion = await this.assetVersionsService.create(
           {
             ...createAssetDto,
             createdBy,
@@ -169,11 +169,12 @@ export class AssetMastersService {
           entityManager,
         );
 
-        // Create asset files if provided
+        // Create asset files if provided - linked to initial version
         if (assetFiles && assetFiles.length > 0) {
           await this.assetFilesService.create(
             {
               assetMasterId: assetMaster.id,
+              assetVersionId: initialVersion.id,
               fileType: AssetFileTypes.ASSET_IMAGE,
               fileKeys: assetFiles,
               assetEventsId: assetAddedEvent.id,
@@ -253,7 +254,7 @@ export class AssetMastersService {
     try {
       const asset = await this.findOneOrFail({
         where: { id },
-        relations: ['assetVersions', 'assetFiles', 'assetEvents'],
+        relations: ['assetVersions', 'assetFiles'],
       });
 
       const activeVersion = await this.assetVersionsService.findActiveVersion(id);
@@ -261,6 +262,28 @@ export class AssetMastersService {
       if (!activeVersion) {
         throw new NotFoundException(ASSET_MASTERS_ERRORS.ASSET_NOT_FOUND);
       }
+
+      const allFiles = asset.assetFiles?.filter((file) => !file.deletedAt) || [];
+
+      const latestFiles = allFiles
+        .filter(
+          (file) =>
+            file.assetVersionId === activeVersion.id &&
+            file.fileType === AssetFileTypes.ASSET_IMAGE,
+        )
+        .map((file) => ({
+          id: file.id,
+          fileKey: file.fileKey,
+          fileType: file.fileType,
+          label: file.label,
+        }));
+
+      const versionHistory = (
+        asset.assetVersions?.filter((version) => !version.deletedAt) || []
+      ).map((version) => ({
+        ...version,
+        files: allFiles.filter((file) => file.assetVersionId === version.id),
+      }));
 
       return {
         id: asset.id,
@@ -293,10 +316,9 @@ export class AssetMastersService {
         assignedTo: activeVersion.assignedTo,
         remarks: activeVersion.remarks,
         additionalData: activeVersion.additionalData,
-        // Related data
-        files: asset.assetFiles?.filter((f) => !f.deletedAt) || [],
-        events: asset.assetEvents?.filter((e) => !e.deletedAt) || [],
-        versionHistory: asset.assetVersions?.filter((v) => !v.deletedAt) || [],
+        // Related data - files from latest version only
+        files: latestFiles,
+        versionHistory,
       };
     } catch (error) {
       throw error;
@@ -326,7 +348,7 @@ export class AssetMastersService {
 
       return await this.dataSource.transaction(async (entityManager) => {
         // Create new version with merged data
-        await this.assetVersionsService.create(
+        const newVersion = await this.assetVersionsService.create(
           {
             assetMasterId: asset.id,
             name: updateData.name || currentVersion?.name,
@@ -370,11 +392,12 @@ export class AssetMastersService {
           entityManager,
         );
 
-        // Create asset files if provided - linked to UPDATED event
+        // Create asset files if provided - linked to new version and UPDATED event
         if (assetFiles && assetFiles.length > 0) {
           await this.assetFilesService.create(
             {
               assetMasterId: asset.id,
+              assetVersionId: newVersion.id,
               fileType: AssetFileTypes.ASSET_IMAGE,
               fileKeys: assetFiles,
               assetEventsId: updateEvent.id,
