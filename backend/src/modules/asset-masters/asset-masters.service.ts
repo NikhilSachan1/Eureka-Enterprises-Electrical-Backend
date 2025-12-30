@@ -237,11 +237,32 @@ export class AssetMastersService {
       this.assetMastersRepository.executeRawQuery(statsQuery, []) as Promise<any[]>,
     ]);
 
-    const assetsWithStatus = assets.map((asset) => ({
-      ...asset,
-      calibrationStatus: this.getCalibrationStatus(asset.assetType, asset.calibrationEndDate),
-      warrantyStatus: this.getWarrantyStatus(asset.warrantyEndDate),
-    }));
+    const assetsWithStatus = assets.map((asset) => {
+      // Extract and remove flat user fields, then create assignedToUser object
+      const {
+        assignedToUserId,
+        assignedToFirstName,
+        assignedToLastName,
+        assignedToEmail,
+        assignedToEmployeeId,
+        ...restAsset
+      } = asset;
+
+      return {
+        ...restAsset,
+        calibrationStatus: this.getCalibrationStatus(asset.assetType, asset.calibrationEndDate),
+        warrantyStatus: this.getWarrantyStatus(asset.warrantyEndDate),
+        assignedToUser: assignedToUserId
+          ? {
+              id: assignedToUserId,
+              firstName: assignedToFirstName,
+              lastName: assignedToLastName,
+              email: assignedToEmail,
+              employeeId: assignedToEmployeeId,
+            }
+          : null,
+      };
+    });
 
     const stats = statsResult[0] || {};
 
