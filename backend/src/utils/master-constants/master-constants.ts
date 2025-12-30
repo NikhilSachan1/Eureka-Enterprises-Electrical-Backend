@@ -39,6 +39,7 @@ export const CONFIGURATION_KEYS = {
   ASSET_EXPIRING_SOON_DAYS: 'asset_expiring_soon_days',
   WARRANTY_STATUSES: 'warranty_statuses',
   CALIBRATION_STATUSES: 'calibration_statuses',
+  ASSET_EVENT_TYPES: 'asset_event_types',
   //VEHICLES
   VEHICLE_FUEL_TYPES: 'vehicle_fuel_types',
   VEHICLE_STATUSES: 'vehicle_statuses',
