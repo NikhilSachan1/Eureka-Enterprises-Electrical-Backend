@@ -288,15 +288,37 @@ export class AssetMastersService {
     }
   }
 
+  // Helper method to format user details
+  private formatUserDetails(user: any) {
+    if (!user) return null;
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      employeeId: user.employeeId,
+    };
+  }
+
   async findOneWithDetails(id: string) {
     try {
       const asset = await this.findOneOrFail({
         where: { id },
-        relations: ['assetVersions', 'assetFiles'],
+        relations: [
+          'assetVersions',
+          'assetVersions.assignedToUser',
+          'assetVersions.createdByUser',
+          'assetVersions.updatedByUser',
+          'assetFiles',
+          'createdByUser',
+          'updatedByUser',
+          'deletedByUser',
+        ],
       });
 
       const activeVersion = await this.assetVersionsService.findOne({
         where: { assetMasterId: id, isActive: true },
+        relations: ['assignedToUser', 'createdByUser', 'updatedByUser'],
       });
 
       if (!activeVersion) {
@@ -321,7 +343,34 @@ export class AssetMastersService {
       const versionHistory = (
         asset.assetVersions?.filter((version) => !version.deletedAt) || []
       ).map((version) => ({
-        ...version,
+        id: version.id,
+        assetMasterId: version.assetMasterId,
+        name: version.name,
+        model: version.model,
+        serialNumber: version.serialNumber,
+        category: version.category,
+        assetType: version.assetType,
+        calibrationFrom: version.calibrationFrom,
+        calibrationFrequency: version.calibrationFrequency,
+        calibrationStartDate: version.calibrationStartDate,
+        calibrationEndDate: version.calibrationEndDate,
+        purchaseDate: version.purchaseDate,
+        vendorName: version.vendorName,
+        warrantyStartDate: version.warrantyStartDate,
+        warrantyEndDate: version.warrantyEndDate,
+        status: version.status,
+        assignedTo: version.assignedTo,
+        remarks: version.remarks,
+        isActive: version.isActive,
+        additionalData: version.additionalData,
+        createdAt: version.createdAt,
+        updatedAt: version.updatedAt,
+        createdBy: version.createdBy,
+        updatedBy: version.updatedBy,
+        // User details for version history
+        assignedToUser: this.formatUserDetails(version.assignedToUser),
+        createdByUser: this.formatUserDetails(version.createdByUser),
+        updatedByUser: this.formatUserDetails(version.updatedByUser),
         files: allFiles.filter((file) => file.assetVersionId === version.id),
       }));
 
@@ -330,6 +379,13 @@ export class AssetMastersService {
         assetId: asset.assetId,
         createdAt: asset.createdAt,
         updatedAt: asset.updatedAt,
+        createdBy: asset.createdBy,
+        updatedBy: asset.updatedBy,
+        deletedBy: asset.deletedBy,
+        // User details for asset master
+        createdByUser: this.formatUserDetails(asset.createdByUser),
+        updatedByUser: this.formatUserDetails(asset.updatedByUser),
+        deletedByUser: this.formatUserDetails(asset.deletedByUser),
         // Version details
         name: activeVersion.name,
         model: activeVersion.model,
@@ -354,6 +410,8 @@ export class AssetMastersService {
         // Status
         status: activeVersion.status,
         assignedTo: activeVersion.assignedTo,
+        // User details for assignedTo
+        assignedToUser: this.formatUserDetails(activeVersion.assignedToUser),
         remarks: activeVersion.remarks,
         additionalData: activeVersion.additionalData,
         // Related data - files from latest version only

@@ -231,10 +231,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
       av."status",
       av."assignedTo",
       av."remarks",
-      av."additionalData",
-      u."firstName" as "assignedToFirstName",
-      u."lastName" as "assignedToLastName",
-      u."email" as "assignedToEmail"
+      av."additionalData"
     FROM "asset_masters" am
     INNER JOIN LATERAL (
       SELECT *
