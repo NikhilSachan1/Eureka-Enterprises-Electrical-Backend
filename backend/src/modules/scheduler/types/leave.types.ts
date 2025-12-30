@@ -69,3 +69,70 @@ export interface MonthlyLeaveAccrualResult {
   skipped: number;
   errors: string[];
 }
+
+/**
+ * CRON 20
+ * Leave Approval Reminder
+ * Runs daily from 25th to end of month at 9:00 AM IST
+ *
+ * Sends reminder to HR/Admin about pending leave applications
+ * that will be auto-approved if not acted upon before 1st of next month
+ */
+export interface LeaveApprovalReminderResult {
+  emailsSent: number;
+  totalPendingLeaves: number;
+  recipients: string[];
+  errors: string[];
+}
+
+export interface PendingLeaveAlert {
+  id: string;
+  userId: string;
+  employeeName: string;
+  employeeEmail: string;
+  leaveCategory: string;
+  leaveType: string;
+  fromDate: Date;
+  toDate: Date;
+  reason: string;
+  appliedOn: Date;
+  daysPending: number;
+  totalDays: number;
+}
+
+export interface LeaveApprovalEmailItem {
+  employeeName: string;
+  leaveCategory: string;
+  leaveType: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  reason: string;
+  appliedOn: string;
+  daysPending: number;
+  isUrgent: boolean;
+  statusClass: 'urgent' | 'pending';
+  daysText: string;
+}
+
+export interface LeaveCategorySummary {
+  category: string;
+  count: number;
+  displayName: string;
+}
+
+export interface LeaveApprovalEmailData {
+  totalPending: number;
+  totalUrgent: number;
+  daysUntilAutoApproval: number;
+  urgencyLevel: 'critical' | 'urgent' | 'normal';
+  categorySummaries: LeaveCategorySummary[];
+  urgentLeaves: LeaveApprovalEmailItem[];
+  pendingLeaves: LeaveApprovalEmailItem[];
+  hasUrgent: boolean;
+  hasPending: boolean;
+  autoApprovalDate: string;
+  monthName: string;
+  adminPortalUrl: string;
+  currentYear: number;
+}

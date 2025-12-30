@@ -84,6 +84,9 @@ export const CRON_NAMES = {
 
   // Config
   CONFIG_SETTING_ACTIVATION: 'ConfigSettingActivation',
+
+  // Leave Reminders
+  LEAVE_APPROVAL_REMINDER: 'LeaveApprovalReminder',
 };
 
 export const SYSTEM_NOTES = {

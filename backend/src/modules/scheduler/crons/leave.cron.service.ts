@@ -18,6 +18,10 @@ import {
   LeaveCarryForwardResult,
   AutoApproveLeavesResult,
   MonthlyLeaveAccrualResult,
+  LeaveApprovalReminderResult,
+  PendingLeaveAlert,
+  LeaveApprovalEmailItem,
+  LeaveCategorySummary,
 } from '../types';
 import {
   getPendingLeavesForPeriodQuery,
@@ -26,6 +30,9 @@ import {
   getUserLeaveBalanceQuery,
   updateLeaveBalanceQuery,
   createLeaveBalanceQuery,
+  getPendingLeavesForCurrentMonthQuery,
+  getPendingLeavesByCategoryQuery,
+  LEAVE_URGENT_THRESHOLD_DAYS,
 } from '../queries';
 import { UtilityService } from '../../../utils/utility/utility.service';
 import { Environments } from '../../../../env-configs';
@@ -747,5 +754,279 @@ export class LeaveCronService {
     );
 
     return toCredit;
+  }
+
+  /**
+   * CRON 20: Leave Approval Reminder
+   * Runs daily at 9:00 AM IST from 25th to end of month
+   *
+   * Sends reminder emails to HR/Admin about pending leave applications
+   * that will be auto-approved on the 1st of next month if not actioned.
+   *
+   * Scenarios Handled:
+   * 1. Only runs from 25th to last day of month (reminder window)
+   * 2. Groups leaves by urgency (pending 5+ days = urgent)
+   * 3. Shows countdown to auto-approval date
+   * 4. Different urgency levels: critical (1 day left), urgent (2-3 days), normal (4+ days)
+   * 5. Category-wise breakdown for quick overview
+   * 6. Only considers leaves for current month (overlapping or within)
+   *
+   * Business Logic:
+   * - Auto-approval happens on 1st of next month (CRON 6)
+   * - This reminder gives HR/Admin time to review before auto-approval
+   * - Critical reminder on last day of month (auto-approval next day)
+   */
+  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  async handleLeaveApprovalReminder(): Promise<LeaveApprovalReminderResult | null> {
+    const cronName = CRON_NAMES.LEAVE_APPROVAL_REMINDER;
+
+    const result: LeaveApprovalReminderResult = {
+      emailsSent: 0,
+      totalPendingLeaves: 0,
+      recipients: [],
+      errors: [],
+    };
+
+    try {
+      const currentDate = this.schedulerService.getCurrentDateIST();
+      const currentDay = currentDate.getDate();
+
+      // Only run from 25th to last day of month
+      if (currentDay < 25) {
+        this.logger.log(`[${cronName}] Skipping - not in reminder window (day ${currentDay})`);
+        return null;
+      }
+
+      this.schedulerService.logCronStart(cronName);
+
+      const { startDate, endDate, daysUntilAutoApproval, autoApprovalDate, monthName } =
+        this.getCurrentMonthInfo(currentDate);
+
+      const pendingLeaves = await this.getPendingLeavesForMonth(startDate, endDate);
+
+      if (pendingLeaves.length === 0) {
+        this.logger.log(`[${cronName}] No pending leaves found for ${monthName}`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      result.totalPendingLeaves = pendingLeaves.length;
+      this.logger.log(
+        `[${cronName}] Found ${pendingLeaves.length} pending leaves for ${monthName}`,
+      );
+
+      const categorySummaries = await this.getLeaveCategorySummary(startDate, endDate);
+
+      const { urgentLeaves, regularLeaves } = this.formatLeavesForEmail(pendingLeaves);
+
+      const urgencyLevel = this.getUrgencyLevel(daysUntilAutoApproval);
+
+      const hrEmails = await this.getHRAdminEmails();
+
+      if (hrEmails.length === 0) {
+        this.logger.warn(`[${cronName}] No HR/Admin emails found to send reminder`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      // Send emails
+      const emailData = {
+        totalPending: pendingLeaves.length,
+        totalUrgent: urgentLeaves.length,
+        daysUntilAutoApproval,
+        urgencyLevel,
+        categorySummaries,
+        urgentLeaves,
+        pendingLeaves: regularLeaves,
+        hasUrgent: urgentLeaves.length > 0,
+        hasPending: regularLeaves.length > 0,
+        autoApprovalDate,
+        monthName,
+        adminPortalUrl: Environments.FE_BASE_URL || '#',
+        currentYear: currentDate.getFullYear(),
+      };
+
+      const subject = this.getLeaveReminderSubject(urgencyLevel, daysUntilAutoApproval);
+
+      for (const email of hrEmails) {
+        try {
+          await this.emailService.sendMail({
+            receiverEmails: email,
+            subject,
+            template: EMAIL_TEMPLATE.LEAVE_APPROVAL_REMINDER,
+            emailData,
+          });
+
+          this.logger.log(`[${cronName}] Email sent to: ${email}`);
+          result.recipients.push(email);
+          result.emailsSent++;
+        } catch (error) {
+          result.errors.push(`Failed to send email to ${email}: ${error.message}`);
+          this.logger.error(`[${cronName}] Failed to send email to ${email}`, error);
+        }
+      }
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private getCurrentMonthInfo(currentDate: Date): {
+    startDate: string;
+    endDate: string;
+    daysUntilAutoApproval: number;
+    autoApprovalDate: string;
+    monthName: string;
+  } {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const startDate = new Date(year, month, 1);
+
+    const endDate = new Date(year, month + 1, 0);
+
+    const nextMonth = new Date(year, month + 1, 1);
+
+    const today = new Date(year, month, currentDate.getDate());
+    const daysUntilAutoApproval = Math.ceil(
+      (nextMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+      daysUntilAutoApproval,
+      autoApprovalDate: this.formatDate(nextMonth),
+      monthName: monthNames[month],
+    };
+  }
+
+  private async getPendingLeavesForMonth(
+    startDate: string,
+    endDate: string,
+  ): Promise<PendingLeaveAlert[]> {
+    const { query, params } = getPendingLeavesForCurrentMonthQuery(startDate, endDate);
+    return await this.dataSource.query(query, params);
+  }
+
+  private async getLeaveCategorySummary(
+    startDate: string,
+    endDate: string,
+  ): Promise<LeaveCategorySummary[]> {
+    const { query, params } = getPendingLeavesByCategoryQuery(startDate, endDate);
+    const results = await this.dataSource.query(query, params);
+
+    return results.map((item: { category: string; count: number }) => ({
+      category: item.category,
+      count: item.count,
+      displayName: this.formatCategoryName(item.category),
+    }));
+  }
+
+  private formatCategoryName(category: string): string {
+    return category
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private formatLeavesForEmail(leaves: PendingLeaveAlert[]): {
+    urgentLeaves: LeaveApprovalEmailItem[];
+    regularLeaves: LeaveApprovalEmailItem[];
+  } {
+    const urgentLeaves: LeaveApprovalEmailItem[] = [];
+    const regularLeaves: LeaveApprovalEmailItem[] = [];
+
+    for (const leave of leaves) {
+      const isUrgent = leave.daysPending >= LEAVE_URGENT_THRESHOLD_DAYS;
+      const emailItem: LeaveApprovalEmailItem = {
+        employeeName: leave.employeeName,
+        leaveCategory: this.formatCategoryName(leave.leaveCategory),
+        leaveType: leave.leaveType === 'HALF_DAY' ? 'Half Day' : 'Full Day',
+        fromDate: this.formatDate(new Date(leave.fromDate)),
+        toDate: this.formatDate(new Date(leave.toDate)),
+        totalDays: leave.totalDays,
+        reason: leave.reason || 'No reason provided',
+        appliedOn: this.formatDate(new Date(leave.appliedOn)),
+        daysPending: leave.daysPending,
+        isUrgent,
+        statusClass: isUrgent ? 'urgent' : 'pending',
+        daysText: this.getDaysText(leave.daysPending),
+      };
+
+      if (isUrgent) {
+        urgentLeaves.push(emailItem);
+      } else {
+        regularLeaves.push(emailItem);
+      }
+    }
+
+    urgentLeaves.sort((a, b) => b.daysPending - a.daysPending);
+
+    return { urgentLeaves, regularLeaves };
+  }
+
+  private getDaysText(daysPending: number): string {
+    if (daysPending === 0) {
+      return 'Applied today';
+    } else if (daysPending === 1) {
+      return 'Pending 1 day';
+    } else {
+      return `Pending ${daysPending} days`;
+    }
+  }
+
+  private getUrgencyLevel(daysUntilAutoApproval: number): 'critical' | 'urgent' | 'normal' {
+    if (daysUntilAutoApproval <= 1) {
+      return 'critical';
+    } else if (daysUntilAutoApproval <= 3) {
+      return 'urgent';
+    }
+    return 'normal';
+  }
+
+  private getLeaveReminderSubject(
+    urgencyLevel: 'critical' | 'urgent' | 'normal',
+    daysUntilAutoApproval: number,
+  ): string {
+    switch (urgencyLevel) {
+      case 'critical':
+        return EMAIL_SUBJECT.LEAVE_APPROVAL_REMINDER_CRITICAL;
+      case 'urgent':
+        return EMAIL_SUBJECT.LEAVE_APPROVAL_REMINDER_URGENT.replace(
+          '{days}',
+          daysUntilAutoApproval.toString(),
+        );
+      default:
+        return EMAIL_SUBJECT.LEAVE_APPROVAL_REMINDER;
+    }
+  }
+
+  private formatDate(date: Date): string {
+    const options: Intl.DateTimeFormatOptions = {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    };
+    return date.toLocaleDateString('en-IN', options);
   }
 }

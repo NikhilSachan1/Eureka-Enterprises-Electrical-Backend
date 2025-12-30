@@ -118,3 +118,67 @@ export const createLeaveBalanceQuery = (
     ],
   };
 };
+
+/**
+ * CRON 20
+ * Leave Approval Reminder
+ * Get all pending leave applications for the current month
+ * Used to send reminder emails to HR/Admin
+ */
+export const getPendingLeavesForCurrentMonthQuery = (startDate: string, endDate: string) => {
+  return {
+    query: `
+      SELECT 
+        la.id,
+        la."userId",
+        CONCAT(u."firstName", ' ', u."lastName") as "employeeName",
+        u."email" as "employeeEmail",
+        la."leaveCategory",
+        la."leaveType",
+        la."fromDate",
+        la."toDate",
+        la."reason",
+        la."createdAt" as "appliedOn",
+        EXTRACT(DAY FROM NOW() - la."createdAt")::integer as "daysPending",
+        CASE 
+          WHEN la."leaveType" = 'HALF_DAY' THEN 0.5
+          ELSE (la."toDate"::date - la."fromDate"::date + 1)
+        END as "totalDays"
+      FROM leave_applications la
+      INNER JOIN users u ON u.id = la."userId" AND u."deletedAt" IS NULL
+      WHERE la."approvalStatus" = $1
+        AND (
+          -- Leave falls within the month OR overlaps with the month
+          (la."fromDate" >= $2::date AND la."fromDate" <= $3::date)
+          OR (la."toDate" >= $2::date AND la."toDate" <= $3::date)
+          OR (la."fromDate" <= $2::date AND la."toDate" >= $3::date)
+        )
+        AND la."deletedAt" IS NULL
+      ORDER BY la."createdAt" ASC
+    `,
+    params: [ApprovalStatus.PENDING, startDate, endDate],
+  };
+};
+
+export const getPendingLeavesByCategoryQuery = (startDate: string, endDate: string) => {
+  return {
+    query: `
+      SELECT 
+        la."leaveCategory" as "category",
+        COUNT(*)::integer as "count"
+      FROM leave_applications la
+      WHERE la."approvalStatus" = $1
+        AND (
+          (la."fromDate" >= $2::date AND la."fromDate" <= $3::date)
+          OR (la."toDate" >= $2::date AND la."toDate" <= $3::date)
+          OR (la."fromDate" <= $2::date AND la."toDate" >= $3::date)
+        )
+        AND la."deletedAt" IS NULL
+      GROUP BY la."leaveCategory"
+      ORDER BY COUNT(*) DESC
+    `,
+    params: [ApprovalStatus.PENDING, startDate, endDate],
+  };
+};
+
+export const LEAVE_URGENT_THRESHOLD_DAYS = 5;

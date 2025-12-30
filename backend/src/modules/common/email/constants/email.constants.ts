@@ -18,6 +18,11 @@ export const EMAIL_SUBJECT = {
   BIRTHDAY_WISH: '🎂 Happy Birthday from Eureka Enterprises!',
   WORK_ANNIVERSARY: '🎉 Happy Work Anniversary - {years} at Eureka Enterprises!',
   WORK_ANNIVERSARY_MILESTONE: '🌟 Celebrating {years} Milestone at Eureka Enterprises!',
+  // Leave Approval Reminders
+  LEAVE_APPROVAL_REMINDER: 'Eureka Enterprises - Pending Leave Approvals',
+  LEAVE_APPROVAL_REMINDER_URGENT:
+    '🚨 URGENT: Eureka Enterprises - Leave Auto-Approval in {days} Days',
+  LEAVE_APPROVAL_REMINDER_CRITICAL: '⚠️ FINAL REMINDER: Leave Auto-Approval Tomorrow!',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -31,6 +36,7 @@ export const EMAIL_TEMPLATE = {
   PENDING_EXPENSE_REMINDER: 'pendingExpenseReminder',
   BIRTHDAY_WISH: 'birthdayWish',
   WORK_ANNIVERSARY: 'workAnniversary',
+  LEAVE_APPROVAL_REMINDER: 'leaveApprovalReminder',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {};
