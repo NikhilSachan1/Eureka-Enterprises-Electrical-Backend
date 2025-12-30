@@ -25,7 +25,7 @@ import {
   FILE_UPLOAD_FOLDER_NAMES,
 } from '../common/file-upload/constants/files.constants';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
-
+import { RequestWithTimezone } from './vehicle-services.types';
 @ApiTags('Vehicle Services')
 @ApiBearerAuth('JWT-auth')
 @Controller('vehicle-service')
@@ -59,12 +59,16 @@ export class VehicleServicesController {
     },
   })
   async create(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() createDto: CreateVehicleServiceDto,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.VEHICLE_SERVICE_FILES)
     { serviceFiles }: { serviceFiles: string[] } = { serviceFiles: [] },
   ) {
-    return await this.vehicleServicesService.create({ ...createDto, createdBy }, serviceFiles);
+    return await this.vehicleServicesService.create(
+      { ...createDto, createdBy: req.user.id },
+      serviceFiles,
+      req.timezone,
+    );
   }
 
   @Get()
@@ -84,11 +88,15 @@ export class VehicleServicesController {
 
   @Patch(':id')
   async update(
-    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDto: UpdateVehicleServiceDto,
   ) {
-    return await this.vehicleServicesService.update({ id }, { ...updateDto, updatedBy });
+    return await this.vehicleServicesService.update(
+      { id },
+      { ...updateDto, updatedBy: req.user.id },
+      req.timezone,
+    );
   }
 
   @Delete(':id')

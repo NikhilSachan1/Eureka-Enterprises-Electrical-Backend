@@ -23,9 +23,13 @@ export class AttendanceActionDto {
 
   @IsEnum(EntrySourceType)
   @IsOptional()
-  entrySourceType: EntrySourceType;
+  entrySourceType?: EntrySourceType;
 
   @IsEnum(AttendanceType)
   @IsOptional()
-  attendanceType: AttendanceType;
+  attendanceType?: AttendanceType;
+
+  @IsString()
+  @IsOptional()
+  timezone?: string;
 }

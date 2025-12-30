@@ -58,6 +58,6 @@ export class SalaryStructureController {
   @Post('increment')
   async applyIncrement(@Body() incrementDto: ApplyIncrementDto, @Request() req: any) {
     const appliedBy = req?.user?.id;
-    return await this.salaryStructureService.applyIncrement(incrementDto, appliedBy);
+    return await this.salaryStructureService.applyIncrement(incrementDto, appliedBy, req.timezone);
   }
 }

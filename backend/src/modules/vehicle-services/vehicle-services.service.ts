@@ -30,6 +30,7 @@ import {
   buildVehicleServiceListQuery,
   buildServiceAnalyticsQuery,
 } from './queries/vehicle-services.queries';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class VehicleServicesService {
@@ -42,6 +43,7 @@ export class VehicleServicesService {
     private readonly utilityService: UtilityService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   private async shouldResetInterval(serviceType: string): Promise<boolean> {
@@ -72,11 +74,9 @@ export class VehicleServicesService {
     return SERVICE_TYPES_RESET_INTERVAL.includes(serviceType as VehicleServiceType);
   }
 
-  private validateServiceDate(serviceDate: string): void {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    const date = new Date(serviceDate);
-    if (date > today) {
+  private validateServiceDate(serviceDate: string, timezone?: string): void {
+    const serviceDateStr = serviceDate.split('T')[0];
+    if (this.dateTimeService.isFutureDate(serviceDateStr, timezone)) {
       throw new BadRequestException(VEHICLE_SERVICES_ERRORS.INVALID_SERVICE_DATE);
     }
   }
@@ -84,12 +84,13 @@ export class VehicleServicesService {
   async create(
     createDto: CreateVehicleServiceDto & { createdBy: string },
     serviceFiles?: string[],
+    timezone?: string,
   ): Promise<VehicleServiceEntity> {
     const { vehicleMasterId, serviceDate, serviceType, createdBy } = createDto;
 
     await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleMasterId } });
 
-    this.validateServiceDate(serviceDate);
+    this.validateServiceDate(serviceDate, timezone);
 
     const resetsServiceInterval =
       createDto.resetsServiceInterval ?? (await this.shouldResetInterval(serviceType));
@@ -189,11 +190,12 @@ export class VehicleServicesService {
   async update(
     identifierConditions: FindOptionsWhere<VehicleServiceEntity>,
     updateDto: UpdateVehicleServiceDto & { updatedBy: string },
+    timezone?: string,
   ): Promise<{ message: string }> {
     const service = await this.findOneOrFail({ where: identifierConditions });
 
     if (updateDto.serviceDate) {
-      this.validateServiceDate(updateDto.serviceDate);
+      this.validateServiceDate(updateDto.serviceDate, timezone);
     }
 
     const serviceType = updateDto.serviceType || service.serviceType;

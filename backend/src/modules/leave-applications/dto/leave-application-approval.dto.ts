@@ -57,4 +57,5 @@ export class LeaveBulkApprovalDto {
   approvals: LeaveApprovalDto[];
 
   approvalBy?: string;
+  timezone?: string;
 }

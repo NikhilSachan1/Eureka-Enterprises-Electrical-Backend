@@ -47,6 +47,7 @@ import {
 } from './queries/leave-queries.dto';
 import { UserService } from '../users/user.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class LeaveApplicationsService {
@@ -59,6 +60,7 @@ export class LeaveApplicationsService {
     private readonly attendanceService: AttendanceService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly userService: UserService,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   async create(
@@ -317,6 +319,7 @@ export class LeaveApplicationsService {
     leaveType: string,
     fromDate: string,
     numberOfDays: number,
+    timezone?: string,
   ) {
     const leaveCategoriesConfigSetting = await this.configurationService.findOneOrFail({
       where: {
@@ -359,12 +362,10 @@ export class LeaveApplicationsService {
       );
     }
 
-    const fromDateObj = new Date(fromDate);
-    const currentDate = new Date();
-    currentDate.setHours(0, 0, 0, 0);
-    fromDateObj.setHours(0, 0, 0, 0);
+    // Use timezone-aware date comparison
+    const fromDateStr = fromDate.split('T')[0];
 
-    if (fromDateObj < currentDate && !config.allowBackwardApply) {
+    if (this.dateTimeService.isPastDate(fromDateStr, timezone) && !config.allowBackwardApply) {
       throw new BadRequestException(
         LEAVE_APPLICATION_ERRORS.BACKWARD_LEAVE_NOT_ALLOWED.replace(
           '{leaveCategory}',
@@ -374,9 +375,7 @@ export class LeaveApplicationsService {
     }
 
     if (config.applyBeforeDays > 0) {
-      const daysDifference = Math.ceil(
-        (fromDateObj.getTime() - currentDate.getTime()) / (1000 * 3600 * 24),
-      );
+      const daysDifference = this.dateTimeService.getDaysUntil(fromDateStr, timezone);
 
       if (daysDifference < config.applyBeforeDays) {
         throw new BadRequestException(
@@ -412,10 +411,12 @@ export class LeaveApplicationsService {
     leaveApplicationType,
     createdBy,
     entrySourceType,
+    timezone,
   }: CreateLeaveApplicationDto & {
     userId: string;
     leaveApplicationType: LeaveApplicationType;
     createdBy: string;
+    timezone?: string;
   }) {
     try {
       const {
@@ -439,6 +440,7 @@ export class LeaveApplicationsService {
         leaveType,
         fromDate,
         numberOfDays,
+        timezone,
       );
       const leaveBalance = await this.validateLeaveBalance(
         userId,
@@ -528,9 +530,11 @@ export class LeaveApplicationsService {
     createdBy,
     entrySourceType,
     approvalReason,
+    timezone,
   }: ForceLeaveApplicationDto & {
     leaveApplicationType: LeaveApplicationType;
     createdBy: string;
+    timezone?: string;
   }) {
     try {
       await this.userService.findOneOrFail({ where: { id: userId } });
@@ -554,6 +558,7 @@ export class LeaveApplicationsService {
         leaveType,
         fromDate,
         numberOfDays,
+        timezone,
       );
 
       const leaveBalance = await this.validateLeaveBalance(
@@ -709,7 +714,10 @@ export class LeaveApplicationsService {
       if (!userGroups.has(userId)) {
         userGroups.set(userId, []);
       }
-      userGroups.get(userId)!.push(record);
+      const userGroup = userGroups.get(userId);
+      if (userGroup) {
+        userGroup.push(record);
+      }
     }
 
     const result: UserLeaveGroupDto[] = [];
@@ -718,11 +726,13 @@ export class LeaveApplicationsService {
       const leaveGroups = this.createLeaveGroups(userRecords);
       const firstRecord = userRecords[0];
 
-      result.push({
-        userId,
-        user: firstRecord.user!,
-        leaveGroups,
-      });
+      if (firstRecord?.user) {
+        result.push({
+          userId,
+          user: firstRecord.user,
+          leaveGroups,
+        });
+      }
     }
 
     result.sort((a, b) => {
@@ -949,7 +959,11 @@ export class LeaveApplicationsService {
     };
   }
 
-  async handleBulkLeaveApplicationApproval({ approvals, approvalBy }: LeaveBulkApprovalDto) {
+  async handleBulkLeaveApplicationApproval({
+    approvals,
+    approvalBy,
+    timezone,
+  }: LeaveBulkApprovalDto & { timezone?: string }) {
     try {
       const result = [];
       const errors = [];
@@ -960,6 +974,7 @@ export class LeaveApplicationsService {
             approval.leaveApplicationId,
             approval,
             approvalBy,
+            timezone,
           );
           result.push(leaveApplication);
         } catch (error) {
@@ -988,6 +1003,7 @@ export class LeaveApplicationsService {
     leaveApplicationId: string,
     approvalDto: LeaveApprovalDto,
     approvalBy: string,
+    timezone?: string,
   ) {
     try {
       const { approvalStatus, approvalComment, attendanceStatus = null } = approvalDto;
@@ -1011,6 +1027,7 @@ export class LeaveApplicationsService {
           attendanceStatus,
           approvalBy,
           approvalComment,
+          timezone,
         );
 
         return {
@@ -1039,20 +1056,21 @@ export class LeaveApplicationsService {
     attendanceStatus: string | null,
     approvalBy: string,
     approvalComment: string,
+    timezone?: string,
   ) {
     try {
-      const currentDate = new Date();
-      currentDate.setHours(0, 0, 0, 0);
+      // Use timezone-aware date comparison
+      const fromDateStr = this.dateTimeService.toDateString(new Date(fromDate));
 
-      fromDate = new Date(fromDate);
-      fromDate.setHours(0, 0, 0, 0);
+      const isTodayOrPast = this.dateTimeService.isTodayOrPast(fromDateStr, timezone);
+      const isFuture = this.dateTimeService.isFutureDate(fromDateStr, timezone);
 
-      if (fromDate <= currentDate && !attendanceStatus) {
+      if (isTodayOrPast && !attendanceStatus) {
         throw new BadRequestException(
           LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ATTENDANCE_STATUS_REQUIRED,
         );
       }
-      if (attendanceStatus && fromDate > currentDate) {
+      if (attendanceStatus && isFuture) {
         throw new BadRequestException(
           LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ATTENDANCE_STATUS_NOT_ALLOWED,
         );
@@ -1191,7 +1209,7 @@ export class LeaveApplicationsService {
               });
               break;
             case ApprovalStatus.CANCELLED:
-              if (fromDate <= currentDate) {
+              if (isTodayOrPast) {
                 throw new BadRequestException(
                   LEAVE_APPLICATION_ERRORS.LEAVE_CANCELLATION_NOT_ALLOWED,
                 );
@@ -1212,7 +1230,7 @@ export class LeaveApplicationsService {
                   {
                     userId,
                     leaveCategory,
-                    financialYear: this.utilityService.getFinancialYear(fromDate),
+                    financialYear: this.utilityService.getFinancialYear(new Date(fromDate)),
                   },
                   { consumed: () => '(consumed::int + 1)::varchar' } as any,
                   entityManager,
@@ -1308,7 +1326,7 @@ export class LeaveApplicationsService {
               });
               break;
             case ApprovalStatus.CANCELLED:
-              if (fromDate <= currentDate) {
+              if (isTodayOrPast) {
                 throw new BadRequestException(
                   LEAVE_APPLICATION_ERRORS.LEAVE_CANCELLATION_NOT_ALLOWED,
                 );
@@ -1329,7 +1347,7 @@ export class LeaveApplicationsService {
                   {
                     userId,
                     leaveCategory,
-                    financialYear: this.utilityService.getFinancialYear(fromDate),
+                    financialYear: this.utilityService.getFinancialYear(new Date(fromDate)),
                   },
                   { consumed: () => '(consumed::int + 1)::varchar' } as any,
                   entityManager,

@@ -40,6 +40,8 @@ import { VehicleServiceFilesModule } from 'src/modules/vehicle-service-files/veh
 import { SalaryStructureModule } from 'src/modules/salary-structures/salary-structure.module';
 import { BonusModule } from 'src/modules/bonuses/bonus.module';
 import { PayrollModule } from 'src/modules/payroll/payroll.module';
+import { DateTimeModule } from 'src/utils/datetime';
+import { TimezoneInterceptor } from 'src/utils/middleware/timezone.interceptor';
 
 @Module({
   imports: [
@@ -77,6 +79,7 @@ import { PayrollModule } from 'src/modules/payroll/payroll.module';
     PayrollModule,
     ScheduleModule.forRoot(),
     SchedulerModule,
+    DateTimeModule,
   ],
   controllers: [AppController],
   providers: [
@@ -89,6 +92,10 @@ import { PayrollModule } from 'src/modules/payroll/payroll.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: ResponseInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TimezoneInterceptor,
     },
     {
       provide: APP_FILTER,

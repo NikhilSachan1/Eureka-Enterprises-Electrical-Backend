@@ -55,4 +55,6 @@ export class CreateLeaveApplicationDto {
   @IsEnum(EntrySourceType)
   @IsOptional()
   entrySourceType: EntrySourceType;
+
+  timezone?: string;
 }

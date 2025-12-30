@@ -1,18 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger(SchedulerService.name);
+  private readonly ORG_TIMEZONE = 'Asia/Kolkata'; // Organization timezone
+
+  constructor(private readonly dateTimeService: DateTimeService) {}
 
   getCurrentDateIST(): Date {
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    return new Date(now.getTime() + istOffset);
+    return this.dateTimeService.getNowInTimezone(this.ORG_TIMEZONE);
   }
 
   getTodayDateIST(): Date {
-    const istDate = this.getCurrentDateIST();
-    return new Date(istDate.getFullYear(), istDate.getMonth(), istDate.getDate());
+    return this.dateTimeService.getStartOfToday(this.ORG_TIMEZONE);
+  }
+
+  getTodayStringIST(): string {
+    return this.dateTimeService.getTodayString(this.ORG_TIMEZONE);
+  }
+
+  getOrgTimezone(): string {
+    return this.ORG_TIMEZONE;
   }
 
   logCronStart(cronName: string): void {

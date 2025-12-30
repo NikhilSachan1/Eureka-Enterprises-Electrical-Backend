@@ -54,15 +54,6 @@ export class RegularizeAttendanceDto {
   @IsNotEmpty()
   userId: string;
 
-  @ApiProperty({
-    description: 'The timezone of the attendance to regularize',
-    example: 'Asia/Kolkata',
-    required: true,
-  })
-  @IsString()
-  @IsNotEmpty()
-  timezone: string;
-
   @IsEnum(EntrySourceType)
   @IsOptional()
   entrySourceType: EntrySourceType;
@@ -70,4 +61,6 @@ export class RegularizeAttendanceDto {
   @IsEnum(AttendanceType)
   @IsOptional()
   attendanceType: AttendanceType;
+
+  timezone?: string;
 }

@@ -73,4 +73,6 @@ export class ForceLeaveApplicationDto {
   @IsEnum(EntrySourceType)
   @IsOptional()
   entrySourceType: EntrySourceType;
+
+  timezone?: string;
 }

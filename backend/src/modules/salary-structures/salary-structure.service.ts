@@ -21,6 +21,7 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class SalaryStructureService {
@@ -30,6 +31,7 @@ export class SalaryStructureService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     @InjectDataSource() private dataSource: DataSource,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   async create(
@@ -131,17 +133,21 @@ export class SalaryStructureService {
   async applyIncrement(
     incrementDto: ApplyIncrementDto,
     appliedBy: string,
+    timezone?: string,
   ): Promise<SalaryStructureEntity> {
     const { userId, incrementPercentage, incrementType, effectiveFrom, remarks } = incrementDto;
 
-    // Validate effective date is not in past
-    const effectiveDate = new Date(effectiveFrom);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Validate effective date is not in past (timezone-aware)
+    const effectiveDateStr =
+      typeof effectiveFrom === 'string'
+        ? effectiveFrom.split('T')[0]
+        : this.dateTimeService.toDateString(new Date(effectiveFrom));
 
-    if (effectiveDate < today) {
+    if (this.dateTimeService.isPastDate(effectiveDateStr, timezone)) {
       throw new BadRequestException(SALARY_STRUCTURE_ERRORS.EFFECTIVE_FROM_PAST);
     }
+
+    const effectiveDate = new Date(effectiveFrom);
 
     // Get current active salary structure
     const currentStructure = await this.getActiveByUserId(userId);

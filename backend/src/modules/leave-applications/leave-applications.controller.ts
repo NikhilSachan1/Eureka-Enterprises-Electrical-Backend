@@ -13,6 +13,7 @@ import { LeaveApplicationType } from './constants/leave-application.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from '../attendance/decorators/source-detector.decorator';
 import { LeaveUserInterceptor } from './interceptors/leave-user.interceptor';
+import { RequestWithTimezone } from './leave-applications.types';
 
 @ApiTags('Leave')
 @ApiBearerAuth('JWT-auth')
@@ -22,30 +23,32 @@ export class LeaveApplicationsController {
 
   @Post('apply')
   applyLeave(
-    @Request() { user: { id: userId } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() createLeaveApplicationDto: CreateLeaveApplicationDto,
     @DetectSource() sourceType: EntrySourceType,
   ) {
     return this.leaveApplicationsService.applyLeave({
       ...createLeaveApplicationDto,
       leaveApplicationType: LeaveApplicationType.SELF,
-      userId,
-      createdBy: userId,
+      userId: req.user.id,
+      createdBy: req.user.id,
       entrySourceType: sourceType,
+      timezone: req.timezone,
     });
   }
 
   @Post('force')
   async forceLeaveApplication(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() forceLeaveApplicationDto: ForceLeaveApplicationDto,
     @DetectSource() sourceType: EntrySourceType,
   ) {
     return this.leaveApplicationsService.forceLeaveApplication({
       ...forceLeaveApplicationDto,
       leaveApplicationType: LeaveApplicationType.FORCED,
-      createdBy,
+      createdBy: req.user.id,
       entrySourceType: sourceType,
+      timezone: req.timezone,
     });
   }
 
@@ -70,12 +73,13 @@ export class LeaveApplicationsController {
 
   @Post('approval')
   async leaveApproval(
-    @Request() { user: { id: approvalBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() leaveBulkApprovalDto: LeaveBulkApprovalDto,
   ) {
     return this.leaveApplicationsService.handleBulkLeaveApplicationApproval({
       ...leaveBulkApprovalDto,
-      approvalBy,
+      approvalBy: req.user.id,
+      timezone: req.timezone,
     });
   }
 }

@@ -32,6 +32,9 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 50, default: 'ACTIVE' })
   status: string;
 
+  @Column({ type: 'varchar', length: 50, default: 'Asia/Kolkata' })
+  timezone: string;
+
   @Index('IDX_USER_EMPLOYEE_ID')
   @Column({ type: 'varchar', length: 50, nullable: true, unique: true })
   employeeId: string;

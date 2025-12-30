@@ -73,18 +73,11 @@ export class ForceAttendanceDto {
   @IsNotEmpty()
   notes: string;
 
-  @ApiProperty({
-    description: 'Timezone for the attendance',
-    example: 'Asia/Kolkata',
-    required: true,
-  })
-  @IsString()
-  @IsNotEmpty()
-  timezone: string;
-
   @IsOptional()
   entrySourceType?: EntrySourceType;
 
   @IsOptional()
   attendanceType?: AttendanceType;
+
+  timezone?: string;
 }

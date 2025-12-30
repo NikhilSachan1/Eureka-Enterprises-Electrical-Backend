@@ -24,7 +24,7 @@ import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
 import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';
-
+import { RequestWithTimezone } from './attendance.types';
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
 @Controller('attendance')
@@ -33,19 +33,21 @@ export class AttendanceController {
 
   @Post('action')
   async handleAttendanceAction(
-    @Request() { user: { id: userId } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() attendanceActionDto: AttendanceActionDto,
     @DetectSource() sourceType: EntrySourceType,
   ) {
-    return this.attendanceService.handleAttendanceAction(userId, {
+    return this.attendanceService.handleAttendanceAction(req.user.id, {
       ...attendanceActionDto,
       entrySourceType: sourceType,
       attendanceType: AttendanceType.SELF,
+      timezone: req.timezone,
     });
   }
 
   @Post(':attendanceId/regularize')
   async regularizeAttendance(
+    @Request() req: RequestWithTimezone,
     @Param('attendanceId') attendanceId: string,
     @Body() regularizeAttendanceDto: RegularizeAttendanceDto,
     @DetectSource() sourceType: EntrySourceType,
@@ -54,19 +56,21 @@ export class AttendanceController {
       ...regularizeAttendanceDto,
       entrySourceType: sourceType,
       attendanceType: AttendanceType.REGULARIZED,
+      timezone: req.timezone,
     });
   }
 
   @Post('force')
   async handleBulkForceAttendance(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request() req: RequestWithTimezone,
     @Body() forceAttendanceDto: ForceAttendanceDto,
     @DetectSource() sourceType: EntrySourceType,
   ) {
-    return this.attendanceService.handleBulkForceAttendance(createdBy, {
+    return this.attendanceService.handleBulkForceAttendance(req.user.id, {
       ...forceAttendanceDto,
       entrySourceType: sourceType,
       attendanceType: AttendanceType.FORCED,
+      timezone: req.timezone,
     });
   }
 
@@ -86,10 +90,8 @@ export class AttendanceController {
   }
 
   @Get('current-status')
-  async getEmployeeCurrentAttendanceStatus(
-    @Request() { user: { id: userId } }: { user: { id: string } },
-  ) {
-    return this.attendanceService.getEmployeeCurrentAttendanceStatus(userId);
+  async getEmployeeCurrentAttendanceStatus(@Request() req: RequestWithTimezone) {
+    return this.attendanceService.getEmployeeCurrentAttendanceStatus(req.user.id, req.timezone);
   }
 
   @Post('approval')

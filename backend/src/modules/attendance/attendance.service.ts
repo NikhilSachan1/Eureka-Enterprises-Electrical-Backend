@@ -34,6 +34,7 @@ import { UtilityService } from '../../utils/utility/utility.service';
 import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/attendance-queries';
 import { AttendanceHistoryDto } from './dto/attendance-history.dto';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class AttendanceService {
@@ -42,6 +43,7 @@ export class AttendanceService {
     private readonly configurationService: ConfigurationService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly utilityService: UtilityService,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   async create(attendance: Partial<AttendanceEntity>, entityManager?: EntityManager) {
@@ -53,9 +55,9 @@ export class AttendanceService {
   }
 
   async handleAttendanceAction(userId: string, attendanceActionDto: AttendanceActionDto) {
-    const { action, entrySourceType, attendanceType, notes } = attendanceActionDto;
-    const today = new Date();
-    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const { action, entrySourceType, attendanceType, notes, timezone } = attendanceActionDto;
+    const todayDate = this.dateTimeService.getStartOfToday(timezone);
+    const currentTimeUTC = new Date();
     const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
 
     return await this.dataSource.transaction(async (entityManager) => {
@@ -76,7 +78,7 @@ export class AttendanceService {
             userId,
             existingAttendance,
             todayDate,
-            today,
+            currentTimeUTC,
             entrySourceType,
             attendanceType,
             notes,
@@ -88,7 +90,7 @@ export class AttendanceService {
           return await this.handleCheckOut(
             userId,
             existingAttendance,
-            today,
+            currentTimeUTC,
             shiftConfigs,
             notes,
             entityManager,
@@ -284,7 +286,7 @@ export class AttendanceService {
 
   async regularizeAttendance(
     attendanceId: string,
-    regularizeAttendanceDto: RegularizeAttendanceDto,
+    regularizeAttendanceDto: RegularizeAttendanceDto & { timezone: string },
   ) {
     //TODO: Remove redunant code and make it more readable
     const {
@@ -310,7 +312,10 @@ export class AttendanceService {
       );
     }
     const { shiftConfigs } = await this.getShiftConfigs();
-    await this.isRegularizationAllowed(existingAttendance);
+    await this.isRegularizationAllowed({
+      attendanceDate: existingAttendance.attendanceDate,
+      timezone,
+    });
 
     if (checkInTime && checkOutTime) {
       const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(checkInTime, timezone);
@@ -783,7 +788,13 @@ export class AttendanceService {
     }
   }
 
-  private async isRegularizationAllowed({ attendanceDate }: { attendanceDate: Date }) {
+  private async isRegularizationAllowed({
+    attendanceDate,
+    timezone,
+  }: {
+    attendanceDate: Date | string;
+    timezone?: string;
+  }) {
     const {
       configSettings: [{ id: configSettingId, value: regularizationConfigs }],
     } = await this.configurationService.findOneOrFail({
@@ -799,14 +810,17 @@ export class AttendanceService {
       throw new BadRequestException(ATTENDANCE_ERRORS.REGULARIZATION_NOT_ALLOWED);
     }
 
-    const today = new Date().setHours(0, 0, 0, 0);
-    const attendanceDay = new Date(attendanceDate).setHours(0, 0, 0, 0);
+    // Use timezone-aware date comparison
+    const attendanceDateStr =
+      typeof attendanceDate === 'string'
+        ? attendanceDate.split('T')[0]
+        : this.dateTimeService.toDateString(new Date(attendanceDate));
 
-    if (attendanceDay > today) {
+    if (this.dateTimeService.isFutureDate(attendanceDateStr, timezone)) {
       throw new BadRequestException(ATTENDANCE_ERRORS.FUTURE_DATE_REGULARIZATION_NOT_ALLOWED);
     }
 
-    if (attendanceDay < today) {
+    if (this.dateTimeService.isPastDate(attendanceDateStr, timezone)) {
       return { configSettingId, regularizationConfigs };
     }
 
@@ -866,7 +880,7 @@ export class AttendanceService {
 
   async handleBulkForceAttendance(
     createdBy: string,
-    bulkForceAttendanceDto: ForceAttendanceDto,
+    bulkForceAttendanceDto: ForceAttendanceDto & { timezone: string },
   ): Promise<{ message: string }> {
     try {
       for (const userId of bulkForceAttendanceDto.userIds) {
@@ -885,7 +899,7 @@ export class AttendanceService {
 
   async handleSingleForceAttendance(
     createdBy: string,
-    forceAttendanceDto: ForceAttendanceDto & { userId: string },
+    forceAttendanceDto: ForceAttendanceDto & { userId: string; timezone: string },
   ) {
     try {
       const {
@@ -901,23 +915,24 @@ export class AttendanceService {
         status,
       } = forceAttendanceDto;
 
-      const targetDate = new Date(attendanceDate);
-      const today = new Date();
-      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const targetDateOnly = new Date(
-        targetDate.getFullYear(),
-        targetDate.getMonth(),
-        targetDate.getDate(),
-      );
+      // Use timezone-aware date comparison
+      const attendanceDateStr =
+        typeof attendanceDate === 'string'
+          ? attendanceDate.split('T')[0]
+          : this.dateTimeService.toDateString(new Date(attendanceDate));
 
-      // Validate date is not in future
-      if (targetDateOnly > todayDate) {
+      // Use real UTC time for shift validation (shift configs are stored in UTC)
+      const currentTimeUTC = new Date();
+      const targetDateOnly = this.dateTimeService.toDate(attendanceDateStr);
+
+      // Validate date is not in future (using user's timezone)
+      if (this.dateTimeService.isFutureDate(attendanceDateStr, timezone)) {
         throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED);
       }
 
       const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
-      const isPreviousDay = targetDateOnly < todayDate;
-      const isSameDay = targetDateOnly.getTime() === todayDate.getTime();
+      const isPreviousDay = this.dateTimeService.isPastDate(attendanceDateStr, timezone);
+      const isSameDay = this.dateTimeService.isToday(attendanceDateStr, timezone);
 
       return await this.dataSource.transaction(async (entityManager) => {
         const existingAttendance = await this.attendanceRepository.findOne(
@@ -940,7 +955,7 @@ export class AttendanceService {
             userId,
             createdBy,
             targetDateOnly,
-            today,
+            currentTimeUTC,
             checkInTime,
             checkOutTime,
             reason,
@@ -1456,7 +1471,8 @@ export class AttendanceService {
     }
   }
 
-  async getEmployeeCurrentAttendanceStatus(userId: string) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getEmployeeCurrentAttendanceStatus(userId: string, _timezone?: string) {
     try {
       const attendance = await this.attendanceRepository.findOne({
         where: {
