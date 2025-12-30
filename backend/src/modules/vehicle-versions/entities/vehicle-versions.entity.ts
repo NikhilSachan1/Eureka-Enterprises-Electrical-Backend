@@ -1,7 +1,8 @@
 import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicle-master.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-file.entity';
 
 @Entity('vehicle_versions')
 @Index('idx_vehicles_number', ['number'])
@@ -93,4 +94,7 @@ export class VehicleVersionEntity extends BaseEntity {
   @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'assignedTo' })
   assignedToUser: UserEntity;
+
+  @OneToMany(() => VehicleFileEntity, (vehicleFile) => vehicleFile.vehicleVersion)
+  vehicleFiles: VehicleFileEntity[];
 }

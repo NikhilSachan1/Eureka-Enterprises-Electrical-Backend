@@ -12,13 +12,21 @@ export class VehicleFilesService {
     entityManager?: EntityManager,
   ) {
     try {
-      const { vehicleMasterId, fileType, fileKeys, createdBy, vehicleEventsId, label } =
-        createVehicleFileDto;
+      const {
+        vehicleMasterId,
+        vehicleVersionId,
+        fileType,
+        fileKeys,
+        createdBy,
+        vehicleEventsId,
+        label,
+      } = createVehicleFileDto;
       if (fileKeys) {
         for (const fileKey of fileKeys) {
           await this.vehicleFilesRepository.create(
             {
               vehicleMasterId,
+              vehicleVersionId,
               fileType,
               fileKey,
               label,

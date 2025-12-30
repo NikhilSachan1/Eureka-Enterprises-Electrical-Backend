@@ -200,7 +200,8 @@ export class VehicleMastersService {
           entityManager,
         );
 
-        await this.vehicleVersionsService.create(
+        // Create initial version
+        const initialVersion = await this.vehicleVersionsService.create(
           {
             vehicleMasterId: vehicleMaster.id,
             number: registrationNo,
@@ -243,10 +244,12 @@ export class VehicleMastersService {
           entityManager,
         );
 
+        // Create vehicle files if provided - linked to initial version
         if (vehicleFiles && vehicleFiles.length > 0) {
           await this.vehicleFilesService.create(
             {
               vehicleMasterId: vehicleMaster.id,
+              vehicleVersionId: initialVersion.id,
               fileType: VehicleFileTypes.VEHICLE_IMAGE,
               fileKeys: vehicleFiles,
               vehicleEventsId: vehicleAddedEvent.id,
@@ -354,7 +357,7 @@ export class VehicleMastersService {
   async update(
     identifierConditions: FindOptionsWhere<VehicleMasterEntity>,
     updateData: UpdateVehicleDto & { updatedBy: string },
-    entityManager?: EntityManager,
+    vehicleFiles: string[] = [],
   ) {
     try {
       const vehicle = await this.findOneOrFail({ where: identifierConditions });
@@ -367,15 +370,13 @@ export class VehicleMastersService {
         where: { vehicleMasterId: vehicle.id, isActive: true },
       });
 
-      return await this.dataSource.transaction(async (txManager) => {
-        const manager = entityManager || txManager;
-
+      return await this.dataSource.transaction(async (entityManager) => {
         // Deactivate current version
         if (currentVersion) {
           await this.vehicleVersionsService.update(
             { id: currentVersion.id },
             { isActive: false, updatedBy: updateData.updatedBy },
-            manager,
+            entityManager,
           );
         }
 
@@ -387,7 +388,7 @@ export class VehicleMastersService {
         };
 
         // Create new version with merged data
-        await this.vehicleVersionsService.create(
+        const newVersion = await this.vehicleVersionsService.create(
           {
             vehicleMasterId: vehicle.id,
             number: updateData.number || currentVersion?.number || vehicle.registrationNo,
@@ -423,18 +424,33 @@ export class VehicleMastersService {
             additionalData: updateData.additionalData || currentVersion?.additionalData,
             createdBy: updateData.updatedBy,
           },
-          manager,
+          entityManager,
         );
 
         // Create update event
-        await this.vehicleEventsService.create(
+        const updateEvent = await this.vehicleEventsService.create(
           {
             vehicleMasterId: vehicle.id,
             eventType: VehicleEventTypes.UPDATED,
             createdBy: updateData.updatedBy,
           },
-          manager,
+          entityManager,
         );
+
+        // Create vehicle files if provided - linked to new version and UPDATED event
+        if (vehicleFiles && vehicleFiles.length > 0) {
+          await this.vehicleFilesService.create(
+            {
+              vehicleMasterId: vehicle.id,
+              vehicleVersionId: newVersion.id,
+              fileType: VehicleFileTypes.VEHICLE_IMAGE,
+              fileKeys: vehicleFiles,
+              vehicleEventsId: updateEvent.id,
+              createdBy: updateData.updatedBy,
+            },
+            entityManager,
+          );
+        }
 
         return this.utilityService.getSuccessMessage(
           VehicleMasterEntityFields.VEHICLE,
@@ -449,7 +465,10 @@ export class VehicleMastersService {
   //Created seperate method because we need to return the vehicle with the active version and the computed statuses
   async findById(id: string) {
     try {
-      const vehicle = await this.findOneOrFail({ where: { id } });
+      const vehicle = await this.findOneOrFail({
+        where: { id },
+        relations: ['vehicleVersions', 'vehicleFiles'],
+      });
 
       // Get active version
       const activeVersion = await this.vehicleVersionsService.findOne({
@@ -457,24 +476,74 @@ export class VehicleMastersService {
       });
 
       if (!activeVersion) {
-        return vehicle;
+        throw new NotFoundException(VEHICLE_MASTERS_ERRORS.VEHICLE_NOT_FOUND);
       }
 
-      // Add computed statuses
+      const allFiles = vehicle.vehicleFiles?.filter((file) => !file.deletedAt) || [];
+
+      const latestFiles = allFiles
+        .filter(
+          (file) =>
+            file.vehicleVersionId === activeVersion.id &&
+            file.fileType === VehicleFileTypes.VEHICLE_IMAGE,
+        )
+        .map((file) => ({
+          id: file.id,
+          fileKey: file.fileKey,
+          fileType: file.fileType,
+          label: file.label,
+        }));
+
+      const versionHistory = (
+        vehicle.vehicleVersions?.filter((version) => !version.deletedAt) || []
+      ).map((version) => ({
+        ...version,
+        files: allFiles.filter((file) => file.vehicleVersionId === version.id),
+      }));
+
       return {
-        ...vehicle,
-        currentVersion: {
-          ...activeVersion,
-          insuranceStatus: this.getDocumentStatus(
-            activeVersion.insuranceStartDate,
-            activeVersion.insuranceEndDate,
-          ),
-          pucStatus: this.getDocumentStatus(activeVersion.pucStartDate, activeVersion.pucEndDate),
-          fitnessStatus: this.getDocumentStatus(
-            activeVersion.fitnessStartDate,
-            activeVersion.fitnessEndDate,
-          ),
-        },
+        id: vehicle.id,
+        registrationNo: vehicle.registrationNo,
+        createdAt: vehicle.createdAt,
+        updatedAt: vehicle.updatedAt,
+        // Version details
+        number: activeVersion.number,
+        brand: activeVersion.brand,
+        model: activeVersion.model,
+        mileage: activeVersion.mileage,
+        fuelType: activeVersion.fuelType,
+        // Purchase
+        purchaseDate: activeVersion.purchaseDate,
+        dealerName: activeVersion.dealerName,
+        // Insurance
+        insuranceStartDate: activeVersion.insuranceStartDate,
+        insuranceEndDate: activeVersion.insuranceEndDate,
+        insuranceStatus: this.getDocumentStatus(
+          activeVersion.insuranceStartDate,
+          activeVersion.insuranceEndDate,
+        ),
+        // PUC
+        pucStartDate: activeVersion.pucStartDate,
+        pucEndDate: activeVersion.pucEndDate,
+        pucStatus: this.getDocumentStatus(activeVersion.pucStartDate, activeVersion.pucEndDate),
+        // Fitness
+        fitnessStartDate: activeVersion.fitnessStartDate,
+        fitnessEndDate: activeVersion.fitnessEndDate,
+        fitnessStatus: this.getDocumentStatus(
+          activeVersion.fitnessStartDate,
+          activeVersion.fitnessEndDate,
+        ),
+        // Status
+        status: activeVersion.status,
+        assignedTo: activeVersion.assignedTo,
+        remarks: activeVersion.remarks,
+        additionalData: activeVersion.additionalData,
+        // Service tracking
+        lastServiceKm: activeVersion.lastServiceKm,
+        lastServiceDate: activeVersion.lastServiceDate,
+        // Related data - files from latest version only
+        files: latestFiles,
+        versionHistory,
       };
     } catch (error) {
       throw error;

@@ -11,12 +11,22 @@ export class CreateVehicleFileDto {
   vehicleMasterId: string;
 
   @ApiProperty({
+    description: 'The ID of the vehicle version',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  vehicleVersionId?: string;
+
+  @ApiProperty({
     description: 'The ID of the vehicle event',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID()
-  vehicleEventsId: string;
+  vehicleEventsId?: string;
 
   @ApiProperty({
     description: 'The keys of the files in the file storage',

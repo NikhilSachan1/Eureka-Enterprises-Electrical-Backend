@@ -74,13 +74,30 @@ export class VehicleMastersController {
     return await this.vehicleMastersService.findAll(query);
   }
 
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return await this.vehicleMastersService.findById(id);
+  }
+
   @Patch(':id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.VEHICLE_FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    type: UpdateVehicleDto,
+    required: true,
+  })
   update(
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Param('id') id: string,
     @Body() updateVehicleDto: UpdateVehicleDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.VEHICLE_FILES)
+    { vehicleFiles }: { vehicleFiles: string[] } = { vehicleFiles: [] },
   ) {
-    return this.vehicleMastersService.update({ id }, { ...updateVehicleDto, updatedBy });
+    return this.vehicleMastersService.update(
+      { id },
+      { ...updateVehicleDto, updatedBy },
+      vehicleFiles,
+    );
   }
 
   @Delete(':id')
