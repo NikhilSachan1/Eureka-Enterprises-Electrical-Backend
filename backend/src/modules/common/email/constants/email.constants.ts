@@ -23,6 +23,11 @@ export const EMAIL_SUBJECT = {
   LEAVE_APPROVAL_REMINDER_URGENT:
     '🚨 URGENT: Eureka Enterprises - Leave Auto-Approval in {days} Days',
   LEAVE_APPROVAL_REMINDER_CRITICAL: '⚠️ FINAL REMINDER: Leave Auto-Approval Tomorrow!',
+  // Attendance Approval Reminders
+  ATTENDANCE_APPROVAL_REMINDER: 'Eureka Enterprises - Pending Attendance Approvals',
+  ATTENDANCE_APPROVAL_REMINDER_URGENT:
+    '🚨 URGENT: Eureka Enterprises - Attendance Auto-Approval in {days} Days',
+  ATTENDANCE_APPROVAL_REMINDER_CRITICAL: '⚠️ FINAL REMINDER: Attendance Auto-Approval Tomorrow!',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -37,6 +42,7 @@ export const EMAIL_TEMPLATE = {
   BIRTHDAY_WISH: 'birthdayWish',
   WORK_ANNIVERSARY: 'workAnniversary',
   LEAVE_APPROVAL_REMINDER: 'leaveApprovalReminder',
+  ATTENDANCE_APPROVAL_REMINDER: 'attendanceApprovalReminder',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {};

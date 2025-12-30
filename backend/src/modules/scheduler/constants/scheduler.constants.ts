@@ -90,6 +90,7 @@ export const CRON_NAMES = {
 
   // Attendance
   AUTO_APPROVE_ATTENDANCE: 'AutoApproveAttendance',
+  ATTENDANCE_APPROVAL_REMINDER: 'AttendanceApprovalReminder',
 };
 
 export const SYSTEM_NOTES = {

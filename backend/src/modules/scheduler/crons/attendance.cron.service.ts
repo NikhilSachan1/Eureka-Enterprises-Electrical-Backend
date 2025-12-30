@@ -24,7 +24,14 @@ import {
   DailyAttendanceResult,
   EndOfDayAttendanceResult,
   AutoApproveAttendanceResult,
+  AttendanceApprovalReminderResult,
+  PendingAttendanceAlert,
+  AttendanceApprovalEmailItem,
+  AttendanceStatusSummary,
 } from '../types';
+import { EmailService } from '../../common/email/email.service';
+import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
+import { Environments } from '../../../../env-configs';
 import {
   getActiveUsersForAttendanceQuery,
   getExistingAttendanceUserIdsQuery,
@@ -33,6 +40,8 @@ import {
   getNotCheckedInAttendancesQuery,
   getUsersWithoutAttendanceQuery,
   getPendingAttendancesForPeriodQuery,
+  getPendingAttendanceForCurrentMonthQuery,
+  getPendingAttendanceByStatusQuery,
   autoApproveAttendanceQuery,
 } from '../queries';
 
@@ -46,6 +55,7 @@ export class AttendanceCronService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
+    private readonly emailService: EmailService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -630,5 +640,274 @@ export class AttendanceCronService {
         byStatus.other++;
         break;
     }
+  }
+
+  /**
+   * CRON 22: Attendance Approval Reminder
+   * Runs daily at 9:00 AM IST from 25th to end of month
+   *
+   * Sends reminder emails to HR/Admin about pending attendance records
+   * that will be auto-approved on the 1st of next month if not actioned.
+   *
+   * Scenarios Handled:
+   * 1. Only runs from 25th to last day of month (reminder window)
+   * 2. Groups attendance by status (ABSENT, CHECKED_OUT, HALF_DAY, LEAVE)
+   * 3. Shows countdown to auto-approval date
+   * 4. Different urgency levels: critical (1 day), urgent (2-3 days), normal (4+ days)
+   * 5. Highlights ABSENT records as they need special review
+   * 6. Only considers attendance for current month
+   */
+  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  async handleAttendanceApprovalReminder(): Promise<AttendanceApprovalReminderResult | null> {
+    const cronName = CRON_NAMES.ATTENDANCE_APPROVAL_REMINDER;
+
+    const result: AttendanceApprovalReminderResult = {
+      emailsSent: 0,
+      totalPendingAttendance: 0,
+      recipients: [],
+      errors: [],
+    };
+
+    try {
+      const currentDate = this.schedulerService.getCurrentDateIST();
+      const currentDay = currentDate.getDate();
+
+      if (currentDay < 25) {
+        this.logger.log(`[${cronName}] Skipping - not in reminder window (day ${currentDay})`);
+        return null;
+      }
+
+      this.schedulerService.logCronStart(cronName);
+
+      const { startDate, endDate, daysUntilAutoApproval, autoApprovalDate, monthName } =
+        this.getAttendanceMonthInfo(currentDate);
+
+      const pendingAttendance = await this.getPendingAttendanceForMonth(startDate, endDate);
+
+      if (pendingAttendance.length === 0) {
+        this.logger.log(`[${cronName}] No pending attendance found for ${monthName}`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      result.totalPendingAttendance = pendingAttendance.length;
+      this.logger.log(
+        `[${cronName}] Found ${pendingAttendance.length} pending attendance for ${monthName}`,
+      );
+
+      const statusSummaries = await this.getAttendanceStatusSummary(startDate, endDate);
+      const { urgentAttendance, regularAttendance } =
+        this.formatAttendanceForEmail(pendingAttendance);
+      const urgencyLevel = this.getAttendanceUrgencyLevel(daysUntilAutoApproval);
+      const hrEmails = await this.getHRAdminEmailsForAttendance();
+
+      if (hrEmails.length === 0) {
+        this.logger.warn(`[${cronName}] No HR/Admin emails found to send reminder`);
+        this.schedulerService.logCronComplete(cronName, result);
+        return result;
+      }
+
+      const emailData = {
+        totalPending: pendingAttendance.length,
+        totalUrgent: urgentAttendance.length,
+        daysUntilAutoApproval,
+        urgencyLevel,
+        statusSummaries,
+        urgentAttendance,
+        pendingAttendance: regularAttendance,
+        hasUrgent: urgentAttendance.length > 0,
+        hasPending: regularAttendance.length > 0,
+        autoApprovalDate,
+        monthName,
+        adminPortalUrl: Environments.FE_BASE_URL || '#',
+        currentYear: currentDate.getFullYear(),
+      };
+
+      const subject = this.getAttendanceReminderSubject(urgencyLevel, daysUntilAutoApproval);
+
+      for (const email of hrEmails) {
+        try {
+          await this.emailService.sendMail({
+            receiverEmails: email,
+            subject,
+            template: EMAIL_TEMPLATE.ATTENDANCE_APPROVAL_REMINDER,
+            emailData,
+          });
+
+          this.logger.log(`[${cronName}] Email sent to: ${email}`);
+          result.recipients.push(email);
+          result.emailsSent++;
+        } catch (error) {
+          result.errors.push(`Failed to send email to ${email}: ${error.message}`);
+          this.logger.error(`[${cronName}] Failed to send email to ${email}`, error);
+        }
+      }
+
+      this.schedulerService.logCronComplete(cronName, result);
+      return result;
+    } catch (error) {
+      this.schedulerService.logCronError(cronName, error);
+      result.errors.push(error.message);
+      return result;
+    }
+  }
+
+  private getAttendanceMonthInfo(currentDate: Date): {
+    startDate: string;
+    endDate: string;
+    daysUntilAutoApproval: number;
+    autoApprovalDate: string;
+    monthName: string;
+  } {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0);
+    const nextMonth = new Date(year, month + 1, 1);
+
+    const today = new Date(year, month, currentDate.getDate());
+    const daysUntilAutoApproval = Math.ceil(
+      (nextMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+      daysUntilAutoApproval,
+      autoApprovalDate: this.formatAttendanceDate(nextMonth),
+      monthName: monthNames[month],
+    };
+  }
+
+  private async getPendingAttendanceForMonth(
+    startDate: string,
+    endDate: string,
+  ): Promise<PendingAttendanceAlert[]> {
+    const { query, params } = getPendingAttendanceForCurrentMonthQuery(startDate, endDate);
+    return await this.dataSource.query(query, params);
+  }
+
+  private async getAttendanceStatusSummary(
+    startDate: string,
+    endDate: string,
+  ): Promise<AttendanceStatusSummary[]> {
+    const { query, params } = getPendingAttendanceByStatusQuery(startDate, endDate);
+    const results = await this.dataSource.query(query, params);
+
+    return results.map((item: { status: string; count: number }) => ({
+      status: item.status,
+      count: item.count,
+      displayName: this.getStatusDisplayName(item.status),
+    }));
+  }
+
+  private getStatusDisplayName(status: string): string {
+    const statusMap: Record<string, string> = {
+      [AttendanceStatus.ABSENT]: 'Absent',
+      [AttendanceStatus.CHECKED_OUT]: 'Checked Out',
+      [AttendanceStatus.HALF_DAY]: 'Half Day',
+      [AttendanceStatus.LEAVE]: 'Leave',
+      [AttendanceStatus.LEAVE_WITHOUT_PAY]: 'LWP',
+      [AttendanceStatus.CHECKED_IN]: 'Checked In',
+      [AttendanceStatus.PRESENT]: 'Present',
+    };
+    return statusMap[status] || status;
+  }
+
+  private formatAttendanceForEmail(attendance: PendingAttendanceAlert[]): {
+    urgentAttendance: AttendanceApprovalEmailItem[];
+    regularAttendance: AttendanceApprovalEmailItem[];
+  } {
+    const urgentAttendance: AttendanceApprovalEmailItem[] = [];
+    const regularAttendance: AttendanceApprovalEmailItem[] = [];
+
+    for (const record of attendance) {
+      const isUrgent = record.status === AttendanceStatus.ABSENT;
+      const emailItem: AttendanceApprovalEmailItem = {
+        employeeName: record.employeeName,
+        attendanceDate: this.formatAttendanceDate(new Date(record.attendanceDate)),
+        status: record.status,
+        statusDisplayName: this.getStatusDisplayName(record.status),
+        checkInTime: record.checkInTime ? this.formatTime(new Date(record.checkInTime)) : '-',
+        checkOutTime: record.checkOutTime ? this.formatTime(new Date(record.checkOutTime)) : '-',
+        notes: record.notes || 'No notes',
+        statusClass: isUrgent ? 'urgent' : 'pending',
+      };
+
+      if (isUrgent) {
+        urgentAttendance.push(emailItem);
+      } else {
+        regularAttendance.push(emailItem);
+      }
+    }
+
+    return { urgentAttendance, regularAttendance };
+  }
+
+  private getAttendanceUrgencyLevel(
+    daysUntilAutoApproval: number,
+  ): 'critical' | 'urgent' | 'normal' {
+    if (daysUntilAutoApproval <= 1) {
+      return 'critical';
+    } else if (daysUntilAutoApproval <= 3) {
+      return 'urgent';
+    }
+    return 'normal';
+  }
+
+  private getAttendanceReminderSubject(
+    urgencyLevel: 'critical' | 'urgent' | 'normal',
+    daysUntilAutoApproval: number,
+  ): string {
+    switch (urgencyLevel) {
+      case 'critical':
+        return EMAIL_SUBJECT.ATTENDANCE_APPROVAL_REMINDER_CRITICAL;
+      case 'urgent':
+        return EMAIL_SUBJECT.ATTENDANCE_APPROVAL_REMINDER_URGENT.replace(
+          '{days}',
+          daysUntilAutoApproval.toString(),
+        );
+      default:
+        return EMAIL_SUBJECT.ATTENDANCE_APPROVAL_REMINDER;
+    }
+  }
+
+  private formatAttendanceDate(date: Date): string {
+    const options: Intl.DateTimeFormatOptions = {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    };
+    return date.toLocaleDateString('en-IN', options);
+  }
+
+  private formatTime(date: Date): string {
+    const options: Intl.DateTimeFormatOptions = {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    };
+    return date.toLocaleTimeString('en-IN', options);
+  }
+
+  private async getHRAdminEmailsForAttendance(): Promise<string[]> {
+    // TODO: Implement dynamic email fetching from users with HR/ADMIN roles
+    return ['hr@company.com'];
   }
 }

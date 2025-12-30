@@ -63,3 +63,62 @@ export interface AutoApproveAttendanceResult {
   };
   errors: string[];
 }
+
+/**
+ * CRON 22
+ * Attendance Approval Reminder
+ * Runs daily from 25th to end of month at 9:00 AM IST
+ *
+ * Sends reminder emails to HR/Admin about pending attendance approvals
+ * that will be auto-approved on the 1st of next month if not actioned.
+ */
+export interface AttendanceApprovalReminderResult {
+  emailsSent: number;
+  totalPendingAttendance: number;
+  recipients: string[];
+  errors: string[];
+}
+
+export interface PendingAttendanceAlert {
+  id: string;
+  attendanceDate: Date;
+  userId: string;
+  employeeName: string;
+  status: string;
+  checkInTime: Date | null;
+  checkOutTime: Date | null;
+  notes: string | null;
+}
+
+export interface AttendanceStatusSummary {
+  status: string;
+  count: number;
+  displayName: string;
+}
+
+export interface AttendanceApprovalEmailItem {
+  employeeName: string;
+  attendanceDate: string;
+  status: string;
+  statusDisplayName: string;
+  checkInTime: string;
+  checkOutTime: string;
+  notes: string;
+  statusClass: 'urgent' | 'pending';
+}
+
+export interface AttendanceApprovalEmailData {
+  totalPending: number;
+  totalUrgent: number;
+  daysUntilAutoApproval: number;
+  urgencyLevel: 'critical' | 'urgent' | 'normal';
+  statusSummaries: AttendanceStatusSummary[];
+  urgentAttendance: AttendanceApprovalEmailItem[];
+  pendingAttendance: AttendanceApprovalEmailItem[];
+  hasUrgent: boolean;
+  hasPending: boolean;
+  autoApprovalDate: string;
+  monthName: string;
+  adminPortalUrl: string;
+  currentYear: number;
+}

@@ -136,6 +136,58 @@ export const getPendingAttendancesForPeriodQuery = (startDate: string, endDate: 
 };
 
 /**
+ * CRON 22
+ * Attendance Approval Reminder
+ * Get pending attendance with employee details for the current month
+ */
+export const getPendingAttendanceForCurrentMonthQuery = (startDate: string, endDate: string) => {
+  return {
+    query: `
+      SELECT 
+        a.id,
+        a."attendanceDate",
+        a."userId",
+        CONCAT(u."firstName", ' ', u."lastName") as "employeeName",
+        a."status",
+        a."checkInTime",
+        a."checkOutTime",
+        a."notes"
+      FROM attendances a
+      INNER JOIN users u ON u.id = a."userId" AND u."deletedAt" IS NULL
+      WHERE a."approvalStatus" = $1
+        AND a."attendanceDate" >= $2::date
+        AND a."attendanceDate" <= $3::date
+        AND a."deletedAt" IS NULL
+        AND a."isActive" = true
+      ORDER BY a."attendanceDate" DESC, u."firstName" ASC
+    `,
+    params: [ApprovalStatus.PENDING, startDate, endDate],
+  };
+};
+
+export const getPendingAttendanceByStatusQuery = (startDate: string, endDate: string) => {
+  return {
+    query: `
+      SELECT 
+        a."status",
+        COUNT(*)::integer as "count"
+      FROM attendances a
+      WHERE a."approvalStatus" = $1
+        AND a."attendanceDate" >= $2::date
+        AND a."attendanceDate" <= $3::date
+        AND a."deletedAt" IS NULL
+        AND a."isActive" = true
+      GROUP BY a."status"
+      ORDER BY COUNT(*) DESC
+    `,
+    params: [ApprovalStatus.PENDING, startDate, endDate],
+  };
+};
+
+export const ATTENDANCE_URGENT_THRESHOLD_DAYS = 20;
+
+/**
+ * CRON 21
  * Auto-approve attendance with conditional status change:
  * - CHECKED_OUT, HALF_DAY → PRESENT (work done, approval confirms it)
  * - ABSENT, LEAVE, LEAVE_WITHOUT_PAY → Keep original status (just approve)
