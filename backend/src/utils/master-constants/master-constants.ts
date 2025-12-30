@@ -3,12 +3,14 @@ export const CONFIGURATION_KEYS = {
   MODULES: 'modules',
   SHIFT_CONFIGS: 'shift_configs',
   REGULARIZATION_CONFIGS: 'regularization_configs',
+  ATTENDANCE_APPROVAL_REMINDER_THRESHOLD_DAYS: 'attendance_approval_reminder_threshold_days',
   //LEAVE
   LEAVE_TYPES: 'leave_types',
   LEAVE_CATEGORIES: 'leave_categories',
   LEAVE_CATEGORIES_CONFIG: 'leave_categories_config',
   HOLIDAY_CALENDAR: 'holiday_calendar',
   CALENDAR_SETTINGS: 'calendar_settings',
+  LEAVE_APPROVAL_REMINDER_THRESHOLD_DAYS: 'leave_approval_reminder_threshold_days',
   //EXPENSE
   EXPENSE_CATEGORIES: 'expense_categories',
   PAYMENT_MODES: 'payment_modes',

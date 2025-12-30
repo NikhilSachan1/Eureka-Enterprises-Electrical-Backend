@@ -32,10 +32,10 @@ import {
   createLeaveBalanceQuery,
   getPendingLeavesForCurrentMonthQuery,
   getPendingLeavesByCategoryQuery,
-  LEAVE_URGENT_THRESHOLD_DAYS,
 } from '../queries';
 import { UtilityService } from '../../../utils/utility/utility.service';
 import { Environments } from '../../../../env-configs';
+import { DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD } from '../constants/scheduler.constants';
 
 @Injectable()
 export class LeaveCronService {
@@ -817,7 +817,11 @@ export class LeaveCronService {
 
       const categorySummaries = await this.getLeaveCategorySummary(startDate, endDate);
 
-      const { urgentLeaves, regularLeaves } = this.formatLeavesForEmail(pendingLeaves);
+      const thresholdDays = await this.getLeaveApprovalReminderThreshold();
+      const { urgentLeaves, regularLeaves } = this.formatLeavesForEmail(
+        pendingLeaves,
+        thresholdDays,
+      );
 
       const urgencyLevel = this.getUrgencyLevel(daysUntilAutoApproval);
 
@@ -949,7 +953,10 @@ export class LeaveCronService {
       .join(' ');
   }
 
-  private formatLeavesForEmail(leaves: PendingLeaveAlert[]): {
+  private formatLeavesForEmail(
+    leaves: PendingLeaveAlert[],
+    thresholdDays: number,
+  ): {
     urgentLeaves: LeaveApprovalEmailItem[];
     regularLeaves: LeaveApprovalEmailItem[];
   } {
@@ -957,7 +964,7 @@ export class LeaveCronService {
     const regularLeaves: LeaveApprovalEmailItem[] = [];
 
     for (const leave of leaves) {
-      const isUrgent = leave.daysPending >= LEAVE_URGENT_THRESHOLD_DAYS;
+      const isUrgent = leave.daysPending >= thresholdDays;
       const emailItem: LeaveApprovalEmailItem = {
         employeeName: leave.employeeName,
         leaveCategory: this.formatCategoryName(leave.leaveCategory),
@@ -1028,5 +1035,37 @@ export class LeaveCronService {
       year: 'numeric',
     };
     return date.toLocaleDateString('en-IN', options);
+  }
+
+  private async getLeaveApprovalReminderThreshold(): Promise<number> {
+    try {
+      const config = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.LEAVE,
+          key: CONFIGURATION_KEYS.LEAVE_APPROVAL_REMINDER_THRESHOLD_DAYS,
+        },
+      });
+
+      if (!config) {
+        return DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: {
+          configId: config.id,
+          isActive: true,
+        },
+      });
+
+      if (!configSetting?.value) {
+        return DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD;
+      }
+
+      const threshold = Number(configSetting.value);
+      return isNaN(threshold) ? DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD : threshold;
+    } catch (error) {
+      this.logger.warn('Failed to fetch leave approval reminder threshold, using default', error);
+      return DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD;
+    }
   }
 }

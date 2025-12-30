@@ -44,6 +44,7 @@ import {
   getPendingAttendanceByStatusQuery,
   autoApproveAttendanceQuery,
 } from '../queries';
+import { DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD } from '../constants/scheduler.constants';
 
 @Injectable()
 export class AttendanceCronService {
@@ -696,8 +697,11 @@ export class AttendanceCronService {
       );
 
       const statusSummaries = await this.getAttendanceStatusSummary(startDate, endDate);
-      const { urgentAttendance, regularAttendance } =
-        this.formatAttendanceForEmail(pendingAttendance);
+      const thresholdDays = await this.getAttendanceApprovalReminderThreshold();
+      const { urgentAttendance, regularAttendance } = this.formatAttendanceForEmail(
+        pendingAttendance,
+        thresholdDays,
+      );
       const urgencyLevel = this.getAttendanceUrgencyLevel(daysUntilAutoApproval);
       const hrEmails = await this.getHRAdminEmailsForAttendance();
 
@@ -830,15 +834,23 @@ export class AttendanceCronService {
     return statusMap[status] || status;
   }
 
-  private formatAttendanceForEmail(attendance: PendingAttendanceAlert[]): {
+  private formatAttendanceForEmail(
+    attendance: PendingAttendanceAlert[],
+    thresholdDays: number,
+  ): {
     urgentAttendance: AttendanceApprovalEmailItem[];
     regularAttendance: AttendanceApprovalEmailItem[];
   } {
     const urgentAttendance: AttendanceApprovalEmailItem[] = [];
     const regularAttendance: AttendanceApprovalEmailItem[] = [];
+    const today = new Date();
 
     for (const record of attendance) {
-      const isUrgent = record.status === AttendanceStatus.ABSENT;
+      const attendanceDate = new Date(record.attendanceDate);
+      const daysPending = Math.floor(
+        (today.getTime() - attendanceDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const isUrgent = record.status === AttendanceStatus.ABSENT || daysPending >= thresholdDays;
       const emailItem: AttendanceApprovalEmailItem = {
         employeeName: record.employeeName,
         attendanceDate: this.formatAttendanceDate(new Date(record.attendanceDate)),
@@ -909,5 +921,40 @@ export class AttendanceCronService {
   private async getHRAdminEmailsForAttendance(): Promise<string[]> {
     // TODO: Implement dynamic email fetching from users with HR/ADMIN roles
     return ['hr@company.com'];
+  }
+
+  private async getAttendanceApprovalReminderThreshold(): Promise<number> {
+    try {
+      const config = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.ATTENDANCE,
+          key: CONFIGURATION_KEYS.ATTENDANCE_APPROVAL_REMINDER_THRESHOLD_DAYS,
+        },
+      });
+
+      if (!config) {
+        return DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: {
+          configId: config.id,
+          isActive: true,
+        },
+      });
+
+      if (!configSetting?.value) {
+        return DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD;
+      }
+
+      const threshold = Number(configSetting.value);
+      return isNaN(threshold) ? DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD : threshold;
+    } catch (error) {
+      this.logger.warn(
+        'Failed to fetch attendance approval reminder threshold, using default',
+        error,
+      );
+      return DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD;
+    }
   }
 }
