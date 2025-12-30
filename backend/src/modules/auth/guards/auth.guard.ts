@@ -1,11 +1,19 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { JsonWebTokenError, TokenExpiredError } from '@nestjs/jwt';
 import { Environments } from 'env-configs';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { UserService } from 'src/modules/users/user.service';
 import { UserStatus } from 'src/modules/users/constants/user.constants';
+import { AUTH_ERRORS } from '../constants/auth.constants';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -41,8 +49,17 @@ export class AuthGuard implements CanActivate {
       }
 
       request['user'] = { id: user.id, email: user.email, role };
-    } catch {
-      throw new UnauthorizedException();
+    } catch (error) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof JsonWebTokenError ||
+        error instanceof TokenExpiredError ||
+        error?.name === 'JsonWebTokenError' ||
+        error?.name === 'TokenExpiredError'
+      ) {
+        throw new UnauthorizedException();
+      }
+      throw new InternalServerErrorException(AUTH_ERRORS.SERVICE_TEMPORARILY_UNAVAILABLE);
     }
     return true;
   }

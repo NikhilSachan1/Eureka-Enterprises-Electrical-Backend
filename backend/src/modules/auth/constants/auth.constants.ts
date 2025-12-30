@@ -17,6 +17,7 @@ export const AUTH_ERRORS = {
   INVITATION_EMAIL_MISMATCH: 'Email does not match with the invitation email',
   USER_ARCHIVED: 'This account is inactive. Contact admin.',
   ROLE_NOT_FOUND: 'Role not found.',
+  SERVICE_TEMPORARILY_UNAVAILABLE: 'Service temporarily unavailable. Please try again later.',
 };
 
 export const AUTH_RESPONSES = {
