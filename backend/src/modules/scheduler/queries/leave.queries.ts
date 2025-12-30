@@ -20,17 +20,23 @@ export const getPendingLeavesForPeriodQuery = (startDate: string, endDate: strin
   };
 };
 
-export const autoApproveLeaveQuery = (leaveId: string, approvalReason: string) => {
+export const autoApproveLeaveQuery = (
+  leaveId: string,
+  approvalReason: string,
+  systemUserId: string,
+) => {
   return {
     query: `
       UPDATE leave_applications 
       SET "approvalStatus" = $1, 
           "approvalAt" = $2, 
           "approvalReason" = $3,
+          "approvalBy" = $4,
+          "updatedBy" = $4,
           "updatedAt" = $2
-      WHERE id = $4
+      WHERE id = $5
     `,
-    params: [ApprovalStatus.APPROVED, new Date(), approvalReason, leaveId],
+    params: [ApprovalStatus.APPROVED, new Date(), approvalReason, systemUserId, leaveId],
   };
 };
 

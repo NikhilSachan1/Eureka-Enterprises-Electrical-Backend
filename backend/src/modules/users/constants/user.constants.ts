@@ -47,6 +47,7 @@ export const USER_FIELD_NAMES = {
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
   ARCHIVED = 'ARCHIVED',
+  SYSTEM = 'SYSTEM',
 }
 
 export const USERS_RESPONSES = {

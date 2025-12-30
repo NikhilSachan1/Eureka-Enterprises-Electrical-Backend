@@ -7,7 +7,12 @@ import { ConfigurationService } from '../../configurations/configuration.service
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
 import { EmailService } from '../../common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
-import { CRON_SCHEDULES, CRON_NAMES, SYSTEM_NOTES } from '../constants/scheduler.constants';
+import {
+  CRON_SCHEDULES,
+  CRON_NAMES,
+  SYSTEM_NOTES,
+  SYSTEM_DEFAULTS,
+} from '../constants/scheduler.constants';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -460,6 +465,7 @@ export class LeaveCronService {
             const { query, params } = autoApproveLeaveQuery(
               leave.id,
               SYSTEM_NOTES.AUTO_APPROVED_LEAVE,
+              SYSTEM_DEFAULTS.SYSTEM_USER_ID,
             );
             await entityManager.query(query, params);
 

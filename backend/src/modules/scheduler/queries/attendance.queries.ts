@@ -196,6 +196,7 @@ export const autoApproveAttendanceQuery = (
   attendanceId: string,
   currentStatus: string,
   approvalReason: string,
+  systemUserId: string,
 ) => {
   // Only change to PRESENT if it was a working day attendance
   const shouldChangeToPRESENT =
@@ -209,14 +210,17 @@ export const autoApproveAttendanceQuery = (
             "status" = $2,
             "approvalAt" = $3, 
             "approvalComment" = $4,
+            "approvalBy" = $5,
+            "updatedBy" = $5,
             "updatedAt" = $3
-        WHERE id = $5
+        WHERE id = $6
       `,
       params: [
         ApprovalStatus.APPROVED,
         AttendanceStatus.PRESENT,
         new Date(),
         approvalReason,
+        systemUserId,
         attendanceId,
       ],
     };
@@ -229,9 +233,11 @@ export const autoApproveAttendanceQuery = (
       SET "approvalStatus" = $1, 
           "approvalAt" = $2, 
           "approvalComment" = $3,
+          "approvalBy" = $4,
+          "updatedBy" = $4,
           "updatedAt" = $2
-      WHERE id = $4
+      WHERE id = $5
     `,
-    params: [ApprovalStatus.APPROVED, new Date(), approvalReason, attendanceId],
+    params: [ApprovalStatus.APPROVED, new Date(), approvalReason, systemUserId, attendanceId],
   };
 };

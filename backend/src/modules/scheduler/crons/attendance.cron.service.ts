@@ -6,7 +6,12 @@ import { SchedulerService } from '../scheduler.service';
 import { AttendanceService } from '../../attendance/attendance.service';
 import { ConfigurationService } from '../../configurations/configuration.service';
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
-import { CRON_SCHEDULES, CRON_NAMES, SYSTEM_NOTES } from '../constants/scheduler.constants';
+import {
+  CRON_SCHEDULES,
+  CRON_NAMES,
+  SYSTEM_NOTES,
+  SYSTEM_DEFAULTS,
+} from '../constants/scheduler.constants';
 import {
   AttendanceStatus,
   ApprovalStatus,
@@ -552,6 +557,7 @@ export class AttendanceCronService {
               attendance.id,
               attendance.status,
               SYSTEM_NOTES.AUTO_APPROVED_ATTENDANCE,
+              SYSTEM_DEFAULTS.SYSTEM_USER_ID,
             );
             await entityManager.query(query, params);
 
