@@ -479,10 +479,7 @@ export class UserService {
       // Handle document updates - replaces old documents of the same type (isUpdate = true)
       await this.createUserDocuments(id, uploadedFiles, updatedBy, entityManager, true);
 
-      return this.utilityService.getSuccessMessage(
-        USER_FIELD_NAMES.USER,
-        DataSuccessOperationType.UPDATE,
-      );
+      return await this.findOneOrFail({ where: { id } });
     });
   }
 
