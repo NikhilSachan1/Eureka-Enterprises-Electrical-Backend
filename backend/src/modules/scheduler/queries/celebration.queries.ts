@@ -22,8 +22,7 @@ export const getBirthdayEmployeesQuery = () => {
         u.email,
         u."dateOfBirth",
         u."profilePicture",
-        u.designation,
-        u.department
+        u.designation
       FROM users u
       WHERE u."deletedAt" IS NULL
         AND u.status = 'ACTIVE'
@@ -67,7 +66,6 @@ export const getAnniversaryEmployeesQuery = () => {
         u."dateOfJoining",
         u."profilePicture",
         u.designation,
-        u.department,
         EXTRACT(YEAR FROM AGE(CURRENT_DATE, u."dateOfJoining"))::int as "yearsOfService"
       FROM users u
       WHERE u."deletedAt" IS NULL

@@ -17,7 +17,6 @@ export interface BirthdayEmployee {
   dateOfBirth: Date;
   profilePicture?: string;
   designation?: string;
-  department?: string;
 }
 
 export interface AnniversaryEmployee {
@@ -29,7 +28,6 @@ export interface AnniversaryEmployee {
   yearsOfService: number;
   profilePicture?: string;
   designation?: string;
-  department?: string;
 }
 
 export interface CelebrationResult {
@@ -72,5 +70,4 @@ export interface CelebrationQueryResult {
   dateOfJoining: Date | null;
   profilePicture: string | null;
   designation: string | null;
-  department: string | null;
 }
