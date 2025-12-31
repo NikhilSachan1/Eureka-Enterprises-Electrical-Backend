@@ -5,6 +5,24 @@ import {
 import { getUserJsonBuildObject } from 'src/utils/master-constants/master-constants';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { BuildAssetEventsQueryParams } from './asset-events.queries.types';
+import { AssetEventTypes } from 'src/modules/asset-masters/constants/asset-masters.constants';
+
+export const buildAssetEventsStatsQuery = (assetMasterId: string) => {
+  const query = `
+    SELECT 
+      COUNT(*) as "total",
+      ${Object.values(AssetEventTypes)
+        .map(
+          (eventType) =>
+            `COUNT(CASE WHEN "eventType" = '${eventType}' THEN 1 END) as "${eventType}"`,
+        )
+        .join(',\n      ')}
+    FROM "assets_events"
+    WHERE "assetMasterId" = $1
+  `;
+
+  return { query, params: [assetMasterId] };
+};
 
 export const buildAssetEventsQuery = ({
   assetMasterId,

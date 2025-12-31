@@ -16,7 +16,7 @@ import {
 import { AssetEventsQueryDto } from './dto/asset-events-query.dto';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
-import { buildAssetEventsQuery } from './queries/asset-events.queries';
+import { buildAssetEventsQuery, buildAssetEventsStatsQuery } from './queries/asset-events.queries';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { AssetEventEntity } from './entities/asset-event.entity';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
@@ -437,11 +437,39 @@ export class AssetEventsService {
       endDateUTC,
     });
 
-    const [events, totalResult] = await Promise.all([
+    const { query: statsQuery, params: statsParams } = buildAssetEventsStatsQuery(assetMasterId);
+
+    const [events, totalResult, statsResult] = await Promise.all([
       this.assetEventsRepository.executeRawQuery(dataQuery, params),
       this.assetEventsRepository.executeRawQuery(countQuery, countParams),
+      this.assetEventsRepository.executeRawQuery(statsQuery, statsParams),
     ]);
 
-    return this.utilityService.listResponse(events, Number(totalResult[0]?.total || 0));
+    const statsRow = statsResult[0] || {};
+
+    const stats = {
+      total: Number(statsRow.total || 0),
+      byEventType: {
+        ASSET_ADDED: Number(statsRow.ASSET_ADDED || 0),
+        AVAILABLE: Number(statsRow.AVAILABLE || 0),
+        ASSIGNED: Number(statsRow.ASSIGNED || 0),
+        DEALLOCATED: Number(statsRow.DEALLOCATED || 0),
+        UNDER_MAINTENANCE: Number(statsRow.UNDER_MAINTENANCE || 0),
+        CALIBRATED: Number(statsRow.CALIBRATED || 0),
+        DAMAGED: Number(statsRow.DAMAGED || 0),
+        RETIRED: Number(statsRow.RETIRED || 0),
+        UPDATED: Number(statsRow.UPDATED || 0),
+        HANDOVER_INITIATED: Number(statsRow.HANDOVER_INITIATED || 0),
+        HANDOVER_ACCEPTED: Number(statsRow.HANDOVER_ACCEPTED || 0),
+        HANDOVER_REJECTED: Number(statsRow.HANDOVER_REJECTED || 0),
+        HANDOVER_CANCELLED: Number(statsRow.HANDOVER_CANCELLED || 0),
+      },
+    };
+
+    return {
+      stats,
+      records: events,
+      totalRecords: Number(totalResult[0]?.total || 0),
+    };
   }
 }
