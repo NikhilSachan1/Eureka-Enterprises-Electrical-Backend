@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
@@ -9,6 +9,20 @@ import {
   CalibrationStatus,
   WarrantyStatus,
 } from '../constants/asset-masters.constants';
+
+const toArray = (value: any): string[] => {
+  if (!value) return undefined;
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [value];
+    } catch {
+      return value.split(',').map((v) => v.trim());
+    }
+  }
+  return [value];
+};
 
 export class AssetQueryDto extends BaseGetDto {
   @ApiProperty({
@@ -48,58 +62,76 @@ export class AssetQueryDto extends BaseGetDto {
   serialNumber?: string;
 
   @ApiProperty({
-    description: 'Filter by category',
-    example: 'Hand Tool',
+    description: 'Filter by category (supports multiple values)',
+    example: ['Hand Tool', 'Power Tool'],
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsString()
-  category?: string;
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => toArray(value))
+  category?: string[];
 
   @ApiProperty({
-    description: 'Filter by asset type',
+    description: 'Filter by asset type (supports multiple values)',
     enum: AssetType,
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsEnum(AssetType)
-  assetType?: AssetType;
+  @IsArray()
+  @IsEnum(AssetType, { each: true })
+  @Transform(({ value }) => toArray(value))
+  assetType?: AssetType[];
 
   @ApiProperty({
-    description: 'Filter by status',
+    description: 'Filter by status (supports multiple values)',
     enum: AssetStatus,
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsEnum(AssetStatus)
-  status?: AssetStatus;
+  @IsArray()
+  @IsEnum(AssetStatus, { each: true })
+  @Transform(({ value }) => toArray(value))
+  status?: AssetStatus[];
 
   @ApiProperty({
-    description: 'Filter by calibration status (computed)',
+    description: 'Filter by calibration status (supports multiple values)',
     enum: CalibrationStatus,
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsEnum(CalibrationStatus)
-  calibrationStatus?: CalibrationStatus;
+  @IsArray()
+  @IsEnum(CalibrationStatus, { each: true })
+  @Transform(({ value }) => toArray(value))
+  calibrationStatus?: CalibrationStatus[];
 
   @ApiProperty({
-    description: 'Filter by warranty status (computed)',
+    description: 'Filter by warranty status (supports multiple values)',
     enum: WarrantyStatus,
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsEnum(WarrantyStatus)
-  warrantyStatus?: WarrantyStatus;
+  @IsArray()
+  @IsEnum(WarrantyStatus, { each: true })
+  @Transform(({ value }) => toArray(value))
+  warrantyStatus?: WarrantyStatus[];
 
   @ApiProperty({
-    description: 'Filter by assigned user',
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'Filter by assigned user (supports multiple values)',
+    example: ['123e4567-e89b-12d3-a456-426614174000'],
+    isArray: true,
     required: false,
   })
   @IsOptional()
-  @IsUUID()
-  assignedTo?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @Transform(({ value }) => toArray(value))
+  assignedTo?: string[];
 
   @ApiProperty({
     description: 'General search (searches assetId, name, serialNumber)',

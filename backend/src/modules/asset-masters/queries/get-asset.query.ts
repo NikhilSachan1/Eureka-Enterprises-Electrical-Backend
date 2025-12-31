@@ -128,28 +128,32 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     paramIndex++;
   }
 
-  if (category) {
-    filters.push(`av."category" = $${paramIndex}`);
-    params.push(category);
-    paramIndex++;
+  if (category && category.length > 0) {
+    const placeholders = category.map((_, i) => `$${paramIndex + i}`).join(', ');
+    filters.push(`av."category" IN (${placeholders})`);
+    params.push(...category);
+    paramIndex += category.length;
   }
 
-  if (assetType) {
-    filters.push(`av."assetType" = $${paramIndex}`);
-    params.push(assetType);
-    paramIndex++;
+  if (assetType && assetType.length > 0) {
+    const placeholders = assetType.map((_, i) => `$${paramIndex + i}`).join(', ');
+    filters.push(`av."assetType" IN (${placeholders})`);
+    params.push(...assetType);
+    paramIndex += assetType.length;
   }
 
-  if (status) {
-    filters.push(`av."status" = $${paramIndex}`);
-    params.push(status);
-    paramIndex++;
+  if (status && status.length > 0) {
+    const placeholders = status.map((_, i) => `$${paramIndex + i}`).join(', ');
+    filters.push(`av."status" IN (${placeholders})`);
+    params.push(...status);
+    paramIndex += status.length;
   }
 
-  if (assignedTo) {
-    filters.push(`av."assignedTo" = $${paramIndex}`);
-    params.push(assignedTo);
-    paramIndex++;
+  if (assignedTo && assignedTo.length > 0) {
+    const placeholders = assignedTo.map((_, i) => `$${paramIndex + i}`).join(', ');
+    filters.push(`av."assignedTo" IN (${placeholders})`);
+    params.push(...assignedTo);
+    paramIndex += assignedTo.length;
   }
 
   // General search across multiple fields
@@ -163,47 +167,71 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     paramIndex++;
   }
 
-  // Calibration status filter (computed)
-  if (calibrationStatus) {
-    if (calibrationStatus === CalibrationStatus.NOT_APPLICABLE) {
-      filters.push(`(av."assetType" = $${paramIndex} OR av."calibrationEndDate" IS NULL)`);
+  // Calibration status filter (computed) - supports multiple values
+  if (calibrationStatus && calibrationStatus.length > 0) {
+    const calibrationConditions: string[] = [];
+
+    if (calibrationStatus.includes(CalibrationStatus.NOT_APPLICABLE)) {
+      calibrationConditions.push(
+        `(av."assetType" = $${paramIndex} OR av."calibrationEndDate" IS NULL)`,
+      );
       params.push(AssetType.NON_CALIBRATED);
       paramIndex++;
-    } else if (calibrationStatus === CalibrationStatus.EXPIRED) {
-      filters.push(`(av."assetType" = $${paramIndex} AND av."calibrationEndDate" < NOW())`);
+    }
+    if (calibrationStatus.includes(CalibrationStatus.EXPIRED)) {
+      calibrationConditions.push(
+        `(av."assetType" = $${paramIndex} AND av."calibrationEndDate" < NOW())`,
+      );
       params.push(AssetType.CALIBRATED);
       paramIndex++;
-    } else if (calibrationStatus === CalibrationStatus.EXPIRING_SOON) {
-      filters.push(`(
+    }
+    if (calibrationStatus.includes(CalibrationStatus.EXPIRING_SOON)) {
+      calibrationConditions.push(`(
         av."assetType" = $${paramIndex}
         AND av."calibrationEndDate" >= NOW()
         AND av."calibrationEndDate" <= NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
       )`);
       params.push(AssetType.CALIBRATED);
       paramIndex++;
-    } else if (calibrationStatus === CalibrationStatus.VALID) {
-      filters.push(`(
+    }
+    if (calibrationStatus.includes(CalibrationStatus.VALID)) {
+      calibrationConditions.push(`(
         av."assetType" = $${paramIndex}
         AND av."calibrationEndDate" > NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
       )`);
       params.push(AssetType.CALIBRATED);
       paramIndex++;
     }
+
+    if (calibrationConditions.length > 0) {
+      filters.push(`(${calibrationConditions.join(' OR ')})`);
+    }
   }
 
-  // Warranty status filter (computed)
-  if (warrantyStatus) {
-    if (warrantyStatus === WarrantyStatus.NOT_APPLICABLE) {
-      filters.push(`av."warrantyEndDate" IS NULL`);
-    } else if (warrantyStatus === WarrantyStatus.EXPIRED) {
-      filters.push(`av."warrantyEndDate" < NOW()`);
-    } else if (warrantyStatus === WarrantyStatus.EXPIRING_SOON) {
-      filters.push(`(
+  // Warranty status filter (computed) - supports multiple values
+  if (warrantyStatus && warrantyStatus.length > 0) {
+    const warrantyConditions: string[] = [];
+
+    if (warrantyStatus.includes(WarrantyStatus.NOT_APPLICABLE)) {
+      warrantyConditions.push(`av."warrantyEndDate" IS NULL`);
+    }
+    if (warrantyStatus.includes(WarrantyStatus.EXPIRED)) {
+      warrantyConditions.push(`av."warrantyEndDate" < NOW()`);
+    }
+    if (warrantyStatus.includes(WarrantyStatus.EXPIRING_SOON)) {
+      warrantyConditions.push(`(
         av."warrantyEndDate" >= NOW()
         AND av."warrantyEndDate" <= NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'
       )`);
-    } else if (warrantyStatus === WarrantyStatus.UNDER_WARRANTY) {
-      filters.push(`av."warrantyEndDate" > NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'`);
+    }
+    if (warrantyStatus.includes(WarrantyStatus.UNDER_WARRANTY)) {
+      warrantyConditions.push(
+        `av."warrantyEndDate" > NOW() + INTERVAL '${EXPIRING_SOON_DAYS} days'`,
+      );
+    }
+
+    if (warrantyConditions.length > 0) {
+      filters.push(`(${warrantyConditions.join(' OR ')})`);
     }
   }
 
