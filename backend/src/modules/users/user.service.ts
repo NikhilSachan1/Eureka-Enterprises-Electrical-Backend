@@ -479,7 +479,8 @@ export class UserService {
       // Handle document updates - replaces old documents of the same type (isUpdate = true)
       await this.createUserDocuments(id, uploadedFiles, updatedBy, entityManager, true);
 
-      return await this.findOneOrFail({ where: { id } });
+      // Return user without confidential fields (includeDocuments = true excludes password)
+      return await this.findOneOrFail({ where: { id } }, true);
     });
   }
 
