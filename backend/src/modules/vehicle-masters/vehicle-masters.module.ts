@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { VehicleMastersService } from './vehicle-masters.service';
+import { VehicleMastersController } from './vehicle-masters.controller';
 import { VehicleMastersRepository } from './vehicle-masters.repository';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VehicleMasterEntity } from './entities/vehicle-master.entity';
@@ -18,6 +19,7 @@ import { ConfigurationsModule } from '../configurations/configuration.module';
     SharedModule,
     ConfigurationsModule,
   ],
+  controllers: [VehicleMastersController],
   providers: [VehicleMastersService, VehicleMastersRepository],
   exports: [VehicleMastersService],
 })

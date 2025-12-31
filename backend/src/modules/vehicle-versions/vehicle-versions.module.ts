@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { VehicleVersionEntity } from './entities/vehicle-versions.entity';
 import { VehicleVersionsRepository } from './vehicle-versions.repository';
 import { SharedModule } from '../shared/shared.module';
+import { VehicleVersionsController } from './vehicle-versions.controller';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SharedModule } from '../shared/shared.module';
     forwardRef(() => VehicleEventsModule),
     SharedModule,
   ],
+  controllers: [VehicleVersionsController],
   providers: [VehicleVersionsService, VehicleVersionsRepository],
   exports: [VehicleVersionsService],
 })
