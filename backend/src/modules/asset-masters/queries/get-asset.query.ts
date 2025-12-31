@@ -3,6 +3,7 @@ import {
   ASSET_SORT_FIELD_MAPPING,
   AssetType,
   AssetStatus,
+  AssetFileTypes,
   CalibrationStatus,
   WarrantyStatus,
   EXPIRING_SOON_DAYS,
@@ -236,7 +237,24 @@ export const getAssetQuery = (query: AssetQueryDto) => {
       u."firstName" as "assignedToFirstName",
       u."lastName" as "assignedToLastName",
       u."email" as "assignedToEmail",
-      u."employeeId" as "assignedToEmployeeId"
+      u."employeeId" as "assignedToEmployeeId",
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', af."id",
+              'fileKey', af."fileKey",
+              'fileType', af."fileType",
+              'label', af."label"
+            )
+          )
+          FROM "assets_files" af
+          WHERE af."assetVersionId" = av."id"
+            AND af."fileType" = '${AssetFileTypes.ASSET_IMAGE}'
+            AND af."deletedAt" IS NULL
+        ),
+        '[]'::json
+      ) as "files"
     FROM "asset_masters" am
     INNER JOIN LATERAL (
       SELECT *
