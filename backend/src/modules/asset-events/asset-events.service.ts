@@ -8,12 +8,18 @@ import {
   AssetEventTypes,
   AssetFileTypes,
 } from '../asset-masters/constants/asset-masters.constants';
-import { ASSET_EVENTS_ERRORS } from './constants/asset-events.constants';
+import {
+  ASSET_EVENTS_ERRORS,
+  VALID_ACTIONS_BY_STATUS,
+  HANDOVER_RESPONSE_ACTIONS,
+} from './constants/asset-events.constants';
 import { AssetEventsQueryDto } from './dto/asset-events-query.dto';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { buildAssetEventsQuery } from './queries/asset-events.queries';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { AssetEventEntity } from './entities/asset-event.entity';
+import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class AssetEventsService {
@@ -89,6 +95,69 @@ export class AssetEventsService {
     }
   }
 
+  private async getLastEvent(assetMasterId: string): Promise<AssetEventEntity | null> {
+    const result = await this.assetEventsRepository.findOne({
+      where: { assetMasterId },
+      order: { createdAt: SortOrder.DESC },
+    });
+    return result || null;
+  }
+
+  private async getPendingHandover(assetMasterId: string): Promise<AssetEventEntity | null> {
+    const lastEvent = await this.getLastEvent(assetMasterId);
+
+    if (lastEvent?.eventType === AssetEventTypes.HANDOVER_INITIATED) {
+      return lastEvent;
+    }
+    return null;
+  }
+
+  private validateStateTransition(
+    currentStatus: string,
+    action: AssetEventTypes,
+    pendingHandover: AssetEventEntity | null,
+  ): void {
+    if (HANDOVER_RESPONSE_ACTIONS.includes(action)) {
+      if (!pendingHandover) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.NO_HANDOVER_PENDING);
+      }
+      return;
+    }
+    if (pendingHandover) {
+      throw new BadRequestException(ASSET_EVENTS_ERRORS.HANDOVER_ALREADY_PENDING);
+    }
+
+    const validActions = VALID_ACTIONS_BY_STATUS[currentStatus] || [];
+    if (!validActions.includes(action)) {
+      throw new BadRequestException(
+        ASSET_EVENTS_ERRORS.INVALID_STATE_TRANSITION.replace('{action}', action).replace(
+          '{status}',
+          currentStatus,
+        ),
+      );
+    }
+  }
+
+  private validateHandoverPermissions(
+    action: AssetEventTypes,
+    pendingHandover: AssetEventEntity,
+    currentUserId: string,
+  ): void {
+    if (action === AssetEventTypes.HANDOVER_ACCEPTED) {
+      if (pendingHandover.toUser !== currentUserId) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.ONLY_TARGET_USER_CAN_ACCEPT);
+      }
+    } else if (action === AssetEventTypes.HANDOVER_REJECTED) {
+      if (pendingHandover.toUser !== currentUserId) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.ONLY_TARGET_USER_CAN_REJECT);
+      }
+    } else if (action === AssetEventTypes.HANDOVER_CANCELLED) {
+      if (pendingHandover.createdBy !== currentUserId) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.ONLY_INITIATOR_CAN_CANCEL);
+      }
+    }
+  }
+
   async action(
     assetActionDto: AssetActionDto & { fromUserId: string },
     assetFiles: string[],
@@ -97,14 +166,28 @@ export class AssetEventsService {
     try {
       const { assetMasterId, action, toUserId, fromUserId, metadata } = assetActionDto;
 
-      // Validate action-specific requirements
+      // Validate action-specific requirements (files, toUserId etc)
       this.validateActionRequirements(action, toUserId, assetFiles);
 
-      return await this.dataSource.transaction(async (entityManager: EntityManager) => {
-        const activeVersion = await this.assetVersionsService.findOne({
-          where: { assetMasterId, isActive: true },
-        });
+      // Get current asset state
+      const activeVersion = await this.assetVersionsService.findOne({
+        where: { assetMasterId, isActive: true },
+      });
 
+      const currentStatus = activeVersion?.status || 'AVAILABLE';
+
+      // Check for pending handover
+      const pendingHandover = await this.getPendingHandover(assetMasterId);
+
+      // Validate state transition
+      this.validateStateTransition(currentStatus, action, pendingHandover);
+
+      // Validate handover permissions if it's a handover response action
+      if (HANDOVER_RESPONSE_ACTIONS.includes(action) && pendingHandover) {
+        this.validateHandoverPermissions(action, pendingHandover, fromUserId);
+      }
+
+      return await this.dataSource.transaction(async (entityManager: EntityManager) => {
         switch (action) {
           // Handover Initiate - requires toUserId and files
           case AssetEventTypes.HANDOVER_INITIATED: {

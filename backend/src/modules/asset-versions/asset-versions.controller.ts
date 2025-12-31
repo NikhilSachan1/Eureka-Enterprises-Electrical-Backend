@@ -3,9 +3,9 @@ import { AssetVersionsService } from './asset-versions.service';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AssetVersionsQueryDto } from './dto';
 
-@ApiTags('Asset Events')
+@ApiTags('Asset Versions')
 @ApiBearerAuth('JWT-auth')
-@Controller('asset-events')
+@Controller('asset-versions')
 export class AssetVersionsController {
   constructor(private readonly assetVersionsService: AssetVersionsService) {}
 

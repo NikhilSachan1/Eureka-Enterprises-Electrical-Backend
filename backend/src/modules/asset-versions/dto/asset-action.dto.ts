@@ -23,6 +23,8 @@ export class AssetActionDto {
   @ApiProperty({
     description: 'The ID of the asset',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: 'string',
+    format: 'uuid',
   })
   @IsNotEmpty()
   @IsUUID()
@@ -30,19 +32,9 @@ export class AssetActionDto {
 
   @ApiProperty({
     description: 'The action to perform',
-    enum: [
-      AssetEventTypes.HANDOVER_INITIATED,
-      AssetEventTypes.HANDOVER_ACCEPTED,
-      AssetEventTypes.HANDOVER_REJECTED,
-      AssetEventTypes.HANDOVER_CANCELLED,
-      AssetEventTypes.UNDER_MAINTENANCE,
-      AssetEventTypes.DEALLOCATED,
-      AssetEventTypes.AVAILABLE,
-      AssetEventTypes.CALIBRATED,
-      AssetEventTypes.DAMAGED,
-      AssetEventTypes.RETIRED,
-    ],
-    example: AssetEventTypes.HANDOVER_INITIATED,
+    enum: AssetEventTypes,
+    enumName: 'AssetEventTypes',
+    example: 'HANDOVER_INITIATED',
   })
   @IsNotEmpty()
   @IsEnum([
@@ -62,6 +54,8 @@ export class AssetActionDto {
   @ApiProperty({
     description: 'The ID of the target user (required only for HANDOVER_INITIATED)',
     example: '123e4567-e89b-12d3-a456-426614174000',
+    type: 'string',
+    format: 'uuid',
     required: false,
   })
   @IsOptional()
@@ -70,9 +64,8 @@ export class AssetActionDto {
 
   @ApiProperty({
     description: 'The metadata of the asset event (e.g., reason for action)',
-    example: {
-      reason: 'Asset is not in good condition',
-    },
+    example: '{"reason": "Asset is not in good condition"}',
+    type: 'string',
     required: false,
   })
   @IsOptional()
@@ -81,10 +74,8 @@ export class AssetActionDto {
   @ApiProperty({
     description:
       'Files to be uploaded (required for HANDOVER_INITIATED, HANDOVER_ACCEPTED, CALIBRATED)',
-    type: 'string',
-    format: 'binary',
-    isArray: true,
-    maxItems: 10,
+    type: 'array',
+    items: { type: 'string', format: 'binary' },
     required: false,
   })
   @IsOptional()
