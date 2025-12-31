@@ -22,6 +22,22 @@ export const ASSET_EVENTS_ERRORS = {
   ONLY_INITIATOR_CAN_CANCEL: 'Only the initiator of the handover can cancel it',
 };
 
+export const ASSET_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
+  [AssetEventTypes.HANDOVER_INITIATED]: 'Handover initiated successfully',
+  [AssetEventTypes.HANDOVER_ACCEPTED]: 'Handover accepted successfully',
+  [AssetEventTypes.HANDOVER_REJECTED]: 'Handover rejected successfully',
+  [AssetEventTypes.HANDOVER_CANCELLED]: 'Handover cancelled successfully',
+  [AssetEventTypes.DEALLOCATED]: 'Asset deallocated successfully',
+  [AssetEventTypes.CALIBRATED]: 'Asset calibrated successfully',
+  [AssetEventTypes.UNDER_MAINTENANCE]: 'Asset marked under maintenance successfully',
+  [AssetEventTypes.DAMAGED]: 'Asset marked as damaged successfully',
+  [AssetEventTypes.RETIRED]: 'Asset retired successfully',
+  [AssetEventTypes.AVAILABLE]: 'Asset marked as available successfully',
+  [AssetEventTypes.ASSIGNED]: 'Asset assigned successfully',
+  [AssetEventTypes.ASSET_ADDED]: 'Asset added successfully',
+  [AssetEventTypes.UPDATED]: 'Asset updated successfully',
+};
+
 export const VALID_ACTIONS_BY_STATUS: Record<string, AssetEventTypes[]> = {
   [AssetStatus.AVAILABLE]: [
     AssetEventTypes.HANDOVER_INITIATED,

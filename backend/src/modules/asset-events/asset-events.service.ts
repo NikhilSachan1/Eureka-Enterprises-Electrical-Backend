@@ -10,6 +10,7 @@ import {
 } from '../asset-masters/constants/asset-masters.constants';
 import {
   ASSET_EVENTS_ERRORS,
+  ASSET_EVENTS_SUCCESS_MESSAGES,
   VALID_ACTIONS_BY_STATUS,
   HANDOVER_RESPONSE_ACTIONS,
 } from './constants/asset-events.constants';
@@ -17,7 +18,6 @@ import { AssetEventsQueryDto } from './dto/asset-events-query.dto';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { buildAssetEventsQuery, buildAssetEventsStatsQuery } from './queries/asset-events.queries';
-import { UtilityService } from 'src/utils/utility/utility.service';
 import { AssetEventEntity } from './entities/asset-event.entity';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
@@ -29,7 +29,6 @@ export class AssetEventsService {
     private readonly assetFilesService: AssetFilesService,
     private readonly assetVersionsService: AssetVersionsService,
     private readonly dateTimeService: DateTimeService,
-    private readonly utilityService: UtilityService,
   ) {}
 
   async create(
@@ -187,7 +186,7 @@ export class AssetEventsService {
         this.validateHandoverPermissions(action, pendingHandover, fromUserId);
       }
 
-      return await this.dataSource.transaction(async (entityManager: EntityManager) => {
+      await this.dataSource.transaction(async (entityManager: EntityManager) => {
         switch (action) {
           // Handover Initiate - requires toUserId and files
           case AssetEventTypes.HANDOVER_INITIATED: {
@@ -213,8 +212,7 @@ export class AssetEventsService {
               },
               entityManager,
             );
-
-            return event;
+            break;
           }
 
           // Handover Accept - files mandatory, userId derived from JWT
@@ -241,8 +239,7 @@ export class AssetEventsService {
               },
               entityManager,
             );
-
-            return event;
+            break;
           }
 
           // Handover Reject - files optional, userId derived from JWT
@@ -271,8 +268,7 @@ export class AssetEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Handover Cancel - files optional, userId derived from JWT
@@ -300,8 +296,7 @@ export class AssetEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Deallocate - fromUser auto-derived from asset's assignedTo
@@ -333,8 +328,7 @@ export class AssetEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Calibrated - files mandatory (calibration certificate)
@@ -359,8 +353,7 @@ export class AssetEventsService {
               },
               entityManager,
             );
-
-            return event;
+            break;
           }
 
           // Under Maintenance, Damaged, Retired - files optional, track who had it
@@ -390,13 +383,12 @@ export class AssetEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Available - no files needed, track previous holder
           case AssetEventTypes.AVAILABLE: {
-            return await this.create(
+            await this.create(
               {
                 assetMasterId,
                 eventType: action,
@@ -406,12 +398,17 @@ export class AssetEventsService {
               },
               entityManager,
             );
+            break;
           }
 
           default:
             throw new BadRequestException(ASSET_EVENTS_ERRORS.INVALID_ACTION);
         }
       });
+
+      return {
+        message: ASSET_EVENTS_SUCCESS_MESSAGES[action],
+      };
     } catch (error) {
       throw error;
     }

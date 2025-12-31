@@ -8,7 +8,10 @@ import {
   VehicleEventTypes,
   VehicleFileTypes,
 } from '../vehicle-masters/constants/vehicle-masters.constants';
-import { VEHICLE_EVENTS_ERRORS } from './constants/vehicle-events.constants';
+import {
+  VEHICLE_EVENTS_ERRORS,
+  VEHICLE_EVENTS_SUCCESS_MESSAGES,
+} from './constants/vehicle-events.constants';
 import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
 
@@ -82,7 +85,7 @@ export class VehicleEventsService {
       // Validate action-specific requirements
       this.validateActionRequirements(action, toUserId, vehicleFiles);
 
-      return await this.dataSource.transaction(async (entityManager: EntityManager) => {
+      await this.dataSource.transaction(async (entityManager: EntityManager) => {
         const activeVersion = await this.vehicleVersionsService.findOne({
           where: { vehicleMasterId, isActive: true },
         });
@@ -112,8 +115,7 @@ export class VehicleEventsService {
               },
               entityManager,
             );
-
-            return event;
+            break;
           }
 
           // Handover Accept - files mandatory, userId derived from JWT
@@ -140,8 +142,7 @@ export class VehicleEventsService {
               },
               entityManager,
             );
-
-            return event;
+            break;
           }
 
           // Handover Reject - files optional, userId derived from JWT
@@ -170,8 +171,7 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Handover Cancel - files optional, userId derived from JWT
@@ -199,8 +199,7 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Deallocate - fromUser auto-derived from vehicle's assignedTo
@@ -232,8 +231,7 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Under Maintenance, Damaged, Retired - files optional, track who had it
@@ -263,13 +261,12 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
-
-            return event;
+            break;
           }
 
           // Available - no files needed, track previous holder
           case VehicleEventTypes.AVAILABLE: {
-            return await this.create(
+            await this.create(
               {
                 vehicleMasterId,
                 eventType: action,
@@ -279,12 +276,17 @@ export class VehicleEventsService {
               },
               entityManager,
             );
+            break;
           }
 
           default:
             throw new BadRequestException(VEHICLE_EVENTS_ERRORS.INVALID_ACTION);
         }
       });
+
+      return {
+        message: VEHICLE_EVENTS_SUCCESS_MESSAGES[action],
+      };
     } catch (error) {
       throw error;
     }
