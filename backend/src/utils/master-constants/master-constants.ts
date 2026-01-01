@@ -68,6 +68,7 @@ export const CONFIGURATION_KEYS = {
   // CARD
   CARD_TYPES: 'card_types',
   CARD_EXPIRY_WARNING_DAYS: 'card_expiry_warning_days',
+  CARD_ACTION_TYPES: 'card_action_types',
 };
 
 export const CONFIGURATION_MODULES = {
