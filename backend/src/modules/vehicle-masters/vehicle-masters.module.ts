@@ -10,6 +10,7 @@ import { VehicleVersionsModule } from '../vehicle-versions/vehicle-versions.modu
 import { SharedModule } from '../shared/shared.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { CardsModule } from '../cards/cards.module';
+import { UsersModule } from '../users/user.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CardsModule } from '../cards/cards.module';
     SharedModule,
     ConfigurationsModule,
     forwardRef(() => CardsModule),
+    UsersModule,
   ],
   controllers: [VehicleMastersController],
   providers: [VehicleMastersService, VehicleMastersRepository],

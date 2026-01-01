@@ -37,6 +37,7 @@ import {
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
 import { getVehicleQuery, getVehicleStatsQuery } from './queries/get-vehicle.query';
+import { UserService } from '../users/user.service';
 
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 const DEFAULT_SERVICE_WARNING_KM = 1000;
@@ -50,9 +51,19 @@ export class VehicleMastersService {
     private readonly vehicleVersionsService: VehicleVersionsService,
     private readonly configurationService: ConfigurationService,
     private readonly utilityService: UtilityService,
+    private readonly userService: UserService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
+
+  private async validateAssignedUser(assignedTo: string | undefined): Promise<void> {
+    if (assignedTo) {
+      const user = await this.userService.findOne({ id: assignedTo });
+      if (!user) {
+        throw new BadRequestException(VEHICLE_MASTERS_ERRORS.ASSIGNED_USER_NOT_FOUND);
+      }
+    }
+  }
 
   private async getServiceIntervalKm(): Promise<number> {
     try {
@@ -190,10 +201,12 @@ export class VehicleMastersService {
 
   async create(createVehicleDto: CreateVehicleDto & { createdBy: string }, vehicleFiles: string[]) {
     try {
-      const { registrationNo, createdBy } = createVehicleDto;
+      const { registrationNo, createdBy, assignedTo } = createVehicleDto;
 
       // Validate dates
       this.validateDates(createVehicleDto);
+
+      await this.validateAssignedUser(assignedTo);
 
       const vehicle = await this.findOne({ where: { registrationNo } });
       if (vehicle) {
@@ -434,6 +447,8 @@ export class VehicleMastersService {
 
       // Validate dates
       this.validateDates(updateData);
+
+      await this.validateAssignedUser(updateData.assignedTo);
 
       // Get current active version
       const currentVersion = await this.vehicleVersionsService.findOne({

@@ -3,6 +3,7 @@ export const VEHICLE_MASTERS_ERRORS = {
   VEHICLE_NOT_FOUND: 'Vehicle not found',
   INVALID_ACTION: 'Invalid action',
   INVALID_DATE_RANGE: 'End date must be after start date',
+  ASSIGNED_USER_NOT_FOUND: 'Assigned user not found',
 };
 
 export enum VehicleMasterEntityFields {
