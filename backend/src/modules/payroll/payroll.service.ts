@@ -15,7 +15,9 @@ import {
   buildActiveUsersWithSalaryQuery,
   buildAttendanceSummaryForPayrollQuery,
   buildLeaveSummaryForPayrollQuery,
+  buildPresentDatesForPayrollQuery,
 } from './queries/payroll.queries';
+import { UtilityService } from 'src/utils/utility/utility.service';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import {
@@ -33,6 +35,7 @@ export class PayrollService {
     private readonly bonusRepository: BonusRepository,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly utilityService: UtilityService,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
 
@@ -96,6 +99,9 @@ export class PayrollService {
     // Holidays from attendance records
     const holidays = attendanceSummary.holidays;
 
+    // Calculate holidays worked (employee worked on a holiday - gets extra pay)
+    const holidaysWorked = await this.calculateHolidaysWorked(userId, month, year);
+
     // Calculate weekoffs (days in month - working days - holidays recorded in attendance)
     const weekoffs = daysInMonth - workingDays - holidays;
 
@@ -128,6 +134,10 @@ export class PayrollService {
     const dailySalary = Number(salaryStructure.grossSalary) / workingDays;
     const lopDeduction = Math.round(dailySalary * lopDays);
 
+    // Calculate holiday bonus (extra pay for working on holidays)
+    // Employee already gets holiday pay, so they get 1x extra for each holiday worked
+    const holidayBonus = Math.round(dailySalary * holidaysWorked);
+
     // Calculate totals
     const grossEarnings =
       basicProrated +
@@ -136,7 +146,8 @@ export class PayrollService {
       conveyanceAllowanceProrated +
       medicalAllowanceProrated +
       specialAllowanceProrated +
-      totalBonus;
+      totalBonus +
+      holidayBonus;
 
     const totalDeductions =
       Number(salaryStructure.employeePf) +
@@ -162,6 +173,7 @@ export class PayrollService {
           paidLeaveDays,
           unpaidLeaveDays,
           holidays,
+          holidaysWorked,
           weekoffs,
           halfDays: halfDayCount,
           basicProrated,
@@ -177,6 +189,7 @@ export class PayrollService {
           professionalTax: salaryStructure.professionalTax,
           lopDeduction,
           totalBonus,
+          holidayBonus,
           bonusDetails,
           leaveDetails: leaveSummary,
           grossEarnings,
@@ -452,5 +465,84 @@ export class PayrollService {
     }
 
     return workingDays || config.defaultWorkingDays;
+  }
+
+  private async getHolidayDatesForMonth(month: number, year: number): Promise<string[]> {
+    try {
+      const financialYear = this.utilityService.getFinancialYear(new Date(year, month - 1, 1));
+
+      const holidayCalendarConfig = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.LEAVE,
+          key: CONFIGURATION_KEYS.HOLIDAY_CALENDAR,
+        },
+      });
+
+      if (!holidayCalendarConfig) {
+        return [];
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: {
+          configId: holidayCalendarConfig.id,
+          contextKey: financialYear,
+          isActive: true,
+        },
+      });
+
+      if (!configSetting?.value?.holidays) {
+        return [];
+      }
+
+      const holidays: Array<{ date: string }> = configSetting.value.holidays;
+
+      const monthStr = month.toString().padStart(2, '0');
+      const yearStr = year.toString();
+
+      return holidays
+        .filter((holiday) => {
+          const [holidayYear, holidayMonth] = holiday.date.split('-');
+          return holidayYear === yearStr && holidayMonth === monthStr;
+        })
+        .map((holiday) => holiday.date);
+    } catch (error) {
+      Logger.warn(`Error getting holiday calendar for ${month}/${year}`, error);
+      return [];
+    }
+  }
+
+  private async getPresentDatesForPayroll(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<string[]> {
+    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay
+      .toString()
+      .padStart(2, '0')}`;
+
+    const { query, params } = buildPresentDatesForPayrollQuery(userId, startDate, endDate);
+    const results = await this.payrollRepository.executeRawQuery(query, params);
+
+    return (results || []).map((row: { attendanceDate: string }) => row.attendanceDate);
+  }
+
+  private async calculateHolidaysWorked(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<number> {
+    const [holidayDates, presentDates] = await Promise.all([
+      this.getHolidayDatesForMonth(month, year),
+      this.getPresentDatesForPayroll(userId, month, year),
+    ]);
+
+    if (holidayDates.length === 0 || presentDates.length === 0) {
+      return 0;
+    }
+
+    const holidaySet = new Set(holidayDates);
+    return presentDates.filter((date) => holidaySet.has(date)).length;
   }
 }

@@ -43,6 +43,9 @@ export class PayrollEntity extends BaseEntity {
   holidays: number;
 
   @Column({ type: 'int', default: 0 })
+  holidaysWorked: number;
+
+  @Column({ type: 'int', default: 0 })
   weekoffs: number;
 
   // ==================== Prorated Earnings ====================
@@ -86,6 +89,9 @@ export class PayrollEntity extends BaseEntity {
   // ==================== Bonus ====================
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   totalBonus: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  holidayBonus: number;
 
   @Column({ type: 'jsonb', nullable: true })
   bonusDetails: { bonusId: string; type: string; amount: number }[];
