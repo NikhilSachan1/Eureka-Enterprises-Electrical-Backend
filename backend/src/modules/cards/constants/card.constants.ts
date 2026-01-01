@@ -19,4 +19,5 @@ export enum CardsEntityFields {
   HOLDER_NAME = 'HOLDER_NAME',
   EXPIRY_DATE = 'EXPIRY_DATE',
   EXPIRY_STATUS = 'EXPIRY_STATUS',
+  CARD = 'Card',
 }

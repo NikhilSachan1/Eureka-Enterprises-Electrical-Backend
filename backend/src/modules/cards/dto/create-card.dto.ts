@@ -1,10 +1,10 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumberString, IsString, Length } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsNumberString, IsOptional, IsString, Length } from 'class-validator';
 
 export class CreateCardDto {
   @ApiProperty({
     description: 'The card number',
-    example: '1234567890',
+    example: '1234567890123456',
     minLength: 16,
     maxLength: 16,
     required: true,
@@ -23,21 +23,21 @@ export class CreateCardDto {
   @IsString()
   cardType: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The card holder name',
     example: 'John Doe',
-    required: true,
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  holderName: string;
+  holderName?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'The card expiry date',
     example: '01/2025',
-    required: true,
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  expiryDate: string;
+  expiryDate?: string;
 }

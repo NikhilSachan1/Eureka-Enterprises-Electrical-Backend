@@ -88,8 +88,17 @@ export class CardsService {
       if (card) {
         throw new ConflictException(CARD_ERRORS.CARD_ALREADY_EXISTS);
       }
-      const expiryStatus = await this.calculateExpiryStatus(expiryDate);
-      return await this.cardsRepository.create({ ...createCardDto, expiryStatus, createdBy });
+
+      let expiryStatus: CardExpiryStatus | undefined;
+      if (expiryDate) {
+        expiryStatus = await this.calculateExpiryStatus(expiryDate);
+      }
+
+      await this.cardsRepository.create({ ...createCardDto, expiryStatus, createdBy });
+      return this.utilityService.getSuccessMessage(
+        CardsEntityFields.CARD_NUMBER,
+        DataSuccessOperationType.CREATE,
+      );
     } catch (error) {
       throw error;
     }
