@@ -38,6 +38,7 @@ import {
 } from 'src/utils/master-constants/master-constants';
 import { getVehicleQuery, getVehicleStatsQuery } from './queries/get-vehicle.query';
 import { UserService } from '../users/user.service';
+import { UserStatus } from '../users/constants/user.constants';
 
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 const DEFAULT_SERVICE_WARNING_KM = 1000;
@@ -58,10 +59,9 @@ export class VehicleMastersService {
 
   private async validateAssignedUser(assignedTo: string | undefined): Promise<void> {
     if (assignedTo) {
-      const user = await this.userService.findOne({ id: assignedTo });
-      if (!user) {
-        throw new BadRequestException(VEHICLE_MASTERS_ERRORS.ASSIGNED_USER_NOT_FOUND);
-      }
+      await this.userService.findOneOrFail({
+        where: { id: assignedTo, status: UserStatus.ACTIVE },
+      });
     }
   }
 
