@@ -187,7 +187,10 @@ export class AssetMastersService {
           );
         }
 
-        return assetMaster;
+        return this.utilityService.getSuccessMessage(
+          AssetMasterEntityFields.ASSET,
+          DataSuccessOperationType.CREATE,
+        );
       });
     } catch (error) {
       throw error;

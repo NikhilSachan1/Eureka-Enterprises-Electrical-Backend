@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
-import { AssetEventTypes } from '../constants/asset-masters.constants';
+import { ASSET_MASTERS_ERRORS, AssetEventTypes } from '../constants/asset-masters.constants';
 
 /**
  * Asset Action DTO
@@ -37,18 +37,12 @@ export class AssetActionDto {
     example: 'HANDOVER_INITIATED',
   })
   @IsNotEmpty()
-  @IsEnum([
-    AssetEventTypes.HANDOVER_INITIATED,
-    AssetEventTypes.HANDOVER_ACCEPTED,
-    AssetEventTypes.HANDOVER_REJECTED,
-    AssetEventTypes.HANDOVER_CANCELLED,
-    AssetEventTypes.UNDER_MAINTENANCE,
-    AssetEventTypes.DEALLOCATED,
-    AssetEventTypes.AVAILABLE,
-    AssetEventTypes.CALIBRATED,
-    AssetEventTypes.DAMAGED,
-    AssetEventTypes.RETIRED,
-  ])
+  @IsEnum(AssetEventTypes, {
+    message: ASSET_MASTERS_ERRORS.INVALID_ACTION.replace(
+      '{actions}',
+      Object.values(AssetEventTypes).join(', '),
+    ),
+  })
   action: AssetEventTypes;
 
   @ApiProperty({

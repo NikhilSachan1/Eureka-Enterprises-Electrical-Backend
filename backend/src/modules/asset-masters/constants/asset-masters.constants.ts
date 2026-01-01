@@ -4,7 +4,7 @@ export const ASSET_MASTERS_ERRORS = {
   ASSET_ALREADY_DELETED: 'Asset is already deleted',
   ASSET_CANNOT_DELETE_ASSIGNED:
     'Cannot delete asset with status: {status}. Only available assets can be deleted',
-  INVALID_ACTION: 'Invalid action',
+  INVALID_ACTION: 'Invalid action, Please use the following actions: {actions}',
   INVALID_ASSET_TYPE: 'Invalid asset type',
   INVALID_CATEGORY: 'Invalid category',
   INVALID_CALIBRATION_FROM: 'Invalid calibration source',
