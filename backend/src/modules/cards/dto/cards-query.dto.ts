@@ -14,7 +14,7 @@ export class CardsQueryDto extends BaseGetDto {
 
   @ApiProperty({
     description: 'Card type',
-    example: 'Debit',
+    example: 'PETRO CARD',
     required: false,
   })
   @IsOptional()
@@ -22,8 +22,17 @@ export class CardsQueryDto extends BaseGetDto {
   cardType?: string;
 
   @ApiProperty({
+    description: 'Card provider/company name (e.g., HP, BPCL)',
+    example: 'HP',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  cardName?: string;
+
+  @ApiProperty({
     description: 'Expiry date',
-    example: '2025-01-01',
+    example: '01/2025',
     required: false,
   })
   @IsOptional()
