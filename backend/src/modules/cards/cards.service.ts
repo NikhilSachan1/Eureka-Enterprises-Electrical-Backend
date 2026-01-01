@@ -109,7 +109,7 @@ export class CardsService {
 
       await this.cardsRepository.create({ ...createCardDto, expiryStatus, createdBy });
       return this.utilityService.getSuccessMessage(
-        CardsEntityFields.CARD_NUMBER,
+        CardsEntityFields.CARD,
         DataSuccessOperationType.CREATE,
       );
     } catch (error) {
@@ -348,7 +348,7 @@ export class CardsService {
       await this.findOneOrFail({ where: identifierConditions });
       await this.cardsRepository.delete({ ...identifierConditions, deletedBy }, entityManager);
       return this.utilityService.getSuccessMessage(
-        CardsEntityFields.CARD_NUMBER,
+        CardsEntityFields.CARD,
         DataSuccessOperationType.DELETE,
       );
     } catch (error) {
