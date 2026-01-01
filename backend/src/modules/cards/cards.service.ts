@@ -163,7 +163,7 @@ export class CardsService {
       }
       await this.cardsRepository.update(identifierConditions, updateData, entityManager);
       return this.utilityService.getSuccessMessage(
-        CardsEntityFields.CARD_NUMBER,
+        CardsEntityFields.CARD,
         DataSuccessOperationType.UPDATE,
       );
     } catch (error) {
