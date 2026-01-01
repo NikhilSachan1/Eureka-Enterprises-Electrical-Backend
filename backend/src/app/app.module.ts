@@ -42,6 +42,7 @@ import { BonusModule } from 'src/modules/bonuses/bonus.module';
 import { PayrollModule } from 'src/modules/payroll/payroll.module';
 import { DateTimeModule } from 'src/utils/datetime';
 import { TimezoneInterceptor } from 'src/utils/middleware/timezone.interceptor';
+import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { TimezoneInterceptor } from 'src/utils/middleware/timezone.interceptor';
     ScheduleModule.forRoot(),
     SchedulerModule,
     DateTimeModule,
+    CronLogModule,
   ],
   controllers: [AppController],
   providers: [

@@ -8,6 +8,8 @@ import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/emai
 import { ConfigurationService } from '../../configurations/configuration.service';
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -49,6 +51,7 @@ export class VehicleCronService {
     private readonly emailService: EmailService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -71,20 +74,19 @@ export class VehicleCronService {
    * - All Admins / Admin (TODO: Fetch dynamically from roles)
    */
   @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
-  async handleVehicleDocumentExpiryAlerts(): Promise<VehicleDocumentExpiryResult> {
+  async handleVehicleDocumentExpiryAlerts(): Promise<VehicleDocumentExpiryResult | null> {
     const cronName = CRON_NAMES.VEHICLE_DOCUMENT_EXPIRY_ALERTS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: VehicleDocumentExpiryResult = {
-      totalVehiclesProcessed: 0,
-      expiredDocuments: this.initDocumentCount(),
-      expiringSoonDocuments: this.initDocumentCount(),
-      emailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.VEHICLE, async () => {
+      const result: VehicleDocumentExpiryResult = {
+        totalVehiclesProcessed: 0,
+        expiredDocuments: this.initDocumentCount(),
+        expiringSoonDocuments: this.initDocumentCount(),
+        emailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
-    try {
       const warningDays = await this.getExpiryWarningDays();
       this.logger.log(`[${cronName}] Using warning days: ${warningDays}`);
 
@@ -93,7 +95,6 @@ export class VehicleCronService {
 
       if (vehiclesRaw.length === 0) {
         this.logger.log(`[${cronName}] No vehicles with expiring documents found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -146,13 +147,8 @@ export class VehicleCronService {
         }
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   /**
@@ -176,22 +172,21 @@ export class VehicleCronService {
    * - Assigned users (if vehicle is assigned to someone)
    */
   @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
-  async handleVehicleServiceDueReminders(): Promise<VehicleServiceDueResult> {
+  async handleVehicleServiceDueReminders(): Promise<VehicleServiceDueResult | null> {
     const cronName = CRON_NAMES.VEHICLE_SERVICE_DUE_REMINDERS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: VehicleServiceDueResult = {
-      totalVehiclesProcessed: 0,
-      overdueCount: 0,
-      dueSoonCount: 0,
-      skippedNoServiceHistory: 0,
-      skippedNoOdometer: 0,
-      emailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.VEHICLE, async () => {
+      const result: VehicleServiceDueResult = {
+        totalVehiclesProcessed: 0,
+        overdueCount: 0,
+        dueSoonCount: 0,
+        skippedNoServiceHistory: 0,
+        skippedNoOdometer: 0,
+        emailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
-    try {
       const serviceIntervalKm = await this.getServiceIntervalKm();
       const warningKm = await this.getServiceWarningKm();
 
@@ -204,7 +199,6 @@ export class VehicleCronService {
 
       if (vehiclesRaw.length === 0) {
         this.logger.log(`[${cronName}] No vehicles with service due found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -246,13 +240,8 @@ export class VehicleCronService {
         );
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async getServiceIntervalKm(): Promise<number> {

@@ -4,6 +4,8 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   ConfigSettingActivationResult,
   PendingConfigSetting,
@@ -25,6 +27,7 @@ export class ConfigSettingCronService {
 
   constructor(
     private readonly schedulerService: SchedulerService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -62,21 +65,20 @@ export class ConfigSettingCronService {
    * - Seasonal configuration updates
    */
   @Cron(CRON_SCHEDULES.DAILY_MIDNIGHT_IST)
-  async handleConfigSettingActivation(): Promise<ConfigSettingActivationResult> {
+  async handleConfigSettingActivation(): Promise<ConfigSettingActivationResult | null> {
     const cronName = CRON_NAMES.CONFIG_SETTING_ACTIVATION;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: ConfigSettingActivationResult = {
-      settingsActivated: 0,
-      settingsDeactivated: 0,
-      previousSettingsSuperseded: 0,
-      configsAffected: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.CONFIG, async () => {
+      const result: ConfigSettingActivationResult = {
+        settingsActivated: 0,
+        settingsDeactivated: 0,
+        previousSettingsSuperseded: 0,
+        configsAffected: [],
+        errors: [],
+      };
 
-    const activationLog: ConfigActivationLogEntry[] = [];
+      const activationLog: ConfigActivationLogEntry[] = [];
 
-    try {
       // Deactivate expired settings first
       const deactivationResult = await this.deactivateExpiredSettings(cronName, activationLog);
       result.settingsDeactivated = deactivationResult.count;
@@ -91,13 +93,8 @@ export class ConfigSettingCronService {
 
       this.logActivationSummary(cronName, activationLog);
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async deactivateExpiredSettings(

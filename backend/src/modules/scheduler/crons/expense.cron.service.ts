@@ -8,6 +8,8 @@ import { ConfigurationService } from '../../configurations/configuration.service
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -39,6 +41,7 @@ export class ExpenseCronService {
     private readonly emailService: EmailService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -69,19 +72,18 @@ export class ExpenseCronService {
    * - Admin team (all pending expenses)
    */
   @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
-  async handlePendingExpenseReminders(): Promise<PendingExpenseResult> {
+  async handlePendingExpenseReminders(): Promise<PendingExpenseResult | null> {
     const cronName = CRON_NAMES.PENDING_EXPENSE_REMINDERS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: PendingExpenseResult = {
-      totalExpensesProcessed: 0,
-      pendingCounts: this.initPendingCount(),
-      emailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.EXPENSE, async () => {
+      const result: PendingExpenseResult = {
+        totalExpensesProcessed: 0,
+        pendingCounts: this.initPendingCount(),
+        emailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
-    try {
       // Fetch urgent threshold days from config
       const urgentThresholdDays = await this.getUrgentThresholdDays();
       this.logger.log(`[${cronName}] Using urgent threshold days: ${urgentThresholdDays}`);
@@ -99,7 +101,6 @@ export class ExpenseCronService {
 
       if (allExpenses.length === 0) {
         this.logger.log(`[${cronName}] No pending expenses found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -133,13 +134,8 @@ export class ExpenseCronService {
         );
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   /**

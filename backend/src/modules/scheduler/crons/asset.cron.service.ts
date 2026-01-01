@@ -8,6 +8,8 @@ import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/emai
 import { ConfigurationService } from '../../configurations/configuration.service';
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -46,6 +48,7 @@ export class AssetCronService {
     private readonly emailService: EmailService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -68,20 +71,19 @@ export class AssetCronService {
    * - Assigned users (only their assigned assets)
    */
   @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
-  async handleAssetCalibrationExpiryAlerts(): Promise<AssetCalibrationExpiryResult> {
+  async handleAssetCalibrationExpiryAlerts(): Promise<AssetCalibrationExpiryResult | null> {
     const cronName = CRON_NAMES.ASSET_CALIBRATION_EXPIRY_ALERTS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: AssetCalibrationExpiryResult = {
-      totalAssetsProcessed: 0,
-      expiredCalibrations: this.initCalibrationCount(),
-      expiringSoonCalibrations: this.initCalibrationCount(),
-      emailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ASSET, async () => {
+      const result: AssetCalibrationExpiryResult = {
+        totalAssetsProcessed: 0,
+        expiredCalibrations: this.initCalibrationCount(),
+        expiringSoonCalibrations: this.initCalibrationCount(),
+        emailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
-    try {
       const warningDays = await this.getExpiryWarningDays();
       this.logger.log(`[${cronName}] Using warning days: ${warningDays}`);
 
@@ -90,7 +92,6 @@ export class AssetCronService {
 
       if (assetsRaw.length === 0) {
         this.logger.log(`[${cronName}] No assets with expiring calibrations found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -131,13 +132,8 @@ export class AssetCronService {
         );
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   /**
@@ -158,20 +154,19 @@ export class AssetCronService {
    * - Assigned users (only their assigned assets)
    */
   @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
-  async handleAssetWarrantyExpiryAlerts(): Promise<AssetWarrantyExpiryResult> {
+  async handleAssetWarrantyExpiryAlerts(): Promise<AssetWarrantyExpiryResult | null> {
     const cronName = CRON_NAMES.ASSET_WARRANTY_EXPIRY_ALERTS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: AssetWarrantyExpiryResult = {
-      totalAssetsProcessed: 0,
-      expiredWarranties: this.initWarrantyCount(),
-      expiringSoonWarranties: this.initWarrantyCount(),
-      emailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ASSET, async () => {
+      const result: AssetWarrantyExpiryResult = {
+        totalAssetsProcessed: 0,
+        expiredWarranties: this.initWarrantyCount(),
+        expiringSoonWarranties: this.initWarrantyCount(),
+        emailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
-    try {
       const warningDays = await this.getExpiryWarningDays();
       this.logger.log(`[${cronName}] Using warning days: ${warningDays}`);
 
@@ -180,7 +175,6 @@ export class AssetCronService {
 
       if (assetsRaw.length === 0) {
         this.logger.log(`[${cronName}] No assets with expiring warranties found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -221,13 +215,8 @@ export class AssetCronService {
         );
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async getExpiryWarningDays(): Promise<number> {

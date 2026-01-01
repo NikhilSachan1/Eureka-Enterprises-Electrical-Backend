@@ -12,6 +12,8 @@ import {
   SYSTEM_NOTES,
   SYSTEM_DEFAULTS,
 } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   AttendanceStatus,
   ApprovalStatus,
@@ -62,6 +64,7 @@ export class AttendanceCronService {
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
     private readonly emailService: EmailService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -77,21 +80,20 @@ export class AttendanceCronService {
    * - NOT_CHECKED_IN_YET: Default for all other users
    */
   @Cron(CRON_SCHEDULES.DAILY_MIDNIGHT_IST)
-  async handleDailyAttendanceEntry(): Promise<DailyAttendanceResult> {
+  async handleDailyAttendanceEntry(): Promise<DailyAttendanceResult | null> {
     const cronName = CRON_NAMES.DAILY_ATTENDANCE_ENTRY;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: DailyAttendanceResult = {
-      totalUsers: 0,
-      created: 0,
-      skipped: 0,
-      holidays: 0,
-      leaves: 0,
-      lwp: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ATTENDANCE, async () => {
+      const result: DailyAttendanceResult = {
+        totalUsers: 0,
+        created: 0,
+        skipped: 0,
+        holidays: 0,
+        leaves: 0,
+        lwp: 0,
+        errors: [],
+      };
 
-    try {
       const today = this.schedulerService.getTodayDateIST();
       const financialYear = this.utilityService.getFinancialYear(today);
 
@@ -104,7 +106,6 @@ export class AttendanceCronService {
 
       if (activeUsers.length === 0) {
         this.logger.log(`[${cronName}] No active users found for attendance`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -148,13 +149,8 @@ export class AttendanceCronService {
         }
       });
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async isHolidayDate(date: Date, financialYear: string): Promise<boolean> {
@@ -286,18 +282,17 @@ export class AttendanceCronService {
    * 3. Create ABSENT records for users added after morning cron
    */
   @Cron(CRON_SCHEDULES.DAILY_SHIFT_END_IST)
-  async handleEndOfDayAttendance(): Promise<EndOfDayAttendanceResult> {
+  async handleEndOfDayAttendance(): Promise<EndOfDayAttendanceResult | null> {
     const cronName = CRON_NAMES.END_OF_DAY_ATTENDANCE;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: EndOfDayAttendanceResult = {
-      autoCheckouts: 0,
-      markedAbsent: 0,
-      newAbsentRecords: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ATTENDANCE, async () => {
+      const result: EndOfDayAttendanceResult = {
+        autoCheckouts: 0,
+        markedAbsent: 0,
+        newAbsentRecords: 0,
+        errors: [],
+      };
 
-    try {
       const today = this.schedulerService.getTodayDateIST();
 
       // Get shift end time from config
@@ -324,13 +319,8 @@ export class AttendanceCronService {
         result.errors.push(...newAbsentResult.errors);
       });
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async getShiftEndTime(today: Date): Promise<Date> {
@@ -512,24 +502,23 @@ export class AttendanceCronService {
    * Both are independent and can run in parallel.
    */
   @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_IST)
-  async handleAutoApproveAttendance(): Promise<AutoApproveAttendanceResult> {
+  async handleAutoApproveAttendance(): Promise<AutoApproveAttendanceResult | null> {
     const cronName = CRON_NAMES.AUTO_APPROVE_ATTENDANCE;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: AutoApproveAttendanceResult = {
-      attendanceApproved: 0,
-      byStatus: {
-        absent: 0,
-        checkedOut: 0,
-        halfDay: 0,
-        leave: 0,
-        leaveWithoutPay: 0,
-        other: 0,
-      },
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ATTENDANCE, async () => {
+      const result: AutoApproveAttendanceResult = {
+        attendanceApproved: 0,
+        byStatus: {
+          absent: 0,
+          checkedOut: 0,
+          halfDay: 0,
+          leave: 0,
+          leaveWithoutPay: 0,
+          other: 0,
+        },
+        errors: [],
+      };
 
-    try {
       const currentDate = this.schedulerService.getCurrentDateIST();
 
       const { startDate, endDate } = this.getPreviousMonthDateRange(currentDate);
@@ -542,7 +531,6 @@ export class AttendanceCronService {
 
       if (pendingAttendances.length === 0) {
         this.logger.log(`[${cronName}] No pending attendance found for previous month`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -586,13 +574,8 @@ export class AttendanceCronService {
           `LWP: ${result.byStatus.leaveWithoutPay}, Other: ${result.byStatus.other})`,
       );
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private getPreviousMonthDateRange(currentDate: Date): { startDate: string; endDate: string } {
@@ -668,23 +651,22 @@ export class AttendanceCronService {
   async handleAttendanceApprovalReminder(): Promise<AttendanceApprovalReminderResult | null> {
     const cronName = CRON_NAMES.ATTENDANCE_APPROVAL_REMINDER;
 
-    const result: AttendanceApprovalReminderResult = {
-      emailsSent: 0,
-      totalPendingAttendance: 0,
-      recipients: [],
-      errors: [],
-    };
+    // Check if in reminder window first (before logging to DB)
+    const currentDate = this.schedulerService.getCurrentDateIST();
+    const currentDay = currentDate.getDate();
 
-    try {
-      const currentDate = this.schedulerService.getCurrentDateIST();
-      const currentDay = currentDate.getDate();
+    if (currentDay < 25) {
+      this.logger.log(`[${cronName}] Skipping - not in reminder window (day ${currentDay})`);
+      return null;
+    }
 
-      if (currentDay < 25) {
-        this.logger.log(`[${cronName}] Skipping - not in reminder window (day ${currentDay})`);
-        return null;
-      }
-
-      this.schedulerService.logCronStart(cronName);
+    return this.cronLogService.execute(cronName, CronJobType.NOTIFICATION, async () => {
+      const result: AttendanceApprovalReminderResult = {
+        emailsSent: 0,
+        totalPendingAttendance: 0,
+        recipients: [],
+        errors: [],
+      };
 
       const { startDate, endDate, daysUntilAutoApproval, autoApprovalDate, monthName } =
         this.getAttendanceMonthInfo(currentDate);
@@ -693,7 +675,6 @@ export class AttendanceCronService {
 
       if (pendingAttendance.length === 0) {
         this.logger.log(`[${cronName}] No pending attendance found for ${monthName}`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -713,7 +694,6 @@ export class AttendanceCronService {
 
       if (hrEmails.length === 0) {
         this.logger.warn(`[${cronName}] No HR/Admin emails found to send reminder`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -753,13 +733,8 @@ export class AttendanceCronService {
         }
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private getAttendanceMonthInfo(currentDate: Date): {

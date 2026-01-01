@@ -19,6 +19,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { PayrollModule } from '../payroll/payroll.module';
 import { EmailModule } from '../common/email/email.module';
 import { SharedModule } from '../shared/shared.module';
+import { CronLogModule } from '../cron-logs/cron-log.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { SharedModule } from '../shared/shared.module';
     ConfigSettingsModule,
     PayrollModule,
     EmailModule,
+    CronLogModule,
   ],
   providers: [
     SchedulerService,

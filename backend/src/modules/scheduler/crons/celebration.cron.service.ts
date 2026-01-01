@@ -6,6 +6,8 @@ import { SchedulerService } from '../scheduler.service';
 import { EmailService } from '../../common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   CelebrationResult,
   BirthdayEmailData,
@@ -28,6 +30,7 @@ export class CelebrationCronService {
   constructor(
     private readonly schedulerService: SchedulerService,
     private readonly emailService: EmailService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -53,20 +56,19 @@ export class CelebrationCronService {
    * - The employee themselves (direct recipient)
    */
   @Cron(CRON_SCHEDULES.DAILY_8AM_IST)
-  async handleBirthdayAnniversaryWishes(): Promise<CelebrationResult> {
+  async handleBirthdayAnniversaryWishes(): Promise<CelebrationResult | null> {
     const cronName = CRON_NAMES.BIRTHDAY_ANNIVERSARY_WISHES;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: CelebrationResult = {
-      birthdaysProcessed: 0,
-      anniversariesProcessed: 0,
-      birthdayEmailsSent: 0,
-      anniversaryEmailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.CELEBRATION, async () => {
+      const result: CelebrationResult = {
+        birthdaysProcessed: 0,
+        anniversariesProcessed: 0,
+        birthdayEmailsSent: 0,
+        anniversaryEmailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
-    try {
       // Process birthdays
       const birthdayResult = await this.processBirthdays(cronName);
       result.birthdaysProcessed = birthdayResult.processed;
@@ -85,13 +87,8 @@ export class CelebrationCronService {
         `[${cronName}] Summary: ${result.birthdaysProcessed} birthdays, ${result.anniversariesProcessed} anniversaries`,
       );
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async processBirthdays(

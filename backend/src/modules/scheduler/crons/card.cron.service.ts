@@ -8,6 +8,8 @@ import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/emai
 import { ConfigurationService } from '../../configurations/configuration.service';
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -41,6 +43,7 @@ export class CardCronService {
     private readonly emailService: EmailService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -72,7 +75,7 @@ export class CardCronService {
   @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
   async handleCardExpiryAlerts(): Promise<CardExpiryResult> {
     const cronName = CRON_NAMES.CARD_EXPIRY_ALERTS;
-    this.schedulerService.logCronStart(cronName);
+    const cronLog = await this.cronLogService.start(cronName, CronJobType.CARD);
 
     const result: CardExpiryResult = {
       totalCardsProcessed: 0,
@@ -92,7 +95,7 @@ export class CardCronService {
 
       if (cardsRaw.length === 0) {
         this.logger.log(`[${cronName}] No cards with expiring dates found`);
-        this.schedulerService.logCronComplete(cronName, result);
+        await this.cronLogService.success(cronLog.id, result);
         return result;
       }
 
@@ -132,10 +135,10 @@ export class CardCronService {
         );
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
+      await this.cronLogService.success(cronLog.id, result);
       return result;
     } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
+      await this.cronLogService.fail(cronLog.id, error);
       result.errors.push(error.message);
       return result;
     }

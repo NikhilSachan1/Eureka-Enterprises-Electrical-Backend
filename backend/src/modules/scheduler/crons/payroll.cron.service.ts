@@ -12,6 +12,8 @@ import {
   SYSTEM_DEFAULTS,
   CronProcessStatus,
 } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import { MonthlyPayrollGenerationResult } from '../types/payroll.types';
 import {
   getEligibleUsersForPayrollQuery,
@@ -25,6 +27,7 @@ export class PayrollCronService {
   constructor(
     private readonly schedulerService: SchedulerService,
     private readonly payrollService: PayrollService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -42,27 +45,26 @@ export class PayrollCronService {
    * Workflow: DRAFT → GENERATED → APPROVED → PAID
    */
   @Cron(CRON_SCHEDULES.MONTHLY_SECOND_1AM_IST)
-  async handleMonthlyPayrollGeneration(): Promise<MonthlyPayrollGenerationResult> {
+  async handleMonthlyPayrollGeneration(): Promise<MonthlyPayrollGenerationResult | null> {
     const cronName = CRON_NAMES.MONTHLY_PAYROLL_GENERATION;
-    this.schedulerService.logCronStart(cronName);
 
     const currentDate = this.schedulerService.getCurrentDateIST();
     const { month, year } = this.getPreviousMonth(currentDate);
 
-    const result: MonthlyPayrollGenerationResult = {
-      month,
-      year,
-      totalProcessed: 0,
-      activeUsersProcessed: 0,
-      archivedUsersProcessed: 0,
-      successCount: 0,
-      skippedCount: 0,
-      failedCount: 0,
-      skipped: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.PAYROLL, async () => {
+      const result: MonthlyPayrollGenerationResult = {
+        month,
+        year,
+        totalProcessed: 0,
+        activeUsersProcessed: 0,
+        archivedUsersProcessed: 0,
+        successCount: 0,
+        skippedCount: 0,
+        failedCount: 0,
+        skipped: [],
+        errors: [],
+      };
 
-    try {
       this.logger.log(`[${cronName}] Generating DRAFT payroll for ${month}/${year}`);
 
       const { query, params } = getEligibleUsersForPayrollQuery(month, year);
@@ -70,7 +72,6 @@ export class PayrollCronService {
 
       if (eligibleUsers.length === 0) {
         this.logger.warn(`[${cronName}] No eligible users found for payroll generation`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -109,13 +110,8 @@ export class PayrollCronService {
         `[${cronName}] Completed: Success=${result.successCount}, Skipped=${result.skippedCount}, Failed=${result.failedCount}`,
       );
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push({ userId: SYSTEM_DEFAULTS.UNKNOWN_USER_ID, error: error.message });
-      return result;
-    }
+    });
   }
 
   private async processUserPayroll(

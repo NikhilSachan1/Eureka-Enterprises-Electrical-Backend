@@ -4,6 +4,8 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
 import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
   ExpireAnnouncementsResult,
   PublishScheduledAnnouncementsResult,
@@ -21,6 +23,7 @@ export class AnnouncementCronService {
 
   constructor(
     private readonly schedulerService: SchedulerService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -41,23 +44,21 @@ export class AnnouncementCronService {
    * - Announcements without expiry date (never expire)
    */
   @Cron(CRON_SCHEDULES.DAILY_6AM_IST)
-  async handleExpireAnnouncements(): Promise<ExpireAnnouncementsResult> {
+  async handleExpireAnnouncements(): Promise<ExpireAnnouncementsResult | null> {
     const cronName = CRON_NAMES.EXPIRE_ANNOUNCEMENTS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: ExpireAnnouncementsResult = {
-      expiredCount: 0,
-      expiredIds: [],
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ANNOUNCEMENT, async () => {
+      const result: ExpireAnnouncementsResult = {
+        expiredCount: 0,
+        expiredIds: [],
+        errors: [],
+      };
 
-    try {
       const { query: selectQuery, params: selectParams } = getAnnouncementsToExpireQuery();
       const announcementsToExpire = await this.dataSource.query(selectQuery, selectParams);
 
       if (announcementsToExpire.length === 0) {
         this.logger.log(`[${cronName}] No announcements to expire`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -80,13 +81,8 @@ export class AnnouncementCronService {
 
       this.logger.log(`[${cronName}] Successfully expired ${result.expiredCount} announcements`);
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   /**
@@ -108,25 +104,23 @@ export class AnnouncementCronService {
    * - Already PUBLISHED / ARCHIVED / EXPIRED announcements
    */
   @Cron(CRON_SCHEDULES.EVERY_30_MINUTES)
-  async handlePublishScheduledAnnouncements(): Promise<PublishScheduledAnnouncementsResult> {
+  async handlePublishScheduledAnnouncements(): Promise<PublishScheduledAnnouncementsResult | null> {
     const cronName = CRON_NAMES.PUBLISH_ANNOUNCEMENTS;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: PublishScheduledAnnouncementsResult = {
-      publishedCount: 0,
-      publishedIds: [],
-      skippedExpiredCount: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.ANNOUNCEMENT, async () => {
+      const result: PublishScheduledAnnouncementsResult = {
+        publishedCount: 0,
+        publishedIds: [],
+        skippedExpiredCount: 0,
+        errors: [],
+      };
 
-    try {
       const { query: selectQuery, params: selectParams } =
         getScheduledAnnouncementsToPublishQuery();
       const announcementsToPublish = await this.dataSource.query(selectQuery, selectParams);
 
       if (announcementsToPublish.length === 0) {
         this.logger.log(`[${cronName}] No scheduled announcements to publish`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -151,12 +145,7 @@ export class AnnouncementCronService {
         `[${cronName}] Successfully published ${result.publishedCount} announcements`,
       );
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 }

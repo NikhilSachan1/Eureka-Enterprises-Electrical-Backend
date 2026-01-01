@@ -41,6 +41,8 @@ import {
 import { UtilityService } from '../../../utils/utility/utility.service';
 import { Environments } from '../../../../env-configs';
 import { DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD } from '../constants/scheduler.constants';
+import { CronLogService } from '../../cron-logs/cron-log.service';
+import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 
 @Injectable()
 export class LeaveCronService {
@@ -52,6 +54,7 @@ export class LeaveCronService {
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
     private readonly emailService: EmailService,
+    private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -66,24 +69,23 @@ export class LeaveCronService {
   async handleFYLeaveConfigReminder(): Promise<FYLeaveConfigReminderResult | null> {
     const cronName = CRON_NAMES.FY_LEAVE_CONFIG_REMINDER;
 
-    const result: FYLeaveConfigReminderResult = {
-      emailsSent: 0,
-      recipients: [],
-      errors: [],
-    };
+    // Check if in reminder window first (before logging to DB)
+    const currentDate = this.schedulerService.getCurrentDateIST();
+    const currentMonth = currentDate.getMonth(); // 0-indexed (2 = March)
+    const currentDay = currentDate.getDate();
 
-    try {
-      const currentDate = this.schedulerService.getCurrentDateIST();
-      const currentMonth = currentDate.getMonth(); // 0-indexed (2 = March)
-      const currentDay = currentDate.getDate();
+    // Only run from March 15 to March 31
+    if (currentMonth !== 2 || currentDay < 15) {
+      this.logger.log(`[${cronName}] Skipping - not in reminder window`);
+      return null;
+    }
 
-      // Only run from March 15 to March 31
-      if (currentMonth !== 2 || currentDay < 15) {
-        this.logger.log(`[${cronName}] Skipping - not in reminder window`);
-        return null;
-      }
-
-      this.schedulerService.logCronStart(cronName);
+    return this.cronLogService.execute(cronName, CronJobType.NOTIFICATION, async () => {
+      const result: FYLeaveConfigReminderResult = {
+        emailsSent: 0,
+        recipients: [],
+        errors: [],
+      };
 
       const nextFYStart = new Date(currentDate.getFullYear(), 3, 1); // April 1
       const daysRemaining = Math.ceil(
@@ -95,7 +97,6 @@ export class LeaveCronService {
 
       if (hrEmails.length === 0) {
         this.logger.warn(`[${cronName}] No HR/Admin emails found to send reminder`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -124,13 +125,8 @@ export class LeaveCronService {
         }
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private getNextFinancialYearLabel(): string {
@@ -167,17 +163,16 @@ export class LeaveCronService {
    * Special handling for holiday_calendar: sets holidays to empty array
    */
   @Cron(CRON_SCHEDULES.APRIL_1_MIDNIGHT_IST)
-  async handleFYLeaveConfigAutoCopy(): Promise<FYLeaveConfigAutoCopyResult> {
+  async handleFYLeaveConfigAutoCopy(): Promise<FYLeaveConfigAutoCopyResult | null> {
     const cronName = CRON_NAMES.FY_LEAVE_CONFIG_AUTO_COPY;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: FYLeaveConfigAutoCopyResult = {
-      configsCopied: 0,
-      configsSkipped: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.CONFIG, async () => {
+      const result: FYLeaveConfigAutoCopyResult = {
+        configsCopied: 0,
+        configsSkipped: 0,
+        errors: [],
+      };
 
-    try {
       const currentDate = this.schedulerService.getCurrentDateIST();
       const { previousFY, currentFY, newFYEffectiveFrom, newFYEffectiveTo } =
         this.calculateFYDates(currentDate);
@@ -189,7 +184,6 @@ export class LeaveCronService {
 
       if (leaveConfigurations.length === 0) {
         this.logger.warn(`[${cronName}] No leave configurations found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -255,13 +249,8 @@ export class LeaveCronService {
         }
       });
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private calculateFYDates(currentDate: Date): {
@@ -329,17 +318,16 @@ export class LeaveCronService {
    * as it's not required for the current org. Will be implemented when needed.
    */
   @Cron(CRON_SCHEDULES.APRIL_1_1AM_IST)
-  async handleLeaveCarryForward(): Promise<LeaveCarryForwardResult> {
+  async handleLeaveCarryForward(): Promise<LeaveCarryForwardResult | null> {
     const cronName = CRON_NAMES.LEAVE_CARRY_FORWARD;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: LeaveCarryForwardResult = {
-      usersProcessed: 0,
-      leavesCarriedForward: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.LEAVE, async () => {
+      const result: LeaveCarryForwardResult = {
+        usersProcessed: 0,
+        leavesCarriedForward: 0,
+        errors: [],
+      };
 
-    try {
       const currentDate = this.schedulerService.getCurrentDateIST();
       const { currentFY } = this.calculateFYDates(currentDate);
 
@@ -348,7 +336,6 @@ export class LeaveCronService {
 
       if (!leaveCategoriesConfig) {
         this.logger.warn(`[${cronName}] No leave categories config found for ${currentFY}`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -384,13 +371,8 @@ export class LeaveCronService {
         );
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private async getLeaveCategoriesConfig(financialYear: string): Promise<any | null> {
@@ -429,16 +411,15 @@ export class LeaveCronService {
    * This ensures leaves are counted in payroll even if admin forgot to approve
    */
   @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_IST)
-  async handleAutoApproveLeaves(): Promise<AutoApproveLeavesResult> {
+  async handleAutoApproveLeaves(): Promise<AutoApproveLeavesResult | null> {
     const cronName = CRON_NAMES.AUTO_APPROVE_LEAVES;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: AutoApproveLeavesResult = {
-      leavesApproved: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.LEAVE, async () => {
+      const result: AutoApproveLeavesResult = {
+        leavesApproved: 0,
+        errors: [],
+      };
 
-    try {
       const currentDate = this.schedulerService.getCurrentDateIST();
 
       // Get previous month's date range
@@ -453,7 +434,6 @@ export class LeaveCronService {
 
       if (pendingLeaves.length === 0) {
         this.logger.log(`[${cronName}] No pending leaves found for previous month`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -480,13 +460,8 @@ export class LeaveCronService {
         }
       });
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private getPreviousMonthDateRange(currentDate: Date): { startDate: string; endDate: string } {
@@ -538,19 +513,18 @@ export class LeaveCronService {
    * - Month 12: floor(52 * 12/12) - 48 = 52 - 48 = 4
    */
   @Cron(CRON_SCHEDULES.MONTHLY_FIRST_1230AM_IST)
-  async handleMonthlyLeaveAccrual(): Promise<MonthlyLeaveAccrualResult> {
+  async handleMonthlyLeaveAccrual(): Promise<MonthlyLeaveAccrualResult | null> {
     const cronName = CRON_NAMES.MONTHLY_LEAVE_ACCRUAL;
-    this.schedulerService.logCronStart(cronName);
 
-    const result: MonthlyLeaveAccrualResult = {
-      usersProcessed: 0,
-      categoriesProcessed: 0,
-      leavesCredited: 0,
-      skipped: 0,
-      errors: [],
-    };
+    return this.cronLogService.execute(cronName, CronJobType.LEAVE, async () => {
+      const result: MonthlyLeaveAccrualResult = {
+        usersProcessed: 0,
+        categoriesProcessed: 0,
+        leavesCredited: 0,
+        skipped: 0,
+        errors: [],
+      };
 
-    try {
       const currentDate = this.schedulerService.getCurrentDateIST();
       const financialYear = this.utilityService.getFinancialYear(currentDate);
       const currentMonth = this.getMonthInFinancialYear(currentDate);
@@ -563,7 +537,6 @@ export class LeaveCronService {
 
       if (!leaveCategoriesConfig) {
         this.logger.warn(`[${cronName}] No leave categories config found for ${financialYear}`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -577,7 +550,6 @@ export class LeaveCronService {
 
       if (activeUsers.length === 0) {
         this.logger.log(`[${cronName}] No active users found`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -645,13 +617,8 @@ export class LeaveCronService {
         result.usersProcessed = activeUsers.length;
       });
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private getMonthInFinancialYear(date: Date): number {
@@ -786,24 +753,23 @@ export class LeaveCronService {
   async handleLeaveApprovalReminder(): Promise<LeaveApprovalReminderResult | null> {
     const cronName = CRON_NAMES.LEAVE_APPROVAL_REMINDER;
 
-    const result: LeaveApprovalReminderResult = {
-      emailsSent: 0,
-      totalPendingLeaves: 0,
-      recipients: [],
-      errors: [],
-    };
+    // Check if in reminder window first (before logging to DB)
+    const currentDate = this.schedulerService.getCurrentDateIST();
+    const currentDay = currentDate.getDate();
 
-    try {
-      const currentDate = this.schedulerService.getCurrentDateIST();
-      const currentDay = currentDate.getDate();
+    // Only run from 25th to last day of month
+    if (currentDay < 25) {
+      this.logger.log(`[${cronName}] Skipping - not in reminder window (day ${currentDay})`);
+      return null;
+    }
 
-      // Only run from 25th to last day of month
-      if (currentDay < 25) {
-        this.logger.log(`[${cronName}] Skipping - not in reminder window (day ${currentDay})`);
-        return null;
-      }
-
-      this.schedulerService.logCronStart(cronName);
+    return this.cronLogService.execute(cronName, CronJobType.NOTIFICATION, async () => {
+      const result: LeaveApprovalReminderResult = {
+        emailsSent: 0,
+        totalPendingLeaves: 0,
+        recipients: [],
+        errors: [],
+      };
 
       const { startDate, endDate, daysUntilAutoApproval, autoApprovalDate, monthName } =
         this.getCurrentMonthInfo(currentDate);
@@ -812,7 +778,6 @@ export class LeaveCronService {
 
       if (pendingLeaves.length === 0) {
         this.logger.log(`[${cronName}] No pending leaves found for ${monthName}`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -835,7 +800,6 @@ export class LeaveCronService {
 
       if (hrEmails.length === 0) {
         this.logger.warn(`[${cronName}] No HR/Admin emails found to send reminder`);
-        this.schedulerService.logCronComplete(cronName, result);
         return result;
       }
 
@@ -876,13 +840,8 @@ export class LeaveCronService {
         }
       }
 
-      this.schedulerService.logCronComplete(cronName, result);
       return result;
-    } catch (error) {
-      this.schedulerService.logCronError(cronName, error);
-      result.errors.push(error.message);
-      return result;
-    }
+    });
   }
 
   private getCurrentMonthInfo(currentDate: Date): {
