@@ -12,6 +12,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { FilesModule } from '../common/file-upload/files.module';
 import { UserDocumentModule } from '../user-documents/user-document.module';
 import { SalaryStructureModule } from '../salary-structures/salary-structure.module';
+import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SalaryStructureModule } from '../salary-structures/salary-structure.mod
     FilesModule,
     UserDocumentModule,
     forwardRef(() => SalaryStructureModule),
+    LeaveBalancesModule,
   ],
   providers: [UserService, UserRepository],
   exports: [UserService],

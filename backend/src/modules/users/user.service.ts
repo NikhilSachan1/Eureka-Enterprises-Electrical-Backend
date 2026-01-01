@@ -43,8 +43,10 @@ import {
   USER_DOCUMENT_ERRORS,
 } from '../user-documents/constants/user-document.constants';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
+import { LeaveCreditService } from '../leave-balances/leave-credit.service';
 import { Environments } from 'env-configs';
 import { AUTH_REDIRECT_ROUTES } from '../auth/constants/auth.constants';
+import { LEAVE_CREDIT_LOG_MESSAGES } from '../leave-balances/constants/leave-credit.constants';
 
 @Injectable()
 export class UserService {
@@ -59,6 +61,7 @@ export class UserService {
     private userDocumentService: UserDocumentService,
     @Inject(forwardRef(() => SalaryStructureService))
     private salaryStructureService: SalaryStructureService,
+    private leaveCreditService: LeaveCreditService,
     @InjectDataSource() private dataSource: DataSource,
     private jwtService: JwtService,
   ) {}
@@ -313,6 +316,29 @@ export class UserService {
           );
         }
 
+        let leaveCreditResult = null;
+        if (userData.dateOfJoining) {
+          leaveCreditResult = await this.leaveCreditService.creditLeavesForNewEmployee(
+            user.id,
+            new Date(userData.dateOfJoining),
+            createdBy,
+            entityManager,
+          );
+
+          if (leaveCreditResult.errors.length > 0) {
+            throw new BadRequestException(
+              `Failed to credit leaves: ${leaveCreditResult.errors.join(', ')}`,
+            );
+          }
+
+          Logger.log(
+            LEAVE_CREDIT_LOG_MESSAGES.LEAVE_CREDIT_FOR_USER.replace('{email}', email).replace(
+              '{categoriesCredited}',
+              leaveCreditResult.categoriesCredited.length.toString(),
+            ),
+          );
+        }
+
         // TODO: Send welcome email with credentials to the employee
         // await this.sendWelcomeEmail(email, generatedPassword, createEmployeeDto.firstName);
         Logger.log(`TODO: Send welcome email to ${email} with generated password`);
@@ -322,6 +348,7 @@ export class UserService {
           employeeId: user.employeeId,
           message: USERS_RESPONSES.EMPLOYEE_CREATED,
           salaryCreated: !!salaryDetails,
+          leavesCredited: leaveCreditResult?.categoriesCredited || [],
         };
       } catch (error) {
         Logger.error('Create employee failed:', error);

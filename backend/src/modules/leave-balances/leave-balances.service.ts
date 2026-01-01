@@ -10,6 +10,7 @@ import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.co
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { GetAllLeaveBalanceDto } from './dto';
 import { buildLeaveBalanceQuery } from './queries/leave-balances.queries';
+import { CreateLeaveBalanceDto } from './types/leave-balances.types';
 
 @Injectable()
 export class LeaveBalancesService {
@@ -17,6 +18,27 @@ export class LeaveBalancesService {
     private readonly leaveBalancesRepository: LeaveBalancesRepository,
     private readonly utilityService: UtilityService,
   ) {}
+
+  async create(
+    createDto: CreateLeaveBalanceDto,
+    entityManager?: EntityManager,
+  ): Promise<LeaveBalanceEntity> {
+    const leaveBalance = {
+      userId: createDto.userId,
+      leaveConfigId: createDto.leaveConfigId,
+      leaveCategory: createDto.leaveCategory,
+      financialYear: createDto.financialYear,
+      totalAllocated: createDto.totalAllocated,
+      creditSource: createDto.creditSource,
+      consumed: '0',
+      carriedForward: '0',
+      adjusted: '0',
+      notes: createDto.notes,
+      createdBy: createDto.createdBy,
+    } as LeaveBalanceEntity;
+
+    return await this.leaveBalancesRepository.create(leaveBalance, entityManager);
+  }
 
   async findAll(options: FindManyOptions<LeaveBalanceEntity>): Promise<{
     records: LeaveBalanceEntity[];
