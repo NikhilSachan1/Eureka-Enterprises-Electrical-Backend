@@ -1,4 +1,108 @@
 import { VehicleQueryDto } from '../dto/vehicle-query.dto';
+import {
+  VehicleStatus,
+  VehicleFuelType,
+  DEFAULT_EXPIRING_SOON_DAYS,
+} from '../constants/vehicle-masters.constants';
+
+export const getVehicleStatsQuery = () => {
+  return `
+    SELECT
+      -- Total count
+      COUNT(DISTINCT vm."id") as "total",
+      
+      -- Status breakdown
+      COUNT(DISTINCT CASE WHEN vv."status" = '${VehicleStatus.AVAILABLE}' THEN vm."id" END) as "available",
+      COUNT(DISTINCT CASE WHEN vv."status" = '${VehicleStatus.ASSIGNED}' THEN vm."id" END) as "assigned",
+      COUNT(DISTINCT CASE WHEN vv."status" = '${VehicleStatus.UNDER_MAINTENANCE}' THEN vm."id" END) as "underMaintenance",
+      COUNT(DISTINCT CASE WHEN vv."status" = '${VehicleStatus.DAMAGED}' THEN vm."id" END) as "damaged",
+      COUNT(DISTINCT CASE WHEN vv."status" = '${VehicleStatus.RETIRED}' THEN vm."id" END) as "retired",
+      
+      -- Fuel type breakdown
+      COUNT(DISTINCT CASE WHEN vv."fuelType" = '${VehicleFuelType.PETROL}' THEN vm."id" END) as "petrol",
+      COUNT(DISTINCT CASE WHEN vv."fuelType" = '${VehicleFuelType.DIESEL}' THEN vm."id" END) as "diesel",
+      COUNT(DISTINCT CASE WHEN vv."fuelType" = '${VehicleFuelType.CNG}' THEN vm."id" END) as "cng",
+      COUNT(DISTINCT CASE WHEN vv."fuelType" = '${VehicleFuelType.ELECTRIC}' THEN vm."id" END) as "electric",
+      COUNT(DISTINCT CASE WHEN vv."fuelType" = '${VehicleFuelType.HYBRID}' THEN vm."id" END) as "hybrid",
+      
+      -- Insurance status breakdown
+      COUNT(DISTINCT CASE 
+        WHEN vv."insuranceEndDate" IS NOT NULL 
+        AND vv."insuranceEndDate" < NOW() 
+        THEN vm."id" 
+      END) as "insuranceExpired",
+      COUNT(DISTINCT CASE 
+        WHEN vv."insuranceEndDate" IS NOT NULL 
+        AND vv."insuranceEndDate" >= NOW() 
+        AND vv."insuranceEndDate" <= NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days'
+        THEN vm."id" 
+      END) as "insuranceExpiringSoon",
+      COUNT(DISTINCT CASE 
+        WHEN vv."insuranceEndDate" IS NOT NULL 
+        AND vv."insuranceEndDate" > NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days'
+        THEN vm."id" 
+      END) as "insuranceActive",
+      COUNT(DISTINCT CASE 
+        WHEN vv."insuranceEndDate" IS NULL 
+        THEN vm."id" 
+      END) as "insuranceNotApplicable",
+      
+      -- PUC status breakdown
+      COUNT(DISTINCT CASE 
+        WHEN vv."pucEndDate" IS NOT NULL 
+        AND vv."pucEndDate" < NOW() 
+        THEN vm."id" 
+      END) as "pucExpired",
+      COUNT(DISTINCT CASE 
+        WHEN vv."pucEndDate" IS NOT NULL 
+        AND vv."pucEndDate" >= NOW() 
+        AND vv."pucEndDate" <= NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days'
+        THEN vm."id" 
+      END) as "pucExpiringSoon",
+      COUNT(DISTINCT CASE 
+        WHEN vv."pucEndDate" IS NOT NULL 
+        AND vv."pucEndDate" > NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days'
+        THEN vm."id" 
+      END) as "pucActive",
+      COUNT(DISTINCT CASE 
+        WHEN vv."pucEndDate" IS NULL 
+        THEN vm."id" 
+      END) as "pucNotApplicable",
+      
+      -- Fitness status breakdown
+      COUNT(DISTINCT CASE 
+        WHEN vv."fitnessEndDate" IS NOT NULL 
+        AND vv."fitnessEndDate" < NOW() 
+        THEN vm."id" 
+      END) as "fitnessExpired",
+      COUNT(DISTINCT CASE 
+        WHEN vv."fitnessEndDate" IS NOT NULL 
+        AND vv."fitnessEndDate" >= NOW() 
+        AND vv."fitnessEndDate" <= NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days'
+        THEN vm."id" 
+      END) as "fitnessExpiringSoon",
+      COUNT(DISTINCT CASE 
+        WHEN vv."fitnessEndDate" IS NOT NULL 
+        AND vv."fitnessEndDate" > NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days'
+        THEN vm."id" 
+      END) as "fitnessActive",
+      COUNT(DISTINCT CASE 
+        WHEN vv."fitnessEndDate" IS NULL 
+        THEN vm."id" 
+      END) as "fitnessNotApplicable"
+      
+    FROM "vehicle_masters" vm
+    INNER JOIN LATERAL (
+      SELECT *
+      FROM "vehicle_versions"
+      WHERE "vehicleMasterId" = vm."id"
+        AND "isActive" = true
+        AND "deletedAt" IS NULL
+      LIMIT 1
+    ) vv ON true
+    WHERE vm."deletedAt" IS NULL
+  `;
+};
 
 export const getVehicleQuery = (query: VehicleQueryDto) => {
   const {

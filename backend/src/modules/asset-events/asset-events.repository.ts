@@ -48,7 +48,7 @@ export class AssetEventsRepository {
 
   async executeRawQuery(query: string, params: any[]) {
     try {
-      return await this.dataSource.query(query, params);
+      return await this.repository.query(query, params);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

@@ -30,7 +30,7 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
-import { getVehicleQuery } from './queries/get-vehicle.query';
+import { getVehicleQuery, getVehicleStatsQuery } from './queries/get-vehicle.query';
 
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 const DEFAULT_SERVICE_WARNING_KM = 1000;
@@ -307,11 +307,14 @@ export class VehicleMastersService {
   async findAll(findOptions: VehicleQueryDto) {
     try {
       const { dataQuery, countQuery, params, countParams } = getVehicleQuery(findOptions);
-      const [vehicles, total] = await Promise.all([
+      const statsQuery = getVehicleStatsQuery();
+
+      const [vehicles, totalResult, statsResult] = await Promise.all([
         this.vehicleMastersRepository.executeRawQuery(dataQuery, params) as Promise<any[]>,
-        this.vehicleMastersRepository.executeRawQuery(countQuery, countParams) as Promise<{
-          total: number;
-        }>,
+        this.vehicleMastersRepository.executeRawQuery(countQuery, countParams) as Promise<
+          { total: number }[]
+        >,
+        this.vehicleMastersRepository.executeRawQuery(statsQuery, []) as Promise<any[]>,
       ]);
 
       // Fetch config values for service due calculation
@@ -347,10 +350,49 @@ export class VehicleMastersService {
         );
       }
 
-      return this.utilityService.listResponse(
-        filteredVehicles,
-        findOptions.serviceDueStatus ? filteredVehicles.length : total[0].total,
-      );
+      const stats = statsResult[0] || {};
+
+      return {
+        stats: {
+          total: Number(stats.total || 0),
+          byStatus: {
+            available: Number(stats.available || 0),
+            assigned: Number(stats.assigned || 0),
+            underMaintenance: Number(stats.underMaintenance || 0),
+            damaged: Number(stats.damaged || 0),
+            retired: Number(stats.retired || 0),
+          },
+          byFuelType: {
+            petrol: Number(stats.petrol || 0),
+            diesel: Number(stats.diesel || 0),
+            cng: Number(stats.cng || 0),
+            electric: Number(stats.electric || 0),
+            hybrid: Number(stats.hybrid || 0),
+          },
+          insuranceStatus: {
+            active: Number(stats.insuranceActive || 0),
+            expiringSoon: Number(stats.insuranceExpiringSoon || 0),
+            expired: Number(stats.insuranceExpired || 0),
+            notApplicable: Number(stats.insuranceNotApplicable || 0),
+          },
+          pucStatus: {
+            active: Number(stats.pucActive || 0),
+            expiringSoon: Number(stats.pucExpiringSoon || 0),
+            expired: Number(stats.pucExpired || 0),
+            notApplicable: Number(stats.pucNotApplicable || 0),
+          },
+          fitnessStatus: {
+            active: Number(stats.fitnessActive || 0),
+            expiringSoon: Number(stats.fitnessExpiringSoon || 0),
+            expired: Number(stats.fitnessExpired || 0),
+            notApplicable: Number(stats.fitnessNotApplicable || 0),
+          },
+        },
+        records: filteredVehicles,
+        totalRecords: findOptions.serviceDueStatus
+          ? filteredVehicles.length
+          : totalResult[0]?.total || 0,
+      };
     } catch (error) {
       throw error;
     }

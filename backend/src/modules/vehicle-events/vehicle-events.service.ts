@@ -14,6 +14,7 @@ import {
 } from './constants/vehicle-events.constants';
 import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
+import { buildVehicleEventsStatsQuery } from './queries/vehicle-events.queries';
 
 @Injectable()
 export class VehicleEventsService {
@@ -294,13 +295,47 @@ export class VehicleEventsService {
 
   async findAll(vehicleMasterId: string, query: VehicleEventsQueryDto) {
     try {
-      return await this.vehicleEventsRepository.findAll({
-        where: {
-          vehicleMasterId,
+      const { query: statsQuery, params: statsParams } =
+        buildVehicleEventsStatsQuery(vehicleMasterId);
+
+      const [eventsResult, statsResult] = await Promise.all([
+        this.vehicleEventsRepository.findAll({
+          where: {
+            vehicleMasterId,
+            ...(query.eventType && { eventType: query.eventType as VehicleEventTypes }),
+            ...(query.toUser && { toUser: query.toUser }),
+            ...(query.fromUser && { fromUser: query.fromUser }),
+          },
+          relations: ['vehicleFiles'],
+          order: { createdAt: 'DESC' },
+        }),
+        this.vehicleEventsRepository.executeRawQuery(statsQuery, statsParams),
+      ]);
+
+      const statsRow = statsResult[0] || {};
+
+      const stats = {
+        total: Number(statsRow.total || 0),
+        byEventType: {
+          VEHICLE_ADDED: Number(statsRow.VEHICLE_ADDED || 0),
+          AVAILABLE: Number(statsRow.AVAILABLE || 0),
+          ASSIGNED: Number(statsRow.ASSIGNED || 0),
+          DEALLOCATED: Number(statsRow.DEALLOCATED || 0),
+          UNDER_MAINTENANCE: Number(statsRow.UNDER_MAINTENANCE || 0),
+          DAMAGED: Number(statsRow.DAMAGED || 0),
+          RETIRED: Number(statsRow.RETIRED || 0),
+          UPDATED: Number(statsRow.UPDATED || 0),
+          HANDOVER_INITIATED: Number(statsRow.HANDOVER_INITIATED || 0),
+          HANDOVER_ACCEPTED: Number(statsRow.HANDOVER_ACCEPTED || 0),
+          HANDOVER_REJECTED: Number(statsRow.HANDOVER_REJECTED || 0),
+          HANDOVER_CANCELLED: Number(statsRow.HANDOVER_CANCELLED || 0),
         },
-        ...query,
-        relations: ['vehicleFiles'],
-      });
+      };
+
+      return {
+        stats,
+        ...eventsResult,
+      };
     } catch (error) {
       throw error;
     }
