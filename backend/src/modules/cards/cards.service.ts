@@ -1,10 +1,19 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CreateCardDto } from './dto';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
+import { CreateCardDto, BulkDeleteCardDto } from './dto';
 import { CardsRepository } from './cards.repository';
 import { CardsEntity } from './entities/card.entity';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import {
   CARD_ERRORS,
+  CARD_SUCCESS_MESSAGES,
   CardExpiryStatus,
   CardsEntityFields,
   DEFAULT_CARD_EXPIRY_WARNING_DAYS,
@@ -13,6 +22,7 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
+import { FuelExpenseService } from '../fuel-expense/fuel-expense.service';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -27,6 +37,8 @@ export class CardsService {
     private readonly utilityService: UtilityService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
+    @Inject(forwardRef(() => FuelExpenseService))
+    private readonly fuelExpenseService: FuelExpenseService,
   ) {}
 
   /**
@@ -223,9 +235,6 @@ export class CardsService {
     return { updated, expiringSoon, expired };
   }
 
-  /**
-   * Get cards that are expiring soon or expired (for alerts)
-   */
   async getExpiringCards(): Promise<{ expiringSoon: CardsEntity[]; expired: CardsEntity[] }> {
     const { records: cards } = await this.findAll({});
 
@@ -235,5 +244,53 @@ export class CardsService {
     const expired = cards.filter((card) => card.expiryStatus === CardExpiryStatus.EXPIRED);
 
     return { expiringSoon, expired };
+  }
+
+  async bulkDeleteCards(bulkDeleteDto: BulkDeleteCardDto) {
+    const { cardIds, deletedBy } = bulkDeleteDto;
+    const result = [];
+    const errors = [];
+
+    for (const cardId of cardIds) {
+      try {
+        const card = await this.findOne({ where: { id: cardId } });
+
+        if (!card) {
+          throw new NotFoundException(CARD_ERRORS.CARD_NOT_FOUND);
+        }
+
+        // Check if card is associated with any fuel expense
+        await this.validateCardNotInUse(cardId);
+
+        await this.cardsRepository.delete({ id: cardId, deletedBy });
+        result.push({ id: cardId });
+      } catch (error) {
+        errors.push({
+          cardId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: CARD_SUCCESS_MESSAGES.CARD_DELETE_PROCESSED.replace(
+        '{length}',
+        cardIds.length.toString(),
+      )
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateCardNotInUse(cardId: string): Promise<void> {
+    const fuelExpense = await this.fuelExpenseService.findOne({
+      where: { cardId, deletedAt: null },
+    });
+
+    if (fuelExpense) {
+      throw new BadRequestException(CARD_ERRORS.CARD_HAS_FUEL_EXPENSES);
+    }
   }
 }

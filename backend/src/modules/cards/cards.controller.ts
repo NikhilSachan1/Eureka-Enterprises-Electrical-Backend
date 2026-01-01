@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Request } from '@nestjs/common';
 import { CardsService } from './cards.service';
-import { CreateCardDto, CardsQueryDto, UpdateCardDto } from './dto';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CreateCardDto, CardsQueryDto, UpdateCardDto, BulkDeleteCardDto } from './dto';
+import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Cards')
 @ApiBearerAuth('JWT-auth')
@@ -31,11 +31,15 @@ export class CardsController {
     return this.cardsService.update({ id }, { ...updateCardDto, updatedBy });
   }
 
-  @Delete(':id')
-  delete(
+  @Delete('bulk')
+  @ApiBody({ type: BulkDeleteCardDto })
+  bulkDeleteCards(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
-    @Param('id') id: string,
+    @Body() bulkDeleteDto: BulkDeleteCardDto,
   ) {
-    return this.cardsService.delete({ id }, deletedBy);
+    return this.cardsService.bulkDeleteCards({
+      ...bulkDeleteDto,
+      deletedBy,
+    });
   }
 }

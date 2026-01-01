@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { FuelExpenseRepository } from './fuel-expense.repository';
 import {
   CreateFuelExpenseDto,
@@ -50,6 +57,7 @@ export class FuelExpenseService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly fuelExpenseFilesService: FuelExpenseFilesService,
     private readonly vehicleMastersService: VehicleMastersService,
+    @Inject(forwardRef(() => CardsService))
     private readonly cardsService: CardsService,
     private readonly userService: UserService,
     private readonly configurationService: ConfigurationService,

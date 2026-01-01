@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { FuelExpenseService } from './fuel-expense.service';
 import { FuelExpenseController } from './fuel-expense.controller';
 import { FuelExpenseRepository } from './fuel-expense.repository';
@@ -19,12 +19,11 @@ import { DateTimeModule } from 'src/utils/datetime';
     SharedModule,
     FuelExpenseFilesModule,
     VehicleMastersModule,
-    CardsModule,
+    forwardRef(() => CardsModule),
     UsersModule,
     ConfigurationsModule,
     ConfigSettingsModule,
     DateTimeModule,
-    SharedModule,
   ],
   controllers: [FuelExpenseController],
   providers: [FuelExpenseService, FuelExpenseRepository],
