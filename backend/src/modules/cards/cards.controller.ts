@@ -25,7 +25,7 @@ export class CardsController {
 
   @Get()
   findAll(@Query() query: CardsQueryDto) {
-    return this.cardsService.findAllWithStats({ where: { ...query } });
+    return this.cardsService.findAllWithStats(query);
   }
 
   @Patch(':id')

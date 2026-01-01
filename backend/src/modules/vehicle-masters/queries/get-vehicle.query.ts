@@ -203,6 +203,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     SELECT 
       vm."id",
       vm."registrationNo",
+      vm."cardId",
       vm."createdAt",
       vm."updatedAt",
       vm."deletedAt",

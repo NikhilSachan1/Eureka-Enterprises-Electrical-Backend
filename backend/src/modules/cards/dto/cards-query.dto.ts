@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
 export class CardsQueryDto extends BaseGetDto {
@@ -56,4 +57,14 @@ export class CardsQueryDto extends BaseGetDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiProperty({
+    description: 'Filter by allocation status (true = allocated, false = available)',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isAllocated?: boolean;
 }

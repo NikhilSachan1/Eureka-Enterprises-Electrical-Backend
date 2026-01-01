@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { CreateCardDto, BulkDeleteCardDto, CardActionDto } from './dto';
+import { CreateCardDto, BulkDeleteCardDto, CardActionDto, CardsQueryDto } from './dto';
 import { CardsRepository } from './cards.repository';
 import { CardsEntity } from './entities/card.entity';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
@@ -181,57 +181,6 @@ export class CardsService {
     return this.findOne({ where: { id: vehicle.cardId, deletedAt: null } });
   }
 
-  async getStats(): Promise<{
-    total: number;
-    assigned: number;
-    unassigned: number;
-    byExpiryStatus: Record<string, number>;
-    byCardType: Record<string, number>;
-    byCardName: Record<string, number>;
-  }> {
-    const { records: cards } = await this.findAll({});
-
-    const cardIds = cards.map((card) => card.id);
-    let assigned = 0;
-    for (const cardId of cardIds) {
-      const vehicle = await this.vehicleMastersService.findOne({
-        where: { cardId, deletedAt: null },
-      });
-      if (vehicle) assigned++;
-    }
-
-    const total = cards.length;
-    const unassigned = total - assigned;
-
-    const byExpiryStatus: Record<string, number> = {};
-    Object.values(CardExpiryStatus).forEach((status) => {
-      byExpiryStatus[status] = cards.filter((card) => card.expiryStatus === status).length;
-    });
-
-    const byCardType: Record<string, number> = {};
-    cards.forEach((card) => {
-      if (card.cardType) {
-        byCardType[card.cardType] = (byCardType[card.cardType] || 0) + 1;
-      }
-    });
-
-    const byCardName: Record<string, number> = {};
-    cards.forEach((card) => {
-      if (card.cardName) {
-        byCardName[card.cardName] = (byCardName[card.cardName] || 0) + 1;
-      }
-    });
-
-    return {
-      total,
-      assigned,
-      unassigned,
-      byExpiryStatus,
-      byCardType,
-      byCardName,
-    };
-  }
-
   async findOne(findOptions: FindOneOptions<CardsEntity>) {
     try {
       return await this.cardsRepository.findOne(findOptions);
@@ -248,13 +197,104 @@ export class CardsService {
     }
   }
 
-  async findAllWithStats(findOptions: FindManyOptions<CardsEntity>) {
+  async findAllWithStats(query: CardsQueryDto) {
     try {
-      const [cards, stats] = await Promise.all([
-        this.cardsRepository.findAll(findOptions),
-        this.getStats(),
-      ]);
-      return { ...cards, stats };
+      const { isAllocated, search, ...filterOptions } = query;
+
+      const whereConditions: FindOptionsWhere<CardsEntity> = {
+        deletedAt: null,
+      };
+
+      if (filterOptions.cardNumber) whereConditions.cardNumber = filterOptions.cardNumber;
+      if (filterOptions.cardType) whereConditions.cardType = filterOptions.cardType;
+      if (filterOptions.cardName) whereConditions.cardName = filterOptions.cardName;
+      if (filterOptions.expiryDate) whereConditions.expiryDate = filterOptions.expiryDate;
+      if (filterOptions.holderName) whereConditions.holderName = filterOptions.holderName;
+
+      const cardsResult = await this.cardsRepository.findAll({ where: whereConditions });
+
+      const vehiclesWithCards = await this.vehicleMastersService.findAllRaw({
+        select: ['id', 'registrationNo', 'cardId'],
+        where: { deletedAt: null },
+      });
+
+      const cardToVehicleMap = new Map<
+        string,
+        { id: string; registrationNo: string; brand?: string; model?: string }
+      >();
+
+      for (const vehicle of vehiclesWithCards) {
+        if (vehicle.cardId) {
+          cardToVehicleMap.set(vehicle.cardId, {
+            id: vehicle.id,
+            registrationNo: vehicle.registrationNo,
+            brand: (vehicle as any).brand,
+            model: (vehicle as any).model,
+          });
+        }
+      }
+
+      let enrichedCards = cardsResult.records.map((card) => {
+        const vehicle = cardToVehicleMap.get(card.id);
+        return {
+          ...card,
+          isAllocated: !!vehicle,
+          allocatedVehicle: vehicle || null,
+        };
+      });
+
+      if (isAllocated !== undefined) {
+        enrichedCards = enrichedCards.filter((card) => card.isAllocated === isAllocated);
+      }
+
+      if (search) {
+        const searchLower = search.toLowerCase();
+        enrichedCards = enrichedCards.filter(
+          (card) =>
+            card.cardNumber?.toLowerCase().includes(searchLower) ||
+            card.cardType?.toLowerCase().includes(searchLower) ||
+            card.cardName?.toLowerCase().includes(searchLower) ||
+            card.holderName?.toLowerCase().includes(searchLower),
+        );
+      }
+
+      const total = cardsResult.records.length;
+      const allocated = cardsResult.records.filter((card) => cardToVehicleMap.has(card.id)).length;
+      const available = total - allocated;
+
+      const byExpiryStatus: Record<string, number> = {};
+      Object.values(CardExpiryStatus).forEach((status) => {
+        byExpiryStatus[status] = cardsResult.records.filter(
+          (card) => card.expiryStatus === status,
+        ).length;
+      });
+
+      const byCardType: Record<string, number> = {};
+      cardsResult.records.forEach((card) => {
+        if (card.cardType) {
+          byCardType[card.cardType] = (byCardType[card.cardType] || 0) + 1;
+        }
+      });
+
+      const byCardName: Record<string, number> = {};
+      cardsResult.records.forEach((card) => {
+        if (card.cardName) {
+          byCardName[card.cardName] = (byCardName[card.cardName] || 0) + 1;
+        }
+      });
+
+      return {
+        stats: {
+          total,
+          allocated,
+          available,
+          byExpiryStatus,
+          byCardType,
+          byCardName,
+        },
+        records: enrichedCards,
+        totalRecords: enrichedCards.length,
+      };
     } catch (error) {
       throw error;
     }

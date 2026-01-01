@@ -8,7 +8,13 @@ import {
 import { CreateVehicleDto, UpdateVehicleDto, VehicleActionDto, VehicleQueryDto } from './dto';
 import { VehicleMastersRepository } from './vehicle-masters.repository';
 import { VehicleMasterEntity } from './entities/vehicle-master.entity';
-import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindManyOptions,
+  FindOneOptions,
+  FindOptionsWhere,
+} from 'typeorm';
 import {
   VEHICLE_MASTERS_ERRORS,
   VehicleMasterEntityFields,
@@ -289,6 +295,14 @@ export class VehicleMastersService {
   async findOne(findOptions: FindOneOptions<VehicleMasterEntity>) {
     try {
       return await this.vehicleMastersRepository.findOne(findOptions);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findAllRaw(findOptions: FindManyOptions<VehicleMasterEntity>) {
+    try {
+      return await this.vehicleMastersRepository.find(findOptions);
     } catch (error) {
       throw error;
     }

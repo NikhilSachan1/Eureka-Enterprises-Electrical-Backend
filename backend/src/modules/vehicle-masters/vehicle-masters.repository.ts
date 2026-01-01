@@ -40,6 +40,17 @@ export class VehicleMastersRepository {
     }
   }
 
+  async find(options: FindManyOptions<VehicleMasterEntity>, entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(VehicleMasterEntity)
+        : this.repository;
+      return await repository.find(options);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
   async findOne(options: FindOneOptions<VehicleMasterEntity>, entityManager?: EntityManager) {
     try {
       const repository = entityManager
