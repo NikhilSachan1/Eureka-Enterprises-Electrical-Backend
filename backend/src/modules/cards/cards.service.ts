@@ -199,17 +199,15 @@ export class CardsService {
 
   async findAllWithStats(query: CardsQueryDto) {
     try {
-      const { isAllocated, search, ...filterOptions } = query;
+      const { isAllocated, search, cardNumber, cardType, cardName, expiryDate, holderName } = query;
 
-      const whereConditions: FindOptionsWhere<CardsEntity> = {
-        deletedAt: null,
-      };
+      const whereConditions: FindOptionsWhere<CardsEntity> = {};
 
-      if (filterOptions.cardNumber) whereConditions.cardNumber = filterOptions.cardNumber;
-      if (filterOptions.cardType) whereConditions.cardType = filterOptions.cardType;
-      if (filterOptions.cardName) whereConditions.cardName = filterOptions.cardName;
-      if (filterOptions.expiryDate) whereConditions.expiryDate = filterOptions.expiryDate;
-      if (filterOptions.holderName) whereConditions.holderName = filterOptions.holderName;
+      if (cardNumber) whereConditions.cardNumber = cardNumber;
+      if (cardType) whereConditions.cardType = cardType;
+      if (cardName) whereConditions.cardName = cardName;
+      if (expiryDate) whereConditions.expiryDate = expiryDate;
+      if (holderName) whereConditions.holderName = holderName;
 
       const cardsResult = await this.cardsRepository.findAll({ where: whereConditions });
 
