@@ -195,8 +195,12 @@ export class VehicleMastersService {
       }
 
       return await this.dataSource.transaction(async (entityManager) => {
+        // Exclude vehicleFiles from DTO to prevent conflict with entity relation
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { vehicleFiles: _, ...vehicleData } = createVehicleDto;
+
         const vehicleMaster = await this.vehicleMastersRepository.create(
-          { ...createVehicleDto, createdBy },
+          { registrationNo, createdBy },
           entityManager,
         );
 
