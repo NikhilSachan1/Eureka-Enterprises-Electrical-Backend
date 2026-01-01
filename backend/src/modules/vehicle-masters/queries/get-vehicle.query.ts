@@ -17,11 +17,10 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
   } = query;
 
   const offset = (page - 1) * pageSize;
-  const filters: string[] = ['vm."deletedAt" IS NULL', 'vv."isActive" = true'];
+  const filters: string[] = ['vm."deletedAt" IS NULL'];
   const params: any[] = [];
   let paramIndex = 1;
 
-  // Add filters
   if (registrationNo) {
     filters.push(`vm."registrationNo" ILIKE $${paramIndex}`);
     params.push(`%${registrationNo}%`);
@@ -64,7 +63,6 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     paramIndex++;
   }
 
-  // General search across multiple fields
   if (search) {
     filters.push(`(
       vm."registrationNo" ILIKE $${paramIndex} OR
@@ -79,7 +77,6 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
 
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
-  // Map sortField to correct table column
   const sortFieldMap: Record<string, string> = {
     createdAt: 'vm."createdAt"',
     updatedAt: 'vm."updatedAt"',
@@ -137,14 +134,14 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
       END as "assignedToUser",
       -- Get current odometer reading from fuel_expenses or vehicle_services
       COALESCE(
-        (SELECT MAX("odometerReading") FROM fuel_expenses WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
+        (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
         (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
         0
       ) as "currentOdometerKm"
-    FROM vehicle_masters vm
+    FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
       SELECT *
-      FROM vehicle_versions
+      FROM "vehicle_versions"
       WHERE "vehicleMasterId" = vm."id"
         AND "isActive" = true
         AND "deletedAt" IS NULL
@@ -159,10 +156,10 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
 
   const countQuery = `
     SELECT COUNT(DISTINCT vm."id")::int as total
-    FROM vehicle_masters vm
+    FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
-      SELECT "vehicleMasterId", "fuelType", "status", "assignedTo", "number", "brand", "model", "mileage", "dealerName"
-      FROM vehicle_versions
+      SELECT *
+      FROM "vehicle_versions"
       WHERE "vehicleMasterId" = vm."id"
         AND "isActive" = true
         AND "deletedAt" IS NULL
@@ -171,11 +168,14 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     ${whereClause}
   `;
 
+  const countParams = [...params];
+
   params.push(pageSize, offset);
 
   return {
     dataQuery,
     countQuery,
     params,
+    countParams,
   };
 };

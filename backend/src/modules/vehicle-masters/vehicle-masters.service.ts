@@ -292,10 +292,10 @@ export class VehicleMastersService {
 
   async findAll(findOptions: VehicleQueryDto) {
     try {
-      const { dataQuery, countQuery, params } = await getVehicleQuery(findOptions);
+      const { dataQuery, countQuery, params, countParams } = getVehicleQuery(findOptions);
       const [vehicles, total] = await Promise.all([
         this.vehicleMastersRepository.executeRawQuery(dataQuery, params) as Promise<any[]>,
-        this.vehicleMastersRepository.executeRawQuery(countQuery, params) as Promise<{
+        this.vehicleMastersRepository.executeRawQuery(countQuery, countParams) as Promise<{
           total: number;
         }>,
       ]);
