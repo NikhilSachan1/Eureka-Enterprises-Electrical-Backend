@@ -1,3 +1,7 @@
+// Import SYSTEM_USER_ID from user constants for consistency
+// Re-exported here for convenience in scheduler module
+import { SYSTEM_USER_ID } from '../../users/constants/user.constants';
+
 /**
  * Cron Schedules
  * All times are in UTC - Server runs in UTC
@@ -194,7 +198,7 @@ export const SYSTEM_NOTES = {
 };
 
 export const SYSTEM_DEFAULTS = {
-  SYSTEM_USER_ID: '00000000-0000-0000-0000-000000000001',
+  SYSTEM_USER_ID,
   UNKNOWN_USER_ID: 'N/A',
 };
 

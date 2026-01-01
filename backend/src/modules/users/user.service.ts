@@ -17,6 +17,7 @@ import {
   USERS_RESPONSES,
   VALIDATION_PATTERNS,
   USER_DTO_ERRORS,
+  SYSTEM_USER_ID,
 } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
@@ -61,6 +62,19 @@ export class UserService {
     @InjectDataSource() private dataSource: DataSource,
     private jwtService: JwtService,
   ) {}
+
+  private validateNotSystemUser(userId: string, operation: 'update' | 'delete' | 'archive'): void {
+    if (userId === SYSTEM_USER_ID) {
+      switch (operation) {
+        case 'update':
+          throw new BadRequestException(USERS_ERRORS.SYSTEM_USER_UPDATE_FORBIDDEN);
+        case 'delete':
+          throw new BadRequestException(USERS_ERRORS.SYSTEM_USER_DELETE_FORBIDDEN);
+        case 'archive':
+          throw new BadRequestException(USERS_ERRORS.SYSTEM_USER_ARCHIVE_FORBIDDEN);
+      }
+    }
+  }
 
   async findAll(
     options: GetUsersDto,
@@ -379,6 +393,8 @@ export class UserService {
       });
       if (!user) throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
 
+      this.validateNotSystemUser(user.id, 'update');
+
       await this.validateDropdownFields(updateData);
 
       const processedData: any = this.utilityService.convertEmptyStringsToNull(updateData);
@@ -416,6 +432,8 @@ export class UserService {
     },
     updatedBy?: string,
   ) {
+    this.validateNotSystemUser(id, 'update');
+
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
@@ -431,6 +449,9 @@ export class UserService {
 
     // Validate status change
     if (updateData.status) {
+      if (updateData.status === UserStatus.ARCHIVED && id === SYSTEM_USER_ID) {
+        throw new BadRequestException(USERS_ERRORS.SYSTEM_USER_ARCHIVE_FORBIDDEN);
+      }
       if (updateData.status === UserStatus.ARCHIVED && user.status === UserStatus.ARCHIVED) {
         throw new BadRequestException(USERS_ERRORS.USER_ALREADY_ARCHIVED);
       }
@@ -486,6 +507,8 @@ export class UserService {
 
   async delete(id: string, deletedBy: string) {
     try {
+      this.validateNotSystemUser(id, 'delete');
+
       const user = await this.userRepository.findOne({ where: { id } });
       if (!user) {
         throw new NotFoundException(USERS_ERRORS.NOT_FOUND);
@@ -536,6 +559,8 @@ export class UserService {
   }
 
   private async validateAndDeleteUser(userId: string, deletedBy: string) {
+    this.validateNotSystemUser(userId, 'delete');
+
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {

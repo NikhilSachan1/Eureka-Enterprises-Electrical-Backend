@@ -10,6 +10,8 @@ export enum UsersEntityFields {
   PASSWORD_UPDATED_AT = 'passwordUpdatedAt',
 }
 
+export const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+
 export const USERS_ERRORS = {
   NOT_FOUND: 'User not found',
   GOOGLE_PROFILE_CHANGE:
@@ -32,6 +34,10 @@ export const USERS_ERRORS = {
   INVALID_PASSPORT: 'Invalid Passport number. Format: A1234567 (1 letter + 7 digits)',
   INVALID_EMPLOYEE_ID: 'Invalid Employee ID. Format: EE-0000 (EE- followed by 4 digits)',
   EMPLOYEE_ID_ALREADY_EXISTS: 'An employee with this Employee ID already exists.',
+  // System user protection
+  SYSTEM_USER_UPDATE_FORBIDDEN: 'System user cannot be modified.',
+  SYSTEM_USER_DELETE_FORBIDDEN: 'System user cannot be deleted.',
+  SYSTEM_USER_ARCHIVE_FORBIDDEN: 'System user cannot be archived.',
 };
 
 export const USER_DTO_ERRORS = {

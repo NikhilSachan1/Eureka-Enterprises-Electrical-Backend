@@ -5,7 +5,7 @@ import { UserEntity } from './entities/user.entity';
 import { GetUsersDto, CreateUserDto } from './dto';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { UserStatus, EMPLOYEE_ID_PREFIX } from './constants/user.constants';
+import { UserStatus, EMPLOYEE_ID_PREFIX, SYSTEM_USER_ID } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 
 @Injectable()
@@ -42,7 +42,9 @@ export class UserRepository {
           'users.updatedAt',
           'user-roles.id',
           'role.name',
-        ]);
+        ])
+        // Exclude system user from regular listings
+        .where('users.id != :systemUserId', { systemUserId: SYSTEM_USER_ID });
 
       if (Object.keys(whereCondition).length > 0) {
         Object.entries(whereCondition).forEach(([key, value]) => {
@@ -173,6 +175,7 @@ export class UserRepository {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+      // Exclude system user from all metrics
       const metricsQuery = this.repository
         .createQueryBuilder('users')
         .select([
@@ -181,6 +184,7 @@ export class UserRepository {
           `SUM(CASE WHEN users.status = '${UserStatus.ARCHIVED}' THEN 1 ELSE 0 END) as inactive`,
           `SUM(CASE WHEN users.dateOfJoining >= :thirtyDaysAgo THEN 1 ELSE 0 END) as "newJoinersLast30Days"`,
         ])
+        .where('users.id != :systemUserId', { systemUserId: SYSTEM_USER_ID })
         .setParameter('thirtyDaysAgo', thirtyDaysAgo);
 
       const [mainMetrics] = await metricsQuery.getRawMany();
@@ -189,6 +193,7 @@ export class UserRepository {
         .createQueryBuilder('users')
         .select(['users.employeeType as type', 'COUNT(*) as count'])
         .where('users.employeeType IS NOT NULL')
+        .andWhere('users.id != :systemUserId', { systemUserId: SYSTEM_USER_ID })
         .groupBy('users.employeeType')
         .getRawMany();
 
@@ -196,6 +201,7 @@ export class UserRepository {
         .createQueryBuilder('users')
         .select(['users.designation as type', 'COUNT(*) as count'])
         .where('users.designation IS NOT NULL')
+        .andWhere('users.id != :systemUserId', { systemUserId: SYSTEM_USER_ID })
         .groupBy('users.designation')
         .getRawMany();
 
@@ -203,6 +209,7 @@ export class UserRepository {
         .createQueryBuilder('users')
         .select(['users.gender as type', 'COUNT(*) as count'])
         .where('users.gender IS NOT NULL')
+        .andWhere('users.id != :systemUserId', { systemUserId: SYSTEM_USER_ID })
         .groupBy('users.gender')
         .getRawMany();
 
