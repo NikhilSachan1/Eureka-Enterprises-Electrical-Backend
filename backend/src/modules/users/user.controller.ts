@@ -50,6 +50,11 @@ export class UserController {
     return await this.userService.findOneOrFail({ where: { id } }, true);
   }
 
+  @Get('me')
+  async getMe(@Request() { user: { id: userId } }: { user: { id: string } }) {
+    return await this.userService.findOneOrFail({ where: { id: userId } }, true);
+  }
+
   @Post()
   @UseInterceptors(
     FileFieldsInterceptor([
