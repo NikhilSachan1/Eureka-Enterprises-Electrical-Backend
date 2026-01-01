@@ -39,12 +39,13 @@ export class CardsRepository {
 
       const queryBuilder = repository.createQueryBuilder('cards');
 
+      queryBuilder.where('cards.deletedAt IS NULL');
+
       if (search) {
-        queryBuilder.where('cards.cardNumber LIKE :search', { search: `%${search}%` });
-        queryBuilder.orWhere('cards.cardType LIKE :search', { search: `%${search}%` });
-        queryBuilder.orWhere('cards.cardName LIKE :search', { search: `%${search}%` });
-        queryBuilder.orWhere('cards.holderName LIKE :search', { search: `%${search}%` });
-        queryBuilder.orWhere('cards.expiryDate LIKE :search', { search: `%${search}%` });
+        queryBuilder.andWhere(
+          '(cards.cardNumber LIKE :search OR cards.cardType LIKE :search OR cards.cardName LIKE :search OR cards.holderName LIKE :search OR cards.expiryDate LIKE :search)',
+          { search: `%${search}%` },
+        );
       }
 
       if (sortField && sortOrder) {

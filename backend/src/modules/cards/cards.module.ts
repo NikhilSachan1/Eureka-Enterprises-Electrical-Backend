@@ -9,6 +9,7 @@ import { SharedModule } from '../shared/shared.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { FuelExpenseModule } from '../fuel-expense/fuel-expense.module';
+import { VehicleMastersModule } from '../vehicle-masters/vehicle-masters.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { FuelExpenseModule } from '../fuel-expense/fuel-expense.module';
     ConfigurationsModule,
     ConfigSettingsModule,
     forwardRef(() => FuelExpenseModule),
+    forwardRef(() => VehicleMastersModule),
   ],
   controllers: [CardsController],
   providers: [CardsService, CardsRepository, UtilityService],

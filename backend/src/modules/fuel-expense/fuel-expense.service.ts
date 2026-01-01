@@ -78,7 +78,7 @@ export class FuelExpenseService {
     try {
       const {
         vehicleId,
-        cardId,
+        cardId: providedCardId,
         fillDate,
         odometerKm,
         userId,
@@ -95,21 +95,25 @@ export class FuelExpenseService {
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
-      if (cardId) {
+      let cardId = providedCardId;
+      if (!cardId) {
+        const vehicleCard = await this.cardsService.findByVehicleId(vehicleId);
+        if (vehicleCard) {
+          cardId = vehicleCard.id;
+        }
+      } else {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
-      // Validate user exists
       await this.userService.findOneOrFail({ where: { id: userId } });
 
-      // Validate odometer reading is greater than previous reading
       await this.validateOdometerReading(vehicleId, odometerKm);
 
       return await this.dataSource.transaction(async (entityManager) => {
-        // Create fuel expense record
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
             ...createFuelExpenseDto,
+            cardId,
             approvalStatus: ApprovalStatus.PENDING,
             isActive: true,
             versionNumber: 1,
@@ -120,7 +124,6 @@ export class FuelExpenseService {
           entityManager,
         );
 
-        // Create file attachments if provided
         if (fileKeys && fileKeys.length > 0) {
           await this.fuelExpenseFilesService.create(
             {
@@ -151,7 +154,7 @@ export class FuelExpenseService {
     try {
       const {
         vehicleId,
-        cardId,
+        cardId: providedCardId,
         fillDate,
         odometerKm,
         userId,
@@ -174,21 +177,25 @@ export class FuelExpenseService {
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
-      if (cardId) {
+      let cardId = providedCardId;
+      if (!cardId) {
+        const vehicleCard = await this.cardsService.findByVehicleId(vehicleId);
+        if (vehicleCard) {
+          cardId = vehicleCard.id;
+        }
+      } else {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
-      // Validate user exists
       await this.userService.findOneOrFail({ where: { id: userId } });
 
-      // Validate odometer reading is greater than previous reading
       await this.validateOdometerReading(vehicleId, odometerKm);
 
       return await this.dataSource.transaction(async (entityManager) => {
-        // Create fuel expense record as approved
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
             ...createFuelExpenseDto,
+            cardId,
             approvalStatus: ApprovalStatus.APPROVED,
             approvalAt: new Date(),
             approvalBy: createdBy,
@@ -202,7 +209,6 @@ export class FuelExpenseService {
           entityManager,
         );
 
-        // Create file attachments if provided
         if (fileKeys && fileKeys.length > 0) {
           await this.fuelExpenseFilesService.create(
             {
@@ -308,7 +314,13 @@ export class FuelExpenseService {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_BE_EDITED);
       }
 
-      const { vehicleId, cardId, fillDate, odometerKm, paymentMode } = editFuelExpenseDto;
+      const {
+        vehicleId,
+        cardId: providedCardId,
+        fillDate,
+        odometerKm,
+        paymentMode,
+      } = editFuelExpenseDto;
 
       // Validate fill date
       await this.validateFillDate(fillDate, timezone);
@@ -319,8 +331,13 @@ export class FuelExpenseService {
       // Validate vehicle exists
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
-      // Validate card exists if provided
-      if (cardId) {
+      let cardId = providedCardId;
+      if (!cardId) {
+        const vehicleCard = await this.cardsService.findByVehicleId(vehicleId);
+        if (vehicleCard) {
+          cardId = vehicleCard.id;
+        }
+      } else {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
@@ -350,6 +367,7 @@ export class FuelExpenseService {
           {
             ...fuelExpenseData,
             ...editData,
+            cardId,
             isActive: true,
             updatedBy,
             originalFuelExpenseId,

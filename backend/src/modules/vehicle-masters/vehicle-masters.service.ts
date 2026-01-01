@@ -294,6 +294,16 @@ export class VehicleMastersService {
     }
   }
 
+  async updateMaster(
+    identifierConditions: FindOptionsWhere<VehicleMasterEntity>,
+    updateData: Partial<VehicleMasterEntity>,
+  ) {
+    return this.vehicleMastersRepository.update(identifierConditions, {
+      ...updateData,
+      updatedAt: new Date(),
+    });
+  }
+
   async findAll(findOptions: VehicleQueryDto) {
     try {
       const { dataQuery, countQuery, params, countParams } = getVehicleQuery(findOptions);

@@ -1,6 +1,12 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Request } from '@nestjs/common';
 import { CardsService } from './cards.service';
-import { CreateCardDto, CardsQueryDto, UpdateCardDto, BulkDeleteCardDto } from './dto';
+import {
+  CreateCardDto,
+  CardsQueryDto,
+  UpdateCardDto,
+  BulkDeleteCardDto,
+  CardActionDto,
+} from './dto';
 import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Cards')
@@ -19,7 +25,7 @@ export class CardsController {
 
   @Get()
   findAll(@Query() query: CardsQueryDto) {
-    return this.cardsService.findAll({ where: { ...query } });
+    return this.cardsService.findAllWithStats({ where: { ...query } });
   }
 
   @Patch(':id')
@@ -29,6 +35,15 @@ export class CardsController {
     @Body() updateCardDto: UpdateCardDto,
   ) {
     return this.cardsService.update({ id }, { ...updateCardDto, updatedBy });
+  }
+
+  @Post('action')
+  @ApiBody({ type: CardActionDto })
+  action(
+    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Body() actionDto: CardActionDto,
+  ) {
+    return this.cardsService.action(actionDto, updatedBy);
   }
 
   @Delete('bulk')

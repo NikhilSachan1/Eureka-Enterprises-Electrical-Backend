@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { CreateCardDto, BulkDeleteCardDto } from './dto';
+import { CreateCardDto, BulkDeleteCardDto, CardActionDto } from './dto';
 import { CardsRepository } from './cards.repository';
 import { CardsEntity } from './entities/card.entity';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
@@ -17,12 +17,14 @@ import {
   CardExpiryStatus,
   CardsEntityFields,
   DEFAULT_CARD_EXPIRY_WARNING_DAYS,
+  CardActionType,
 } from './constants/card.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { FuelExpenseService } from '../fuel-expense/fuel-expense.service';
+import { VehicleMastersService } from '../vehicle-masters/vehicle-masters.service';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
@@ -39,11 +41,10 @@ export class CardsService {
     private readonly configSettingService: ConfigSettingService,
     @Inject(forwardRef(() => FuelExpenseService))
     private readonly fuelExpenseService: FuelExpenseService,
+    @Inject(forwardRef(() => VehicleMastersService))
+    private readonly vehicleMastersService: VehicleMastersService,
   ) {}
 
-  /**
-   * Get card expiry warning days from configuration
-   */
   private async getExpiryWarningDays(): Promise<number> {
     try {
       const configuration = await this.configurationService.findOne({
@@ -116,6 +117,121 @@ export class CardsService {
     }
   }
 
+  async action(actionDto: CardActionDto, updatedBy: string): Promise<{ message: string }> {
+    const { cardId, action, vehicleMasterId } = actionDto;
+
+    await this.findOneOrFail({ where: { id: cardId } });
+
+    switch (action) {
+      case CardActionType.ASSIGN: {
+        if (!vehicleMasterId) {
+          throw new BadRequestException(CARD_ERRORS.VEHICLE_ID_REQUIRED);
+        }
+
+        const vehicle = await this.vehicleMastersService.findOneOrFail({
+          where: { id: vehicleMasterId },
+        });
+
+        if (vehicle.cardId && vehicle.cardId !== cardId) {
+          throw new ConflictException(CARD_ERRORS.VEHICLE_ALREADY_HAS_CARD);
+        }
+
+        const vehicleWithCard = await this.vehicleMastersService.findOne({
+          where: { cardId, deletedAt: null },
+        });
+        if (vehicleWithCard && vehicleWithCard.id !== vehicleMasterId) {
+          throw new ConflictException(CARD_ERRORS.CARD_ALREADY_ASSIGNED);
+        }
+
+        await this.vehicleMastersService.updateMaster(
+          { id: vehicleMasterId },
+          { cardId, updatedBy },
+        );
+        return { message: CARD_SUCCESS_MESSAGES.CARD_ASSIGNED };
+      }
+
+      case CardActionType.UNASSIGN: {
+        const vehicle = await this.vehicleMastersService.findOne({
+          where: { cardId, deletedAt: null },
+        });
+
+        if (!vehicle) {
+          throw new BadRequestException(CARD_ERRORS.CARD_NOT_ASSIGNED);
+        }
+
+        await this.vehicleMastersService.updateMaster(
+          { id: vehicle.id },
+          { cardId: null, updatedBy },
+        );
+        return { message: CARD_SUCCESS_MESSAGES.CARD_UNASSIGNED };
+      }
+
+      default:
+        throw new BadRequestException(CARD_ERRORS.INVALID_ACTION);
+    }
+  }
+
+  async findByVehicleId(vehicleMasterId: string): Promise<CardsEntity | null> {
+    const vehicle = await this.vehicleMastersService.findOne({
+      where: { id: vehicleMasterId, deletedAt: null },
+    });
+    if (!vehicle?.cardId) {
+      return null;
+    }
+    return this.findOne({ where: { id: vehicle.cardId, deletedAt: null } });
+  }
+
+  async getStats(): Promise<{
+    total: number;
+    assigned: number;
+    unassigned: number;
+    byExpiryStatus: Record<string, number>;
+    byCardType: Record<string, number>;
+    byCardName: Record<string, number>;
+  }> {
+    const { records: cards } = await this.findAll({});
+
+    const cardIds = cards.map((card) => card.id);
+    let assigned = 0;
+    for (const cardId of cardIds) {
+      const vehicle = await this.vehicleMastersService.findOne({
+        where: { cardId, deletedAt: null },
+      });
+      if (vehicle) assigned++;
+    }
+
+    const total = cards.length;
+    const unassigned = total - assigned;
+
+    const byExpiryStatus: Record<string, number> = {};
+    Object.values(CardExpiryStatus).forEach((status) => {
+      byExpiryStatus[status] = cards.filter((card) => card.expiryStatus === status).length;
+    });
+
+    const byCardType: Record<string, number> = {};
+    cards.forEach((card) => {
+      if (card.cardType) {
+        byCardType[card.cardType] = (byCardType[card.cardType] || 0) + 1;
+      }
+    });
+
+    const byCardName: Record<string, number> = {};
+    cards.forEach((card) => {
+      if (card.cardName) {
+        byCardName[card.cardName] = (byCardName[card.cardName] || 0) + 1;
+      }
+    });
+
+    return {
+      total,
+      assigned,
+      unassigned,
+      byExpiryStatus,
+      byCardType,
+      byCardName,
+    };
+  }
+
   async findOne(findOptions: FindOneOptions<CardsEntity>) {
     try {
       return await this.cardsRepository.findOne(findOptions);
@@ -127,6 +243,18 @@ export class CardsService {
   async findAll(findOptions: FindManyOptions<CardsEntity>) {
     try {
       return await this.cardsRepository.findAll(findOptions);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findAllWithStats(findOptions: FindManyOptions<CardsEntity>) {
+    try {
+      const [cards, stats] = await Promise.all([
+        this.cardsRepository.findAll(findOptions),
+        this.getStats(),
+      ]);
+      return { ...cards, stats };
     } catch (error) {
       throw error;
     }
