@@ -65,7 +65,7 @@ export class LeaveCronService {
    * Sends email reminder to HR/Admin about reviewing leave configurations
    * before the new financial year starts on April 1st
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_FY_LEAVE_REMINDER)
   async handleFYLeaveConfigReminder(): Promise<FYLeaveConfigReminderResult | null> {
     const cronName = CRON_NAMES.FY_LEAVE_CONFIG_REMINDER;
 
@@ -157,100 +157,110 @@ export class LeaveCronService {
 
   /**
    * CRON 4: Financial Year Leave Config Auto Copy
-   * Runs on April 1 at 12:00 AM IST (6:30 PM UTC previous day)
+   * NOTE: This cron is now controlled by April1FYOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
    *
+   * Runs on April 1 at 12:00 AM IST
    * If leave config for new FY is not updated, copies previous year's config
-   * Special handling for holiday_calendar: sets holidays to empty array
    */
-  @Cron(CRON_SCHEDULES.APRIL_1_MIDNIGHT_IST)
+  // @Cron decorator removed - now controlled by April1FYOrchestrator
   async handleFYLeaveConfigAutoCopy(): Promise<FYLeaveConfigAutoCopyResult | null> {
     const cronName = CRON_NAMES.FY_LEAVE_CONFIG_AUTO_COPY;
 
     return this.cronLogService.execute(cronName, CronJobType.CONFIG, async () => {
-      const result: FYLeaveConfigAutoCopyResult = {
-        configsCopied: 0,
-        configsSkipped: 0,
-        errors: [],
-      };
-
-      const currentDate = this.schedulerService.getCurrentDateIST();
-      const { previousFY, currentFY, newFYEffectiveFrom, newFYEffectiveTo } =
-        this.calculateFYDates(currentDate);
-
-      this.logger.log(`[${cronName}] Previous FY: ${previousFY}, Current FY: ${currentFY}`);
-
-      // Get all leave-related configurations
-      const leaveConfigurations = await this.getLeaveConfigurations();
-
-      if (leaveConfigurations.length === 0) {
-        this.logger.warn(`[${cronName}] No leave configurations found`);
-        return result;
-      }
-
-      await this.dataSource.transaction(async (entityManager) => {
-        for (const config of leaveConfigurations) {
-          try {
-            // Check if config already exists for new FY
-            const existingNewFYConfig = await this.configSettingService.findOne({
-              where: {
-                configId: config.id,
-                contextKey: currentFY,
-              },
-            });
-
-            if (existingNewFYConfig) {
-              this.logger.log(
-                `[${cronName}] Config ${config.key} already exists for ${currentFY} - skipping`,
-              );
-              result.configsSkipped++;
-              continue;
-            }
-
-            // Get previous FY config to copy from
-            const previousFYConfig = await this.configSettingService.findOne({
-              where: {
-                configId: config.id,
-                contextKey: previousFY,
-              },
-            });
-
-            if (!previousFYConfig) {
-              this.logger.warn(
-                `[${cronName}] No previous FY config found for ${config.key} (${previousFY}) - skipping`,
-              );
-              result.errors.push(`No previous FY config for ${config.key}`);
-              continue;
-            }
-
-            // Prepare new config value (special handling for holiday_calendar)
-            const newValue = this.prepareNewFYConfigValue(config.key, previousFYConfig.value);
-
-            // Create new config setting for current FY
-            // isActive: false - will be activated by Config Activation Cron based on effectiveFrom
-            await this.configSettingService.create(
-              {
-                configId: config.id,
-                contextKey: currentFY,
-                value: newValue,
-                effectiveFrom: newFYEffectiveFrom,
-                effectiveTo: newFYEffectiveTo,
-                isSystemOperation: true,
-                isActive: false,
-              },
-              entityManager,
-            );
-
-            this.logger.log(`[${cronName}] Copied config ${config.key} to ${currentFY}`);
-            result.configsCopied++;
-          } catch (error) {
-            result.errors.push(`Failed to copy ${config.key}: ${error.message}`);
-            this.logger.error(`[${cronName}] Failed to copy config ${config.key}`, error);
-          }
-        }
-      });
-
-      return result;
+      return this.handleFYLeaveConfigAutoCopyDirect();
     });
+  }
+
+  /**
+   * Direct execution method - called by orchestrator
+   */
+  async handleFYLeaveConfigAutoCopyDirect(): Promise<FYLeaveConfigAutoCopyResult> {
+    const cronName = CRON_NAMES.FY_LEAVE_CONFIG_AUTO_COPY;
+
+    const result: FYLeaveConfigAutoCopyResult = {
+      configsCopied: 0,
+      configsSkipped: 0,
+      errors: [],
+    };
+
+    const currentDate = this.schedulerService.getCurrentDateIST();
+    const { previousFY, currentFY, newFYEffectiveFrom, newFYEffectiveTo } =
+      this.calculateFYDates(currentDate);
+
+    this.logger.log(`[${cronName}] Previous FY: ${previousFY}, Current FY: ${currentFY}`);
+
+    // Get all leave-related configurations
+    const leaveConfigurations = await this.getLeaveConfigurations();
+
+    if (leaveConfigurations.length === 0) {
+      this.logger.warn(`[${cronName}] No leave configurations found`);
+      return result;
+    }
+
+    await this.dataSource.transaction(async (entityManager) => {
+      for (const config of leaveConfigurations) {
+        try {
+          // Check if config already exists for new FY
+          const existingNewFYConfig = await this.configSettingService.findOne({
+            where: {
+              configId: config.id,
+              contextKey: currentFY,
+            },
+          });
+
+          if (existingNewFYConfig) {
+            this.logger.log(
+              `[${cronName}] Config ${config.key} already exists for ${currentFY} - skipping`,
+            );
+            result.configsSkipped++;
+            continue;
+          }
+
+          // Get previous FY config to copy from
+          const previousFYConfig = await this.configSettingService.findOne({
+            where: {
+              configId: config.id,
+              contextKey: previousFY,
+            },
+          });
+
+          if (!previousFYConfig) {
+            this.logger.warn(
+              `[${cronName}] No previous FY config found for ${config.key} (${previousFY}) - skipping`,
+            );
+            result.errors.push(`No previous FY config for ${config.key}`);
+            continue;
+          }
+
+          // Prepare new config value (special handling for holiday_calendar)
+          const newValue = this.prepareNewFYConfigValue(config.key, previousFYConfig.value);
+
+          // Create new config setting for current FY
+          // isActive: false - will be activated by Config Activation Cron based on effectiveFrom
+          await this.configSettingService.create(
+            {
+              configId: config.id,
+              contextKey: currentFY,
+              value: newValue,
+              effectiveFrom: newFYEffectiveFrom,
+              effectiveTo: newFYEffectiveTo,
+              isSystemOperation: true,
+              isActive: false,
+            },
+            entityManager,
+          );
+
+          this.logger.log(`[${cronName}] Copied config ${config.key} to ${currentFY}`);
+          result.configsCopied++;
+        } catch (error) {
+          result.errors.push(`Failed to copy ${config.key}: ${error.message}`);
+          this.logger.error(`[${cronName}] Failed to copy config ${config.key}`, error);
+        }
+      }
+    });
+
+    return result;
   }
 
   private calculateFYDates(currentDate: Date): {
@@ -309,70 +319,74 @@ export class LeaveCronService {
 
   /**
    * CRON 5: Leave Carry Forward
-   * Runs on April 1 at 1:00 AM IST (after config copy cron)
+   *
+   * NOTE: This cron is now controlled by April1FYOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
    *
    * Carries forward eligible leaves from previous FY to new FY
    * Only processes leave types where carryForward: true in config
    *
    * NOTE: Currently a placeholder - actual carry forward logic not implemented
-   * as it's not required for the current org. Will be implemented when needed.
    */
-  @Cron(CRON_SCHEDULES.APRIL_1_1AM_IST)
+  // @Cron decorator removed - now controlled by April1FYOrchestrator
   async handleLeaveCarryForward(): Promise<LeaveCarryForwardResult | null> {
     const cronName = CRON_NAMES.LEAVE_CARRY_FORWARD;
 
     return this.cronLogService.execute(cronName, CronJobType.LEAVE, async () => {
-      const result: LeaveCarryForwardResult = {
-        usersProcessed: 0,
-        leavesCarriedForward: 0,
-        errors: [],
-      };
-
-      const currentDate = this.schedulerService.getCurrentDateIST();
-      const { currentFY } = this.calculateFYDates(currentDate);
-
-      // Get leave categories config for current FY
-      const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(currentFY);
-
-      if (!leaveCategoriesConfig) {
-        this.logger.warn(`[${cronName}] No leave categories config found for ${currentFY}`);
-        return result;
-      }
-
-      // Check each leave category for carryForward flag
-      const leaveCategories = Object.keys(leaveCategoriesConfig);
-
-      for (const category of leaveCategories) {
-        const categoryConfig = leaveCategoriesConfig[category]?.actual;
-
-        if (!categoryConfig) {
-          this.logger.warn(`[${cronName}] No config found for category: ${category}`);
-          continue;
-        }
-
-        const isCarryForwardAllowed = categoryConfig.carryForward === true;
-
-        if (!isCarryForwardAllowed) {
-          this.logger.log(
-            `[${cronName}] Skipping ${category} - carryForward not allowed (carryForward: ${categoryConfig.carryForward})`,
-          );
-          continue;
-        }
-
-        // TODO: Implement actual carry forward logic when required
-        // This would involve:
-        // 1. Get all users' leave balances for previous FY
-        // 2. Calculate carry forward amount (respecting maxCarryForward limit if any)
-        // 3. Add to new FY balance
-        // 4. Create audit/history records
-
-        this.logger.log(
-          `[${cronName}] ${category} has carryForward: true - would carry forward (NOT IMPLEMENTED)`,
-        );
-      }
-
-      return result;
+      return this.handleLeaveCarryForwardDirect();
     });
+  }
+
+  /**
+   * Direct execution method - called by orchestrator
+   */
+  async handleLeaveCarryForwardDirect(): Promise<LeaveCarryForwardResult> {
+    const cronName = CRON_NAMES.LEAVE_CARRY_FORWARD;
+
+    const result: LeaveCarryForwardResult = {
+      usersProcessed: 0,
+      leavesCarriedForward: 0,
+      errors: [],
+    };
+
+    const currentDate = this.schedulerService.getCurrentDateIST();
+    const { currentFY } = this.calculateFYDates(currentDate);
+
+    // Get leave categories config for current FY
+    const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(currentFY);
+
+    if (!leaveCategoriesConfig) {
+      this.logger.warn(`[${cronName}] No leave categories config found for ${currentFY}`);
+      return result;
+    }
+
+    // Check each leave category for carryForward flag
+    const leaveCategories = Object.keys(leaveCategoriesConfig);
+
+    for (const category of leaveCategories) {
+      const categoryConfig = leaveCategoriesConfig[category]?.actual;
+
+      if (!categoryConfig) {
+        this.logger.warn(`[${cronName}] No config found for category: ${category}`);
+        continue;
+      }
+
+      const isCarryForwardAllowed = categoryConfig.carryForward === true;
+
+      if (!isCarryForwardAllowed) {
+        this.logger.log(
+          `[${cronName}] Skipping ${category} - carryForward not allowed (carryForward: ${categoryConfig.carryForward})`,
+        );
+        continue;
+      }
+
+      // TODO: Implement actual carry forward logic when required
+      this.logger.log(
+        `[${cronName}] ${category} has carryForward: true - would carry forward (NOT IMPLEMENTED)`,
+      );
+    }
+
+    return result;
   }
 
   private async getLeaveCategoriesConfig(financialYear: string): Promise<any | null> {
@@ -405,63 +419,70 @@ export class LeaveCronService {
 
   /**
    * CRON 6: Auto Approve Pending Leaves
-   * Runs on 1st of every month at 12:00 AM IST (before payroll generation)
    *
+   * NOTE: This cron is now controlled by MonthlyAutoApproveOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
+   *
+   * Runs on 1st of every month at 12:00 AM IST (before payroll generation)
    * Auto-approves all pending leave applications for the previous month
-   * This ensures leaves are counted in payroll even if admin forgot to approve
    */
-  @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_IST)
+  // @Cron decorator removed - now controlled by MonthlyAutoApproveOrchestrator
   async handleAutoApproveLeaves(): Promise<AutoApproveLeavesResult | null> {
     const cronName = CRON_NAMES.AUTO_APPROVE_LEAVES;
 
     return this.cronLogService.execute(cronName, CronJobType.LEAVE, async () => {
-      const result: AutoApproveLeavesResult = {
-        leavesApproved: 0,
-        errors: [],
-      };
-
-      const currentDate = this.schedulerService.getCurrentDateIST();
-
-      // Get previous month's date range
-      const { startDate, endDate } = this.getPreviousMonthDateRange(currentDate);
-
-      this.logger.log(
-        `[${cronName}] Auto-approving pending leaves from ${startDate} to ${endDate}`,
-      );
-
-      // Get all pending leave applications for the previous month
-      const pendingLeaves = await this.getPendingLeavesForPeriod(startDate, endDate);
-
-      if (pendingLeaves.length === 0) {
-        this.logger.log(`[${cronName}] No pending leaves found for previous month`);
-        return result;
-      }
-
-      this.logger.log(`[${cronName}] Found ${pendingLeaves.length} pending leaves to auto-approve`);
-
-      await this.dataSource.transaction(async (entityManager) => {
-        for (const leave of pendingLeaves) {
-          try {
-            const { query, params } = autoApproveLeaveQuery(
-              leave.id,
-              SYSTEM_NOTES.AUTO_APPROVED_LEAVE,
-              SYSTEM_DEFAULTS.SYSTEM_USER_ID,
-            );
-            await entityManager.query(query, params);
-
-            result.leavesApproved++;
-            this.logger.log(
-              `[${cronName}] Auto-approved leave ${leave.id} for user ${leave.userId}`,
-            );
-          } catch (error) {
-            result.errors.push(`Failed to approve leave ${leave.id}: ${error.message}`);
-            this.logger.error(`[${cronName}] Failed to approve leave ${leave.id}`, error);
-          }
-        }
-      });
-
-      return result;
+      return this.handleAutoApproveLeavesDirect();
     });
+  }
+
+  /**
+   * Direct execution method - called by orchestrator
+   */
+  async handleAutoApproveLeavesDirect(): Promise<AutoApproveLeavesResult> {
+    const cronName = CRON_NAMES.AUTO_APPROVE_LEAVES;
+
+    const result: AutoApproveLeavesResult = {
+      leavesApproved: 0,
+      errors: [],
+    };
+
+    const currentDate = this.schedulerService.getCurrentDateIST();
+
+    // Get previous month's date range
+    const { startDate, endDate } = this.getPreviousMonthDateRange(currentDate);
+
+    this.logger.log(`[${cronName}] Auto-approving pending leaves from ${startDate} to ${endDate}`);
+
+    // Get all pending leave applications for the previous month
+    const pendingLeaves = await this.getPendingLeavesForPeriod(startDate, endDate);
+
+    if (pendingLeaves.length === 0) {
+      this.logger.log(`[${cronName}] No pending leaves found for previous month`);
+      return result;
+    }
+
+    this.logger.log(`[${cronName}] Found ${pendingLeaves.length} pending leaves to auto-approve`);
+
+    await this.dataSource.transaction(async (entityManager) => {
+      for (const leave of pendingLeaves) {
+        try {
+          const { query, params } = autoApproveLeaveQuery(
+            leave.id,
+            SYSTEM_NOTES.AUTO_APPROVED_LEAVE,
+            SYSTEM_DEFAULTS.SYSTEM_USER_ID,
+          );
+          await entityManager.query(query, params);
+
+          result.leavesApproved++;
+          this.logger.log(`[${cronName}] Auto-approved leave ${leave.id} for user ${leave.userId}`);
+        } catch (error) {
+          result.errors.push(`Failed to approve leave ${leave.id}: ${error.message}`);
+          this.logger.error(`[${cronName}] Failed to approve leave ${leave.id}`, error);
+        }
+      }
+    });
+
+    return result;
   }
 
   private getPreviousMonthDateRange(currentDate: Date): { startDate: string; endDate: string } {
@@ -749,7 +770,7 @@ export class LeaveCronService {
    * - This reminder gives HR/Admin time to review before auto-approval
    * - Critical reminder on last day of month (auto-approval next day)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_LEAVE_APPROVAL)
   async handleLeaveApprovalReminder(): Promise<LeaveApprovalReminderResult | null> {
     const cronName = CRON_NAMES.LEAVE_APPROVAL_REMINDER;
 

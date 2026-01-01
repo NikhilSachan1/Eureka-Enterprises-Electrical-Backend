@@ -71,7 +71,7 @@ export class ExpenseCronService {
    * Recipients:
    * - Admin team (all pending expenses)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_EXPENSE_REMINDERS)
   async handlePendingExpenseReminders(): Promise<PendingExpenseResult | null> {
     const cronName = CRON_NAMES.PENDING_EXPENSE_REMINDERS;
 

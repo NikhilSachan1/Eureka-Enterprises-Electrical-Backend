@@ -70,7 +70,7 @@ export class AssetCronService {
    * - Asset Managers / Admins (all alerts)
    * - Assigned users (only their assigned assets)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_ASSET_CALIBRATION)
   async handleAssetCalibrationExpiryAlerts(): Promise<AssetCalibrationExpiryResult | null> {
     const cronName = CRON_NAMES.ASSET_CALIBRATION_EXPIRY_ALERTS;
 
@@ -153,7 +153,7 @@ export class AssetCronService {
    * - Asset Managers / Admins (all alerts)
    * - Assigned users (only their assigned assets)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_ASSET_WARRANTY)
   async handleAssetWarrantyExpiryAlerts(): Promise<AssetWarrantyExpiryResult | null> {
     const cronName = CRON_NAMES.ASSET_WARRANTY_EXPIRY_ALERTS;
 

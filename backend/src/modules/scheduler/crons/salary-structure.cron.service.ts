@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
-import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CRON_NAMES } from '../constants/scheduler.constants';
 import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
@@ -34,64 +33,50 @@ export class SalaryStructureCronService {
   /**
    * CRON 18: Salary Structure Activation/Deactivation
    *
+   * NOTE: This cron is now controlled by DailyMidnightOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
+   * Use handleSalaryStructureActivationDirect() for orchestrated execution.
+   *
    * Runs daily at midnight IST to manage salary structure transitions.
-   *
-   * Scenarios Handled:
-   * 1. ACTIVATION: Structures with effectiveFrom <= today that are inactive
-   *    - Activates the pending structure
-   *    - Deactivates/supersedes the current active structure for the user
-   *    - Sets effectiveTo on the superseded structure
-   *
-   * 2. DEACTIVATION: Structures with effectiveTo < today that are still active
-   *    - Deactivates expired structures
-   *
-   * 3. MULTIPLE PENDING: If user has multiple pending structures
-   *    - Processes them in order of effectiveFrom (oldest first)
-   *    - Each activation supersedes the previous
-   *
-   * Validations:
-   * - Skips deleted salary structures (deletedAt IS NOT NULL)
-   * - Skips structures for deleted users
-   * - Ensures only ONE active structure per user at any time
-   * - Logs all changes for audit trail
-   *
-   * Edge Cases:
-   * - Structure with past effectiveFrom never activated - will be activated
-   * - User with no active structure - new structure activates normally
-   * - Same effectiveFrom date for multiple structures - processed by creation order
    */
-  @Cron(CRON_SCHEDULES.DAILY_MIDNIGHT_IST)
+  // @Cron decorator removed - now controlled by DailyMidnightOrchestrator
   async handleSalaryStructureActivation(): Promise<SalaryStructureActivationResult | null> {
     const cronName = CRON_NAMES.SALARY_STRUCTURE_ACTIVATION;
 
-    return this.cronLogService.execute(cronName, CronJobType.CONFIG, async () => {
-      const result: SalaryStructureActivationResult = {
-        structuresActivated: 0,
-        structuresDeactivated: 0,
-        previousStructuresUpdated: 0,
-        usersAffected: [],
-        errors: [],
-      };
-
-      const activationLog: ActivationLogEntry[] = [];
-
-      // Deactivate expired structures first
-      const deactivationResult = await this.deactivateExpiredStructures(cronName, activationLog);
-      result.structuresDeactivated = deactivationResult.count;
-      result.errors.push(...deactivationResult.errors);
-
-      // Activate pending structures
-      const activationResult = await this.activatePendingStructures(cronName, activationLog);
-      result.structuresActivated = activationResult.activated;
-      result.previousStructuresUpdated = activationResult.superseded;
-      result.usersAffected = activationResult.usersAffected;
-      result.errors.push(...activationResult.errors);
-
-      // Log summary
-      this.logActivationSummary(cronName, activationLog);
-
-      return result;
+    return this.cronLogService.execute(cronName, CronJobType.SALARY_STRUCTURE, async () => {
+      return this.handleSalaryStructureActivationDirect();
     });
+  }
+
+  async handleSalaryStructureActivationDirect(): Promise<SalaryStructureActivationResult> {
+    const cronName = CRON_NAMES.SALARY_STRUCTURE_ACTIVATION;
+
+    const result: SalaryStructureActivationResult = {
+      structuresActivated: 0,
+      structuresDeactivated: 0,
+      previousStructuresUpdated: 0,
+      usersAffected: [],
+      errors: [],
+    };
+
+    const activationLog: ActivationLogEntry[] = [];
+
+    // Deactivate expired structures first
+    const deactivationResult = await this.deactivateExpiredStructures(cronName, activationLog);
+    result.structuresDeactivated = deactivationResult.count;
+    result.errors.push(...deactivationResult.errors);
+
+    // Activate pending structures
+    const activationResult = await this.activatePendingStructures(cronName, activationLog);
+    result.structuresActivated = activationResult.activated;
+    result.previousStructuresUpdated = activationResult.superseded;
+    result.usersAffected = activationResult.usersAffected;
+    result.errors.push(...activationResult.errors);
+
+    // Log summary
+    this.logActivationSummary(cronName, activationLog);
+
+    return result;
   }
 
   private async deactivateExpiredStructures(

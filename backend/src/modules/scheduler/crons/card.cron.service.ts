@@ -72,7 +72,7 @@ export class CardCronService {
    * Recipients:
    * - Finance/Admin team (all alerts)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_CARD_ALERTS)
   async handleCardExpiryAlerts(): Promise<CardExpiryResult> {
     const cronName = CRON_NAMES.CARD_EXPIRY_ALERTS;
     const cronLog = await this.cronLogService.start(cronName, CronJobType.CARD);

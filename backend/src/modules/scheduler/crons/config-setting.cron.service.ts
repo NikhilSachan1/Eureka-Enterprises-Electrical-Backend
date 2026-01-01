@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
-import { CRON_SCHEDULES, CRON_NAMES } from '../constants/scheduler.constants';
+import { CRON_NAMES } from '../constants/scheduler.constants';
 import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import {
@@ -34,67 +33,55 @@ export class ConfigSettingCronService {
   /**
    * CRON 19: Config Setting Activation/Deactivation
    *
+   * NOTE: This cron is now controlled by DailyMidnightOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
+   * Use handleConfigSettingActivationDirect() for orchestrated execution.
+   *
    * Runs daily at midnight IST to manage config setting transitions.
    *
    * Scenarios Handled:
    * 1. ACTIVATION: Settings with effectiveFrom <= today that are inactive
-   *    - Activates the pending setting
-   *    - Deactivates/supersedes the current active setting for same config+context
-   *    - Sets effectiveTo on the superseded setting
-   *
    * 2. DEACTIVATION: Settings with effectiveTo < today that are still active
-   *    - Deactivates expired settings
-   *
    * 3. CONTEXT-AWARE: Settings are grouped by configId + contextKey
-   *    - Each config+context combination has at most ONE active setting
-   *    - Leave configs use contextKey for financial year (e.g., "2024-25")
-   *
-   * 4. MULTIPLE PENDING: If same config+context has multiple pending settings
-   *    - Processes them in order of effectiveFrom (oldest first)
-   *    - Each activation supersedes the previous
-   *
-   * Validations:
-   * - Skips deleted config settings (deletedAt IS NOT NULL)
-   * - Skips settings for deleted configurations
-   * - Ensures only ONE active setting per configId + contextKey
-   * - Logs all changes for audit trail
-   *
-   * Use Cases:
-   * - Leave configurations transitioning between financial years
-   * - Scheduled policy changes (attendance, expense limits, etc.)
-   * - Seasonal configuration updates
+   * 4. MULTIPLE PENDING: Processes them in order of effectiveFrom
    */
-  @Cron(CRON_SCHEDULES.DAILY_MIDNIGHT_IST)
+  // @Cron decorator removed - now controlled by DailyMidnightOrchestrator
   async handleConfigSettingActivation(): Promise<ConfigSettingActivationResult | null> {
     const cronName = CRON_NAMES.CONFIG_SETTING_ACTIVATION;
 
     return this.cronLogService.execute(cronName, CronJobType.CONFIG, async () => {
-      const result: ConfigSettingActivationResult = {
-        settingsActivated: 0,
-        settingsDeactivated: 0,
-        previousSettingsSuperseded: 0,
-        configsAffected: [],
-        errors: [],
-      };
-
-      const activationLog: ConfigActivationLogEntry[] = [];
-
-      // Deactivate expired settings first
-      const deactivationResult = await this.deactivateExpiredSettings(cronName, activationLog);
-      result.settingsDeactivated = deactivationResult.count;
-      result.errors.push(...deactivationResult.errors);
-
-      // Activate pending settings
-      const activationResult = await this.activatePendingSettings(cronName, activationLog);
-      result.settingsActivated = activationResult.activated;
-      result.previousSettingsSuperseded = activationResult.superseded;
-      result.configsAffected = activationResult.configsAffected;
-      result.errors.push(...activationResult.errors);
-
-      this.logActivationSummary(cronName, activationLog);
-
-      return result;
+      return this.handleConfigSettingActivationDirect();
     });
+  }
+
+  async handleConfigSettingActivationDirect(): Promise<ConfigSettingActivationResult> {
+    const cronName = CRON_NAMES.CONFIG_SETTING_ACTIVATION;
+
+    const result: ConfigSettingActivationResult = {
+      settingsActivated: 0,
+      settingsDeactivated: 0,
+      previousSettingsSuperseded: 0,
+      configsAffected: [],
+      errors: [],
+    };
+
+    const activationLog: ConfigActivationLogEntry[] = [];
+
+    // Deactivate expired settings first
+    const deactivationResult = await this.deactivateExpiredSettings(cronName, activationLog);
+    result.settingsDeactivated = deactivationResult.count;
+    result.errors.push(...deactivationResult.errors);
+
+    // Activate pending settings
+    const activationResult = await this.activatePendingSettings(cronName, activationLog);
+    result.settingsActivated = activationResult.activated;
+    result.previousSettingsSuperseded = activationResult.superseded;
+    result.configsAffected = activationResult.configsAffected;
+    result.errors.push(...activationResult.errors);
+
+    this.logActivationSummary(cronName, activationLog);
+
+    return result;
   }
 
   private async deactivateExpiredSettings(

@@ -73,84 +73,93 @@ export class AttendanceCronService {
    * Daily Attendance Entry Creation
    * Runs at 12:00 AM IST (6:30 PM UTC previous day)
    *
+   * NOTE: This cron is now controlled by DailyMidnightOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
+   *
    * Creates attendance records for all active employees:
    * - HOLIDAY: If today is a holiday
    * - LEAVE: If user has approved/pending paid leave
    * - LEAVE_WITHOUT_PAY: If user has approved/pending LWP
    * - NOT_CHECKED_IN_YET: Default for all other users
    */
-  @Cron(CRON_SCHEDULES.DAILY_MIDNIGHT_IST)
+  // @Cron decorator removed - now controlled by DailyMidnightOrchestrator
   async handleDailyAttendanceEntry(): Promise<DailyAttendanceResult | null> {
     const cronName = CRON_NAMES.DAILY_ATTENDANCE_ENTRY;
 
     return this.cronLogService.execute(cronName, CronJobType.ATTENDANCE, async () => {
-      const result: DailyAttendanceResult = {
-        totalUsers: 0,
-        created: 0,
-        skipped: 0,
-        holidays: 0,
-        leaves: 0,
-        lwp: 0,
-        errors: [],
-      };
-
-      const today = this.schedulerService.getTodayDateIST();
-      const financialYear = this.utilityService.getFinancialYear(today);
-
-      // 1. Check if today is a holiday
-      const isHoliday = await this.isHolidayDate(today, financialYear);
-
-      // 2. Get all active users who have joined
-      const activeUsers = await this.getActiveUsersForAttendance(today);
-      result.totalUsers = activeUsers.length;
-
-      if (activeUsers.length === 0) {
-        this.logger.log(`[${cronName}] No active users found for attendance`);
-        return result;
-      }
-
-      // 3. Get users who have leaves for today
-      const userLeaveMap = await this.getUserLeavesForDate(
-        activeUsers.map((user) => user.id),
-        today,
-      );
-
-      // 4. Get existing attendance records for today (to skip duplicates)
-      const existingAttendanceUserIds = await this.getExistingAttendanceUserIds(today);
-
-      // 5. Create attendance records
-      await this.dataSource.transaction(async (entityManager) => {
-        for (const user of activeUsers) {
-          try {
-            // Skip if attendance already exists
-            if (existingAttendanceUserIds.has(user.id)) {
-              result.skipped++;
-              continue;
-            }
-
-            const leaveInfo = userLeaveMap.get(user.id);
-            const attendanceData = this.buildAttendanceRecord(user.id, today, isHoliday, leaveInfo);
-
-            await this.attendanceService.create(attendanceData, entityManager);
-            result.created++;
-
-            // Track by type
-            if (attendanceData.status === AttendanceStatus.HOLIDAY) {
-              result.holidays++;
-            } else if (attendanceData.status === AttendanceStatus.LEAVE) {
-              result.leaves++;
-            } else if (attendanceData.status === AttendanceStatus.LEAVE_WITHOUT_PAY) {
-              result.lwp++;
-            }
-          } catch (error) {
-            result.errors.push(`User ${user.id}: ${error.message}`);
-            this.logger.error(`[${cronName}] Error creating attendance for user ${user.id}`, error);
-          }
-        }
-      });
-
-      return result;
+      return this.handleDailyAttendanceEntryDirect();
     });
+  }
+
+  async handleDailyAttendanceEntryDirect(): Promise<DailyAttendanceResult> {
+    const cronName = CRON_NAMES.DAILY_ATTENDANCE_ENTRY;
+
+    const result: DailyAttendanceResult = {
+      totalUsers: 0,
+      created: 0,
+      skipped: 0,
+      holidays: 0,
+      leaves: 0,
+      lwp: 0,
+      errors: [],
+    };
+
+    const today = this.schedulerService.getTodayDateIST();
+    const financialYear = this.utilityService.getFinancialYear(today);
+
+    // 1. Check if today is a holiday
+    const isHoliday = await this.isHolidayDate(today, financialYear);
+
+    // 2. Get all active users who have joined
+    const activeUsers = await this.getActiveUsersForAttendance(today);
+    result.totalUsers = activeUsers.length;
+
+    if (activeUsers.length === 0) {
+      this.logger.log(`[${cronName}] No active users found for attendance`);
+      return result;
+    }
+
+    // 3. Get users who have leaves for today
+    const userLeaveMap = await this.getUserLeavesForDate(
+      activeUsers.map((user) => user.id),
+      today,
+    );
+
+    // 4. Get existing attendance records for today (to skip duplicates)
+    const existingAttendanceUserIds = await this.getExistingAttendanceUserIds(today);
+
+    // 5. Create attendance records
+    await this.dataSource.transaction(async (entityManager) => {
+      for (const user of activeUsers) {
+        try {
+          // Skip if attendance already exists
+          if (existingAttendanceUserIds.has(user.id)) {
+            result.skipped++;
+            continue;
+          }
+
+          const leaveInfo = userLeaveMap.get(user.id);
+          const attendanceData = this.buildAttendanceRecord(user.id, today, isHoliday, leaveInfo);
+
+          await this.attendanceService.create(attendanceData, entityManager);
+          result.created++;
+
+          // Track by type
+          if (attendanceData.status === AttendanceStatus.HOLIDAY) {
+            result.holidays++;
+          } else if (attendanceData.status === AttendanceStatus.LEAVE) {
+            result.leaves++;
+          } else if (attendanceData.status === AttendanceStatus.LEAVE_WITHOUT_PAY) {
+            result.lwp++;
+          }
+        } catch (error) {
+          result.errors.push(`User ${user.id}: ${error.message}`);
+          this.logger.error(`[${cronName}] Error creating attendance for user ${user.id}`, error);
+        }
+      }
+    });
+
+    return result;
   }
 
   private async isHolidayDate(date: Date, financialYear: string): Promise<boolean> {
@@ -486,96 +495,101 @@ export class AttendanceCronService {
    * Auto-approves all pending attendance records for the previous month.
    * This ensures attendance is counted in payroll even if admin forgot to approve.
    *
+   * NOTE: This cron is now controlled by MonthlyAutoApproveOrchestrator.
+   * The @Cron decorator is removed to prevent duplicate execution.
+   *
    * Scenarios Handled:
    * 1. ABSENT with PENDING approval - Auto-approved
    * 2. CHECKED_OUT with PENDING approval - Auto-approved
    * 3. HALF_DAY with PENDING approval - Auto-approved
    * 4. LEAVE/LEAVE_WITHOUT_PAY with PENDING approval - Auto-approved
    * 5. Already APPROVED/REJECTED records - Skipped
-   *
-   * Timing:
-   * - Runs at midnight on 1st of every month (same time as leave auto-approve)
-   * - Runs BEFORE payroll generation (payroll runs at 1 AM on 2nd)
-   * - Only processes previous month's attendance records
-   *
-   * Note: This runs at same schedule as leave auto-approve (CRON 6).
-   * Both are independent and can run in parallel.
    */
-  @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_IST)
+  // @Cron decorator removed - now controlled by MonthlyAutoApproveOrchestrator
   async handleAutoApproveAttendance(): Promise<AutoApproveAttendanceResult | null> {
     const cronName = CRON_NAMES.AUTO_APPROVE_ATTENDANCE;
 
     return this.cronLogService.execute(cronName, CronJobType.ATTENDANCE, async () => {
-      const result: AutoApproveAttendanceResult = {
-        attendanceApproved: 0,
-        byStatus: {
-          absent: 0,
-          checkedOut: 0,
-          halfDay: 0,
-          leave: 0,
-          leaveWithoutPay: 0,
-          other: 0,
-        },
-        errors: [],
-      };
-
-      const currentDate = this.schedulerService.getCurrentDateIST();
-
-      const { startDate, endDate } = this.getPreviousMonthDateRange(currentDate);
-
-      this.logger.log(
-        `[${cronName}] Auto-approving pending attendance from ${startDate} to ${endDate}`,
-      );
-
-      const pendingAttendances = await this.getPendingAttendancesForPeriod(startDate, endDate);
-
-      if (pendingAttendances.length === 0) {
-        this.logger.log(`[${cronName}] No pending attendance found for previous month`);
-        return result;
-      }
-
-      this.logger.log(
-        `[${cronName}] Found ${pendingAttendances.length} pending attendance records to auto-approve`,
-      );
-
-      await this.dataSource.transaction(async (entityManager) => {
-        for (const attendance of pendingAttendances) {
-          try {
-            const { query, params } = autoApproveAttendanceQuery(
-              attendance.id,
-              attendance.status,
-              SYSTEM_NOTES.AUTO_APPROVED_ATTENDANCE,
-              SYSTEM_DEFAULTS.SYSTEM_USER_ID,
-            );
-            await entityManager.query(query, params);
-
-            result.attendanceApproved++;
-            this.trackAttendanceByStatus(result.byStatus, attendance.status);
-
-            const statusChanged =
-              attendance.status === AttendanceStatus.CHECKED_OUT ||
-              attendance.status === AttendanceStatus.HALF_DAY;
-            const newStatus = statusChanged ? AttendanceStatus.PRESENT : attendance.status;
-
-            this.logger.debug(
-              `[${cronName}] Auto-approved attendance ${attendance.id} (${attendance.status} → ${newStatus})`,
-            );
-          } catch (error) {
-            result.errors.push(`Failed to approve attendance ${attendance.id}: ${error.message}`);
-            this.logger.error(`[${cronName}] Failed to approve attendance ${attendance.id}`, error);
-          }
-        }
-      });
-
-      this.logger.log(
-        `[${cronName}] Summary: ${result.attendanceApproved} approved ` +
-          `(Absent: ${result.byStatus.absent}, CheckedOut: ${result.byStatus.checkedOut}, ` +
-          `HalfDay: ${result.byStatus.halfDay}, Leave: ${result.byStatus.leave}, ` +
-          `LWP: ${result.byStatus.leaveWithoutPay}, Other: ${result.byStatus.other})`,
-      );
-
-      return result;
+      return this.handleAutoApproveAttendanceDirect();
     });
+  }
+
+  /**
+   * Direct execution method - called by orchestrator
+   * Contains the actual business logic without DB logging wrapper
+   */
+  async handleAutoApproveAttendanceDirect(): Promise<AutoApproveAttendanceResult> {
+    const cronName = CRON_NAMES.AUTO_APPROVE_ATTENDANCE;
+
+    const result: AutoApproveAttendanceResult = {
+      attendanceApproved: 0,
+      byStatus: {
+        absent: 0,
+        checkedOut: 0,
+        halfDay: 0,
+        leave: 0,
+        leaveWithoutPay: 0,
+        other: 0,
+      },
+      errors: [],
+    };
+
+    const currentDate = this.schedulerService.getCurrentDateIST();
+
+    const { startDate, endDate } = this.getPreviousMonthDateRange(currentDate);
+
+    this.logger.log(
+      `[${cronName}] Auto-approving pending attendance from ${startDate} to ${endDate}`,
+    );
+
+    const pendingAttendances = await this.getPendingAttendancesForPeriod(startDate, endDate);
+
+    if (pendingAttendances.length === 0) {
+      this.logger.log(`[${cronName}] No pending attendance found for previous month`);
+      return result;
+    }
+
+    this.logger.log(
+      `[${cronName}] Found ${pendingAttendances.length} pending attendance records to auto-approve`,
+    );
+
+    await this.dataSource.transaction(async (entityManager) => {
+      for (const attendance of pendingAttendances) {
+        try {
+          const { query, params } = autoApproveAttendanceQuery(
+            attendance.id,
+            attendance.status,
+            SYSTEM_NOTES.AUTO_APPROVED_ATTENDANCE,
+            SYSTEM_DEFAULTS.SYSTEM_USER_ID,
+          );
+          await entityManager.query(query, params);
+
+          result.attendanceApproved++;
+          this.trackAttendanceByStatus(result.byStatus, attendance.status);
+
+          const statusChanged =
+            attendance.status === AttendanceStatus.CHECKED_OUT ||
+            attendance.status === AttendanceStatus.HALF_DAY;
+          const newStatus = statusChanged ? AttendanceStatus.PRESENT : attendance.status;
+
+          this.logger.debug(
+            `[${cronName}] Auto-approved attendance ${attendance.id} (${attendance.status} → ${newStatus})`,
+          );
+        } catch (error) {
+          result.errors.push(`Failed to approve attendance ${attendance.id}: ${error.message}`);
+          this.logger.error(`[${cronName}] Failed to approve attendance ${attendance.id}`, error);
+        }
+      }
+    });
+
+    this.logger.log(
+      `[${cronName}] Summary: ${result.attendanceApproved} approved ` +
+        `(Absent: ${result.byStatus.absent}, CheckedOut: ${result.byStatus.checkedOut}, ` +
+        `HalfDay: ${result.byStatus.halfDay}, Leave: ${result.byStatus.leave}, ` +
+        `LWP: ${result.byStatus.leaveWithoutPay}, Other: ${result.byStatus.other})`,
+    );
+
+    return result;
   }
 
   private getPreviousMonthDateRange(currentDate: Date): { startDate: string; endDate: string } {
@@ -647,7 +661,7 @@ export class AttendanceCronService {
    * 5. Highlights ABSENT records as they need special review
    * 6. Only considers attendance for current month
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_ATTENDANCE_APPROVAL)
   async handleAttendanceApprovalReminder(): Promise<AttendanceApprovalReminderResult | null> {
     const cronName = CRON_NAMES.ATTENDANCE_APPROVAL_REMINDER;
 

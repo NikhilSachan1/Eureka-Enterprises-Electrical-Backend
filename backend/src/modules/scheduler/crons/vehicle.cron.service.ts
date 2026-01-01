@@ -73,7 +73,7 @@ export class VehicleCronService {
    * Recipients:
    * - All Admins / Admin (TODO: Fetch dynamically from roles)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_VEHICLE_DOCS)
   async handleVehicleDocumentExpiryAlerts(): Promise<VehicleDocumentExpiryResult | null> {
     const cronName = CRON_NAMES.VEHICLE_DOCUMENT_EXPIRY_ALERTS;
 
@@ -171,7 +171,7 @@ export class VehicleCronService {
    * - All Admins (TODO: Fetch dynamically from roles)
    * - Assigned users (if vehicle is assigned to someone)
    */
-  @Cron(CRON_SCHEDULES.DAILY_9AM_IST)
+  @Cron(CRON_SCHEDULES.DAILY_9AM_VEHICLE_SERVICE)
   async handleVehicleServiceDueReminders(): Promise<VehicleServiceDueResult | null> {
     const cronName = CRON_NAMES.VEHICLE_SERVICE_DUE_REMINDERS;
 
