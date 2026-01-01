@@ -43,6 +43,8 @@ import { PayrollModule } from 'src/modules/payroll/payroll.module';
 import { DateTimeModule } from 'src/utils/datetime';
 import { TimezoneInterceptor } from 'src/utils/middleware/timezone.interceptor';
 import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
+import { AuditLogModule } from 'src/modules/audit-logs/audit-log.module';
+import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/request-audit.interceptor';
 
 @Module({
   imports: [
@@ -82,6 +84,7 @@ import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
     SchedulerModule,
     DateTimeModule,
     CronLogModule,
+    AuditLogModule,
   ],
   controllers: [AppController],
   providers: [
@@ -98,6 +101,10 @@ import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: TimezoneInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestAuditInterceptor,
     },
     {
       provide: APP_FILTER,

@@ -36,6 +36,9 @@ import { SalaryStructureEntity } from 'src/modules/salary-structures/entities/sa
 import { SalaryChangeLogEntity } from 'src/modules/salary-change-logs/entities/salary-change-log.entity';
 import { BonusEntity } from 'src/modules/bonuses/entities/bonus.entity';
 import { PayrollEntity } from 'src/modules/payroll/entities/payroll.entity';
+import { CronLogEntity } from 'src/modules/cron-logs/entities/cron-log.entity';
+import { RequestAuditLogEntity } from 'src/modules/audit-logs/entities/request-audit-log.entity';
+import { EntityAuditLogEntity } from 'src/modules/audit-logs/entities/entity-audit-log.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -97,6 +100,9 @@ export class ConfigService {
         SalaryChangeLogEntity,
         BonusEntity,
         PayrollEntity,
+        CronLogEntity,
+        RequestAuditLogEntity,
+        EntityAuditLogEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,
