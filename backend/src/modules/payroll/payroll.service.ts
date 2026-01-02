@@ -6,6 +6,7 @@ import { SalaryStructureService } from '../salary-structures/salary-structure.se
 import { BonusService } from '../bonuses/bonus.service';
 import { BonusRepository } from '../bonuses/bonus.repository';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
+import { PayslipService } from './payslip/payslip.service';
 import { GeneratePayrollDto, GenerateBulkPayrollDto, GetPayrollDto, UpdatePayrollDto } from './dto';
 import { PayrollEntity } from './entities/payroll.entity';
 import { BonusStatus } from '../bonuses/constants/bonus.constants';
@@ -46,6 +47,7 @@ export class PayrollService {
     private readonly bonusService: BonusService,
     private readonly bonusRepository: BonusRepository,
     private readonly leaveBalancesService: LeaveBalancesService,
+    private readonly payslipService: PayslipService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
@@ -347,6 +349,15 @@ export class PayrollService {
     }
 
     await this.payrollRepository.update({ id }, updateData);
+
+    if (updateDto.status === PayrollStatus.PAID) {
+      // Send payslip asynchronously (don't block the response)
+      this.payslipService
+        .generateAndSendPayslip({ payrollId: id, sendEmail: true })
+        .catch((error) => {
+          Logger.error(`Failed to generate/send payslip for payroll ${id}:`, error);
+        });
+    }
 
     // Return appropriate message based on status change
     if (updateDto.status === PayrollStatus.APPROVED) {

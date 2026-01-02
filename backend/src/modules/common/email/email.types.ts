@@ -1,8 +1,16 @@
+export interface IMailAttachment {
+  filename: string;
+  content?: Buffer | string;
+  path?: string;
+  contentType?: string;
+}
+
 export interface IMailOptions {
   receiverEmails: string | string[];
   subject: string;
   template: string;
   emailData: IEmailDataValues;
+  attachments?: IMailAttachment[];
 }
 
 export interface IEmailDataValues {
@@ -14,6 +22,12 @@ export interface IEmailDataValues {
   firstName?: string;
   lastName?: string;
   resetPasswordLink?: string;
+
+  // Payslip
+  employeeName?: string;
+  monthYear?: string;
+  netPayable?: string;
+  companyName?: string;
 
   // FY Leave Config Reminder
   daysRemaining?: number;

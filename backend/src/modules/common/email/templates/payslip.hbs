@@ -1,0 +1,140 @@
+<html lang='en'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Your Payslip for {{monthYear}}</title>
+  </head>
+  <body
+    style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fa;"
+  >
+    <table role='presentation' style='width: 100%; border-collapse: collapse;'>
+      <tr>
+        <td align='center' style='padding: 40px 0;'>
+          <table
+            role='presentation'
+            style='width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.1);'
+          >
+
+            <!-- Header -->
+            <tr>
+              <td
+                style='background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); padding: 40px; text-align: center;'
+              >
+                <table role='presentation' style='width: 100%; border-collapse: collapse;'>
+                  <tr>
+                    <td align='center'>
+                      <img
+                        src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+                        alt='Eureka Enterprises'
+                        style='max-width: 80px; height: auto; display: block; margin: 0 auto 16px; border-radius: 8px;'
+                      />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align='center'>
+                      <h1
+                        style='margin: 0; color: #ffffff; font-size: 22px; font-weight: 600; letter-spacing: 0.5px;'
+                      >{{companyName}}</h1>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Main Content -->
+            <tr>
+              <td style='padding: 40px;'>
+                <table role='presentation' style='width: 100%; border-collapse: collapse;'>
+                  <tr>
+                    <td>
+                      <h2
+                        style='margin: 0 0 8px 0; color: #1e293b; font-size: 22px; font-weight: 600;'
+                      >Hello {{firstName}},</h2>
+                      <p
+                        style='margin: 0 0 24px 0; color: #64748b; font-size: 15px; line-height: 1.6;'
+                      >Your salary slip for
+                        <strong style='color: #1e293b;'>{{monthYear}}</strong>
+                        is ready.</p>
+                    </td>
+                  </tr>
+
+                  <!-- Amount Card -->
+                  <tr>
+                    <td>
+                      <table
+                        role='presentation'
+                        style='width: 100%; border-collapse: collapse; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 16px; margin-bottom: 24px;'
+                      >
+                        <tr>
+                          <td style='padding: 32px; text-align: center;'>
+                            <p
+                              style='margin: 0 0 8px 0; color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 2px;'
+                            >Net Payable Amount</p>
+                            <p
+                              style='margin: 0; color: #0284c7; font-size: 36px; font-weight: 700;'
+                            >{{netPayable}}</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Attachment Note -->
+                  <tr>
+                    <td>
+                      <table
+                        role='presentation'
+                        style='width: 100%; border-collapse: collapse; background-color: #f8fafc; border-radius: 12px; border-left: 4px solid #2c5282;'
+                      >
+                        <tr>
+                          <td style='padding: 20px;'>
+                            <p
+                              style='margin: 0; color: #475569; font-size: 14px; line-height: 1.6;'
+                            >
+                              <strong style='color: #1e293b;'>📎 Attachment:</strong>
+                              Your detailed payslip is attached to this email as a PDF document.
+                              Please download and save it for your records.
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Help Text -->
+                  <tr>
+                    <td style='padding-top: 24px;'>
+                      <p style='margin: 0; color: #94a3b8; font-size: 13px; line-height: 1.6;'>If
+                        you have any questions regarding your salary or need clarification on any
+                        deductions, please contact the HR department.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td
+                style='background-color: #f8fafc; padding: 24px 40px; border-top: 1px solid #e2e8f0;'
+              >
+                <table role='presentation' style='width: 100%; border-collapse: collapse;'>
+                  <tr>
+                    <td style='text-align: center;'>
+                      <p style='margin: 0 0 8px 0; color: #64748b; font-size: 12px;'>This is an
+                        automated email. Please do not reply.</p>
+                      <p style='margin: 0; color: #94a3b8; font-size: 11px;'>©
+                        {{currentYear}}
+                        {{companyName}}. All rights reserved.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

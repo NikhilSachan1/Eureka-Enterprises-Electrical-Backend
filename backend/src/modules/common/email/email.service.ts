@@ -10,7 +10,7 @@ export class EmailService {
 
   async sendMail(emailContext: IMailOptions) {
     try {
-      const { receiverEmails, subject, template, emailData } = emailContext;
+      const { receiverEmails, subject, template, emailData, attachments } = emailContext;
 
       const environment = Environments.APP_ENVIRONMENT;
 
@@ -33,6 +33,12 @@ export class EmailService {
         subject,
         template,
         context: emailData,
+        attachments: attachments?.map((att) => ({
+          filename: att.filename,
+          content: att.content,
+          path: att.path,
+          contentType: att.contentType,
+        })),
       });
 
       Logger.log(`Mail Successfully Sent to : ${receiverEmails}`);

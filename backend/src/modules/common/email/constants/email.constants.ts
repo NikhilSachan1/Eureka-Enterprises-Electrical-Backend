@@ -1,33 +1,33 @@
 export const EMAIL_SUBJECT = {
-  FORGET_PASSWORD: 'Eureka Enterprises - Password Reset Request',
-  FY_LEAVE_CONFIG_REMINDER: 'Eureka Enterprises - Financial Year Leave Configuration Reminder',
-  VEHICLE_DOCUMENT_EXPIRY: 'Eureka Enterprises - Vehicle Documents Expiring Soon',
-  VEHICLE_DOCUMENT_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Vehicle Documents Expired',
-  VEHICLE_SERVICE_DUE: 'Eureka Enterprises - Vehicle Service Due Reminder',
-  VEHICLE_SERVICE_DUE_URGENT: '🚨 URGENT: Eureka Enterprises - Vehicle Service Overdue',
-  ASSET_CALIBRATION_EXPIRY: 'Eureka Enterprises - Asset Calibration Expiring Soon',
-  ASSET_CALIBRATION_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Asset Calibration Expired',
-  ASSET_WARRANTY_EXPIRY: 'Eureka Enterprises - Asset Warranty Expiring Soon',
-  ASSET_WARRANTY_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Asset Warranty Expired',
-  CARD_EXPIRY: 'Eureka Enterprises - Cards Expiring Soon',
-  CARD_EXPIRY_URGENT: '🚨 URGENT: Eureka Enterprises - Cards Expired',
-  PENDING_EXPENSE_REMINDER: 'Eureka Enterprises - Pending Expense Approvals',
-  PENDING_EXPENSE_REMINDER_URGENT:
-    '🚨 ACTION REQUIRED: Eureka Enterprises - Overdue Expense Approvals',
+  FORGET_PASSWORD: 'Eureka HRMS - Password Reset Request',
+  FY_LEAVE_CONFIG_REMINDER: 'Eureka HRMS - Financial Year Leave Configuration Reminder',
+  VEHICLE_DOCUMENT_EXPIRY: 'Eureka HRMS - Vehicle Documents Expiring Soon',
+  VEHICLE_DOCUMENT_EXPIRY_URGENT: '🚨 URGENT: Eureka HRMS - Vehicle Documents Expired',
+  VEHICLE_SERVICE_DUE: 'Eureka HRMS - Vehicle Service Due Reminder',
+  VEHICLE_SERVICE_DUE_URGENT: '🚨 URGENT: Eureka HRMS - Vehicle Service Overdue',
+  ASSET_CALIBRATION_EXPIRY: 'Eureka HRMS - Asset Calibration Expiring Soon',
+  ASSET_CALIBRATION_EXPIRY_URGENT: '🚨 URGENT: Eureka HRMS - Asset Calibration Expired',
+  ASSET_WARRANTY_EXPIRY: 'Eureka HRMS - Asset Warranty Expiring Soon',
+  ASSET_WARRANTY_EXPIRY_URGENT: '🚨 URGENT: Eureka HRMS - Asset Warranty Expired',
+  CARD_EXPIRY: 'Eureka HRMS - Cards Expiring Soon',
+  CARD_EXPIRY_URGENT: '🚨 URGENT: Eureka HRMS - Cards Expired',
+  PENDING_EXPENSE_REMINDER: 'Eureka HRMS - Pending Expense Approvals',
+  PENDING_EXPENSE_REMINDER_URGENT: '🚨 ACTION REQUIRED: Eureka HRMS - Overdue Expense Approvals',
   // Celebration wishes
-  BIRTHDAY_WISH: '🎂 Happy Birthday from Eureka Enterprises!',
-  WORK_ANNIVERSARY: '🎉 Happy Work Anniversary - {years} at Eureka Enterprises!',
-  WORK_ANNIVERSARY_MILESTONE: '🌟 Celebrating {years} Milestone at Eureka Enterprises!',
+  BIRTHDAY_WISH: '🎂 Happy Birthday from Eureka HRMS!',
+  WORK_ANNIVERSARY: '🎉 Happy Work Anniversary - {years} at Eureka HRMS!',
+  WORK_ANNIVERSARY_MILESTONE: '🌟 Celebrating {years} Milestone at Eureka HRMS!',
   // Leave Approval Reminders
-  LEAVE_APPROVAL_REMINDER: 'Eureka Enterprises - Pending Leave Approvals',
-  LEAVE_APPROVAL_REMINDER_URGENT:
-    '🚨 URGENT: Eureka Enterprises - Leave Auto-Approval in {days} Days',
+  LEAVE_APPROVAL_REMINDER: 'Eureka HRMS - Pending Leave Approvals',
+  LEAVE_APPROVAL_REMINDER_URGENT: '🚨 URGENT: Eureka HRMS - Leave Auto-Approval in {days} Days',
   LEAVE_APPROVAL_REMINDER_CRITICAL: '⚠️ FINAL REMINDER: Leave Auto-Approval Tomorrow!',
   // Attendance Approval Reminders
-  ATTENDANCE_APPROVAL_REMINDER: 'Eureka Enterprises - Pending Attendance Approvals',
+  ATTENDANCE_APPROVAL_REMINDER: 'Eureka HRMS - Pending Attendance Approvals',
   ATTENDANCE_APPROVAL_REMINDER_URGENT:
-    '🚨 URGENT: Eureka Enterprises - Attendance Auto-Approval in {days} Days',
+    '🚨 URGENT: Eureka HRMS - Attendance Auto-Approval in {days} Days',
   ATTENDANCE_APPROVAL_REMINDER_CRITICAL: '⚠️ FINAL REMINDER: Attendance Auto-Approval Tomorrow!',
+  // Payslip
+  PAYSLIP: 'Eureka HRMS - Salary Slip for {monthYear}',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -43,6 +43,7 @@ export const EMAIL_TEMPLATE = {
   WORK_ANNIVERSARY: 'workAnniversary',
   LEAVE_APPROVAL_REMINDER: 'leaveApprovalReminder',
   ATTENDANCE_APPROVAL_REMINDER: 'attendanceApprovalReminder',
+  PAYSLIP: 'payslip',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {};
