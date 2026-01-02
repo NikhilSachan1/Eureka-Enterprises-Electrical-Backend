@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { UsersModule } from '../users/user.module';
 import { JwtModule } from '@nestjs/jwt';
@@ -7,9 +8,13 @@ import { Environments } from 'env-configs';
 import { SharedModule } from '../shared/shared.module';
 import { EmailModule } from '../common/email/email.module';
 import { UserRoleModule } from '../user-roles/user-role.module';
+import { RolesGuard } from './guards/roles.guard';
+import { RefreshTokenEntity } from './entities/refresh-token.entity';
+import { RefreshTokenRepository } from './refresh-token.repository';
 
 @Module({
   imports: [
+    TypeOrmModule.forFeature([RefreshTokenEntity]),
     forwardRef(() => UsersModule),
     JwtModule.register({
       global: true,
@@ -20,8 +25,8 @@ import { UserRoleModule } from '../user-roles/user-role.module';
     EmailModule,
     UserRoleModule,
   ],
-  providers: [AuthService],
+  providers: [AuthService, RolesGuard, RefreshTokenRepository],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, RolesGuard],
 })
 export class AuthModule {}

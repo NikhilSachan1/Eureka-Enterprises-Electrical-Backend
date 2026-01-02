@@ -18,6 +18,19 @@ export const AUTH_ERRORS = {
   USER_ARCHIVED: 'This account is inactive. Contact admin.',
   ROLE_NOT_FOUND: 'Role not found.',
   SERVICE_TEMPORARILY_UNAVAILABLE: 'Service temporarily unavailable. Please try again later.',
+  // Multi-role authentication errors
+  USER_HAS_NO_ROLES: 'User has no roles assigned. Please contact administrator.',
+  INVALID_ACTIVE_ROLE: 'The requested role is not assigned to this user.',
+  ACTIVE_ROLE_REQUIRED: 'Active role header (X-Active-Role) is required.',
+  ROLE_SWITCH_UNAUTHORIZED: 'You are not authorized to switch to this role.',
+  USER_NOT_AUTHENTICATED: 'User not authenticated.',
+  ACCESS_DENIED_REQUIRED_ROLES:
+    'Access denied. Required roles: {requiredRoles}. Your active role: {activeRole}.',
+  // Refresh token errors
+  INVALID_REFRESH_TOKEN: 'Invalid or expired refresh token. Please sign in again.',
+  REFRESH_TOKEN_REVOKED: 'Refresh token has been revoked. Please sign in again.',
+  REFRESH_TOKEN_EXPIRED: 'Refresh token has expired. Please sign in again.',
+  REFRESH_TOKEN_NOT_FOUND: 'Refresh token not found. Please sign in again.',
 };
 
 export const AUTH_RESPONSES = {
@@ -27,6 +40,9 @@ export const AUTH_RESPONSES = {
     'A password reset link has been successfully sent to your email. Please check your inbox to continue.',
   SIGNUP_SUCCESS: 'Signup successfully, please login to continue.',
   SIGN_OUT_SUCCESS: 'Signed out successfully.',
+  ROLE_SWITCHED: 'Role switched successfully.',
+  TOKEN_REFRESHED: 'Token refreshed successfully.',
+  ALL_SESSIONS_REVOKED: 'All sessions have been revoked successfully.',
 };
 
 export const AUTH_DTO_ERRORS = {
@@ -34,3 +50,5 @@ export const AUTH_DTO_ERRORS = {
   PASSWORD_STRENGTH:
     'Password must include uppercase letters, lowercase letters, numbers, and special characters',
 };
+
+export const ACTIVE_ROLE_HEADER = 'x-active-role';

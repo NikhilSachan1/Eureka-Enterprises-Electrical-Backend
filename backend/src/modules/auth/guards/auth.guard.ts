@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
@@ -13,7 +14,8 @@ import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { UserService } from 'src/modules/users/user.service';
 import { UserStatus } from 'src/modules/users/constants/user.constants';
-import { AUTH_ERRORS } from '../constants/auth.constants';
+import { ACTIVE_ROLE_HEADER, AUTH_ERRORS } from '../constants/auth.constants';
+import { JwtPayload, UserFromRequest } from '../auth.types';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -38,18 +40,43 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       throw new UnauthorizedException();
     }
+
     try {
-      const { id, email, role } = await this.jwtService.verifyAsync(token, {
+      const payload: JwtPayload = await this.jwtService.verifyAsync(token, {
         secret: Environments.JWT_AUTH_SECRET_KEY,
       });
-      const user = await this.userService.findOne({ id, email, deletedAt: null });
 
+      const { id, email, roles, activeRole: tokenActiveRole } = payload;
+
+      const user = await this.userService.findOne({ id, email, deletedAt: null });
       if (!user || user.status === UserStatus.ARCHIVED) {
         throw new UnauthorizedException();
       }
 
-      request['user'] = { id: user.id, email: user.email, role };
+      const headerActiveRole = this.extractActiveRoleFromHeader(request);
+      const activeRole = headerActiveRole || tokenActiveRole;
+
+      if (!roles || roles.length === 0) {
+        throw new ForbiddenException(AUTH_ERRORS.USER_HAS_NO_ROLES);
+      }
+
+      if (!roles.includes(activeRole)) {
+        throw new ForbiddenException(AUTH_ERRORS.INVALID_ACTIVE_ROLE);
+      }
+
+      const userFromRequest: UserFromRequest = {
+        id: user.id,
+        email: user.email,
+        roles,
+        activeRole,
+        role: activeRole, // Backwards compatibility - existing code uses user.role
+      };
+
+      request['user'] = userFromRequest;
     } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
       if (
         error instanceof UnauthorizedException ||
         error instanceof JsonWebTokenError ||
@@ -67,5 +94,10 @@ export class AuthGuard implements CanActivate {
   private extractTokenFromHeader(request: Request): string | undefined {
     const [type, token] = request.headers.authorization?.split(' ') ?? [];
     return type === 'Bearer' ? token : undefined;
+  }
+
+  private extractActiveRoleFromHeader(request: Request): string | undefined {
+    const activeRole = request.headers[ACTIVE_ROLE_HEADER];
+    return typeof activeRole === 'string' ? activeRole : undefined;
   }
 }

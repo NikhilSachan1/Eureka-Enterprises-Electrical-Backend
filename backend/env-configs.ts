@@ -16,9 +16,12 @@ export const Environments = {
   APP_PORT: process.env.APP_PORT,
 
   // JWT configuration
-  JWT_AUTH_TOKEN_EXPIRY: process.env.JWT_AUTH_TOKEN_EXPIRY,
+  JWT_AUTH_TOKEN_EXPIRY: process.env.JWT_AUTH_TOKEN_EXPIRY, // Access token: 30 minutes
+  JWT_REFRESH_TOKEN_EXPIRY: process.env.JWT_REFRESH_TOKEN_EXPIRY, // Refresh token: 30 days
+  JWT_REFRESH_TOKEN_EXPIRY_DAYS: parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRY_DAYS),
   FORGET_PASSWORD_TOKEN_EXPIRY: process.env.FORGET_PASSWORD_TOKEN_EXPIRY,
   JWT_AUTH_SECRET_KEY: process.env.JWT_AUTH_SECRET_KEY,
+  JWT_REFRESH_SECRET_KEY: process.env.JWT_REFRESH_SECRET_KEY,
 
   // Security configuration
   SALT_CHARACTER_LENGTH: parseInt(process.env.SALT_CHARACTER_LENGTH),
