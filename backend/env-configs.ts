@@ -45,5 +45,5 @@ export const Environments = {
   AWS_S3_BUCKET_NAME: process.env.AWS_S3_BUCKET_NAME,
 
   // Feature flags
-  ENFORCE_REQUIRED_HEADERS: process.env.ENFORCE_REQUIRED_HEADERS === 'true',
+  ENFORCE_REQUIRED_HEADERS: process.env.ENFORCE_REQUIRED_HEADERS === 'true' ? true : false || false,
 };
