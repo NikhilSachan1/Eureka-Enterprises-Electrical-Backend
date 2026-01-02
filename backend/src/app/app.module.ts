@@ -9,6 +9,7 @@ import { HttpErrorFilter } from 'src/utils/custom-error-filter/error.filter';
 import { RequestInterceptor } from 'src/utils/middleware/request.interceptor';
 import { ResponseInterceptor } from 'src/utils/middleware/response.interceptor';
 import { AuthGuard } from 'src/modules/auth/guards/auth.guard';
+import { HeaderValidationGuard } from 'src/modules/auth/guards/header-validation.guard';
 import { AppConfigModule } from 'src/utils/config/config.module';
 import { CustomLoggerModule } from 'src/utils/custom-logger/custom-logger.module';
 import { SharedModule } from 'src/modules/shared/shared.module';
@@ -109,6 +110,10 @@ import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/req
     {
       provide: APP_FILTER,
       useClass: HttpErrorFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: HeaderValidationGuard,
     },
     {
       provide: APP_GUARD,

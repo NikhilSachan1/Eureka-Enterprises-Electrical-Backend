@@ -45,13 +45,71 @@ async function bootstrap() {
   setGlobalModuleRef(moduleRef);
 
   if (Environments.APP_ENVIRONMENT !== 'production') {
-    const config = new DocumentBuilder()
+    const docBuilder = new DocumentBuilder()
       .setTitle(`${pkg.name} APIs`)
       .setDescription(`${pkg.name} Backend APIs`)
       .setVersion(`${pkg.version}`)
-      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT-auth')
-      .build();
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT-auth');
+
+    // Add required headers to Swagger only when enforcement is enabled
+    if (Environments.ENFORCE_REQUIRED_HEADERS) {
+      docBuilder
+        .addApiKey(
+          {
+            type: 'apiKey',
+            name: 'X-Active-Role',
+            in: 'header',
+            description: 'Active role (ADMIN, HR, EMPLOYEE)',
+          },
+          'X-Active-Role',
+        )
+        .addApiKey(
+          {
+            type: 'apiKey',
+            name: 'X-Correlation-Id',
+            in: 'header',
+            description: 'Correlation ID (UUID)',
+          },
+          'X-Correlation-Id',
+        )
+        .addApiKey(
+          {
+            type: 'apiKey',
+            name: 'X-Source-Type',
+            in: 'header',
+            description: 'Source type (web/app)',
+          },
+          'X-Source-Type',
+        )
+        .addApiKey(
+          {
+            type: 'apiKey',
+            name: 'X-Client-Type',
+            in: 'header',
+            description: 'Client type (web/app)',
+          },
+          'X-Client-Type',
+        );
+    }
+
+    const config = docBuilder.build();
     const document = SwaggerModule.createDocument(app, config);
+
+    // Apply security globally based on toggle
+    if (Environments.ENFORCE_REQUIRED_HEADERS) {
+      document.security = [
+        {
+          'JWT-auth': [],
+          'X-Active-Role': [],
+          'X-Correlation-Id': [],
+          'X-Source-Type': [],
+          'X-Client-Type': [],
+        },
+      ];
+    } else {
+      document.security = [{ 'JWT-auth': [] }];
+    }
+
     SwaggerModule.setup('api/v1', app, document);
   }
 

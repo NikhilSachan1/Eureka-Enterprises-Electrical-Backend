@@ -52,3 +52,21 @@ export const AUTH_DTO_ERRORS = {
 };
 
 export const ACTIVE_ROLE_HEADER = 'x-active-role';
+export const CORRELATION_ID_HEADER = 'x-correlation-id';
+export const SOURCE_TYPE_HEADER = 'x-source-type';
+export const CLIENT_TYPE_HEADER = 'x-client-type';
+
+export const REQUIRED_HEADERS = {
+  ACTIVE_ROLE: ACTIVE_ROLE_HEADER,
+  CORRELATION_ID: CORRELATION_ID_HEADER,
+  SOURCE_TYPE: SOURCE_TYPE_HEADER,
+  CLIENT_TYPE: CLIENT_TYPE_HEADER,
+};
+
+export const HEADER_ERRORS = {
+  MISSING_ACTIVE_ROLE: 'Missing required header: X-Active-Role',
+  MISSING_CORRELATION_ID: 'Missing required header: X-Correlation-Id',
+  MISSING_SOURCE_TYPE: 'Missing required header: X-Source-Type',
+  MISSING_CLIENT_TYPE: 'Missing required header: X-Client-Type',
+  MISSING_REQUIRED_HEADERS: 'Missing required headers: {headers}',
+};
