@@ -23,7 +23,7 @@ export class AddHolidayWorkCompensation1789000000000 implements MigrationInterfa
           'payroll',
           'holiday_work_compensation',
           'Holiday Work Compensation',
-          'object',
+          'json',
           true,
           'Configures how employees are compensated for working on holidays. Options: MONEY (holiday bonus) or LEAVE (earned leave credit)',
           NOW(),
