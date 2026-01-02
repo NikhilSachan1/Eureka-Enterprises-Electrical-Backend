@@ -1,17 +1,21 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
-import { PayslipData, GeneratePayslipOptions } from './payslip.types';
+import { PayslipData, GeneratePayslipOptions, PayslipLeaveBalance } from './payslip.types';
 import { generatePayslipHTML } from './payslip.template';
 import { PayrollRepository } from '../payroll.repository';
+import { LeaveBalancesService } from 'src/modules/leave-balances/leave-balances.service';
 import { EmailService } from 'src/modules/common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from 'src/modules/common/email/constants/email.constants';
 import { PAYSLIP_CONSTANTS } from './payslip.constants';
+import { UtilityService } from 'src/utils/utility/utility.service';
 
 @Injectable()
 export class PayslipService {
   constructor(
     private readonly payrollRepository: PayrollRepository,
+    private readonly leaveBalancesService: LeaveBalancesService,
     private readonly emailService: EmailService,
+    private readonly utilityService: UtilityService,
   ) {}
 
   async generatePayslipPDF(payrollId: string): Promise<Buffer> {
@@ -24,7 +28,14 @@ export class PayslipService {
       throw new NotFoundException(PAYSLIP_CONSTANTS.ERRORS.PAYROLL_NOT_FOUND);
     }
 
-    const payslipData = this.mapPayrollToPayslipData(payroll);
+    // Fetch leave balance for the user
+    const leaveBalance = await this.getLeaveBalanceForUser(
+      payroll.userId,
+      payroll.month,
+      payroll.year,
+    );
+
+    const payslipData = this.mapPayrollToPayslipData(payroll, leaveBalance);
     const html = generatePayslipHTML(payslipData);
 
     const browser = await puppeteer.launch({
@@ -109,14 +120,14 @@ export class PayslipService {
     }
   }
 
-  private mapPayrollToPayslipData(payroll: any): PayslipData {
+  private mapPayrollToPayslipData(payroll: any, leaveBalance?: PayslipLeaveBalance): PayslipData {
     const user = payroll.user;
     const monthName = this.getMonthName(payroll.month);
 
     // Calculate earnings
     const earningsItems = [
       { label: 'Basic Salary', amount: Number(payroll.basicProrated) },
-      { label: 'House Rent Allowance (HRA)', amount: Number(payroll.hraProrated) },
+      { label: 'House Rent Allowance', amount: Number(payroll.hraProrated) },
       { label: 'Food Allowance', amount: Number(payroll.foodAllowanceProrated) },
       { label: 'Conveyance Allowance', amount: Number(payroll.conveyanceAllowanceProrated) },
       { label: 'Medical Allowance', amount: Number(payroll.medicalAllowanceProrated) },
@@ -139,8 +150,8 @@ export class PayslipService {
 
     // Calculate deductions
     const deductionItems = [
-      { label: 'Employee PF', amount: Number(payroll.employeePf) },
-      { label: 'TDS', amount: Number(payroll.tds) },
+      { label: 'Provident Fund', amount: Number(payroll.employeePf) },
+      { label: 'Income Tax (TDS)', amount: Number(payroll.tds) },
       { label: 'ESIC', amount: Number(payroll.esic) },
       { label: 'Professional Tax', amount: Number(payroll.professionalTax) },
       { label: 'LOP Deduction', amount: Number(payroll.lopDeduction) },
@@ -149,12 +160,16 @@ export class PayslipService {
     const totalEarnings = earningsItems.reduce((sum, item) => sum + item.amount, 0);
     const totalDeductions = deductionItems.reduce((sum, item) => sum + item.amount, 0);
 
-    // Build summary text for holiday leaves
-    let summaryNotes = '';
-    if (payroll.holidayLeavesCredited > 0) {
-      summaryNotes = `Holiday Leaves Credited: ${payroll.holidayLeavesCredited}`;
-      Logger.log(summaryNotes);
-    }
+    // Calculate paid days (present + paid leaves)
+    const paidDays = payroll.presentDays + payroll.paidLeaveDays;
+
+    // Calculate pay date (last day of the month)
+    const lastDayOfMonth = new Date(payroll.year, payroll.month, 0);
+    const payDate = lastDayOfMonth.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
 
     return {
       company: {
@@ -172,20 +187,22 @@ export class PayslipService {
         dateOfJoining: user.dateOfJoining
           ? new Date(user.dateOfJoining).toLocaleDateString('en-IN', {
               day: '2-digit',
-              month: 'short',
+              month: '2-digit',
               year: 'numeric',
             })
           : 'N/A',
         email: user.email,
-        bankAccount: user.accountNumber ? `XXXX${user.accountNumber.slice(-4)}` : 'N/A',
+        bankAccount: user.accountNumber || 'N/A',
         bankName: user.bankName || 'N/A',
         bankHolderName: user.bankHolderName || `${user.firstName} ${user.lastName}`,
         ifscCode: user.ifscCode || 'N/A',
+        uanNumber: user.uanNumber || undefined,
       },
       payPeriod: {
         month: payroll.month,
         year: payroll.year,
         monthName,
+        payDate,
       },
       attendance: {
         totalDays: payroll.totalDays,
@@ -196,6 +213,7 @@ export class PayslipService {
         holidays: payroll.holidays,
         weekoffs: payroll.weekoffs,
         holidaysWorked: payroll.holidaysWorked,
+        paidDays,
       },
       earnings: {
         items: earningsItems,
@@ -212,7 +230,54 @@ export class PayslipService {
         netPayableInWords: this.numberToWords(Number(payroll.netPayable)),
         holidayLeavesCredited: payroll.holidayLeavesCredited || 0,
       },
+      leaveBalance,
     };
+  }
+
+  private async getLeaveBalanceForUser(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<PayslipLeaveBalance | undefined> {
+    try {
+      const financialYear = this.utilityService.getFinancialYear(new Date(year, month - 1, 1));
+
+      // Fetch all leave balances for the user for the current financial year
+      const { records } = await this.leaveBalancesService.getAllLeaveBalances({
+        userIds: [userId],
+        financialYear,
+      });
+
+      if (!records || records.length === 0) {
+        return undefined;
+      }
+
+      // Map leave balances by category
+      const balanceMap: PayslipLeaveBalance = {};
+      let total = 0;
+
+      records.forEach((balance: any) => {
+        const available =
+          parseFloat(balance.totalAllocated || '0') - parseFloat(balance.totalUsed || '0');
+
+        if (balance.leaveCategory === 'earned') {
+          balanceMap.earned = available;
+        } else if (balance.leaveCategory === 'casual') {
+          balanceMap.casual = available;
+        } else if (balance.leaveCategory === 'sick') {
+          balanceMap.sick = available;
+        }
+
+        total += available;
+      });
+
+      balanceMap.total = total;
+
+      return balanceMap;
+    } catch (error) {
+      Logger.warn(`Failed to fetch leave balance for user ${userId}:`, error);
+      return undefined;
+    }
   }
 
   private getMonthName(month: number): string {
