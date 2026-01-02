@@ -65,6 +65,7 @@ export const CONFIGURATION_KEYS = {
   PAYROLL_STATUSES: 'payroll_statuses',
   PAYROLL_GENERATION_DAY: 'payroll_generation_day',
   PAYROLL_WORKING_DAYS_CALCULATION: 'payroll_working_days_calculation',
+  HOLIDAY_WORK_COMPENSATION: 'holiday_work_compensation',
   // CARD
   CARD_TYPES: 'card_types',
   CARD_EXPIRY_WARNING_DAYS: 'card_expiry_warning_days',

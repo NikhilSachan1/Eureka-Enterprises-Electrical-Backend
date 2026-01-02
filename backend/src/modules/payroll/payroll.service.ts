@@ -1,14 +1,21 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { PayrollRepository } from './payroll.repository';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
 import { BonusService } from '../bonuses/bonus.service';
 import { BonusRepository } from '../bonuses/bonus.repository';
+import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
 import { GeneratePayrollDto, GenerateBulkPayrollDto, GetPayrollDto, UpdatePayrollDto } from './dto';
 import { PayrollEntity } from './entities/payroll.entity';
 import { BonusStatus } from '../bonuses/constants/bonus.constants';
-import { PayrollStatus, PAYROLL_ERRORS, PAYROLL_RESPONSES } from './constants/payroll.constants';
+import {
+  PayrollStatus,
+  PAYROLL_ERRORS,
+  PAYROLL_RESPONSES,
+  HOLIDAY_WORK_CREDIT,
+  HolidayWorkCompensationType,
+} from './constants/payroll.constants';
 import { UserStatus } from '../users/constants/user.constants';
 import {
   buildPayrollSummaryQuery,
@@ -24,7 +31,12 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
-import { WorkingDaysConfig, AttendanceSummary, LeaveSummaryItem } from './payroll.types';
+import {
+  WorkingDaysConfig,
+  AttendanceSummary,
+  LeaveSummaryItem,
+  HolidayWorkCompensationConfig,
+} from './payroll.types';
 
 @Injectable()
 export class PayrollService {
@@ -33,6 +45,7 @@ export class PayrollService {
     private readonly salaryStructureService: SalaryStructureService,
     private readonly bonusService: BonusService,
     private readonly bonusRepository: BonusRepository,
+    private readonly leaveBalancesService: LeaveBalancesService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
@@ -134,9 +147,18 @@ export class PayrollService {
     const dailySalary = Number(salaryStructure.grossSalary) / workingDays;
     const lopDeduction = Math.round(dailySalary * lopDays);
 
-    // Calculate holiday bonus (extra pay for working on holidays)
-    // Employee already gets holiday pay, so they get 1x extra for each holiday worked
-    const holidayBonus = Math.round(dailySalary * holidaysWorked);
+    const holidayWorkConfig = await this.getHolidayWorkCompensationConfig();
+    const compensationType = holidayWorkConfig?.type || HolidayWorkCompensationType.MONEY;
+    const leavePerHoliday = holidayWorkConfig?.leavePerHoliday || 1;
+
+    let holidayBonus = 0;
+    let holidayLeavesCredited = 0;
+
+    if (compensationType === HolidayWorkCompensationType.MONEY) {
+      holidayBonus = Math.round(dailySalary * holidaysWorked);
+    } else if (compensationType === HolidayWorkCompensationType.LEAVE && holidaysWorked > 0) {
+      holidayLeavesCredited = holidaysWorked * leavePerHoliday;
+    }
 
     // Calculate totals
     const grossEarnings =
@@ -157,6 +179,9 @@ export class PayrollService {
       lopDeduction;
 
     const netPayable = grossEarnings - totalDeductions;
+
+    const holidayDatesWorked =
+      holidayLeavesCredited > 0 ? await this.getHolidayDatesWorkedByUser(userId, month, year) : [];
 
     return this.dataSource.transaction(async (manager) => {
       // Create payroll record
@@ -190,6 +215,7 @@ export class PayrollService {
           lopDeduction,
           totalBonus,
           holidayBonus,
+          holidayLeavesCredited,
           bonusDetails,
           leaveDetails: leaveSummary,
           grossEarnings,
@@ -201,6 +227,20 @@ export class PayrollService {
         },
         manager,
       );
+
+      // Credit earned leaves for holiday work (if configured)
+      if (holidayLeavesCredited > 0) {
+        await this.creditHolidayWorkLeaves(
+          userId,
+          holidayLeavesCredited,
+          month,
+          year,
+          holidayDatesWorked,
+          holidayWorkConfig?.leaveCategory || 'earned',
+          generatedBy,
+          manager,
+        );
+      }
 
       // Mark bonuses as paid
       for (const bonus of bonuses) {
@@ -544,5 +584,117 @@ export class PayrollService {
 
     const holidaySet = new Set(holidayDates);
     return presentDates.filter((date) => holidaySet.has(date)).length;
+  }
+
+  private async getHolidayWorkCompensationConfig(): Promise<HolidayWorkCompensationConfig | null> {
+    try {
+      const configuration = await this.configurationService.findOne({
+        where: {
+          key: CONFIGURATION_KEYS.HOLIDAY_WORK_COMPENSATION,
+          module: CONFIGURATION_MODULES.PAYROLL,
+        },
+      });
+
+      if (!configuration) {
+        return null;
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: { configId: configuration.id, isActive: true },
+      });
+
+      return configSetting?.value as HolidayWorkCompensationConfig | null;
+    } catch (error) {
+      Logger.warn('Error fetching holiday work compensation config', error);
+      return null;
+    }
+  }
+
+  private async getHolidayDatesWorkedByUser(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<string[]> {
+    const [holidayDates, presentDates] = await Promise.all([
+      this.getHolidayDatesForMonth(month, year),
+      this.getPresentDatesForPayroll(userId, month, year),
+    ]);
+
+    if (holidayDates.length === 0 || presentDates.length === 0) {
+      return [];
+    }
+
+    const holidaySet = new Set(holidayDates);
+    return presentDates.filter((date) => holidaySet.has(date));
+  }
+
+  private async creditHolidayWorkLeaves(
+    userId: string,
+    leavesToCredit: number,
+    month: number,
+    year: number,
+    holidayDatesWorked: string[],
+    leaveCategory: string,
+    createdBy: string,
+    entityManager: EntityManager,
+  ): Promise<void> {
+    try {
+      const financialYear = this.utilityService.getFinancialYear(new Date(year, month - 1, 1));
+
+      const existingBalance = await this.leaveBalancesService.findOne({
+        where: { userId, leaveCategory, financialYear },
+      });
+
+      if (!existingBalance) {
+        Logger.warn(
+          HOLIDAY_WORK_CREDIT.LOG_CONFIG_NOT_FOUND.replace('{financialYear}', financialYear),
+        );
+        return;
+      }
+
+      const formattedDates = holidayDatesWorked
+        .map((date) => {
+          const d = new Date(date);
+          return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        })
+        .join(', ');
+
+      const monthName = new Date(year, month - 1, 1).toLocaleDateString('en-IN', {
+        month: 'short',
+      });
+
+      const creditNote = HOLIDAY_WORK_CREDIT.NOTE_TEMPLATE.replace(
+        '{leavesToCredit}',
+        leavesToCredit.toString(),
+      )
+        .replace('{holidayDates}', formattedDates)
+        .replace('{monthYear}', `${monthName}-${year}`);
+
+      const newTotalAllocated = parseFloat(existingBalance.totalAllocated) + leavesToCredit;
+
+      const updatedNotes = existingBalance.notes
+        ? `${existingBalance.notes} | ${creditNote}`
+        : creditNote;
+
+      await this.leaveBalancesService.update(
+        { id: existingBalance.id },
+        {
+          totalAllocated: newTotalAllocated.toString(),
+          notes: updatedNotes,
+          updatedBy: createdBy,
+        },
+        entityManager,
+      );
+
+      Logger.log(
+        HOLIDAY_WORK_CREDIT.LOG_SUCCESS.replace(
+          '{leavesToCredit}',
+          leavesToCredit.toString(),
+        ).replace('{userId}', userId),
+      );
+    } catch (error) {
+      Logger.error(HOLIDAY_WORK_CREDIT.LOG_ERROR.replace('{userId}', userId), error);
+      throw error;
+    }
   }
 }

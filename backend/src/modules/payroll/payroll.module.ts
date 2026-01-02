@@ -9,6 +9,7 @@ import { BonusModule } from '../bonuses/bonus.module';
 import { SharedModule } from '../shared/shared.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
+import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
     BonusModule,
     ConfigurationsModule,
     ConfigSettingsModule,
+    LeaveBalancesModule,
   ],
   controllers: [PayrollController],
   providers: [PayrollService, PayrollRepository],

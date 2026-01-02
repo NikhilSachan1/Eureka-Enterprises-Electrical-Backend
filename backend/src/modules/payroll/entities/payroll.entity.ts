@@ -93,6 +93,9 @@ export class PayrollEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   holidayBonus: number;
 
+  @Column({ type: 'int', default: 0 })
+  holidayLeavesCredited: number;
+
   @Column({ type: 'jsonb', nullable: true })
   bonusDetails: { bonusId: string; type: string; amount: number }[];
 
