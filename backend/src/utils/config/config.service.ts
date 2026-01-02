@@ -39,6 +39,7 @@ import { PayrollEntity } from 'src/modules/payroll/entities/payroll.entity';
 import { CronLogEntity } from 'src/modules/cron-logs/entities/cron-log.entity';
 import { RequestAuditLogEntity } from 'src/modules/audit-logs/entities/request-audit-log.entity';
 import { EntityAuditLogEntity } from 'src/modules/audit-logs/entities/entity-audit-log.entity';
+import { RefreshTokenEntity } from 'src/modules/auth/entities/refresh-token.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -103,6 +104,7 @@ export class ConfigService {
         CronLogEntity,
         RequestAuditLogEntity,
         EntityAuditLogEntity,
+        RefreshTokenEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,
