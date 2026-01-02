@@ -119,14 +119,17 @@ export class AnnouncementService {
 
       // For admin view, format stats
       if (!isUserView) {
-        const formattedRecords = records.map((record: any) => ({
-          ...record,
-          stats: {
-            total: parseInt(record.totalAck) || 0,
-            acknowledged: parseInt(record.acknowledgedCount) || 0,
-            pending: (parseInt(record.totalAck) || 0) - (parseInt(record.acknowledgedCount) || 0),
-          },
-        }));
+        const formattedRecords = records.map((record: any) => {
+          const { totalAck, acknowledgedCount, ...rest } = record;
+          return {
+            ...rest,
+            stats: {
+              total: parseInt(totalAck) || 0,
+              acknowledged: parseInt(acknowledgedCount) || 0,
+              pending: (parseInt(totalAck) || 0) - (parseInt(acknowledgedCount) || 0),
+            },
+          };
+        });
 
         // Fetch targets for each announcement
         for (const record of formattedRecords) {
