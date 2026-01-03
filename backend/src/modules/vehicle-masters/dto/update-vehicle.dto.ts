@@ -13,12 +13,6 @@ import { Transform } from 'class-transformer';
 import { VehicleFuelType, VehicleStatus } from '../constants/vehicle-masters.constants';
 
 export class UpdateVehicleDto {
-  @ApiPropertyOptional({ description: 'Vehicle number', example: 'MP01KK2345' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  number?: string;
-
   @ApiPropertyOptional({ description: 'Vehicle brand', example: 'Toyota' })
   @IsOptional()
   @IsString()

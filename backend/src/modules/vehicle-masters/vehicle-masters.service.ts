@@ -227,7 +227,7 @@ export class VehicleMastersService {
         const initialVersion = await this.vehicleVersionsService.create(
           {
             vehicleMasterId: vehicleMaster.id,
-            number: registrationNo,
+            registrationNo: registrationNo,
             brand: createVehicleDto.brand,
             model: createVehicleDto.model,
             mileage: createVehicleDto.mileage,
@@ -479,7 +479,7 @@ export class VehicleMastersService {
         const newVersion = await this.vehicleVersionsService.create(
           {
             vehicleMasterId: vehicle.id,
-            number: updateData.number || currentVersion?.number || vehicle.registrationNo,
+            registrationNo: currentVersion?.registrationNo || vehicle.registrationNo,
             brand: updateData.brand || currentVersion?.brand || '',
             model: updateData.model || currentVersion?.model || '',
             mileage: updateData.mileage || currentVersion?.mileage || '',
@@ -595,7 +595,6 @@ export class VehicleMastersService {
         createdAt: vehicle.createdAt,
         updatedAt: vehicle.updatedAt,
         // Version details
-        number: activeVersion.number,
         brand: activeVersion.brand,
         model: activeVersion.model,
         mileage: activeVersion.mileage,

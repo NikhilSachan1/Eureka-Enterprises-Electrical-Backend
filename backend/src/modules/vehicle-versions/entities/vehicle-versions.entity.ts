@@ -5,7 +5,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm
 import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-file.entity';
 
 @Entity('vehicle_versions')
-@Index('idx_vehicles_number', ['number'])
+@Index('idx_vehicles_registrationNo', ['registrationNo'])
 @Index('idx_vehicles_brand', ['brand'])
 @Index('IDX_VEHICLE_VERSIONS_FUEL_TYPE', ['fuelType'])
 @Index('IDX_VEHICLE_VERSIONS_STATUS', ['status'])
@@ -19,7 +19,7 @@ export class VehicleVersionEntity extends BaseEntity {
 
   // Basic Info
   @Column({ type: 'varchar', nullable: false })
-  number: string;
+  registrationNo: string;
 
   @Column({ type: 'varchar', nullable: false })
   brand: string;

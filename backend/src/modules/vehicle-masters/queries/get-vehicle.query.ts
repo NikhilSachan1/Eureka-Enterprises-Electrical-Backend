@@ -170,7 +170,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
   if (search) {
     filters.push(`(
       vm."registrationNo" ILIKE $${paramIndex} OR
-      vv."number" ILIKE $${paramIndex} OR
+      vv."registrationNo" ILIKE $${paramIndex} OR
       vv."brand" ILIKE $${paramIndex} OR
       vv."model" ILIKE $${paramIndex} OR
       vv."dealerName" ILIKE $${paramIndex}
@@ -185,7 +185,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     createdAt: 'vm."createdAt"',
     updatedAt: 'vm."updatedAt"',
     deletedAt: 'vm."deletedAt"',
-    number: 'vv."number"',
+    registrationNo: 'vv."registrationNo"',
     brand: 'vv."brand"',
     model: 'vv."model"',
     mileage: 'vv."mileage"',
@@ -207,7 +207,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
       vm."createdAt",
       vm."updatedAt",
       vm."deletedAt",
-      vv."number",
+      vv."registrationNo",
       vv."brand",
       vv."model",
       vv."mileage",

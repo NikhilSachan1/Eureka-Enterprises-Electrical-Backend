@@ -20,7 +20,7 @@ export class VehicleVersionsService {
   async create(
     createVehicleDto: Partial<CreateVehicleVersionDto> & {
       vehicleMasterId: string;
-      number: string;
+      registrationNo: string;
       brand: string;
       model: string;
       mileage: string;
