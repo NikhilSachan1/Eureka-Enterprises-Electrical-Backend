@@ -51,63 +51,56 @@ async function bootstrap() {
       .setVersion(`${pkg.version}`)
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT-auth');
 
-    // Add required headers to Swagger only when enforcement is enabled
-    if (Environments.ENFORCE_REQUIRED_HEADERS) {
-      docBuilder
-        .addApiKey(
-          {
-            type: 'apiKey',
-            name: 'X-Active-Role',
-            in: 'header',
-            description: 'Active role (ADMIN, HR, EMPLOYEE)',
-          },
-          'X-Active-Role',
-        )
-        .addApiKey(
-          {
-            type: 'apiKey',
-            name: 'X-Correlation-Id',
-            in: 'header',
-            description: 'Correlation ID (UUID)',
-          },
-          'X-Correlation-Id',
-        )
-        .addApiKey(
-          {
-            type: 'apiKey',
-            name: 'X-Source-Type',
-            in: 'header',
-            description: 'Source type (web/app)',
-          },
-          'X-Source-Type',
-        )
-        .addApiKey(
-          {
-            type: 'apiKey',
-            name: 'X-Client-Type',
-            in: 'header',
-            description: 'Client type (web/app)',
-          },
-          'X-Client-Type',
-        );
-    }
-
     const config = docBuilder.build();
     const document = SwaggerModule.createDocument(app, config);
 
-    // Apply security globally based on toggle
+    // Apply JWT security globally
+    document.security = [{ 'JWT-auth': [] }];
+
+    // Add required headers as global parameters (more reliable than apiKey security)
     if (Environments.ENFORCE_REQUIRED_HEADERS) {
-      document.security = [
+      const globalHeaders = [
         {
-          'JWT-auth': [],
-          'X-Active-Role': [],
-          'X-Correlation-Id': [],
-          'X-Source-Type': [],
-          'X-Client-Type': [],
+          name: 'X-Active-Role',
+          in: 'header' as const,
+          required: true,
+          schema: { type: 'string', example: 'ADMIN' },
+          description: 'Active role (ADMIN, HR, EMPLOYEE, DRIVER)',
+        },
+        {
+          name: 'X-Correlation-Id',
+          in: 'header' as const,
+          required: true,
+          schema: { type: 'string', example: '550e8400-e29b-41d4-a716-446655440000' },
+          description: 'Correlation ID (UUID for request tracing)',
+        },
+        {
+          name: 'X-Source-Type',
+          in: 'header' as const,
+          required: true,
+          schema: { type: 'string', example: 'web' },
+          description: 'Source type (web/mobile)',
+        },
+        {
+          name: 'X-Client-Type',
+          in: 'header' as const,
+          required: true,
+          schema: { type: 'string', example: 'web' },
+          description: 'Client type (web/mobile/desktop)',
         },
       ];
-    } else {
-      document.security = [{ 'JWT-auth': [] }];
+
+      // Add headers to all paths/operations
+      Object.values(document.paths).forEach((pathItem: any) => {
+        ['get', 'post', 'put', 'patch', 'delete'].forEach((method) => {
+          if (pathItem[method]) {
+            pathItem[method].parameters = [
+              ...(pathItem[method].parameters || []),
+              ...globalHeaders,
+            ];
+          }
+        });
+      });
     }
 
     SwaggerModule.setup('api/v1', app, document);

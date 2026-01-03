@@ -47,7 +47,3 @@ export const Environments = {
   // Feature flags
   ENFORCE_REQUIRED_HEADERS: process.env.ENFORCE_REQUIRED_HEADERS === 'true',
 };
-
-// ENFORCE_REQUIRED_HEADERS=false
-
-// isko add karoo env mein, aasan ho jaayega
