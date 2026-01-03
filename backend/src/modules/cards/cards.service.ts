@@ -344,7 +344,7 @@ export class CardsService {
   ) {
     try {
       await this.findOneOrFail({ where: identifierConditions });
-      await this.cardsRepository.delete({ ...identifierConditions, deletedBy }, entityManager);
+      await this.cardsRepository.delete(identifierConditions, deletedBy, entityManager);
       return this.utilityService.getSuccessMessage(
         CardsEntityFields.CARD,
         DataSuccessOperationType.DELETE,
@@ -428,7 +428,7 @@ export class CardsService {
         // Check if card is associated with any fuel expense
         await this.validateCardNotInUse(cardId);
 
-        await this.cardsRepository.delete({ id: cardId, deletedBy });
+        await this.cardsRepository.delete({ id: cardId }, deletedBy);
         result.push({ id: cardId });
       } catch (error) {
         errors.push({

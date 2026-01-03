@@ -89,7 +89,14 @@ export class CardsRepository {
   async findOne(options: FindOneOptions<CardsEntity>, entityManager?: EntityManager) {
     try {
       const repository = entityManager ? entityManager.getRepository(CardsEntity) : this.repository;
-      return await repository.findOne(options);
+      const whereConditions = options.where as FindOptionsWhere<CardsEntity>;
+      return await repository.findOne({
+        ...options,
+        where: {
+          ...whereConditions,
+          deletedAt: null,
+        },
+      });
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
@@ -108,10 +115,17 @@ export class CardsRepository {
     }
   }
 
-  async delete(identifierConditions: FindOptionsWhere<CardsEntity>, entityManager?: EntityManager) {
+  async delete(
+    identifierConditions: FindOptionsWhere<CardsEntity>,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ) {
     try {
       const repository = entityManager ? entityManager.getRepository(CardsEntity) : this.repository;
-      return await repository.delete(identifierConditions);
+      return await repository.update(identifierConditions, {
+        deletedAt: new Date(),
+        deletedBy,
+      });
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
