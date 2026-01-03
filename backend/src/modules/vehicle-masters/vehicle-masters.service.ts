@@ -390,6 +390,21 @@ export class VehicleMastersService {
 
       const stats = statsResult[0] || {};
 
+      // Calculate service due stats from computed vehicles
+      const serviceDueStats = vehiclesWithComputedStatus.reduce(
+        (acc, vehicle) => {
+          if (vehicle.serviceDueStatus === ServiceDueStatus.OK) {
+            acc.ok++;
+          } else if (vehicle.serviceDueStatus === ServiceDueStatus.DUE_SOON) {
+            acc.dueSoon++;
+          } else if (vehicle.serviceDueStatus === ServiceDueStatus.OVERDUE) {
+            acc.overdue++;
+          }
+          return acc;
+        },
+        { ok: 0, dueSoon: 0, overdue: 0 },
+      );
+
       return {
         stats: {
           total: Number(stats.total || 0),
@@ -424,6 +439,11 @@ export class VehicleMastersService {
             expiringSoon: Number(stats.fitnessExpiringSoon || 0),
             expired: Number(stats.fitnessExpired || 0),
             notApplicable: Number(stats.fitnessNotApplicable || 0),
+          },
+          serviceDueStatus: {
+            ok: serviceDueStats.ok,
+            dueSoon: serviceDueStats.dueSoon,
+            overdue: serviceDueStats.overdue,
           },
         },
         records: filteredVehicles,
