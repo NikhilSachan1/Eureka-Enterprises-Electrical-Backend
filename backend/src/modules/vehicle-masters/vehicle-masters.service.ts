@@ -5,7 +5,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CreateVehicleDto, UpdateVehicleDto, VehicleActionDto, VehicleQueryDto } from './dto';
+import {
+  CreateVehicleDto,
+  UpdateVehicleDto,
+  VehicleActionDto,
+  VehicleQueryDto,
+  BulkDeleteVehicleDto,
+} from './dto';
 import { VehicleMastersRepository } from './vehicle-masters.repository';
 import { VehicleMasterEntity } from './entities/vehicle-master.entity';
 import {
@@ -17,6 +23,7 @@ import {
 } from 'typeorm';
 import {
   VEHICLE_MASTERS_ERRORS,
+  VEHICLE_MASTERS_SUCCESS_MESSAGES,
   VehicleMasterEntityFields,
   VehicleEventTypes,
   VehicleStatus,
@@ -25,6 +32,7 @@ import {
   ServiceDueStatus,
   DEFAULT_EXPIRING_SOON_DAYS,
 } from './constants/vehicle-masters.constants';
+import { Roles } from '../roles/constants/role.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -655,5 +663,79 @@ export class VehicleMastersService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async bulkDeleteVehicles(bulkDeleteDto: BulkDeleteVehicleDto) {
+    const { vehicleIds, deletedBy, userRole } = bulkDeleteDto;
+    const result = [];
+    const errors = [];
+
+    const isAdminOrHR = userRole === Roles.ADMIN || userRole === Roles.HR;
+
+    for (const vehicleId of vehicleIds) {
+      try {
+        const deletedVehicle = await this.validateAndDeleteVehicle(
+          vehicleId,
+          deletedBy,
+          isAdminOrHR,
+        );
+        result.push(deletedVehicle);
+      } catch (error) {
+        errors.push({
+          vehicleId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: VEHICLE_MASTERS_SUCCESS_MESSAGES.VEHICLE_DELETE_PROCESSED.replace(
+        '{length}',
+        vehicleIds.length.toString(),
+      )
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateAndDeleteVehicle(
+    vehicleId: string,
+    deletedBy: string,
+    isAdminOrHR: boolean,
+  ) {
+    const vehicle = await this.vehicleMastersRepository.findOne({
+      where: { id: vehicleId },
+    });
+
+    if (!vehicle) {
+      throw new NotFoundException(VEHICLE_MASTERS_ERRORS.VEHICLE_NOT_FOUND);
+    }
+
+    if (vehicle.deletedAt) {
+      throw new BadRequestException(VEHICLE_MASTERS_ERRORS.VEHICLE_ALREADY_DELETED);
+    }
+
+    const activeVersion = await this.vehicleVersionsService.findOne({
+      where: { vehicleMasterId: vehicleId, isActive: true },
+    });
+
+    if (!isAdminOrHR && activeVersion?.status !== VehicleStatus.AVAILABLE) {
+      throw new BadRequestException(
+        VEHICLE_MASTERS_ERRORS.VEHICLE_CANNOT_DELETE_ASSIGNED.replace(
+          '{status}',
+          activeVersion?.status || 'UNKNOWN',
+        ),
+      );
+    }
+
+    await this.vehicleMastersRepository.delete({ id: vehicleId, deletedBy });
+
+    return {
+      vehicleId,
+      message: VEHICLE_MASTERS_SUCCESS_MESSAGES.VEHICLE_DELETE_SUCCESS,
+      previousStatus: activeVersion?.status,
+    };
   }
 }

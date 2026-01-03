@@ -11,7 +11,7 @@ import {
   Get,
 } from '@nestjs/common';
 import { VehicleMastersService } from './vehicle-masters.service';
-import { CreateVehicleDto, UpdateVehicleDto, VehicleQueryDto } from './dto';
+import { CreateVehicleDto, UpdateVehicleDto, VehicleQueryDto, BulkDeleteVehicleDto } from './dto';
 import {
   FIELD_NAMES,
   FILE_UPLOAD_FOLDER_NAMES,
@@ -100,6 +100,18 @@ export class VehicleMastersController {
     );
   }
 
+  @Delete()
+  bulkDeleteVehicles(
+    @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },
+    @Body() bulkDeleteDto: BulkDeleteVehicleDto,
+  ) {
+    return this.vehicleMastersService.bulkDeleteVehicles({
+      ...bulkDeleteDto,
+      deletedBy,
+      userRole,
+    });
+  }
+
   @Delete(':id')
   delete(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
@@ -108,5 +120,3 @@ export class VehicleMastersController {
     return this.vehicleMastersService.delete({ id }, deletedBy);
   }
 }
-
-// TODO: If required then add multiple types of vehicle documents
