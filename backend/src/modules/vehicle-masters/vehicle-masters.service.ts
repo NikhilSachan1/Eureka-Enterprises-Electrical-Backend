@@ -282,7 +282,10 @@ export class VehicleMastersService {
           );
         }
 
-        return vehicleMaster;
+        return this.utilityService.getSuccessMessage(
+          VehicleMasterEntityFields.VEHICLE,
+          DataSuccessOperationType.CREATE,
+        );
       });
     } catch (error) {
       throw error;
