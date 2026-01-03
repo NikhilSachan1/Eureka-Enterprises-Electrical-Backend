@@ -558,17 +558,38 @@ export class VehicleMastersService {
     }
   }
 
+  private formatUserDetails(user: any) {
+    if (!user) return null;
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      employeeId: user.employeeId,
+    };
+  }
+
   //Created seperate method because we need to return the vehicle with the active version and the computed statuses
   async findById(id: string) {
     try {
       const vehicle = await this.findOneOrFail({
         where: { id },
-        relations: ['vehicleVersions', 'vehicleFiles'],
+        relations: [
+          'vehicleVersions',
+          'vehicleVersions.assignedToUser',
+          'vehicleVersions.createdByUser',
+          'vehicleVersions.updatedByUser',
+          'vehicleFiles',
+          'createdByUser',
+          'updatedByUser',
+          'deletedByUser',
+        ],
       });
 
-      // Get active version
+      // Get active version with user relations
       const activeVersion = await this.vehicleVersionsService.findOne({
         where: { vehicleMasterId: id, isActive: true },
+        relations: ['assignedToUser', 'createdByUser', 'updatedByUser'],
       });
 
       if (!activeVersion) {
@@ -594,6 +615,9 @@ export class VehicleMastersService {
         vehicle.vehicleVersions?.filter((version) => !version.deletedAt) || []
       ).map((version) => ({
         ...version,
+        assignedToUser: this.formatUserDetails(version.assignedToUser),
+        createdByUser: this.formatUserDetails(version.createdByUser),
+        updatedByUser: this.formatUserDetails(version.updatedByUser),
         files: allFiles.filter((file) => file.vehicleVersionId === version.id),
       }));
 
@@ -602,6 +626,13 @@ export class VehicleMastersService {
         registrationNo: vehicle.registrationNo,
         createdAt: vehicle.createdAt,
         updatedAt: vehicle.updatedAt,
+        createdBy: vehicle.createdBy,
+        updatedBy: vehicle.updatedBy,
+        deletedBy: vehicle.deletedBy,
+        // User details for vehicle master
+        createdByUser: this.formatUserDetails(vehicle.createdByUser),
+        updatedByUser: this.formatUserDetails(vehicle.updatedByUser),
+        deletedByUser: this.formatUserDetails(vehicle.deletedByUser),
         // Version details
         brand: activeVersion.brand,
         model: activeVersion.model,
@@ -631,6 +662,7 @@ export class VehicleMastersService {
         // Status
         status: activeVersion.status,
         assignedTo: activeVersion.assignedTo,
+        assignedToUser: this.formatUserDetails(activeVersion.assignedToUser),
         remarks: activeVersion.remarks,
         additionalData: activeVersion.additionalData,
         // Service tracking
