@@ -2,6 +2,7 @@ import { VehicleQueryDto } from '../dto/vehicle-query.dto';
 import {
   VehicleStatus,
   VehicleFuelType,
+  VehicleFileTypes,
   DEFAULT_EXPIRING_SOON_DAYS,
 } from '../constants/vehicle-masters.constants';
 
@@ -242,7 +243,25 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
         (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
         0
-      ) as "currentOdometerKm"
+      ) as "currentOdometerKm",
+      -- Get files for active version
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', vf."id",
+              'fileKey', vf."fileKey",
+              'fileType', vf."fileType",
+              'label', vf."label"
+            )
+          )
+          FROM "vehicle_files" vf
+          WHERE vf."vehicleVersionId" = vv."id"
+            AND vf."fileType" = '${VehicleFileTypes.VEHICLE_IMAGE}'
+            AND vf."deletedAt" IS NULL
+        ),
+        '[]'::json
+      ) as "files"
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
       SELECT *
