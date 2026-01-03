@@ -583,6 +583,7 @@ export class VehicleMastersService {
           'createdByUser',
           'updatedByUser',
           'deletedByUser',
+          'card',
         ],
       });
 
@@ -671,6 +672,18 @@ export class VehicleMastersService {
         // Related data - files from latest version only
         files: latestFiles,
         versionHistory,
+        // Associated card details
+        associatedCard: vehicle.card
+          ? {
+              id: vehicle.card.id,
+              cardNumber: vehicle.card.cardNumber,
+              cardType: vehicle.card.cardType,
+              cardName: vehicle.card.cardName,
+              holderName: vehicle.card.holderName,
+              expiryDate: vehicle.card.expiryDate,
+              expiryStatus: vehicle.card.expiryStatus,
+            }
+          : null,
       };
     } catch (error) {
       throw error;

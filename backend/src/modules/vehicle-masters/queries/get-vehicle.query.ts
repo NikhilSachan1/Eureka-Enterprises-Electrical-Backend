@@ -261,7 +261,20 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
             AND vf."deletedAt" IS NULL
         ),
         '[]'::json
-      ) as "files"
+      ) as "files",
+      -- Associated card details
+      CASE 
+        WHEN c."id" IS NOT NULL THEN json_build_object(
+          'id', c."id",
+          'cardNumber', c."cardNumber",
+          'cardType', c."cardType",
+          'cardName', c."cardName",
+          'holderName', c."holderName",
+          'expiryDate', c."expiryDate",
+          'expiryStatus', c."expiryStatus"
+        )
+        ELSE NULL
+      END as "associatedCard"
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
       SELECT *
@@ -273,6 +286,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
       LIMIT 1
     ) vv ON true
     LEFT JOIN users u ON u."id" = vv."assignedTo" AND u."deletedAt" IS NULL
+    LEFT JOIN cards c ON c."id" = vm."cardId" AND c."deletedAt" IS NULL
     ${whereClause}
     ORDER BY ${orderByColumn} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
