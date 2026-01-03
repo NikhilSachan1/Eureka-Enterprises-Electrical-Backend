@@ -39,6 +39,8 @@ export class CardsRepository {
 
       const queryBuilder = repository.createQueryBuilder('cards');
 
+      queryBuilder.leftJoinAndSelect('cards.createdByUser', 'createdByUser');
+
       queryBuilder.where('cards.deletedAt IS NULL');
 
       if (search) {
@@ -65,7 +67,20 @@ export class CardsRepository {
 
       const [cards, total] = await queryBuilder.getManyAndCount();
 
-      return this.utilityService.listResponse(cards, total);
+      // Map to include createdBy details in a cleaner format
+      const mappedCards = cards.map((card) => ({
+        ...card,
+        createdByUser: card.createdByUser
+          ? {
+              id: card.createdByUser.id,
+              firstName: card.createdByUser.firstName,
+              lastName: card.createdByUser.lastName,
+              email: card.createdByUser.email,
+            }
+          : null,
+      }));
+
+      return this.utilityService.listResponse(mappedCards, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
