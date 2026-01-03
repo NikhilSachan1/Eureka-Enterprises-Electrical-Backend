@@ -91,10 +91,14 @@ export class UserPermissionService {
     await this.permissionService.findOneOrFail({ where: { id: permissionId, deletedAt: null } });
   }
 
-  async getUserPermissions(userId: string, isActive?: boolean): Promise<UserPermissionResult> {
+  async getUserPermissions(
+    userId: string,
+    roleId?: string,
+    isActive?: boolean,
+  ): Promise<UserPermissionResult> {
     try {
       const rolePermissions = await this.userPermissionRepository.executeRawQuery(
-        getUserPermissionsQuery(userId, isActive),
+        getUserPermissionsQuery({ userId, roleId, isActive }),
       );
 
       // Get user-specific permission overrides
@@ -104,6 +108,17 @@ export class UserPermissionService {
       });
 
       const permissionMap = new Map();
+
+      // Extract role info from first permission (if filtering by role)
+      let roleInfo: { id: string; name: string; label: string } | undefined;
+      if (roleId && rolePermissions.length > 0) {
+        const firstPermission = rolePermissions[0];
+        roleInfo = {
+          id: firstPermission.roleId,
+          name: firstPermission.roleName,
+          label: firstPermission.roleLabel,
+        };
+      }
 
       // Add permissions from roles
       rolePermissions.forEach((rp) => {
@@ -170,6 +185,7 @@ export class UserPermissionService {
 
       return {
         userId,
+        ...(roleInfo && { role: roleInfo }),
         permissions: permissionsArray,
       };
     } catch (error) {

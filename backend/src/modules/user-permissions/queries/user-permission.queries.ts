@@ -1,21 +1,40 @@
 import { GetUserPermissionStatsDto } from '../dto';
+import { GetUserPermissionsQueryOptions } from '../user-permission.types';
 
-export function getUserPermissionsQuery(userId: string, isActive?: boolean) {
+export function getUserPermissionsQuery({
+  userId,
+  roleId,
+  isActive,
+}: GetUserPermissionsQueryOptions) {
+  const filters: string[] = [
+    `ur."userId" = '${userId}'`,
+    `rp."deletedAt" IS NULL`,
+    `p."deletedAt" IS NULL`,
+    `ur."deletedAt" IS NULL`,
+  ];
+
+  if (roleId) {
+    filters.push(`ur."roleId" = '${roleId}'`);
+  }
+
+  if (isActive !== undefined) {
+    filters.push(`rp."isActive" = ${isActive}`);
+  }
+
   return `
     SELECT 
       p.name as "permissionName",
       p.module as "permissionModule",
       p.id as "permissionId",
-      rp."isActive" as "isGranted"
+      rp."isActive" as "isGranted",
+      r.id as "roleId",
+      r.name as "roleName",
+      r.label as "roleLabel"
     FROM role_permissions rp
     INNER JOIN permissions p ON rp."permissionId" = p.id
     INNER JOIN user_roles ur ON rp."roleId" = ur."roleId"
-    WHERE ur."userId" = '${userId}' ${
-    isActive !== undefined ? `AND rp."isActive" = ${isActive}` : ''
-  }
-      AND rp."deletedAt" IS NULL 
-      AND p."deletedAt" IS NULL 
-      AND ur."deletedAt" IS NULL
+    INNER JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
+    WHERE ${filters.join(' AND ')}
   `;
 }
 

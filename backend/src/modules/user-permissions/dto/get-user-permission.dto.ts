@@ -12,6 +12,16 @@ export class GetUserPermissionDto {
   @IsUUID()
   userId: string;
 
+  @ApiProperty({
+    description:
+      'Role ID - Filter permissions by specific role (useful when user has multiple roles)',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  roleId?: string;
+
   @ApiProperty({ description: 'Is active', example: true, required: false })
   @Transform(({ value }) => {
     if (value === 'true' || value === true) return true;
