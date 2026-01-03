@@ -52,6 +52,8 @@ export class CardsRepository {
 
       if (sortField && sortOrder) {
         queryBuilder.orderBy(`cards.${sortField}`, sortOrder as SortOrder);
+      } else {
+        queryBuilder.orderBy('cards.createdAt', 'DESC');
       }
 
       if (page && pageSize) {
@@ -67,7 +69,6 @@ export class CardsRepository {
 
       const [cards, total] = await queryBuilder.getManyAndCount();
 
-      // Map to include createdBy details in a cleaner format
       const mappedCards = cards.map((card) => ({
         ...card,
         createdByUser: card.createdByUser
