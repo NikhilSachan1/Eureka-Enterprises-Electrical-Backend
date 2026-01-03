@@ -68,6 +68,7 @@ export const CONFIGURATION_KEYS = {
   HOLIDAY_WORK_COMPENSATION: 'holiday_work_compensation',
   // CARD
   CARD_TYPES: 'card_types',
+  CARD_STATUSES: 'card_statuses',
   CARD_EXPIRY_WARNING_DAYS: 'card_expiry_warning_days',
   CARD_ACTION_TYPES: 'card_action_types',
 };
