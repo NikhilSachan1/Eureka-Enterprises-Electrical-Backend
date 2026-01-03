@@ -52,6 +52,9 @@ export const CONFIGURATION_KEYS = {
   VEHICLE_SERVICE_FILE_TYPES: 'vehicle_service_file_types',
   VEHICLE_SERVICE_INTERVAL_KM: 'vehicle_service_interval_km',
   VEHICLE_SERVICE_WARNING_KM: 'vehicle_service_warning_km',
+  // VEHICLE DOCUMENT & SERVICE DUE STATUSES
+  VEHICLE_DOCUMENT_STATUSES: 'vehicle_document_statuses',
+  VEHICLE_SERVICE_DUE_STATUSES: 'vehicle_service_due_statuses',
   // SALARY
   SALARY_INCREMENT_TYPES: 'salary_increment_types',
   SALARY_COMPONENTS: 'salary_components',
