@@ -10,6 +10,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { AssetType, AssetStatus } from '../constants/asset-masters.constants';
 
 export class CreateAssetDto {
@@ -148,6 +149,16 @@ export class CreateAssetDto {
     required: false,
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @IsObject()
   additionalData?: Record<string, any>;
 

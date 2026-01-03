@@ -8,6 +8,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { AssetType, AssetStatus } from '../constants/asset-masters.constants';
 
 export class UpdateAssetDto {
@@ -143,6 +144,16 @@ export class UpdateAssetDto {
     required: false,
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @IsObject()
   additionalData?: Record<string, any>;
 

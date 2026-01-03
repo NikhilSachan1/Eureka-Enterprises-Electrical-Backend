@@ -9,6 +9,7 @@ import {
   IsUUID,
   ValidateIf,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { VehicleFuelType, VehicleStatus } from '../constants/vehicle-masters.constants';
 
 export class UpdateVehicleDto {
@@ -123,6 +124,16 @@ export class UpdateVehicleDto {
     example: { color: 'Red', year: 2020 },
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @IsObject()
   additionalData?: Record<string, any>;
 }
