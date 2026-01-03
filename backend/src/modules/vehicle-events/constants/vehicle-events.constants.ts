@@ -26,3 +26,15 @@ export const VEHICLE_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
   [VehicleEventTypes.VEHICLE_ADDED]: 'Vehicle added successfully',
   [VehicleEventTypes.UPDATED]: 'Vehicle updated successfully',
 };
+
+export enum VehicleEventsSortableFields {
+  CREATED_AT = 'createdAt',
+  UPDATED_AT = 'updatedAt',
+  EVENT_TYPE = 'eventType',
+}
+
+export const VEHICLE_EVENTS_SORT_FIELD_MAPPING: Record<string, string> = {
+  createdAt: 've."createdAt"',
+  updatedAt: 've."updatedAt"',
+  eventType: 've."eventType"',
+};

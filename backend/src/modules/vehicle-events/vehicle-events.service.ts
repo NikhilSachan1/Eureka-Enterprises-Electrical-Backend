@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateVehicleEventDto } from './dto/create-vehicle-event.dto';
-import { Between, DataSource, EntityManager, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { VehicleEventsRepository } from './vehicle-events.repository';
 import { VehicleActionDto } from '../vehicle-versions/dto/vehicle-action.dto';
 import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
@@ -14,7 +14,10 @@ import {
 } from './constants/vehicle-events.constants';
 import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
-import { buildVehicleEventsStatsQuery } from './queries/vehicle-events.queries';
+import {
+  buildVehicleEventsStatsQuery,
+  buildVehicleEventsQuery,
+} from './queries/vehicle-events.queries';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 
 @Injectable()
@@ -309,34 +312,26 @@ export class VehicleEventsService {
         endDateUTC = this.dateTimeService.getDateInUTC(endDate, timezone, true);
       }
 
-      let createdAtCondition: any;
-      if (startDateUTC && endDateUTC) {
-        createdAtCondition = Between(startDateUTC, endDateUTC);
-      } else if (startDateUTC) {
-        createdAtCondition = MoreThanOrEqual(startDateUTC);
-      } else if (endDateUTC) {
-        createdAtCondition = LessThanOrEqual(endDateUTC);
-      }
-
+      // Build queries
       const { query: statsQuery, params: statsParams } =
         buildVehicleEventsStatsQuery(vehicleMasterId);
 
-      const [eventsResult, statsResult] = await Promise.all([
-        this.vehicleEventsRepository.findAll({
-          where: {
-            vehicleMasterId,
-            ...(query.eventType && { eventType: query.eventType as VehicleEventTypes }),
-            ...(query.toUser && { toUser: query.toUser }),
-            ...(query.fromUser && { fromUser: query.fromUser }),
-            ...(createdAtCondition && { createdAt: createdAtCondition }),
-          },
-          relations: ['vehicleFiles'],
-          order: { createdAt: 'DESC' },
-        }),
+      const { dataQuery, countQuery, params, countParams } = buildVehicleEventsQuery({
+        vehicleMasterId,
+        query,
+        startDateUTC,
+        endDateUTC,
+      });
+
+      // Execute queries in parallel
+      const [eventsResult, countResult, statsResult] = await Promise.all([
+        this.vehicleEventsRepository.executeRawQuery(dataQuery, params),
+        this.vehicleEventsRepository.executeRawQuery(countQuery, countParams),
         this.vehicleEventsRepository.executeRawQuery(statsQuery, statsParams),
       ]);
 
       const statsRow = statsResult[0] || {};
+      const totalRecords = Number(countResult[0]?.total || 0);
 
       const stats = {
         total: Number(statsRow.total || 0),
@@ -358,7 +353,8 @@ export class VehicleEventsService {
 
       return {
         stats,
-        ...eventsResult,
+        records: eventsResult,
+        totalRecords,
       };
     } catch (error) {
       throw error;
