@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateVehicleEventDto } from './dto/create-vehicle-event.dto';
-import { DataSource, EntityManager } from 'typeorm';
+import { Between, DataSource, EntityManager, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { VehicleEventsRepository } from './vehicle-events.repository';
 import { VehicleActionDto } from '../vehicle-versions/dto/vehicle-action.dto';
 import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
@@ -15,6 +15,7 @@ import {
 import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
 import { buildVehicleEventsStatsQuery } from './queries/vehicle-events.queries';
+import { DateTimeService } from 'src/utils/datetime/datetime.service';
 
 @Injectable()
 export class VehicleEventsService {
@@ -23,6 +24,7 @@ export class VehicleEventsService {
     private readonly dataSource: DataSource,
     private readonly vehicleFilesService: VehicleFilesService,
     private readonly vehicleVersionsService: VehicleVersionsService,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   async create(
@@ -293,8 +295,29 @@ export class VehicleEventsService {
     }
   }
 
-  async findAll(vehicleMasterId: string, query: VehicleEventsQueryDto) {
+  async findAll(vehicleMasterId: string, query: VehicleEventsQueryDto, timezone: string) {
     try {
+      const { startDate, endDate } = query;
+
+      let startDateUTC: Date | undefined;
+      let endDateUTC: Date | undefined;
+
+      if (startDate) {
+        startDateUTC = this.dateTimeService.getDateInUTC(startDate, timezone, false);
+      }
+      if (endDate) {
+        endDateUTC = this.dateTimeService.getDateInUTC(endDate, timezone, true);
+      }
+
+      let createdAtCondition: any;
+      if (startDateUTC && endDateUTC) {
+        createdAtCondition = Between(startDateUTC, endDateUTC);
+      } else if (startDateUTC) {
+        createdAtCondition = MoreThanOrEqual(startDateUTC);
+      } else if (endDateUTC) {
+        createdAtCondition = LessThanOrEqual(endDateUTC);
+      }
+
       const { query: statsQuery, params: statsParams } =
         buildVehicleEventsStatsQuery(vehicleMasterId);
 
@@ -305,6 +328,7 @@ export class VehicleEventsService {
             ...(query.eventType && { eventType: query.eventType as VehicleEventTypes }),
             ...(query.toUser && { toUser: query.toUser }),
             ...(query.fromUser && { fromUser: query.fromUser }),
+            ...(createdAtCondition && { createdAt: createdAtCondition }),
           },
           relations: ['vehicleFiles'],
           order: { createdAt: 'DESC' },

@@ -1,9 +1,27 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { VehicleEventTypes } from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
 import { VEHICLE_EVENTS_ERRORS } from '../constants/vehicle-events.constants';
 
 export class VehicleEventsQueryDto {
+  @ApiProperty({
+    description: 'Start date for filtering events (YYYY-MM-DD)',
+    example: '2024-01-01',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiProperty({
+    description: 'End date for filtering events (YYYY-MM-DD)',
+    example: '2024-12-31',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
   @ApiProperty({
     description: 'Search by event type',
     example: 'VEHICLE_ADDED',
