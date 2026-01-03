@@ -255,7 +255,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
               'label', vf."label"
             )
           )
-          FROM "vehicle_files" vf
+          FROM "vehicles_files" vf
           WHERE vf."vehicleVersionId" = vv."id"
             AND vf."fileType" = '${VehicleFileTypes.VEHICLE_IMAGE}'
             AND vf."deletedAt" IS NULL
