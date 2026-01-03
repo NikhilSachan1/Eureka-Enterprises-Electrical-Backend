@@ -10,7 +10,7 @@ export const buildVehicleEventsStatsQuery = (vehicleMasterId: string) => {
             `COUNT(CASE WHEN "eventType" = '${eventType}' THEN 1 END) as "${eventType}"`,
         )
         .join(',\n      ')}
-    FROM "vehicle_events"
+    FROM "vehicles_events"
     WHERE "vehicleMasterId" = $1
   `;
 
