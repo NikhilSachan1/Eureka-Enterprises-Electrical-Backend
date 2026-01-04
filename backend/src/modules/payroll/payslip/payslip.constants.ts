@@ -1,12 +1,4 @@
 export const PAYSLIP_CONSTANTS = {
-  COMPANY: {
-    NAME: 'Eureka Enterprises Pvt Ltd',
-    ADDRESS: {
-      CITY: 'Jhansi',
-      STATE: 'Uttar Pradesh',
-      PINCODE: '284001',
-    },
-  },
   ERRORS: {
     PAYROLL_NOT_FOUND: 'Payroll record not found',
     PDF_GENERATION_FAILED: 'Failed to generate payslip PDF',

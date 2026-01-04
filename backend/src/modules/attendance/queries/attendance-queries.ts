@@ -1,6 +1,6 @@
 import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { ATTENDANCE_SORTABLE_FIELDS } from '../constants/attendance.constants';
-import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
+import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
 export function buildAttendanceListQuery(query: AttendanceQueryDto) {
   const {

@@ -1,6 +1,6 @@
 import { GetLeaveApplicationsDto } from '../dto';
 import { LEAVE_APPLICATION_SORTABLE_FIELDS } from '../constants/leave-application.constants';
-import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
+import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
 export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto) => {
   const {

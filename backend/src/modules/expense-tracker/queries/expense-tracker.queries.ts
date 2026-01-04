@@ -3,7 +3,7 @@ import {
   EXPENSE_SORT_FIELD_MAPPING,
   TransactionType,
 } from '../constants/expense-tracker.constants';
-import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
+import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
 export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
   const {

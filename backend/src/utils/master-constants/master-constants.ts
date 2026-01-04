@@ -74,6 +74,11 @@ export const CONFIGURATION_KEYS = {
   CARD_STATUSES: 'card_statuses',
   CARD_EXPIRY_WARNING_DAYS: 'card_expiry_warning_days',
   CARD_ACTION_TYPES: 'card_action_types',
+  // FNF (Full & Final Settlement)
+  FNF_SETTINGS: 'fnf_settings',
+  FNF_EXIT_REASONS: 'fnf_exit_reasons',
+  FNF_STATUSES: 'fnf_statuses',
+  FNF_CLEARANCE_STATUSES: 'fnf_clearance_statuses',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -90,6 +95,7 @@ export const CONFIGURATION_MODULES = {
   BONUS: 'bonus',
   PAYROLL: 'payroll',
   CARD: 'card',
+  FNF: 'fnf',
 };
 
 export enum LeaveCycleType {
@@ -106,25 +112,16 @@ export enum EntrySourceType {
 
 export const USER_RESPONSE_FIELDS = ['id', 'firstName', 'lastName', 'email', 'employeeId'] as const;
 
-export const getUserSelectFields = (alias: string, prefix?: string): string => {
-  // Skip 'id' when no prefix to avoid overwriting main table's id field
-  // The user id is already available via foreign key column (e.g., userId, approvalBy)
-  const fieldsToSelect = prefix
-    ? USER_RESPONSE_FIELDS
-    : USER_RESPONSE_FIELDS.filter((f) => f !== 'id');
-
-  return fieldsToSelect
-    .map((field) => {
-      const aliasName = prefix
-        ? `${prefix}${field.charAt(0).toUpperCase() + field.slice(1)}`
-        : field;
-      return `${alias}."${field}" as "${aliasName}"`;
-    })
-    .join(', ');
-};
-
-export const getUserJsonBuildObject = (alias: string): string => {
-  const fields = USER_RESPONSE_FIELDS;
-  const jsonFields = fields.map((field) => `'${field}', ${alias}."${field}"`).join(', ');
-  return `json_build_object(${jsonFields})`;
+export const COMPANY_DETAILS = {
+  NAME: 'Eureka Enterprises Pvt Ltd',
+  LOGO_URL: 'https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg',
+  EMAIL_HR: 'hr@eurekaenterprises.com',
+  PHONE: '+91 510 123 4567',
+  ADDRESS: {
+    CITY: 'Jhansi',
+    STATE: 'Uttar Pradesh',
+    PINCODE: '284001',
+    COUNTRY: 'India',
+  },
+  FULL_ADDRESS: 'Jhansi, Uttar Pradesh 284001 India',
 };

@@ -58,6 +58,7 @@ export class ExpenseTrackerController {
       ...createExpenseDto,
       fileKeys,
       userId: req.user.id,
+      userRole: req.user.role,
       sourceType,
       timezone: req.timezone,
     });
@@ -128,6 +129,7 @@ export class ExpenseTrackerController {
       ...editExpenseDto,
       id,
       updatedBy: req.user.id,
+      userRole: req.user.role,
       entrySourceType: sourceType,
       fileKeys,
       timezone: req.timezone,

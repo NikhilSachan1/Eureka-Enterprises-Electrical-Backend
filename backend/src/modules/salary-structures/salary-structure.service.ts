@@ -243,7 +243,7 @@ export class SalaryStructureService {
         isActive: true,
         effectiveFrom: LessThanOrEqual(date),
       },
-      order: { effectiveFrom: 'DESC' },
+      order: { effectiveFrom: SortOrder.DESC },
     });
   }
 
@@ -267,7 +267,7 @@ export class SalaryStructureService {
         isActive: true,
         effectiveTo: IsNull(),
       },
-      order: { effectiveFrom: 'DESC' },
+      order: { effectiveFrom: SortOrder.DESC },
     });
   }
 

@@ -1,5 +1,5 @@
 import { VehicleEventTypes } from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
-import { getUserJsonBuildObject } from 'src/utils/master-constants/master-constants';
+import { getUserJsonBuildObject } from 'src/utils/utility/utility.service';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import {
   VehicleEventsSortableFields,

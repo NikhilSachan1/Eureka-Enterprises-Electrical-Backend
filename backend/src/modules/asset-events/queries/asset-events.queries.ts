@@ -2,7 +2,7 @@ import {
   AssetEventsSortableFields,
   ASSET_EVENTS_SORT_FIELD_MAPPING,
 } from '../constants/asset-events.constants';
-import { getUserJsonBuildObject } from 'src/utils/master-constants/master-constants';
+import { getUserJsonBuildObject } from 'src/utils/utility/utility.service';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { BuildAssetEventsQueryParams } from './asset-events.queries.types';
 import { AssetEventTypes } from 'src/modules/asset-masters/constants/asset-masters.constants';

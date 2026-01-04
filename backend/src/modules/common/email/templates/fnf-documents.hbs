@@ -1,0 +1,67 @@
+<html lang='en'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Exit Documents</title>
+    <style>
+      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color:
+      #333; max-width: 600px; margin: 0 auto; padding: 20px; } .header { background:
+      linear-gradient(135deg, #1a365d 0%, #2d5a87 100%); color: white; padding: 30px; text-align:
+      center; border-radius: 10px 10px 0 0; } .header h1 { margin: 0; font-size: 24px; } .content {
+      background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; } .greeting { font-size:
+      18px; margin-bottom: 20px; } .message { margin-bottom: 25px; } .documents-list { background:
+      white; padding: 20px; border-radius: 8px; margin: 20px 0; } .documents-list h3 { margin-top:
+      0; color: #1a365d; } .documents-list ul { list-style: none; padding: 0; } .documents-list li {
+      padding: 10px 0; border-bottom: 1px solid #eee; } .documents-list li:last-child {
+      border-bottom: none; } .documents-list li::before { content: '📄 '; } .footer { margin-top:
+      30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 14px; color: #666; }
+      .company-name { font-weight: bold; color: #1a365d; } .wishes { background: #e8f4fd; padding:
+      15px; border-radius: 5px; margin-top: 20px; font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <div class='header'>
+      <h1>Exit Documents</h1>
+    </div>
+
+    <div class='content'>
+      <p class='greeting'>Dear {{employeeName}},</p>
+
+      <div class='message'>
+        <p>
+          Thank you for your contributions to
+          <span class='company-name'>{{companyName}}</span>. Your last working day was
+          <strong>{{lastWorkingDate}}</strong>.
+        </p>
+
+        <p>
+          Please find attached your exit documents:
+        </p>
+      </div>
+
+      <div class='documents-list'>
+        <h3>Attached Documents</h3>
+        <ul>
+          <li>Relieving Letter</li>
+          <li>Experience Letter</li>
+          <li>Full & Final Settlement Statement</li>
+        </ul>
+      </div>
+
+      <p>
+        Please review these documents carefully. If you have any questions or notice any
+        discrepancies, please contact the HR department within 7 days.
+      </p>
+
+      <div class='wishes'>
+        We wish you all the best in your future endeavors! 🌟
+      </div>
+
+      <div class='footer'>
+        <p>Best regards,</p>
+        <p><strong>Eureka HRMS</strong></p>
+        <p class='company-name'>{{companyName}}</p>
+      </div>
+    </div>
+  </body>
+</html>

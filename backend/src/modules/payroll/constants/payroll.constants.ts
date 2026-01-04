@@ -23,6 +23,8 @@ export const PAYROLL_ERRORS = {
   INVALID_STATUS_TRANSITION: 'Invalid status transition',
   WORKING_DAYS_CONFIG_NOT_FOUND: 'Working days calculation configuration not found',
   WORKING_DAYS_CONFIG_SETTING_NOT_FOUND: 'Working days calculation config setting not found',
+  USER_EXITING_USE_FNF:
+    'Employee is exiting this month (last working date: {lastWorkingDate}). Please use FNF settlement instead of regular payroll.',
 };
 
 export const PAYROLL_RESPONSES = {

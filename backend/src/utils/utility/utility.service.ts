@@ -5,6 +5,7 @@ import * as CryptoJS from 'crypto-js';
 import { DataFailureOperationType, DataSuccessOperationType } from './constants/utility.constants';
 import { createHmac } from 'crypto';
 import * as moment from 'moment-timezone';
+import { USER_RESPONSE_FIELDS } from '../master-constants/master-constants';
 
 @Injectable()
 export class UtilityService {
@@ -125,4 +126,148 @@ export class UtilityService {
   getCurrentYear() {
     return new Date().getFullYear();
   }
+
+  getMonthName(month: number): string {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return months[month - 1] || '';
+  }
+
+  numberToWords(num: number): string {
+    if (num === 0) return 'Zero Rupees Only';
+    num = Math.round(num);
+    let words = '';
+
+    if (num >= 10000000) {
+      words += this.convertBelowThousand(Math.floor(num / 10000000)) + ' Crore ';
+      num %= 10000000;
+    }
+    if (num >= 100000) {
+      words += this.convertBelowThousand(Math.floor(num / 100000)) + ' Lakh ';
+      num %= 100000;
+    }
+    if (num >= 1000) {
+      words += this.convertBelowThousand(Math.floor(num / 1000)) + ' Thousand ';
+      num %= 1000;
+    }
+    if (num >= 100) {
+      const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+      words += ones[Math.floor(num / 100)] + ' Hundred ';
+      num %= 100;
+    }
+    if (num > 0) {
+      const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+      const teens = [
+        'Ten',
+        'Eleven',
+        'Twelve',
+        'Thirteen',
+        'Fourteen',
+        'Fifteen',
+        'Sixteen',
+        'Seventeen',
+        'Eighteen',
+        'Nineteen',
+      ];
+      const tens = [
+        '',
+        '',
+        'Twenty',
+        'Thirty',
+        'Forty',
+        'Fifty',
+        'Sixty',
+        'Seventy',
+        'Eighty',
+        'Ninety',
+      ];
+
+      if (num < 10) words += ones[num];
+      else if (num < 20) words += teens[num - 10];
+      else {
+        words += tens[Math.floor(num / 10)];
+        if (num % 10 > 0) words += ' ' + ones[num % 10];
+      }
+    }
+    return words.trim() + ' Rupees Only';
+  }
+
+  private convertBelowThousand(num: number): string {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const teens = [
+      'Ten',
+      'Eleven',
+      'Twelve',
+      'Thirteen',
+      'Fourteen',
+      'Fifteen',
+      'Sixteen',
+      'Seventeen',
+      'Eighteen',
+      'Nineteen',
+    ];
+    const tens = [
+      '',
+      '',
+      'Twenty',
+      'Thirty',
+      'Forty',
+      'Fifty',
+      'Sixty',
+      'Seventy',
+      'Eighty',
+      'Ninety',
+    ];
+
+    let result = '';
+    if (num >= 100) {
+      result += ones[Math.floor(num / 100)] + ' Hundred ';
+      num %= 100;
+    }
+    if (num >= 20) {
+      result += tens[Math.floor(num / 10)];
+      num %= 10;
+      if (num > 0) result += ' ' + ones[num];
+    } else if (num >= 10) {
+      result += teens[num - 10];
+    } else if (num > 0) {
+      result += ones[num];
+    }
+    return result.trim();
+  }
 }
+
+export const getUserSelectFields = (alias: string, prefix?: string): string => {
+  // Skip 'id' when no prefix to avoid overwriting main table's id field
+  // The user id is already available via foreign key column (e.g., userId, approvalBy)
+  const fieldsToSelect = prefix
+    ? USER_RESPONSE_FIELDS
+    : USER_RESPONSE_FIELDS.filter((f) => f !== 'id');
+
+  return fieldsToSelect
+    .map((field) => {
+      const aliasName = prefix
+        ? `${prefix}${field.charAt(0).toUpperCase() + field.slice(1)}`
+        : field;
+      return `${alias}."${field}" as "${aliasName}"`;
+    })
+    .join(', ');
+};
+
+export const getUserJsonBuildObject = (alias: string): string => {
+  const fields = USER_RESPONSE_FIELDS;
+  const jsonFields = fields.map((field) => `'${field}', ${alias}."${field}"`).join(', ');
+  return `json_build_object(${jsonFields})`;
+};

@@ -20,8 +20,9 @@ export const buildPayrollSummaryQuery = (month: number, year: number) => {
   return { query, params: [month, year] };
 };
 
-export const buildActiveUsersWithSalaryQuery = (status: string) => {
-  const query = `
+export const buildActiveUsersWithSalaryQuery = (status: string, month?: number, year?: number) => {
+  // Base query to get active users with salary structures
+  let query = `
     SELECT DISTINCT u.id as "userId"
     FROM users u
     INNER JOIN salary_structures ss ON ss."userId" = u.id
@@ -30,7 +31,29 @@ export const buildActiveUsersWithSalaryQuery = (status: string) => {
       AND ss."isActive" = true
   `;
 
-  return { query, params: [status] };
+  const params: (string | number)[] = [status];
+
+  // Exclude users whose lastWorkingDate falls within the payroll month
+  // These users will be handled via FNF settlement instead
+  if (month && year) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${new Date(
+      year,
+      month,
+      0,
+    ).getDate()}`;
+
+    query += `
+      AND (
+        u."lastWorkingDate" IS NULL 
+        OR u."lastWorkingDate" < $2::date
+        OR u."lastWorkingDate" > $3::date
+      )
+    `;
+    params.push(startDate, endDate);
+  }
+
+  return { query, params };
 };
 
 export const buildAttendanceSummaryForPayrollQuery = (
@@ -96,4 +119,15 @@ export const buildPresentDatesForPayrollQuery = (
   `;
 
   return { query, params: [userId, startDate, endDate] };
+};
+
+export const buildUserExitCheckQuery = (userId: string) => {
+  const query = `
+    SELECT u."lastWorkingDate"
+    FROM users u
+    WHERE u.id = $1
+      AND u."lastWorkingDate" IS NOT NULL
+  `;
+
+  return { query, params: [userId] };
 };

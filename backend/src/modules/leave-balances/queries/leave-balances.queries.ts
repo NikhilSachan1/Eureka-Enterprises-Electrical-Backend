@@ -1,6 +1,6 @@
 import { GetAllLeaveBalanceDto } from '../dto';
 import { LEAVE_BALANCE_SORT_FIELDS } from '../constants/leave-balances.constants';
-import { getUserJsonBuildObject } from 'src/utils/master-constants/master-constants';
+import { getUserJsonBuildObject } from 'src/utils/utility/utility.service';
 
 export const buildLeaveBalanceQuery = (options: GetAllLeaveBalanceDto) => {
   const { userIds, financialYear, page, pageSize, sortField, sortOrder } = options;

@@ -24,6 +24,7 @@ import {
   buildAttendanceSummaryForPayrollQuery,
   buildLeaveSummaryForPayrollQuery,
   buildPresentDatesForPayrollQuery,
+  buildUserExitCheckQuery,
 } from './queries/payroll.queries';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -37,6 +38,8 @@ import {
   AttendanceSummary,
   LeaveSummaryItem,
   HolidayWorkCompensationConfig,
+  FnfSalaryCalculationInput,
+  FnfSalaryBreakdown,
 } from './payroll.types';
 
 @Injectable()
@@ -63,6 +66,9 @@ export class PayrollService {
 
     // Validate month/year is not in future
     this.validateNotFuture(month, year);
+
+    // Check if user is exiting this month (should use FNF instead)
+    await this.validateUserNotExitingThisMonth(userId, month, year);
 
     // Check if payroll already exists
     const existing = await this.getPayrollByUserAndMonth(userId, month, year);
@@ -268,7 +274,8 @@ export class PayrollService {
     this.validateNotFuture(month, year);
 
     // Get all active users with salary structures
-    const { query, params } = buildActiveUsersWithSalaryQuery(UserStatus.ACTIVE);
+    // Excludes users whose lastWorkingDate falls within the payroll month (handled by FNF)
+    const { query, params } = buildActiveUsersWithSalaryQuery(UserStatus.ACTIVE, month, year);
     const usersWithSalary = await this.payrollRepository.executeRawQuery(query, params);
 
     let success = 0;
@@ -406,6 +413,256 @@ export class PayrollService {
     const { query, params } = buildPayrollSummaryQuery(month, year);
     const results = await this.payrollRepository.executeRawQuery(query, params);
     return results?.[0] || null;
+  }
+
+  // ==================== FNF Salary Calculation ====================
+
+  /**
+   * Calculate pro-rated salary for FNF (Full & Final) settlement.
+   * Uses the same logic as regular payroll but for partial month (1st to last working date).
+   * Includes holiday work compensation if employee worked on holidays.
+   *
+   * TODO: Add pending bonuses integration if required in future
+   */
+  async calculateFnfSalary(input: FnfSalaryCalculationInput): Promise<FnfSalaryBreakdown> {
+    const { userId, lastWorkingDate } = input;
+
+    const exitMonth = lastWorkingDate.getMonth() + 1;
+    const exitYear = lastWorkingDate.getFullYear();
+    const lastWorkingDay = lastWorkingDate.getDate();
+
+    // Get salary structure effective for this month
+    const effectiveDate = new Date(exitYear, exitMonth - 1, 15);
+    const salaryStructure = await this.salaryStructureService.findEffectiveOnDate(
+      userId,
+      effectiveDate,
+    );
+    if (!salaryStructure) {
+      throw new NotFoundException(PAYROLL_ERRORS.NO_SALARY_STRUCTURE);
+    }
+
+    // Calculate working days
+    const totalDaysInMonth = new Date(exitYear, exitMonth, 0).getDate();
+    const totalWorkingDaysInMonth = await this.calculateWorkingDays(exitYear, exitMonth);
+
+    // Calculate working days until last working date
+    const daysWorked = await this.calculateWorkingDaysUntilDate(
+      exitYear,
+      exitMonth,
+      lastWorkingDay,
+    );
+
+    // Get attendance summary for the exit month (from 1st to last working date)
+    const attendanceSummary = await this.getAttendanceSummaryForFnf(
+      userId,
+      exitMonth,
+      exitYear,
+      lastWorkingDay,
+    );
+
+    // Calculate effective present days
+    const fullPresentDays = attendanceSummary.presentDays;
+    const halfDayCount = attendanceSummary.halfDays;
+    const effectivePresentDays = fullPresentDays + halfDayCount * 0.5;
+
+    const paidLeaveDays = attendanceSummary.paidLeaveDays;
+    const unpaidLeaveDays = attendanceSummary.unpaidLeaveDays;
+    const absentDays = attendanceSummary.absentDays;
+
+    // Total payable days = present + paid leave
+    const totalPayableDays = effectivePresentDays + paidLeaveDays;
+    const lopDays = unpaidLeaveDays + absentDays + halfDayCount * 0.5;
+
+    // If no attendance records, use working days until last working date
+    const presentDays = totalPayableDays > 0 ? totalPayableDays : daysWorked;
+
+    // Calculate pro-rate multiplier based on working days
+    const prorateMultiplier = presentDays / totalWorkingDaysInMonth;
+
+    // Pro-rate each salary component
+    const basicProrated = Math.round(Number(salaryStructure.basic) * prorateMultiplier);
+    const hraProrated = Math.round(Number(salaryStructure.hra) * prorateMultiplier);
+    const foodAllowanceProrated = Math.round(
+      Number(salaryStructure.foodAllowance) * prorateMultiplier,
+    );
+    const conveyanceAllowanceProrated = Math.round(
+      Number(salaryStructure.conveyanceAllowance) * prorateMultiplier,
+    );
+    const medicalAllowanceProrated = Math.round(
+      Number(salaryStructure.medicalAllowance) * prorateMultiplier,
+    );
+    const specialAllowanceProrated = Math.round(
+      Number(salaryStructure.specialAllowance) * prorateMultiplier,
+    );
+
+    // Daily salary for calculations
+    const dailySalary = Number(salaryStructure.grossSalary) / totalWorkingDaysInMonth;
+
+    // Holiday work compensation (same logic as regular payroll)
+    const holidaysWorked = await this.calculateHolidaysWorkedForFnf(
+      userId,
+      exitMonth,
+      exitYear,
+      lastWorkingDay,
+    );
+
+    let holidayBonus = 0;
+    const holidayWorkConfig = await this.getHolidayWorkCompensationConfig();
+    const compensationType = holidayWorkConfig?.type || HolidayWorkCompensationType.MONEY;
+
+    // For FNF, always pay as money (no leave credit since employee is leaving)
+    if (holidaysWorked > 0 && compensationType === HolidayWorkCompensationType.MONEY) {
+      holidayBonus = Math.round(dailySalary * holidaysWorked);
+    } else if (holidaysWorked > 0) {
+      // Even if config says LEAVE, pay as money for FNF (employee can't use leaves after exit)
+      holidayBonus = Math.round(dailySalary * holidaysWorked);
+    }
+
+    // Gross earnings (pro-rated + holiday bonus)
+    const grossEarnings =
+      basicProrated +
+      hraProrated +
+      foodAllowanceProrated +
+      conveyanceAllowanceProrated +
+      medicalAllowanceProrated +
+      specialAllowanceProrated +
+      holidayBonus;
+
+    // Pro-rate deductions
+    const employeePfProrated = Math.round(Number(salaryStructure.employeePf) * prorateMultiplier);
+    const tdsProrated = Math.round(Number(salaryStructure.tds) * prorateMultiplier);
+    const esicProrated = Math.round(Number(salaryStructure.esic) * prorateMultiplier);
+    // Professional tax is typically flat per month, prorate only if partial month
+    const professionalTaxProrated =
+      presentDays >= totalWorkingDaysInMonth
+        ? Number(salaryStructure.professionalTax)
+        : Math.round(Number(salaryStructure.professionalTax) * prorateMultiplier);
+
+    // LOP deduction
+    const lopDeduction = Math.round(dailySalary * lopDays);
+
+    // Total deductions
+    const totalDeductions =
+      employeePfProrated + tdsProrated + esicProrated + professionalTaxProrated + lopDeduction;
+
+    // Net salary
+    const netSalary = grossEarnings - totalDeductions;
+
+    return {
+      totalDaysInMonth,
+      totalWorkingDaysInMonth,
+      daysWorked,
+      prorateMultiplier: Math.round(prorateMultiplier * 10000) / 10000,
+      basicProrated,
+      hraProrated,
+      foodAllowanceProrated,
+      conveyanceAllowanceProrated,
+      medicalAllowanceProrated,
+      specialAllowanceProrated,
+      grossEarnings,
+      holidaysWorked,
+      holidayBonus,
+      employeePfProrated,
+      tdsProrated,
+      esicProrated,
+      professionalTaxProrated,
+      lopDeduction,
+      totalDeductions,
+      presentDays,
+      absentDays,
+      halfDays: halfDayCount,
+      paidLeaveDays,
+      unpaidLeaveDays,
+      holidays: attendanceSummary.holidays,
+      netSalary,
+      dailySalary: Math.round(dailySalary * 100) / 100,
+    };
+  }
+
+  private async calculateWorkingDaysUntilDate(
+    year: number,
+    month: number,
+    untilDay: number,
+  ): Promise<number> {
+    const config = await this.getWorkingDaysConfig();
+    let workingDays = 0;
+
+    for (let day = 1; day <= untilDay; day++) {
+      const date = new Date(year, month - 1, day);
+      const dayOfWeek = date.getDay();
+
+      if (config.excludeSundays && dayOfWeek === 0) continue;
+      if (config.excludeSaturdays && dayOfWeek === 6) continue;
+
+      workingDays++;
+    }
+
+    return workingDays;
+  }
+
+  private async getAttendanceSummaryForFnf(
+    userId: string,
+    month: number,
+    year: number,
+    lastWorkingDay: number,
+  ): Promise<AttendanceSummary> {
+    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastWorkingDay
+      .toString()
+      .padStart(2, '0')}`;
+
+    const { query, params } = buildAttendanceSummaryForPayrollQuery(userId, startDate, endDate);
+    const results = await this.payrollRepository.executeRawQuery(query, params);
+
+    const result = results?.[0];
+    return {
+      presentDays: parseInt(result?.presentDays || '0'),
+      absentDays: parseInt(result?.absentDays || '0'),
+      halfDays: parseInt(result?.halfDays || '0'),
+      paidLeaveDays: parseInt(result?.paidLeaveDays || '0'),
+      unpaidLeaveDays: parseInt(result?.unpaidLeaveDays || '0'),
+      holidays: parseInt(result?.holidays || '0'),
+    };
+  }
+
+  private async calculateHolidaysWorkedForFnf(
+    userId: string,
+    month: number,
+    year: number,
+    lastWorkingDay: number,
+  ): Promise<number> {
+    const holidayDates = await this.getHolidayDatesForMonth(month, year);
+    const presentDates = await this.getPresentDatesForFnf(userId, month, year, lastWorkingDay);
+
+    if (holidayDates.length === 0 || presentDates.length === 0) {
+      return 0;
+    }
+
+    // Filter holidays that fall within the FNF period (1st to last working date)
+    const lastWorkingDateStr = `${year}-${month.toString().padStart(2, '0')}-${lastWorkingDay
+      .toString()
+      .padStart(2, '0')}`;
+    const validHolidays = holidayDates.filter((date) => date <= lastWorkingDateStr);
+
+    const holidaySet = new Set(validHolidays);
+    return presentDates.filter((date) => holidaySet.has(date)).length;
+  }
+
+  private async getPresentDatesForFnf(
+    userId: string,
+    month: number,
+    year: number,
+    lastWorkingDay: number,
+  ): Promise<string[]> {
+    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastWorkingDay
+      .toString()
+      .padStart(2, '0')}`;
+
+    const { query, params } = buildPresentDatesForPayrollQuery(userId, startDate, endDate);
+    const results = await this.payrollRepository.executeRawQuery(query, params);
+
+    return (results || []).map((row: { attendanceDate: string }) => row.attendanceDate);
   }
 
   // ==================== Private Helpers ====================
@@ -706,6 +963,30 @@ export class PayrollService {
     } catch (error) {
       Logger.error(HOLIDAY_WORK_CREDIT.LOG_ERROR.replace('{userId}', userId), error);
       throw error;
+    }
+  }
+
+  private async validateUserNotExitingThisMonth(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<void> {
+    const { query, params } = buildUserExitCheckQuery(userId);
+    const result = await this.dataSource.query(query, params);
+
+    if (result.length > 0 && result[0].lastWorkingDate) {
+      const lastWorkingDate = new Date(result[0].lastWorkingDate);
+      const lwdMonth = lastWorkingDate.getMonth() + 1;
+      const lwdYear = lastWorkingDate.getFullYear();
+
+      if (lwdMonth === month && lwdYear === year) {
+        throw new BadRequestException(
+          PAYROLL_ERRORS.USER_EXITING_USE_FNF.replace(
+            '{lastWorkingDate}',
+            lastWorkingDate.toLocaleDateString('en-IN'),
+          ),
+        );
+      }
     }
   }
 }

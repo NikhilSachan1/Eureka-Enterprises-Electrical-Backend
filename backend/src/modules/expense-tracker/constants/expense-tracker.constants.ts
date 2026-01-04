@@ -19,6 +19,7 @@ export enum ApprovalStatus {
 export const EXPENSE_TRACKER_ERRORS = {
   EXPENSE_CATEGORY_NOT_FOUND:
     'Expense category not found. Available categories: {expenseCategories}',
+  EXPENSE_CATEGORY_NOT_ALLOWED: 'You are not authorized to use this expense category',
   PAYMENT_MODE_NOT_FOUND: 'Payment mode not found. Available modes: {paymentModes}',
   INVALID_EXPENSE_DATE: 'Expense date cannot be in the future',
   EXPENSE_DATE_TOO_OLD:
@@ -59,6 +60,12 @@ export const DEFAULT_EXPENSE = {
   CREDIT_APPROVAL_REASON: 'Paid Successfully',
   EDIT_REASON: 'Expense updated',
 };
+
+export const SYSTEM_EXPENSE_DEFAULTS = {
+  PAYMENT_MODE: 'BANK_TRANSFER',
+  APPROVAL_REASON_PREFIX: 'System generated',
+  DEFAULT_REFERENCE_TYPE: 'SYSTEM',
+} as const;
 
 export enum ExpenseTrackerEntityFields {
   ID = 'id',

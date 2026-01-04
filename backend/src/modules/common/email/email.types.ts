@@ -23,11 +23,12 @@ export interface IEmailDataValues {
   lastName?: string;
   resetPasswordLink?: string;
 
-  // Payslip
+  // Payslip / FNF
   employeeName?: string;
   monthYear?: string;
   netPayable?: string;
   companyName?: string;
+  lastWorkingDate?: string;
 
   // FY Leave Config Reminder
   daysRemaining?: number;

@@ -27,6 +27,7 @@ import {
   DEFAULT_EXPENSE,
   ExpenseTrackerEntityFields,
   EXPENSE_TRACKER_SUCCESS_MESSAGES,
+  SYSTEM_EXPENSE_DEFAULTS,
 } from './constants/expense-tracker.constants';
 import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere, In } from 'typeorm';
@@ -56,15 +57,25 @@ export class ExpenseTrackerService {
   async createDebitExpense(
     createExpenseDto: CreateDebitExpenseDto & {
       userId: string;
+      userRole?: string;
       sourceType: EntrySourceType;
       fileKeys: string[];
       timezone?: string;
     },
   ) {
     try {
-      const { category, paymentMode, amount, expenseDate, userId, sourceType, fileKeys, timezone } =
-        createExpenseDto;
-      await this.validateExpenseCategory(category);
+      const {
+        category,
+        paymentMode,
+        amount,
+        expenseDate,
+        userId,
+        userRole,
+        sourceType,
+        fileKeys,
+        timezone,
+      } = createExpenseDto;
+      await this.validateExpenseCategory(category, userRole);
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate, timezone);
 
@@ -101,7 +112,7 @@ export class ExpenseTrackerService {
     }
   }
 
-  private async validateExpenseCategory(category: string) {
+  private async validateExpenseCategory(category: string, userRole?: string) {
     const expenseCategorySetting = await this.configurationService.findOneOrFail({
       where: { module: CONFIGURATION_MODULES.EXPENSE, key: CONFIGURATION_KEYS.EXPENSE_CATEGORIES },
     });
@@ -110,9 +121,9 @@ export class ExpenseTrackerService {
       where: { configId: expenseCategorySetting.id, isActive: true },
     });
 
-    const isValidExpenseCategory = configSetting.value.some((item: any) => item.name === category);
+    const categoryConfig = configSetting.value.find((item: any) => item.name === category);
 
-    if (!isValidExpenseCategory) {
+    if (!categoryConfig) {
       const availableExpenseCategories = configSetting.value.map((item: any) => item.name);
       throw new BadRequestException(
         EXPENSE_TRACKER_ERRORS.EXPENSE_CATEGORY_NOT_FOUND.replace(
@@ -120,6 +131,16 @@ export class ExpenseTrackerService {
           availableExpenseCategories.join(', '),
         ),
       );
+    }
+
+    // Check role restriction if category has allowedRoles
+    if (
+      userRole &&
+      categoryConfig.allowedRoles &&
+      categoryConfig.allowedRoles.length > 0 &&
+      !categoryConfig.allowedRoles.includes(userRole)
+    ) {
+      throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CATEGORY_NOT_ALLOWED);
     }
   }
 
@@ -303,6 +324,40 @@ export class ExpenseTrackerService {
     }
   }
 
+  async createSystemExpense(data: {
+    userId: string;
+    category: string;
+    amount: number;
+    description: string;
+    createdBy: string;
+    referenceId?: string;
+    referenceType?: string;
+  }): Promise<ExpenseTrackerEntity> {
+    const referenceType = data.referenceType || SYSTEM_EXPENSE_DEFAULTS.DEFAULT_REFERENCE_TYPE;
+    const approvalReason = `${SYSTEM_EXPENSE_DEFAULTS.APPROVAL_REASON_PREFIX}: ${referenceType}`;
+
+    const expense = await this.expenseTrackerRepository.create({
+      userId: data.userId,
+      category: data.category,
+      amount: data.amount,
+      description: data.description,
+      paymentMode: SYSTEM_EXPENSE_DEFAULTS.PAYMENT_MODE,
+      expenseDate: new Date(),
+      isActive: true,
+      approvalStatus: ApprovalStatus.APPROVED,
+      approvalAt: new Date(),
+      approvalBy: data.createdBy,
+      approvalReason,
+      transactionType: TransactionType.CREDIT,
+      expenseEntryType: ExpenseEntryType.FORCED,
+      entrySourceType: EntrySourceType.WEB,
+      transactionId: data.referenceId,
+      createdBy: data.createdBy,
+    });
+
+    return expense;
+  }
+
   async findOne(options: FindOneOptions<ExpenseTrackerEntity>): Promise<ExpenseTrackerEntity> {
     try {
       return await this.expenseTrackerRepository.findOne(options);
@@ -349,6 +404,7 @@ export class ExpenseTrackerService {
     editExpenseDto: EditExpenseDto & {
       id: string;
       updatedBy: string;
+      userRole?: string;
       entrySourceType: EntrySourceType;
       fileKeys: string[];
       timezone?: string;
@@ -358,6 +414,7 @@ export class ExpenseTrackerService {
       const {
         id,
         updatedBy,
+        userRole,
         entrySourceType,
         editReason,
         fileKeys,
@@ -381,7 +438,7 @@ export class ExpenseTrackerService {
       }
 
       // Validate category, payment mode, and expense date
-      await this.validateExpenseCategory(category);
+      await this.validateExpenseCategory(category, userRole);
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate, timezone);
 

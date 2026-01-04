@@ -1,6 +1,6 @@
 import { FuelExpenseQueryDto } from '../dto/fuel-expense-query.dto';
 import { TransactionType } from '../constants/fuel-expense.constants';
-import { getUserSelectFields } from 'src/utils/master-constants/master-constants';
+import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
 export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
   const {

@@ -28,6 +28,8 @@ export const EMAIL_SUBJECT = {
   ATTENDANCE_APPROVAL_REMINDER_CRITICAL: '⚠️ FINAL REMINDER: Attendance Auto-Approval Tomorrow!',
   // Payslip
   PAYSLIP: 'Eureka HRMS - Salary Slip for {monthYear}',
+  // FNF Documents
+  FNF_DOCUMENTS: 'Exit Documents - {employeeName}',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -44,6 +46,7 @@ export const EMAIL_TEMPLATE = {
   LEAVE_APPROVAL_REMINDER: 'leaveApprovalReminder',
   ATTENDANCE_APPROVAL_REMINDER: 'attendanceApprovalReminder',
   PAYSLIP: 'payslip',
+  FNF_DOCUMENTS: 'fnf-documents',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {};

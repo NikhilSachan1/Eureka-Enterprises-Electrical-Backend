@@ -87,6 +87,22 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 100, nullable: true })
   designation: string;
 
+  // ==================== Exit Details ====================
+  @Column({ type: 'date', nullable: true })
+  exitDate: Date;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  exitReason: string;
+
+  @Column({ type: 'date', nullable: true })
+  lastWorkingDate: Date;
+
+  @Column({ type: 'text', nullable: true })
+  exitRemarks: string;
+
+  @Column({ type: 'boolean', default: false })
+  noticePeriodWaived: boolean;
+
   // ==================== Education Details ====================
   @Column({ type: 'varchar', length: 100, nullable: true })
   degree: string;

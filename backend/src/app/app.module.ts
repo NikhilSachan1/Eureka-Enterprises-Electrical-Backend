@@ -46,6 +46,7 @@ import { TimezoneInterceptor } from 'src/utils/middleware/timezone.interceptor';
 import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
 import { AuditLogModule } from 'src/modules/audit-logs/audit-log.module';
 import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/request-audit.interceptor';
+import { FnfModule } from 'src/modules/fnf/fnf.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/req
     DateTimeModule,
     CronLogModule,
     AuditLogModule,
+    FnfModule,
   ],
   controllers: [AppController],
   providers: [
