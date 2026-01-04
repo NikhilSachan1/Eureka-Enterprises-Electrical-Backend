@@ -78,14 +78,19 @@ export class VehicleMastersRepository {
   }
 
   async delete(
-    identifierConditions: FindOptionsWhere<VehicleMasterEntity>,
+    identifierConditions: FindOptionsWhere<VehicleMasterEntity> & { deletedBy?: string },
     entityManager?: EntityManager,
   ) {
     try {
       const repository = entityManager
         ? entityManager.getRepository(VehicleMasterEntity)
         : this.repository;
-      return await repository.delete(identifierConditions);
+
+      const { deletedBy, ...conditions } = identifierConditions;
+      if (deletedBy) {
+        await repository.update(conditions, { deletedBy, updatedAt: new Date() });
+      }
+      return await repository.softDelete(conditions);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
