@@ -22,6 +22,11 @@ export const VEHICLE_EVENTS_ERRORS = {
   ONLY_INITIATOR_CAN_CANCEL: 'Only the initiator of the handover can cancel it',
 };
 
+export const VEHICLE_EVENTS_DTO_ERRORS = {
+  INVALID_EVENT_TYPES: 'Invalid event type(s). Please choose from the following: {eventTypes}',
+  INVALID_SORT_FIELD: 'Invalid sort field. Please choose from the following: {sortFields}',
+};
+
 export const VALID_ACTIONS_BY_STATUS: Record<string, VehicleEventTypes[]> = {
   [VehicleStatus.AVAILABLE]: [
     VehicleEventTypes.HANDOVER_INITIATED,

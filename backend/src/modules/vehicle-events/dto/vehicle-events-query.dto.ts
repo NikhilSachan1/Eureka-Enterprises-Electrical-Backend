@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsUUID, IsArray } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { VehicleEventTypes } from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
 import {
-  VEHICLE_EVENTS_ERRORS,
+  VEHICLE_EVENTS_DTO_ERRORS,
   VehicleEventsSortableFields,
 } from '../constants/vehicle-events.constants';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
@@ -27,16 +28,22 @@ export class VehicleEventsQueryDto extends BaseGetDto {
   endDate?: string;
 
   @ApiProperty({
-    description: 'Search by event type',
-    example: 'VEHICLE_ADDED',
+    description: 'Filter by event types (supports multiple values)',
+    enum: VehicleEventTypes,
+    isArray: true,
     required: false,
   })
   @IsOptional()
+  @IsArray()
   @IsEnum(VehicleEventTypes, {
-    message: VEHICLE_EVENTS_ERRORS.INVALID_EVENT_TYPE + Object.values(VehicleEventTypes).toString(),
+    each: true,
+    message: VEHICLE_EVENTS_DTO_ERRORS.INVALID_EVENT_TYPES.replace(
+      '{eventTypes}',
+      Object.values(VehicleEventTypes).join(', '),
+    ),
   })
-  @IsString()
-  eventType?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  eventTypes?: VehicleEventTypes[];
 
   @ApiProperty({
     description: 'Search by to user',

@@ -38,7 +38,7 @@ export const buildVehicleEventsQuery = ({
   endDateUTC,
 }: BuildVehicleEventsQueryParams) => {
   const {
-    eventType,
+    eventTypes,
     toUser,
     fromUser,
     createdBy,
@@ -67,10 +67,10 @@ export const buildVehicleEventsQuery = ({
     paramIndex++;
   }
 
-  // Event type filter
-  if (eventType) {
-    filters.push(`ve."eventType" = $${paramIndex}`);
-    params.push(eventType);
+  // Event types filter (supports multiple values)
+  if (eventTypes && eventTypes.length > 0) {
+    filters.push(`ve."eventType" = ANY($${paramIndex})`);
+    params.push(eventTypes);
     paramIndex++;
   }
 
