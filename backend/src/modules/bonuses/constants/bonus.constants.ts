@@ -20,6 +20,8 @@ export enum BonusStatus {
 export const BONUS_ERRORS = {
   NOT_FOUND: 'Bonus not found',
   USER_NOT_FOUND: 'User not found',
+  EMPLOYEE_CANNOT_SPECIFY_USER_ID:
+    'You cannot specify userId filter. Only your own records are accessible.',
   INVALID_MONTH: 'Month must be between 1 and 12',
   INVALID_YEAR: 'Invalid year',
   ALREADY_PAID: 'Bonus has already been paid and cannot be modified',

@@ -9,6 +9,7 @@ import {
   Request,
   Res,
   ParseUUIDPipe,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -16,6 +17,7 @@ import { FnfService } from './fnf.service';
 import { InitiateFnfDto, UpdateFnfDto, UpdateClearanceDto, FnfQueryDto } from './dto';
 import { FnfDocumentType } from './documents/fnf-document.constants';
 import { RequestWithTimezone } from './fnf.types';
+import { FnfUserInterceptor } from './interceptors/fnf-user.interceptor';
 
 @ApiTags('FNF (Full & Final Settlement)')
 @ApiBearerAuth('JWT-auth')
@@ -29,6 +31,7 @@ export class FnfController {
   }
 
   @Get()
+  @UseInterceptors(FnfUserInterceptor)
   async findAll(@Query() query: FnfQueryDto) {
     return this.fnfService.findAll(query);
   }

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Request,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SalaryStructureService } from './salary-structure.service';
 import {
@@ -7,6 +17,8 @@ import {
   ApplyIncrementDto,
   GetSalaryStructureDto,
 } from './dto';
+import { SalaryStructureUserInterceptor } from './interceptors/salary-structure-user.interceptor';
+import { SalaryStructureParamUserInterceptor } from './interceptors/salary-structure-param-user.interceptor';
 
 @ApiTags('Salary Structures')
 @ApiBearerAuth('JWT-auth')
@@ -21,16 +33,19 @@ export class SalaryStructureController {
   }
 
   @Get()
+  @UseInterceptors(SalaryStructureUserInterceptor)
   async findAll(@Query() query: GetSalaryStructureDto) {
     return await this.salaryStructureService.findAll(query);
   }
 
   @Get('user/:userId')
+  @UseInterceptors(SalaryStructureParamUserInterceptor)
   async findByUserId(@Param('userId') userId: string) {
     return await this.salaryStructureService.findActiveByUserId(userId);
   }
 
   @Get('user/:userId/history')
+  @UseInterceptors(SalaryStructureParamUserInterceptor)
   async getSalaryHistory(@Param('userId') userId: string) {
     return await this.salaryStructureService.findSalaryHistory(userId);
   }

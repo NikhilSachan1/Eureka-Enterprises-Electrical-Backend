@@ -1,7 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Request,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 import { BonusService } from './bonus.service';
 import { CreateBonusDto, UpdateBonusDto, GetBonusDto } from './dto';
+import { BonusUserInterceptor } from './interceptors/bonus-user.interceptor';
 
 @ApiTags('Bonuses')
 @ApiBearerAuth('JWT-auth')
@@ -17,6 +29,7 @@ export class BonusController {
   }
 
   @Get()
+  @UseInterceptors(BonusUserInterceptor)
   async findAll(@Query() query: GetBonusDto) {
     return await this.bonusService.findAll(query);
   }

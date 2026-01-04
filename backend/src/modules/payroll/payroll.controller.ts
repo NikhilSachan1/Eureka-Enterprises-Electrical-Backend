@@ -1,9 +1,21 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Request,
+  Res,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiProduces, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PayrollService } from './payroll.service';
 import { PayslipService } from './payslip/payslip.service';
 import { GeneratePayrollDto, GenerateBulkPayrollDto, GetPayrollDto, UpdatePayrollDto } from './dto';
+import { PayrollUserInterceptor } from './interceptors/payroll-user.interceptor';
 
 @ApiTags('Payroll')
 @ApiBearerAuth('JWT-auth')
@@ -27,6 +39,7 @@ export class PayrollController {
   }
 
   @Get()
+  @UseInterceptors(PayrollUserInterceptor)
   async findAll(@Query() query: GetPayrollDto) {
     return await this.payrollService.findAll(query);
   }

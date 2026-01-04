@@ -11,6 +11,8 @@ export enum IncrementType {
 export const SALARY_STRUCTURE_ERRORS = {
   NOT_FOUND: 'Salary structure not found',
   USER_NOT_FOUND: 'User not found',
+  EMPLOYEE_CANNOT_SPECIFY_USER_ID:
+    'You cannot specify userId filter. Only your own records are accessible.',
   ALREADY_EXISTS: 'Active salary structure already exists for this user',
   EFFECTIVE_FROM_REQUIRED: 'Effective from date is required',
   EFFECTIVE_FROM_PAST: 'Effective from date cannot be in the past for increments',

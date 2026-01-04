@@ -1,6 +1,8 @@
 export const FNF_ERRORS = {
   FNF_NOT_FOUND: 'FNF settlement not found',
   USER_NOT_FOUND: 'User not found',
+  EMPLOYEE_CANNOT_SPECIFY_USER_ID:
+    'You cannot specify userId filter. Only your own records are accessible.',
   USER_ALREADY_HAS_FNF: 'User already has an active FNF settlement',
   INVALID_EXIT_DATE: 'Exit date cannot be in the past',
   INVALID_LAST_WORKING_DATE: 'Last working date cannot be after exit date',

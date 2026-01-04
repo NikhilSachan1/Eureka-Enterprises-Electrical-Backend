@@ -9,6 +9,8 @@ export enum PayrollStatus {
 export const PAYROLL_ERRORS = {
   NOT_FOUND: 'Payroll record not found',
   USER_NOT_FOUND: 'User not found',
+  EMPLOYEE_CANNOT_SPECIFY_USER_ID:
+    'You cannot specify userId filter. Only your own records are accessible.',
   NO_SALARY_STRUCTURE: 'No salary structure found for this user',
   ALREADY_EXISTS: 'Payroll for this month/year already exists for this user',
   ALREADY_APPROVED: 'Payroll has already been approved',
