@@ -7,6 +7,7 @@ import { AssetFilesService } from '../asset-files/asset-files.service';
 import {
   AssetEventTypes,
   AssetFileTypes,
+  AssetStatus,
 } from '../asset-masters/constants/asset-masters.constants';
 import {
   ASSET_EVENTS_ERRORS,
@@ -239,6 +240,13 @@ export class AssetEventsService {
               },
               entityManager,
             );
+
+            // Update version: status -> ASSIGNED, assignedTo -> the person who accepted
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.ASSIGNED, assignedTo: fromUserId, updatedBy: createdBy },
+              entityManager,
+            );
             break;
           }
 
@@ -328,6 +336,13 @@ export class AssetEventsService {
                 entityManager,
               );
             }
+
+            // Update version: status -> AVAILABLE, clear assignedTo
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
+              entityManager,
+            );
             break;
           }
 
@@ -356,15 +371,13 @@ export class AssetEventsService {
             break;
           }
 
-          // Under Maintenance, Damaged, Retired - files optional, track who had it
-          case AssetEventTypes.UNDER_MAINTENANCE:
-          case AssetEventTypes.DAMAGED:
-          case AssetEventTypes.RETIRED: {
+          // Under Maintenance - files optional, track who had it
+          case AssetEventTypes.UNDER_MAINTENANCE: {
             const event = await this.create(
               {
                 assetMasterId,
                 eventType: action,
-                fromUser: activeVersion?.assignedTo, // Track who had the asset
+                fromUser: activeVersion?.assignedTo,
                 metadata,
                 createdBy,
               },
@@ -383,6 +396,83 @@ export class AssetEventsService {
                 entityManager,
               );
             }
+
+            // Update version: status -> UNDER_MAINTENANCE
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.UNDER_MAINTENANCE, updatedBy: createdBy },
+              entityManager,
+            );
+            break;
+          }
+
+          // Damaged - files optional, track who had it
+          case AssetEventTypes.DAMAGED: {
+            const event = await this.create(
+              {
+                assetMasterId,
+                eventType: action,
+                fromUser: activeVersion?.assignedTo,
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (assetFiles && assetFiles.length > 0) {
+              await this.assetFilesService.create(
+                {
+                  assetMasterId,
+                  fileType: this.getFileTypeForAction(action),
+                  fileKeys: assetFiles,
+                  assetEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            // Update version: status -> DAMAGED
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.DAMAGED, updatedBy: createdBy },
+              entityManager,
+            );
+            break;
+          }
+
+          // Retired - files optional, track who had it
+          case AssetEventTypes.RETIRED: {
+            const event = await this.create(
+              {
+                assetMasterId,
+                eventType: action,
+                fromUser: activeVersion?.assignedTo,
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (assetFiles && assetFiles.length > 0) {
+              await this.assetFilesService.create(
+                {
+                  assetMasterId,
+                  fileType: this.getFileTypeForAction(action),
+                  fileKeys: assetFiles,
+                  assetEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            // Update version: status -> RETIRED
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.RETIRED, updatedBy: createdBy },
+              entityManager,
+            );
             break;
           }
 
@@ -396,6 +486,13 @@ export class AssetEventsService {
                 metadata,
                 createdBy,
               },
+              entityManager,
+            );
+
+            // Update version: status -> AVAILABLE, clear assignedTo
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
               entityManager,
             );
             break;

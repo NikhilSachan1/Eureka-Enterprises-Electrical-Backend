@@ -7,6 +7,7 @@ import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
 import {
   VehicleEventTypes,
   VehicleFileTypes,
+  VehicleStatus,
 } from '../vehicle-masters/constants/vehicle-masters.constants';
 import {
   VEHICLE_EVENTS_ERRORS,
@@ -227,6 +228,13 @@ export class VehicleEventsService {
               },
               entityManager,
             );
+
+            // Update version: status -> ASSIGNED, assignedTo -> the person who accepted
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.ASSIGNED, assignedTo: fromUserId, updatedBy: createdBy },
+              entityManager,
+            );
             break;
           }
 
@@ -316,18 +324,23 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
+
+            // Update version: status -> AVAILABLE, clear assignedTo
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
+              entityManager,
+            );
             break;
           }
 
-          // Under Maintenance, Damaged, Retired - files optional, track who had it
-          case VehicleEventTypes.UNDER_MAINTENANCE:
-          case VehicleEventTypes.DAMAGED:
-          case VehicleEventTypes.RETIRED: {
+          // Under Maintenance - files optional, track who had it
+          case VehicleEventTypes.UNDER_MAINTENANCE: {
             const event = await this.create(
               {
                 vehicleMasterId,
                 eventType: action,
-                fromUser: activeVersion?.assignedTo, // Track who had the vehicle
+                fromUser: activeVersion?.assignedTo,
                 metadata,
                 createdBy,
               },
@@ -346,6 +359,83 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
+
+            // Update version: status -> UNDER_MAINTENANCE
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.UNDER_MAINTENANCE, updatedBy: createdBy },
+              entityManager,
+            );
+            break;
+          }
+
+          // Damaged - files optional, track who had it
+          case VehicleEventTypes.DAMAGED: {
+            const event = await this.create(
+              {
+                vehicleMasterId,
+                eventType: action,
+                fromUser: activeVersion?.assignedTo,
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (vehicleFiles && vehicleFiles.length > 0) {
+              await this.vehicleFilesService.create(
+                {
+                  vehicleMasterId,
+                  fileType: VehicleFileTypes.OTHER,
+                  fileKeys: vehicleFiles,
+                  vehicleEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            // Update version: status -> DAMAGED
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.DAMAGED, updatedBy: createdBy },
+              entityManager,
+            );
+            break;
+          }
+
+          // Retired - files optional, track who had it
+          case VehicleEventTypes.RETIRED: {
+            const event = await this.create(
+              {
+                vehicleMasterId,
+                eventType: action,
+                fromUser: activeVersion?.assignedTo,
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (vehicleFiles && vehicleFiles.length > 0) {
+              await this.vehicleFilesService.create(
+                {
+                  vehicleMasterId,
+                  fileType: VehicleFileTypes.OTHER,
+                  fileKeys: vehicleFiles,
+                  vehicleEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            // Update version: status -> RETIRED
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.RETIRED, updatedBy: createdBy },
+              entityManager,
+            );
             break;
           }
 
@@ -359,6 +449,13 @@ export class VehicleEventsService {
                 metadata,
                 createdBy,
               },
+              entityManager,
+            );
+
+            // Update version: status -> AVAILABLE, clear assignedTo
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
               entityManager,
             );
             break;
