@@ -380,11 +380,34 @@ export class VehicleMastersService {
         };
       });
 
-      // Filter by serviceDueStatus if provided
+      // Post-filter by computed statuses if provided (for consistency with SQL-level filtering)
       let filteredVehicles = vehiclesWithComputedStatus;
-      if (findOptions.serviceDueStatus) {
-        filteredVehicles = vehiclesWithComputedStatus.filter(
-          (v) => v.serviceDueStatus === findOptions.serviceDueStatus,
+
+      // Filter by insuranceStatuses
+      if (findOptions.insuranceStatuses && findOptions.insuranceStatuses.length > 0) {
+        filteredVehicles = filteredVehicles.filter((vehicle) =>
+          findOptions.insuranceStatuses.includes(vehicle.insuranceStatus),
+        );
+      }
+
+      // Filter by pucStatuses
+      if (findOptions.pucStatuses && findOptions.pucStatuses.length > 0) {
+        filteredVehicles = filteredVehicles.filter((vehicle) =>
+          findOptions.pucStatuses.includes(vehicle.pucStatus),
+        );
+      }
+
+      // Filter by fitnessStatuses
+      if (findOptions.fitnessStatuses && findOptions.fitnessStatuses.length > 0) {
+        filteredVehicles = filteredVehicles.filter((vehicle) =>
+          findOptions.fitnessStatuses.includes(vehicle.fitnessStatus),
+        );
+      }
+
+      // Filter by serviceDueStatuses
+      if (findOptions.serviceDueStatuses && findOptions.serviceDueStatuses.length > 0) {
+        filteredVehicles = filteredVehicles.filter((vehicle) =>
+          findOptions.serviceDueStatuses.includes(vehicle.serviceDueStatus),
         );
       }
 
@@ -404,6 +427,13 @@ export class VehicleMastersService {
         },
         { ok: 0, dueSoon: 0, overdue: 0 },
       );
+
+      // Determine if any computed status filter was applied
+      const hasComputedStatusFilter =
+        (findOptions.insuranceStatuses && findOptions.insuranceStatuses.length > 0) ||
+        (findOptions.pucStatuses && findOptions.pucStatuses.length > 0) ||
+        (findOptions.fitnessStatuses && findOptions.fitnessStatuses.length > 0) ||
+        (findOptions.serviceDueStatuses && findOptions.serviceDueStatuses.length > 0);
 
       return {
         stats: {
@@ -447,7 +477,7 @@ export class VehicleMastersService {
           },
         },
         records: filteredVehicles,
-        totalRecords: findOptions.serviceDueStatus
+        totalRecords: hasComputedStatusFilter
           ? filteredVehicles.length
           : totalResult[0]?.total || 0,
       };
