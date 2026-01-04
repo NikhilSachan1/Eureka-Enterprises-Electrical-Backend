@@ -4,6 +4,8 @@ import {
   VehicleFuelType,
   VehicleFileTypes,
   DEFAULT_EXPIRING_SOON_DAYS,
+  DocumentStatus,
+  ServiceDueStatus,
 } from '../constants/vehicle-masters.constants';
 
 export const getVehicleStatsQuery = () => {
@@ -111,8 +113,12 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     brand,
     model,
     mileage,
-    fuelType,
-    status,
+    fuelTypes,
+    statuses,
+    insuranceStatuses,
+    pucStatuses,
+    fitnessStatuses,
+    serviceDueStatuses,
     assignedTo,
     search,
     sortField,
@@ -150,16 +156,113 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     paramIndex++;
   }
 
-  if (fuelType) {
-    filters.push(`vv."fuelType" = $${paramIndex}`);
-    params.push(fuelType);
+  if (fuelTypes && fuelTypes.length > 0) {
+    filters.push(`vv."fuelType" = ANY($${paramIndex})`);
+    params.push(fuelTypes);
     paramIndex++;
   }
 
-  if (status) {
-    filters.push(`vv."status" = $${paramIndex}`);
-    params.push(status);
+  if (statuses && statuses.length > 0) {
+    filters.push(`vv."status" = ANY($${paramIndex})`);
+    params.push(statuses);
     paramIndex++;
+  }
+
+  // Computed status filters for insurance
+  if (insuranceStatuses && insuranceStatuses.length > 0) {
+    const insuranceConditions: string[] = [];
+    insuranceStatuses.forEach((status) => {
+      if (status === DocumentStatus.ACTIVE) {
+        insuranceConditions.push(
+          `(vv."insuranceEndDate" IS NOT NULL AND vv."insuranceEndDate" > NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days')`,
+        );
+      } else if (status === DocumentStatus.EXPIRING_SOON) {
+        insuranceConditions.push(
+          `(vv."insuranceEndDate" IS NOT NULL AND vv."insuranceEndDate" >= NOW() AND vv."insuranceEndDate" <= NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days')`,
+        );
+      } else if (status === DocumentStatus.EXPIRED) {
+        insuranceConditions.push(
+          `(vv."insuranceEndDate" IS NOT NULL AND vv."insuranceEndDate" < NOW())`,
+        );
+      } else if (status === DocumentStatus.NOT_APPLICABLE) {
+        insuranceConditions.push(`(vv."insuranceEndDate" IS NULL)`);
+      }
+    });
+    if (insuranceConditions.length > 0) {
+      filters.push(`(${insuranceConditions.join(' OR ')})`);
+    }
+  }
+
+  // Computed status filters for PUC
+  if (pucStatuses && pucStatuses.length > 0) {
+    const pucConditions: string[] = [];
+    pucStatuses.forEach((status) => {
+      if (status === DocumentStatus.ACTIVE) {
+        pucConditions.push(
+          `(vv."pucEndDate" IS NOT NULL AND vv."pucEndDate" > NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days')`,
+        );
+      } else if (status === DocumentStatus.EXPIRING_SOON) {
+        pucConditions.push(
+          `(vv."pucEndDate" IS NOT NULL AND vv."pucEndDate" >= NOW() AND vv."pucEndDate" <= NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days')`,
+        );
+      } else if (status === DocumentStatus.EXPIRED) {
+        pucConditions.push(`(vv."pucEndDate" IS NOT NULL AND vv."pucEndDate" < NOW())`);
+      } else if (status === DocumentStatus.NOT_APPLICABLE) {
+        pucConditions.push(`(vv."pucEndDate" IS NULL)`);
+      }
+    });
+    if (pucConditions.length > 0) {
+      filters.push(`(${pucConditions.join(' OR ')})`);
+    }
+  }
+
+  // Computed status filters for fitness
+  if (fitnessStatuses && fitnessStatuses.length > 0) {
+    const fitnessConditions: string[] = [];
+    fitnessStatuses.forEach((status) => {
+      if (status === DocumentStatus.ACTIVE) {
+        fitnessConditions.push(
+          `(vv."fitnessEndDate" IS NOT NULL AND vv."fitnessEndDate" > NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days')`,
+        );
+      } else if (status === DocumentStatus.EXPIRING_SOON) {
+        fitnessConditions.push(
+          `(vv."fitnessEndDate" IS NOT NULL AND vv."fitnessEndDate" >= NOW() AND vv."fitnessEndDate" <= NOW() + INTERVAL '${DEFAULT_EXPIRING_SOON_DAYS} days')`,
+        );
+      } else if (status === DocumentStatus.EXPIRED) {
+        fitnessConditions.push(`(vv."fitnessEndDate" IS NOT NULL AND vv."fitnessEndDate" < NOW())`);
+      } else if (status === DocumentStatus.NOT_APPLICABLE) {
+        fitnessConditions.push(`(vv."fitnessEndDate" IS NULL)`);
+      }
+    });
+    if (fitnessConditions.length > 0) {
+      filters.push(`(${fitnessConditions.join(' OR ')})`);
+    }
+  }
+
+  // Computed status filters for service due (based on lastServiceDate and lastServiceKm)
+  if (serviceDueStatuses && serviceDueStatuses.length > 0) {
+    const serviceConditions: string[] = [];
+    serviceDueStatuses.forEach((status) => {
+      if (status === ServiceDueStatus.OK) {
+        // Service is OK if last service was within acceptable range
+        serviceConditions.push(
+          `(vv."lastServiceDate" IS NOT NULL AND vv."lastServiceDate" > NOW() - INTERVAL '6 months')`,
+        );
+      } else if (status === ServiceDueStatus.DUE_SOON) {
+        // Service is due soon if last service was 5-6 months ago
+        serviceConditions.push(
+          `(vv."lastServiceDate" IS NOT NULL AND vv."lastServiceDate" <= NOW() - INTERVAL '5 months' AND vv."lastServiceDate" > NOW() - INTERVAL '6 months')`,
+        );
+      } else if (status === ServiceDueStatus.OVERDUE) {
+        // Service is overdue if last service was more than 6 months ago or never done
+        serviceConditions.push(
+          `(vv."lastServiceDate" IS NULL OR vv."lastServiceDate" <= NOW() - INTERVAL '6 months')`,
+        );
+      }
+    });
+    if (serviceConditions.length > 0) {
+      filters.push(`(${serviceConditions.join(' OR ')})`);
+    }
   }
 
   if (assignedTo) {

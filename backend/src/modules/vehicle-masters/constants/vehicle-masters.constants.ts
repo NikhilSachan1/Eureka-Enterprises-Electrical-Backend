@@ -14,6 +14,20 @@ export const VEHICLE_MASTERS_SUCCESS_MESSAGES = {
   VEHICLE_DELETE_PROCESSED: 'Processed {length} vehicles: {success} deleted, {error} failed',
 };
 
+export const VEHICLE_DTO_ERRORS = {
+  INVALID_FUEL_TYPE: 'Invalid fuel type(s). Please choose from the following: {fuelTypes}',
+  INVALID_STATUS: 'Invalid status(es). Please choose from the following: {statuses}',
+  INVALID_INSURANCE_STATUS:
+    'Invalid insurance status(es). Please choose from the following: {documentStatuses}',
+  INVALID_PUC_STATUS:
+    'Invalid PUC status(es). Please choose from the following: {documentStatuses}',
+  INVALID_FITNESS_STATUS:
+    'Invalid fitness status(es). Please choose from the following: {documentStatuses}',
+  INVALID_SERVICE_DUE_STATUS:
+    'Invalid service due status(es). Please choose from the following: {serviceDueStatuses}',
+  INVALID_SORT_FIELD: 'Invalid sort field. Please choose from the following: {sortFields}',
+};
+
 export enum VehicleMasterEntityFields {
   REGISTRATION_NO = 'registrationNo',
   VEHICLE = 'Vehicle',

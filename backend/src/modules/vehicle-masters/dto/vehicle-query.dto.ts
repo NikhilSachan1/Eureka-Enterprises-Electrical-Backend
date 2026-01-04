@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
@@ -8,6 +8,7 @@ import {
   VehicleFuelType,
   DocumentStatus,
   ServiceDueStatus,
+  VEHICLE_DTO_ERRORS,
 } from '../constants/vehicle-masters.constants';
 
 export class VehicleQueryDto extends BaseGetDto {
@@ -44,52 +45,106 @@ export class VehicleQueryDto extends BaseGetDto {
   mileage?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by fuel type',
+    description: 'Filter by fuel types (supports multiple values)',
     enum: VehicleFuelType,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(VehicleFuelType)
-  fuelType?: string;
+  @IsArray()
+  @IsEnum(VehicleFuelType, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_FUEL_TYPE.replace(
+      '{fuelTypes}',
+      Object.values(VehicleFuelType).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  fuelTypes?: VehicleFuelType[];
 
   @ApiPropertyOptional({
-    description: 'Filter by vehicle status',
+    description: 'Filter by vehicle statuses (supports multiple values)',
     enum: VehicleStatus,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(VehicleStatus)
-  status?: string;
+  @IsArray()
+  @IsEnum(VehicleStatus, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_STATUS.replace(
+      '{statuses}',
+      Object.values(VehicleStatus).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  statuses?: VehicleStatus[];
 
   @ApiPropertyOptional({
-    description: 'Filter by insurance status (computed)',
+    description: 'Filter by insurance statuses (computed, supports multiple values)',
     enum: DocumentStatus,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(DocumentStatus)
-  insuranceStatus?: string;
+  @IsArray()
+  @IsEnum(DocumentStatus, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_INSURANCE_STATUS.replace(
+      '{documentStatuses}',
+      Object.values(DocumentStatus).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  insuranceStatuses?: DocumentStatus[];
 
   @ApiPropertyOptional({
-    description: 'Filter by PUC status (computed)',
+    description: 'Filter by PUC statuses (computed, supports multiple values)',
     enum: DocumentStatus,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(DocumentStatus)
-  pucStatus?: string;
+  @IsArray()
+  @IsEnum(DocumentStatus, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_PUC_STATUS.replace(
+      '{documentStatuses}',
+      Object.values(DocumentStatus).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  pucStatuses?: DocumentStatus[];
 
   @ApiPropertyOptional({
-    description: 'Filter by fitness status (computed)',
+    description: 'Filter by fitness statuses (computed, supports multiple values)',
     enum: DocumentStatus,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(DocumentStatus)
-  fitnessStatus?: string;
+  @IsArray()
+  @IsEnum(DocumentStatus, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_FITNESS_STATUS.replace(
+      '{documentStatuses}',
+      Object.values(DocumentStatus).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  fitnessStatuses?: DocumentStatus[];
 
   @ApiPropertyOptional({
-    description: 'Filter by service due status (computed)',
+    description: 'Filter by service due statuses (computed, supports multiple values)',
     enum: ServiceDueStatus,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(ServiceDueStatus)
-  serviceDueStatus?: string;
+  @IsArray()
+  @IsEnum(ServiceDueStatus, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_SERVICE_DUE_STATUS.replace(
+      '{serviceDueStatuses}',
+      Object.values(ServiceDueStatus).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  serviceDueStatuses?: ServiceDueStatus[];
 
   @ApiPropertyOptional({
     description: 'Filter by assigned user ID',
@@ -113,7 +168,12 @@ export class VehicleQueryDto extends BaseGetDto {
     default: VehicleMasterSortFields.CREATED_AT,
   })
   @IsOptional()
-  @IsEnum(VehicleMasterSortFields)
+  @IsEnum(VehicleMasterSortFields, {
+    message: VEHICLE_DTO_ERRORS.INVALID_SORT_FIELD.replace(
+      '{sortFields}',
+      Object.values(VehicleMasterSortFields).join(', '),
+    ),
+  })
   @Transform(({ value }) => value || VehicleMasterSortFields.CREATED_AT)
   sortField?: string = VehicleMasterSortFields.CREATED_AT;
 }
