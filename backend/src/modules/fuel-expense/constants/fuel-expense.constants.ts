@@ -75,6 +75,15 @@ export const FUEL_EXPENSE_SUCCESS_MESSAGES = {
     'Bulk delete processed: {length} total, {success} successful, {error} failed',
 };
 
+export const FUEL_EXPENSE_EMAIL_CONSTANTS = {
+  SYSTEM_USER: 'System',
+  NOT_APPLICABLE: 'N/A',
+  FUEL_TYPE_PETROL: 'petrol',
+  FUEL_TYPE_DIESEL: 'diesel',
+  FUEL_TYPE_CNG: 'cng',
+  FUEL_TYPE_ELECTRIC: 'electric',
+};
+
 export const DEFAULT_FUEL_EXPENSE = {
   EDIT_REASON: 'Fuel expense updated',
   FORCE_APPROVAL_REASON: 'Force fuel expense',

@@ -1,0 +1,214 @@
+<html lang='en' dir='ltr'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <meta name='color-scheme' content='light' />
+    <meta name='supported-color-schemes' content='light' />
+    <title>{{companyName}} - Fuel Expense {{#if isApproved}}Approved{{else}}Rejected{{/if}}</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
+      sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
+      .email-wrapper { padding: 40px 20px; background-color: #f7fafc; } .email-container {
+      max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0
+      4px 6px rgba(0, 0, 0, 0.07); overflow: hidden; } .header { padding: 40px; text-align: center; }
+      .header.approved { background: linear-gradient(135deg, #059669 0%, #10b981 100%); }
+      .header.rejected { background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); }
+      .logo { max-width: 80px; height: auto; display: block; margin: 0 auto 16px; border-radius: 8px; }
+      .company-name { color: #ffffff; font-size: 20px; font-weight: 600; margin: 0 0 24px 0;
+      letter-spacing: 0.5px; } .status-badge { display: inline-block; padding: 12px 32px;
+      background-color: rgba(255,255,255,0.2); border-radius: 50px; } .status-badge h1 { margin: 0;
+      color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 1px; } .content { padding:
+      40px; } .greeting { font-size: 18px; color: #1e293b; margin-bottom: 16px; font-weight: 600; }
+      .message-text { color: #64748b; margin-bottom: 24px; line-height: 1.7; } /* Fuel Stats */
+      .fuel-stats { display: flex; gap: 16px; margin: 24px 0; } .fuel-stat { flex: 1; text-align:
+      center; padding: 24px 16px; border-radius: 12px; } .fuel-stat.amount { background:
+      linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); } .fuel-stat.amount.rejected { background:
+      linear-gradient(135deg, #fef2f2 0%, #fecaca 100%); } .fuel-stat.liters { background:
+      linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); } .fuel-stat.vehicle { background:
+      linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); } .fuel-stat-value { font-size: 28px;
+      font-weight: 700; margin: 0 0 4px 0; } .fuel-stat.amount .fuel-stat-value { color: #047857; }
+      .fuel-stat.amount.rejected .fuel-stat-value { color: #b91c1c; } .fuel-stat.liters
+      .fuel-stat-value { color: #92400e; } .fuel-stat.vehicle .fuel-stat-value { color: #1e40af;
+      font-size: 14px; } .fuel-stat-label { font-size: 11px; font-weight: 600; text-transform:
+      uppercase; letter-spacing: 1px; margin: 0; } .fuel-stat.amount .fuel-stat-label { color:
+      #059669; } .fuel-stat.amount.rejected .fuel-stat-label { color: #dc2626; } .fuel-stat.liters
+      .fuel-stat-label { color: #b45309; } .fuel-stat.vehicle .fuel-stat-label { color: #2563eb; }
+      /* Details Card */ .details-card { background-color: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 12px; overflow: hidden; margin: 24px 0; } .details-header { padding: 16px 20px;
+      background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; } .details-title { margin: 0;
+      font-size: 14px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing:
+      1px; } .details-body { padding: 20px; } .detail-row { display: flex; justify-content:
+      space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; } .detail-row:last-child {
+      border-bottom: none; } .detail-label { color: #64748b; font-size: 13px; font-weight: 500; }
+      .detail-value { color: #1e293b; font-size: 14px; font-weight: 600; text-align: right;
+      max-width: 60%; } /* Fuel Type Badge */ .fuel-badge { display: inline-block; padding: 4px 12px;
+      border-radius: 6px; font-size: 12px; font-weight: 600; } .fuel-badge.petrol { background-color:
+      #fef3c7; color: #92400e; } .fuel-badge.diesel { background-color: #fce7f3; color: #9d174d; }
+      .fuel-badge.cng { background-color: #d1fae5; color: #047857; } .fuel-badge.electric {
+      background-color: #dbeafe; color: #1e40af; } /* Status Indicator */ .status-indicator {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; } .status-indicator.approved { background-color: #ecfdf5;
+      color: #059669; } .status-indicator.rejected { background-color: #fef2f2; color: #dc2626; }
+      .status-dot { width: 8px; height: 8px; border-radius: 50%; } .status-indicator.approved
+      .status-dot { background-color: #10b981; } .status-indicator.rejected .status-dot {
+      background-color: #ef4444; } /* Remarks Box */ .remarks-box { background-color: #fffbeb;
+      border: 1px solid #fcd34d; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 0
+      8px 8px 0; margin: 24px 0; } .remarks-box.rejected { background-color: #fef2f2; border-color:
+      #fca5a5; border-left-color: #ef4444; } .remarks-label { font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; color: #92400e; }
+      .remarks-box.rejected .remarks-label { color: #991b1b; } .remarks-text { margin: 0; color:
+      #78350f; font-size: 14px; line-height: 1.6; } .remarks-box.rejected .remarks-text { color:
+      #7f1d1d; } /* Reimbursement Note */ .reimburse-note { background: linear-gradient(135deg,
+      #dbeafe 0%, #bfdbfe 100%); border: 1px solid #93c5fd; border-radius: 12px; padding: 20px;
+      margin: 24px 0; text-align: center; } .reimburse-note p { margin: 0; color: #1e40af; font-size:
+      14px; } .reimburse-note strong { color: #1e3a8a; } /* Button */ .button-container { text-align:
+      center; margin: 32px 0; } .button { display: inline-block; padding: 14px 32px; background:
+      linear-gradient(135deg, #2c5282 0%, #1a365d 100%); color: #ffffff !important; text-decoration:
+      none; border-radius: 8px; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; } .divider
+      { height: 1px; background-color: #e2e8f0; margin: 28px 0; } .signature { margin-top: 28px;
+      color: #64748b; } .signature-name { color: #1e293b; font-weight: 600; } .footer {
+      background-color: #f8fafc; text-align: center; padding: 24px 40px; border-top: 1px solid
+      #e2e8f0; } .footer-text { color: #94a3b8; font-size: 12px; margin: 0 0 8px 0; } .footer-company
+      { color: #cbd5e1; font-size: 11px; margin: 0; } @media screen and (max-width: 600px) { .content
+      { padding: 28px 24px; } .header { padding: 32px 24px; } .footer { padding: 20px 24px; }
+      .fuel-stats { flex-direction: column; } .fuel-stat-value { font-size: 24px; } .detail-row {
+      flex-direction: column; gap: 4px; } .detail-value { text-align: left; max-width: 100%; } }
+    </style>
+  </head>
+  <body>
+    <div class='email-wrapper'>
+      <div class='email-container'>
+        <div class='header {{#if isApproved}}approved{{else}}rejected{{/if}}'>
+          <img
+            src='{{companyLogo}}'
+            alt='{{companyName}}'
+            class='logo'
+          />
+          <p class='company-name'>{{companyName}}</p>
+          <div class='status-badge'>
+            <h1>{{#if isApproved}}✓ APPROVED{{else}}✗ REJECTED{{/if}}</h1>
+          </div>
+        </div>
+
+        <div class='content'>
+          <p class='greeting'>Hello {{employeeName}},</p>
+
+          <p class='message-text'>
+            {{#if isApproved}}
+              Great news! Your fuel expense claim has been reviewed and approved. The details are provided below.
+            {{else}}
+              Your fuel expense claim has been reviewed and was not approved. Please review the details and reason below.
+            {{/if}}
+          </p>
+
+          <!-- Fuel Stats Cards -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
+            <tr>
+              <td style='padding-right: 8px; width: 33%;'>
+                <div style='text-align: center; padding: 20px 12px; border-radius: 12px; {{#if isApproved}}background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);{{else}}background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);{{/if}}'>
+                  <p style='font-size: 24px; font-weight: 700; margin: 0 0 4px 0; {{#if isApproved}}color: #047857;{{else}}color: #b91c1c;{{/if}}'>{{amount}}</p>
+                  <p style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin: 0; {{#if isApproved}}color: #059669;{{else}}color: #dc2626;{{/if}}'>Amount</p>
+                </div>
+              </td>
+              <td style='padding: 0 8px; width: 33%;'>
+                <div style='text-align: center; padding: 20px 12px; border-radius: 12px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);'>
+                  <p style='font-size: 24px; font-weight: 700; margin: 0 0 4px 0; color: #92400e;'>{{fuelLiters}}</p>
+                  <p style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin: 0; color: #b45309;'>Liters</p>
+                </div>
+              </td>
+              <td style='padding-left: 8px; width: 33%;'>
+                <div style='text-align: center; padding: 20px 12px; border-radius: 12px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);'>
+                  <p style='font-size: 14px; font-weight: 700; margin: 0 0 4px 0; color: #1e40af;'>{{vehicleNumber}}</p>
+                  <p style='font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin: 0; color: #2563eb;'>Vehicle</p>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <div class='details-card'>
+            <div class='details-header'>
+              <h3 class='details-title'>⛽ Fuel Expense Details</h3>
+            </div>
+            <div class='details-body'>
+              <div class='detail-row'>
+                <span class='detail-label'>Expense ID</span>
+                <span class='detail-value'>{{expenseId}}</span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Fuel Type</span>
+                <span class='detail-value'>
+                  <span class='fuel-badge {{fuelTypeClass}}'>{{fuelType}}</span>
+                </span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Fuel Date</span>
+                <span class='detail-value'>{{fuelDate}}</span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Odometer Reading</span>
+                <span class='detail-value'>{{odometerReading}} km</span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Price Per Liter</span>
+                <span class='detail-value'>{{pricePerLiter}}</span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Status</span>
+                <span class='detail-value'>
+                  <span class='status-indicator {{#if isApproved}}approved{{else}}rejected{{/if}}'>
+                    <span class='status-dot'></span>
+                    {{#if isApproved}}Approved{{else}}Rejected{{/if}}
+                  </span>
+                </span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Reviewed By</span>
+                <span class='detail-value'>{{approverName}}</span>
+              </div>
+              <div class='detail-row'>
+                <span class='detail-label'>Reviewed On</span>
+                <span class='detail-value'>{{approvalDate}}</span>
+              </div>
+            </div>
+          </div>
+
+          {{#if remarks}}
+            <div class='remarks-box {{#unless isApproved}}rejected{{/unless}}'>
+              <p class='remarks-label'>{{#if isApproved}}Approver's Note{{else}}Reason for Rejection{{/if}}</p>
+              <p class='remarks-text'>{{remarks}}</p>
+            </div>
+          {{/if}}
+
+          {{#if isApproved}}
+            <div class='reimburse-note'>
+              <p><strong>💳 Reimbursement:</strong> The approved amount will be processed and credited to your account as per company policy.</p>
+            </div>
+          {{else}}
+            <p class='message-text'>
+              If you believe this decision was made in error or have any questions, please contact your manager or the finance department.
+            </p>
+          {{/if}}
+
+          <div class='button-container'>
+            <a href='{{portalUrl}}' class='button'>View Fuel Expense History</a>
+          </div>
+
+          <div class='divider'></div>
+
+          <div class='signature'>
+            <p>
+              Best regards,<br />
+              <span class='signature-name'>{{companyName}} HRMS</span>
+            </p>
+          </div>
+        </div>
+
+        <div class='footer'>
+          <p class='footer-text'>This is an automated notification. Please do not reply directly to this email.</p>
+          <p class='footer-company'>&copy; {{currentYear}} {{companyName}}. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+

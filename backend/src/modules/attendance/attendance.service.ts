@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, FindOptionsWhere, FindOneOptions } from 'typeorm';
 import { AttendanceRepository } from './attendance.repository';
@@ -16,6 +16,7 @@ import {
 import {
   ATTENDANCE_ERRORS,
   ATTENDANCE_RESPONSES,
+  ATTENDANCE_EMAIL_CONSTANTS,
   AttendanceStatus,
   AttendanceType,
   ApprovalStatus,
@@ -35,6 +36,14 @@ import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/a
 import { AttendanceHistoryDto } from './dto/attendance-history.dto';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DateTimeService } from 'src/utils/datetime';
+import { EmailService } from '../common/email/email.service';
+import { UserService } from '../users/user.service';
+import { Environments } from 'env-configs';
+import {
+  EMAIL_SUBJECT,
+  EMAIL_TEMPLATE,
+  EMAIL_REDIRECT_ROUTES,
+} from '../common/email/constants/email.constants';
 
 @Injectable()
 export class AttendanceService {
@@ -44,6 +53,8 @@ export class AttendanceService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly utilityService: UtilityService,
     private readonly dateTimeService: DateTimeService,
+    private readonly emailService: EmailService,
+    private readonly userService: UserService,
   ) {}
 
   async create(attendance: Partial<AttendanceEntity>, entityManager?: EntityManager) {
@@ -1599,6 +1610,9 @@ export class AttendanceService {
         entityManager,
       );
 
+      // Send approval email notification
+      this.sendAttendanceApprovalEmail(attendance, approvalBy, approvalStatus, approvalComment);
+
       return {
         message: ATTENDANCE_RESPONSES.ATTENDANCE_APPROVAL_SUCCESS.replace(
           '{status}',
@@ -1609,5 +1623,73 @@ export class AttendanceService {
         approvalStatus,
       };
     });
+  }
+
+  private async sendAttendanceApprovalEmail(
+    attendance: AttendanceEntity,
+    approvalById: string,
+    approvalStatus: string,
+    approvalComment?: string,
+  ) {
+    try {
+      const approver = await this.userService.findOne({ id: approvalById });
+      const employee = attendance.user;
+
+      if (!employee?.email) return;
+
+      const isApproved = approvalStatus === ApprovalStatus.APPROVED;
+      const checkInTime = attendance.checkInTime ? this.formatTime(attendance.checkInTime) : 'N/A';
+      const checkOutTime = attendance.checkOutTime
+        ? this.formatTime(attendance.checkOutTime)
+        : ATTENDANCE_EMAIL_CONSTANTS.NOT_APPLICABLE;
+
+      // Calculate total hours
+      let totalHours = ATTENDANCE_EMAIL_CONSTANTS.NOT_APPLICABLE;
+      if (attendance.checkInTime && attendance.checkOutTime) {
+        const diffMs =
+          new Date(attendance.checkOutTime).getTime() - new Date(attendance.checkInTime).getTime();
+        const hours = Math.floor(diffMs / (1000 * 60 * 60));
+        const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        totalHours = `${hours}h ${minutes}m`;
+      }
+
+      const dateStr = this.formatDateForEmail(attendance.attendanceDate);
+      const subjectKey = isApproved
+        ? EMAIL_SUBJECT.ATTENDANCE_APPROVED
+        : EMAIL_SUBJECT.ATTENDANCE_REJECTED;
+
+      await this.emailService.sendMail({
+        receiverEmails: employee.email,
+        subject: subjectKey.replace('{date}', dateStr),
+        template: EMAIL_TEMPLATE.ATTENDANCE_APPROVAL,
+        emailData: {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          isApproved,
+          attendanceDate: dateStr,
+          checkInTime,
+          checkOutTime,
+          totalHours,
+          approverName: approver
+            ? `${approver.firstName} ${approver.lastName}`
+            : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER,
+          approvalDate: this.formatDateForEmail(new Date()),
+          remarks: approvalComment,
+          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.ATTENDANCE}`,
+        },
+      });
+    } catch (error) {
+      // Log error but don't fail the approval process
+      Logger.error('Failed to send attendance approval email:', error);
+    }
+  }
+
+  private formatDateForEmail(date: Date | string): string {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  private formatTime(date: Date | string): string {
+    const d = new Date(date);
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
   }
 }

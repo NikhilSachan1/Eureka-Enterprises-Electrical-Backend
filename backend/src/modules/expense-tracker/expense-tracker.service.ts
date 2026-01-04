@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ExpenseTrackerRepository } from './expense-tracker.repository';
 import {
   CreateCreditExpenseDto,
@@ -27,6 +27,7 @@ import {
   DEFAULT_EXPENSE,
   ExpenseTrackerEntityFields,
   EXPENSE_TRACKER_SUCCESS_MESSAGES,
+  EXPENSE_EMAIL_CONSTANTS,
   SYSTEM_EXPENSE_DEFAULTS,
 } from './constants/expense-tracker.constants';
 import { ExpenseTrackerEntity } from './entities/expense-tracker.entity';
@@ -41,6 +42,14 @@ import {
 } from './queries/expense-tracker.queries';
 import { ExpenseFilesService } from '../expense-files/expense-files.service';
 import { DateTimeService } from 'src/utils/datetime';
+import { EmailService } from '../common/email/email.service';
+import { UserService } from '../users/user.service';
+import { Environments } from 'env-configs';
+import {
+  EMAIL_SUBJECT,
+  EMAIL_TEMPLATE,
+  EMAIL_REDIRECT_ROUTES,
+} from '../common/email/constants/email.constants';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -52,6 +61,8 @@ export class ExpenseTrackerService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly expenseFilesService: ExpenseFilesService,
     private readonly dateTimeService: DateTimeService,
+    private readonly emailService: EmailService,
+    private readonly userService: UserService,
   ) {}
 
   async createDebitExpense(
@@ -781,6 +792,9 @@ export class ExpenseTrackerService {
           entrySourceType,
         );
 
+        // Send approval email notification
+        this.sendExpenseApprovalEmail(expense, approvalBy, approvalStatus, approvalComment);
+
         return {
           message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_APPROVAL_SUCCESS.replace(
             '{status}',
@@ -1193,6 +1207,53 @@ export class ExpenseTrackerService {
       previousStatus: expense.approvalStatus,
     };
   }
-}
 
-// TODO: Email notification to the user
+  private async sendExpenseApprovalEmail(
+    expense: ExpenseTrackerEntity,
+    approvalById: string,
+    approvalStatus: string,
+    approvalComment?: string,
+  ) {
+    try {
+      const approver = await this.userService.findOne({ id: approvalById });
+      const employee = expense.user;
+
+      if (!employee?.email) return;
+
+      const isApproved = approvalStatus === ApprovalStatus.APPROVED;
+      const subjectKey = isApproved
+        ? EMAIL_SUBJECT.EXPENSE_APPROVED
+        : EMAIL_SUBJECT.EXPENSE_REJECTED;
+
+      await this.emailService.sendMail({
+        receiverEmails: employee.email,
+        subject: subjectKey.replace('{category}', expense.category),
+        template: EMAIL_TEMPLATE.EXPENSE_APPROVAL,
+        emailData: {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          isApproved,
+          expenseId: expense.id.substring(0, 8).toUpperCase(),
+          amount: `₹${Number(expense.amount).toLocaleString('en-IN')}`,
+          category: expense.category,
+          expenseDate: this.formatDateForEmail(expense.expenseDate),
+          description: expense.description || EXPENSE_EMAIL_CONSTANTS.NOT_APPLICABLE,
+          paymentMode: expense.paymentMode,
+          approverName: approver
+            ? `${approver.firstName} ${approver.lastName}`
+            : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
+          approvalDate: this.formatDateForEmail(new Date()),
+          remarks: approvalComment,
+          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.EXPENSES}`,
+        },
+      });
+    } catch (error) {
+      // Log error but don't fail the approval process
+      Logger.error('Failed to send expense approval email:', error);
+    }
+  }
+
+  private formatDateForEmail(date: Date | string): string {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+}

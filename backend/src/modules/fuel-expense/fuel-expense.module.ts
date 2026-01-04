@@ -12,6 +12,7 @@ import { UsersModule } from '../users/user.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { DateTimeModule } from 'src/utils/datetime';
+import { EmailModule } from '../common/email/email.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { DateTimeModule } from 'src/utils/datetime';
     ConfigurationsModule,
     ConfigSettingsModule,
     DateTimeModule,
+    EmailModule,
   ],
   controllers: [FuelExpenseController],
   providers: [FuelExpenseService, FuelExpenseRepository],

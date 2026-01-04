@@ -93,6 +93,11 @@ export const ATTENDANCE_RESPONSES = {
     'Processed {length} attendance records with {success} success and {error} errors',
 };
 
+export const ATTENDANCE_EMAIL_CONSTANTS = {
+  SYSTEM_USER: 'System',
+  NOT_APPLICABLE: 'N/A',
+};
+
 export const DEFAULT_APPROVAL_COMMENT = {
   PRESENT: 'Regularized as present',
   ABSENT: 'Regularized as absent',

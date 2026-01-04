@@ -52,6 +52,17 @@ export const LEAVE_APPLICATION_SUCCESS_MESSAGES = {
     'Leave application approval processed successfully for {status}',
 };
 
+export const LEAVE_EMAIL_CONSTANTS = {
+  SYSTEM_USER: 'System',
+  NOT_APPLICABLE: 'N/A',
+  HALF_DAY: 'Half Day',
+  FULL_DAY: 'Full Day',
+  HALF_DAY_VALUE: 0.5,
+  LEAVE_TYPE_DEFAULT: 'default',
+  LEAVE_TYPE_CASUAL: 'casual',
+  LEAVE_TYPE_EARNED: 'earned',
+};
+
 export enum LeaveType {
   FULL_DAY = 'FULL_DAY',
   HALF_DAY = 'HALF_DAY',

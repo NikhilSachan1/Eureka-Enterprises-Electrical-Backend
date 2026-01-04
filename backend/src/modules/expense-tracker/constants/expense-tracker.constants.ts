@@ -55,6 +55,11 @@ export const EXPENSE_TRACKER_SUCCESS_MESSAGES = {
   EXPENSE_DELETE_SUCCESS: 'Expense deleted successfully',
 };
 
+export const EXPENSE_EMAIL_CONSTANTS = {
+  SYSTEM_USER: 'System',
+  NOT_APPLICABLE: 'N/A',
+};
+
 export const DEFAULT_EXPENSE = {
   FORCE_APPROVAL_REASON: 'Force expense',
   CREDIT_APPROVAL_REASON: 'Paid Successfully',

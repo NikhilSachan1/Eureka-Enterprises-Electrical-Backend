@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { LeaveApplicationsEntity } from './entities/leave-application.entity';
 import {
   DataSource,
@@ -17,6 +17,7 @@ import {
   LeaveType,
   LeaveApplicationType,
   LEAVE_APPLICATION_SUCCESS_MESSAGES,
+  LEAVE_EMAIL_CONSTANTS,
   DEFAULT_APPROVAL_COMMENT,
 } from './constants/leave-application.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
@@ -48,6 +49,13 @@ import {
 import { UserService } from '../users/user.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { DateTimeService } from 'src/utils/datetime';
+import { EmailService } from '../common/email/email.service';
+import { Environments } from 'env-configs';
+import {
+  EMAIL_SUBJECT,
+  EMAIL_TEMPLATE,
+  EMAIL_REDIRECT_ROUTES,
+} from '../common/email/constants/email.constants';
 
 @Injectable()
 export class LeaveApplicationsService {
@@ -61,6 +69,7 @@ export class LeaveApplicationsService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly userService: UserService,
     private readonly dateTimeService: DateTimeService,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(
@@ -1032,6 +1041,9 @@ export class LeaveApplicationsService {
           timezone,
         );
 
+        // Send approval email notification
+        this.sendLeaveApprovalEmail(leaveApplication, approvalBy, approvalStatus, approvalComment);
+
         return {
           message: LEAVE_APPLICATION_SUCCESS_MESSAGES.LEAVE_APPLICATION_APPROVAL_SUCCESS.replace(
             '{status}',
@@ -1421,6 +1433,76 @@ export class LeaveApplicationsService {
     } catch (error) {
       throw error;
     }
+  }
+
+  private async sendLeaveApprovalEmail(
+    leaveApplication: LeaveApplicationsEntity,
+    approvalById: string,
+    approvalStatus: string,
+    approvalComment?: string,
+  ) {
+    try {
+      const approver = await this.userService.findOne({ id: approvalById });
+      const employee = leaveApplication.user;
+
+      if (!employee?.email) return;
+
+      const isApproved = approvalStatus === ApprovalStatus.APPROVED;
+
+      // Determine leave type class for styling
+      const leaveCategoryLower = leaveApplication.leaveCategory?.toLowerCase() || '';
+      let leaveTypeClass = LEAVE_EMAIL_CONSTANTS.LEAVE_TYPE_DEFAULT;
+      if (leaveCategoryLower.includes('casual'))
+        leaveTypeClass = LEAVE_EMAIL_CONSTANTS.LEAVE_TYPE_CASUAL;
+      else if (leaveCategoryLower.includes('earned'))
+        leaveTypeClass = LEAVE_EMAIL_CONSTANTS.LEAVE_TYPE_EARNED;
+
+      // Calculate total days
+      const fromDate = new Date(leaveApplication.fromDate);
+      const toDate = new Date(leaveApplication.toDate);
+      const diffTime = Math.abs(toDate.getTime() - fromDate.getTime());
+      let totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      if (leaveApplication.leaveType === LeaveType.HALF_DAY) {
+        totalDays = 0.5;
+      }
+
+      const subjectKey = isApproved ? EMAIL_SUBJECT.LEAVE_APPROVED : EMAIL_SUBJECT.LEAVE_REJECTED;
+
+      await this.emailService.sendMail({
+        receiverEmails: employee.email,
+        subject: subjectKey.replace('{leaveCategory}', leaveApplication.leaveCategory),
+        template: EMAIL_TEMPLATE.LEAVE_APPROVAL,
+        emailData: {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          isApproved,
+          applicationId: leaveApplication.id.substring(0, 8).toUpperCase(),
+          leaveType: leaveApplication.leaveCategory,
+          leaveTypeClass,
+          leaveCategory:
+            leaveApplication.leaveType === LeaveType.HALF_DAY
+              ? LEAVE_EMAIL_CONSTANTS.HALF_DAY
+              : LEAVE_EMAIL_CONSTANTS.FULL_DAY,
+          fromDate: this.formatDateForEmail(leaveApplication.fromDate),
+          toDate: this.formatDateForEmail(leaveApplication.toDate),
+          totalDays,
+          reason: leaveApplication.reason || LEAVE_EMAIL_CONSTANTS.NOT_APPLICABLE,
+          approverName: approver
+            ? `${approver.firstName} ${approver.lastName}`
+            : LEAVE_EMAIL_CONSTANTS.SYSTEM_USER,
+          approvalDate: this.formatDateForEmail(new Date()),
+          remarks: approvalComment,
+          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.LEAVES}`,
+        },
+      });
+    } catch (error) {
+      // Log error but don't fail the approval process
+      Logger.error('Failed to send leave approval email:', error);
+    }
+  }
+
+  private formatDateForEmail(date: Date | string): string {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   }
 }
 

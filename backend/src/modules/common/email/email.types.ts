@@ -17,6 +17,7 @@ export interface IEmailDataValues {
   // Common
   currentYear?: number;
   adminPortalUrl?: string;
+  portalUrl?: string;
 
   // Forget Password
   firstName?: string;
@@ -55,6 +56,45 @@ export interface IEmailDataValues {
   // Asset Calibration & Warranty Expiry
   expiredAssets?: AssetCalibrationEmailItem[] | AssetWarrantyEmailItem[];
   expiringSoonAssets?: AssetCalibrationEmailItem[] | AssetWarrantyEmailItem[];
+
+  // Approval Emails - Common
+  isApproved?: boolean;
+  approverName?: string;
+  approvalDate?: string;
+  remarks?: string;
+
+  // Attendance Approval
+  attendanceDate?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  totalHours?: string;
+
+  // Expense Approval
+  expenseId?: string;
+  amount?: string;
+  category?: string;
+  expenseDate?: string;
+  description?: string;
+  paymentMode?: string;
+
+  // Fuel Expense Approval
+  fuelLiters?: string;
+  vehicleNumber?: string;
+  fuelType?: string;
+  fuelTypeClass?: string;
+  fuelDate?: string;
+  odometerReading?: string;
+  pricePerLiter?: string;
+
+  // Leave Approval
+  applicationId?: string;
+  leaveType?: string;
+  leaveTypeClass?: string;
+  leaveCategory?: string;
+  fromDate?: string;
+  toDate?: string;
+  totalDays?: number;
+  reason?: string;
 }
 
 export interface VehicleDocumentEmailItem {
@@ -116,4 +156,68 @@ export interface AssetWarrantyEmailItem {
   vendorName: string;
   daysText: string;
   statusClass: string;
+}
+
+// Approval Email Interfaces
+export interface IAttendanceApprovalEmailData {
+  employeeName: string;
+  isApproved: boolean;
+  attendanceDate: string;
+  checkInTime: string;
+  checkOutTime: string;
+  totalHours: string;
+  approverName: string;
+  approvalDate: string;
+  remarks?: string;
+  portalUrl: string;
+}
+
+export interface IExpenseApprovalEmailData {
+  employeeName: string;
+  isApproved: boolean;
+  expenseId: string;
+  amount: string;
+  category: string;
+  expenseDate: string;
+  description: string;
+  paymentMode: string;
+  approverName: string;
+  approvalDate: string;
+  remarks?: string;
+  portalUrl: string;
+}
+
+export interface IFuelExpenseApprovalEmailData {
+  employeeName: string;
+  isApproved: boolean;
+  expenseId: string;
+  amount: string;
+  fuelLiters: string;
+  vehicleNumber: string;
+  fuelType: string;
+  fuelTypeClass: string; // petrol | diesel | cng | electric
+  fuelDate: string;
+  odometerReading: string;
+  pricePerLiter: string;
+  approverName: string;
+  approvalDate: string;
+  remarks?: string;
+  portalUrl: string;
+}
+
+export interface ILeaveApprovalEmailData {
+  employeeName: string;
+  isApproved: boolean;
+  applicationId: string;
+  leaveType: string;
+  leaveTypeClass: string; // casual | sick | earned | unpaid | maternity | paternity | default
+  leaveCategory: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  reason: string;
+  approverName: string;
+  approvalDate: string;
+  remarks?: string;
+  portalUrl: string;
 }

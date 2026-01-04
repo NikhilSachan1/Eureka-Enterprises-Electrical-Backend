@@ -10,6 +10,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 import { UsersModule } from '../users/user.module';
 import { AttendanceModule } from '../attendance/attendance.module';
+import { EmailModule } from '../common/email/email.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AttendanceModule } from '../attendance/attendance.module';
     LeaveBalancesModule,
     UsersModule,
     AttendanceModule,
+    EmailModule,
   ],
   controllers: [LeaveApplicationsController],
   providers: [LeaveApplicationsService, LeaveApplicationsRepository],

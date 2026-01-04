@@ -9,6 +9,8 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ExpenseFilesModule } from '../expense-files/expense-files.module';
 import { DateTimeModule } from 'src/utils/datetime';
+import { EmailModule } from '../common/email/email.module';
+import { UsersModule } from '../users/user.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { DateTimeModule } from 'src/utils/datetime';
     ConfigSettingsModule,
     ExpenseFilesModule,
     DateTimeModule,
+    EmailModule,
+    UsersModule,
   ],
   controllers: [ExpenseTrackerController],
   providers: [ExpenseTrackerService, ExpenseTrackerRepository],

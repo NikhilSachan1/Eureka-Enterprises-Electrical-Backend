@@ -6,9 +6,17 @@ import { AttendanceController } from './attendance.controller';
 import { AttendanceRepository } from './attendance.repository';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { SharedModule } from '../shared/shared.module';
+import { EmailModule } from '../common/email/email.module';
+import { UsersModule } from '../users/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AttendanceEntity]), ConfigurationsModule, SharedModule],
+  imports: [
+    TypeOrmModule.forFeature([AttendanceEntity]),
+    ConfigurationsModule,
+    SharedModule,
+    EmailModule,
+    UsersModule,
+  ],
   providers: [AttendanceService, AttendanceRepository],
   exports: [AttendanceService],
   controllers: [AttendanceController],

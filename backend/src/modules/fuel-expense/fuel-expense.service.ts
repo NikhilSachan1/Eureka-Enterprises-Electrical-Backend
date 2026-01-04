@@ -21,6 +21,7 @@ import { Roles } from '../roles/constants/role.constants';
 import {
   FUEL_EXPENSE_ERRORS,
   FUEL_EXPENSE_SUCCESS_MESSAGES,
+  FUEL_EXPENSE_EMAIL_CONSTANTS,
   ApprovalStatus,
   DEFAULT_FUEL_EXPENSE,
   TransactionType,
@@ -49,6 +50,13 @@ import {
   buildFuelExpenseBalanceQuery,
   buildFuelExpenseSummaryQuery,
 } from './queries/fuel-expense.queries';
+import { EmailService } from '../common/email/email.service';
+import { Environments } from 'env-configs';
+import {
+  EMAIL_SUBJECT,
+  EMAIL_TEMPLATE,
+  EMAIL_REDIRECT_ROUTES,
+} from '../common/email/constants/email.constants';
 
 @Injectable()
 export class FuelExpenseService {
@@ -64,6 +72,7 @@ export class FuelExpenseService {
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
     private readonly dateTimeService: DateTimeService,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(
@@ -803,7 +812,7 @@ export class FuelExpenseService {
 
       return await this.dataSource.transaction(async (entityManager) => {
         const fuelExpense = await this.findOneOrFail(
-          { where: { id: fuelExpenseId, isActive: true }, relations: ['user'] },
+          { where: { id: fuelExpenseId, isActive: true }, relations: ['user', 'vehicle'] },
           entityManager,
         );
 
@@ -821,6 +830,9 @@ export class FuelExpenseService {
           fuelExpense.vehicleId,
           entityManager,
         );
+
+        // Send approval email notification
+        this.sendFuelExpenseApprovalEmail(fuelExpense, approvalBy, approvalStatus, approvalReason);
 
         return {
           message:
@@ -1309,5 +1321,79 @@ export class FuelExpenseService {
     } catch (error) {
       throw error;
     }
+  }
+
+  private async sendFuelExpenseApprovalEmail(
+    fuelExpense: FuelExpenseEntity,
+    approvalById: string,
+    approvalStatus: string,
+    approvalReason?: string,
+  ) {
+    try {
+      const approver = await this.userService.findOne({ id: approvalById });
+      const employee = fuelExpense.user;
+
+      if (!employee?.email) return;
+
+      const isApproved = approvalStatus === ApprovalStatus.APPROVED;
+
+      // Fetch vehicle with active version to get fuelType
+      const vehicleData = fuelExpense.vehicleId
+        ? await this.vehicleMastersService.findById(fuelExpense.vehicleId)
+        : null;
+      const vehicleNo = vehicleData?.registrationNo || FUEL_EXPENSE_EMAIL_CONSTANTS.NOT_APPLICABLE;
+
+      // Determine fuel type class for styling (fuelType is on vehicle version)
+      const fuelType = vehicleData?.fuelType || FUEL_EXPENSE_EMAIL_CONSTANTS.NOT_APPLICABLE;
+      let fuelTypeClass = FUEL_EXPENSE_EMAIL_CONSTANTS.FUEL_TYPE_PETROL;
+      if (fuelType.toLowerCase().includes('diesel'))
+        fuelTypeClass = FUEL_EXPENSE_EMAIL_CONSTANTS.FUEL_TYPE_DIESEL;
+      else if (fuelType.toLowerCase().includes('cng'))
+        fuelTypeClass = FUEL_EXPENSE_EMAIL_CONSTANTS.FUEL_TYPE_CNG;
+      else if (fuelType.toLowerCase().includes('electric'))
+        fuelTypeClass = FUEL_EXPENSE_EMAIL_CONSTANTS.FUEL_TYPE_ELECTRIC;
+
+      const pricePerLiter =
+        Number(fuelExpense.fuelLiters) > 0
+          ? (Number(fuelExpense.fuelAmount) / Number(fuelExpense.fuelLiters)).toFixed(2)
+          : '0';
+
+      const subjectKey = isApproved
+        ? EMAIL_SUBJECT.FUEL_EXPENSE_APPROVED
+        : EMAIL_SUBJECT.FUEL_EXPENSE_REJECTED;
+
+      await this.emailService.sendMail({
+        receiverEmails: employee.email,
+        subject: subjectKey.replace('{vehicleNo}', vehicleNo),
+        template: EMAIL_TEMPLATE.FUEL_EXPENSE_APPROVAL,
+        emailData: {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          isApproved,
+          expenseId: fuelExpense.id.substring(0, 8).toUpperCase(),
+          amount: `₹${Number(fuelExpense.fuelAmount).toLocaleString('en-IN')}`,
+          fuelLiters: Number(fuelExpense.fuelLiters).toFixed(2),
+          vehicleNumber: vehicleNo,
+          fuelType,
+          fuelTypeClass,
+          fuelDate: this.formatDateForEmail(fuelExpense.fillDate),
+          odometerReading: Number(fuelExpense.odometerKm).toLocaleString('en-IN'),
+          pricePerLiter: `₹${pricePerLiter}`,
+          approverName: approver
+            ? `${approver.firstName} ${approver.lastName}`
+            : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
+          approvalDate: this.formatDateForEmail(new Date()),
+          remarks: approvalReason,
+          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.FUEL_EXPENSES}`,
+        },
+      });
+    } catch (error) {
+      // Log error but don't fail the approval process
+      Logger.error('Failed to send fuel expense approval email:', error);
+    }
+  }
+
+  private formatDateForEmail(date: Date | string): string {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   }
 }

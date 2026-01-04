@@ -30,6 +30,15 @@ export const EMAIL_SUBJECT = {
   PAYSLIP: 'Eureka HRMS - Salary Slip for {monthYear}',
   // FNF Documents
   FNF_DOCUMENTS: 'Exit Documents - {employeeName}',
+  // Approval Notifications
+  ATTENDANCE_APPROVED: 'Attendance Approved - {date}',
+  ATTENDANCE_REJECTED: 'Attendance Rejected - {date}',
+  EXPENSE_APPROVED: 'Expense Approved - {category}',
+  EXPENSE_REJECTED: 'Expense Rejected - {category}',
+  FUEL_EXPENSE_APPROVED: 'Fuel Expense Approved - {vehicleNo}',
+  FUEL_EXPENSE_REJECTED: 'Fuel Expense Rejected - {vehicleNo}',
+  LEAVE_APPROVED: 'Leave Approved - {leaveCategory}',
+  LEAVE_REJECTED: 'Leave Rejected - {leaveCategory}',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -47,6 +56,16 @@ export const EMAIL_TEMPLATE = {
   ATTENDANCE_APPROVAL_REMINDER: 'attendanceApprovalReminder',
   PAYSLIP: 'payslip',
   FNF_DOCUMENTS: 'fnf-documents',
+  // Approval Notifications
+  ATTENDANCE_APPROVAL: 'attendanceApproval',
+  EXPENSE_APPROVAL: 'expenseApproval',
+  FUEL_EXPENSE_APPROVAL: 'fuelExpenseApproval',
+  LEAVE_APPROVAL: 'leaveApproval',
 };
 
-export const EMAIL_REDIRECT_ROUTES = {};
+export const EMAIL_REDIRECT_ROUTES = {
+  ATTENDANCE: '/attendance',
+  EXPENSES: '/expenses',
+  FUEL_EXPENSES: '/fuel-expenses',
+  LEAVES: '/leaves',
+};
