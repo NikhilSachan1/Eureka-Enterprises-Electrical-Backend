@@ -84,7 +84,10 @@ export class VehicleServicesController {
 
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return await this.vehicleServicesService.findOneOrFail({ where: { id } });
+    return await this.vehicleServicesService.findOneOrFail({
+      where: { id },
+      relations: ['serviceFiles'],
+    });
   }
 
   @Patch(':id')
