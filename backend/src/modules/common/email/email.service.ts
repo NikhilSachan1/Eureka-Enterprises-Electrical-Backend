@@ -3,6 +3,7 @@ import { MailerService } from '@nestjs-modules/mailer';
 import { IMailOptions } from './email.types';
 import { Environments } from 'env-configs';
 import { ENVIRONMENT_CONFIG } from 'src/utils/config/constants/constants';
+import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 
 @Injectable()
 export class EmailService {
@@ -28,11 +29,22 @@ export class EmailService {
         }
       }
 
+      // Inject company details into every email context for consistency
+      const contextWithCompanyDetails = {
+        ...emailData,
+        companyName: COMPANY_DETAILS.NAME,
+        companyLogo: COMPANY_DETAILS.LOGO_URL,
+        companyEmail: COMPANY_DETAILS.EMAIL_HR,
+        companyPhone: COMPANY_DETAILS.PHONE,
+        companyAddress: COMPANY_DETAILS.FULL_ADDRESS,
+        currentYear: new Date().getFullYear(),
+      };
+
       await this.mailService.sendMail({
         to: receiverEmails,
         subject,
         template,
-        context: emailData,
+        context: contextWithCompanyDetails,
         attachments: attachments?.map((att) => ({
           filename: att.filename,
           content: att.content,

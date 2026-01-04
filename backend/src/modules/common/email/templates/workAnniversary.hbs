@@ -4,7 +4,7 @@
     <meta name='viewport' content='width=device-width, initial-scale=1.0' />
     <meta name='color-scheme' content='light' />
     <meta name='supported-color-schemes' content='light' />
-    <title>Happy Work Anniversary from Eureka Enterprises!</title>
+    <title>Happy Work Anniversary from {{companyName}}!</title>
     <style>
       body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
       sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f0f4ff; }
@@ -65,7 +65,7 @@
               Happy Work Anniversary!
             {{/if}}
           </h1>
-          <p class='anniversary-subtitle'>Celebrating {{yearsText}} at Eureka Enterprises</p>
+          <p class='anniversary-subtitle'>Celebrating {{yearsText}} at {{companyName}}</p>
         </div>
 
         <div class='content'>
@@ -77,10 +77,10 @@
             Today marks a special milestone in your journey with us!
             {{#if isMilestone}}
               We are thrilled to celebrate <strong>{{yearsText}}</strong> of your incredible 
-              contribution to <strong>Eureka Enterprises</strong>.
+              contribution to <strong>{{companyName}}</strong>.
             {{else}}
               We are delighted to celebrate <strong>{{yearsText}}</strong> of your valuable 
-              contribution to <strong>Eureka Enterprises</strong>.
+              contribution to <strong>{{companyName}}</strong>.
             {{/if}}
           </p>
 
@@ -121,7 +121,7 @@
           <div class='signature'>
             <p>
               With appreciation and gratitude,<br />
-              <span class='signature-name {{#if isMilestone}}milestone{{/if}}'>The Eureka Enterprises Family</span>
+              <span class='signature-name {{#if isMilestone}}milestone{{/if}}'>The {{companyName}} Family</span>
             </p>
           </div>
         </div>
@@ -134,7 +134,7 @@
               🎉 Thank you for your continued dedication! 🎉
             {{/if}}
           </p>
-          <p class='footer-company'>&copy; {{currentYear}} Eureka Enterprises. All rights reserved.</p>
+          <p class='footer-company'>&copy; {{currentYear}} {{companyName}}. All rights reserved.</p>
         </div>
       </div>
     </div>

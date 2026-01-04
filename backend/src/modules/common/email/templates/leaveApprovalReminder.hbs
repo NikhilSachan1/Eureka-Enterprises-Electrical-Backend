@@ -4,7 +4,7 @@
     <meta name='viewport' content='width=device-width, initial-scale=1.0' />
     <meta name='color-scheme' content='light' />
     <meta name='supported-color-schemes' content='light' />
-    <title>Eureka Enterprises - Pending Leave Approvals</title>
+    <title>{{companyName}} - Pending Leave Approvals</title>
     <style>
       body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
       sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
@@ -79,11 +79,11 @@
       <div class='email-container'>
         <div class='header {{urgencyLevel}}'>
           <img
-            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
-            alt='Eureka Enterprises'
+            src='{{companyLogo}}'
+            alt='{{companyName}}'
             class='logo'
           />
-          <p class='company-name'>Eureka Enterprises</p>
+          <p class='company-name'>{{companyName}}</p>
         </div>
 
         <div class='content'>
@@ -419,7 +419,7 @@
           <div class='signature'>
             <p>
               Best regards,<br />
-              <span class='signature-name'>Eureka HRMS</span>
+              <span class='signature-name'>{{companyName}} HRMS</span>
             </p>
           </div>
         </div>
@@ -429,7 +429,7 @@
             this email.</p>
           <p class='footer-company'>&copy;
             {{currentYear}}
-            Eureka Enterprises. All rights reserved.</p>
+            {{companyName}}. All rights reserved.</p>
         </div>
       </div>
     </div>
