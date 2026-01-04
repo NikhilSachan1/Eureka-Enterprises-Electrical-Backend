@@ -55,3 +55,16 @@ export enum VehicleServiceSortFields {
   ODOMETER_READING = 'odometerReading',
   SERVICE_COST = 'serviceCost',
 }
+
+export enum VehicleServiceEntityFields {
+  VEHICLE_MASTER_ID = 'vehicleMasterId',
+  SERVICE_DATE = 'serviceDate',
+  ODOMETER_READING = 'odometerReading',
+  SERVICE_TYPE = 'serviceType',
+  SERVICE_DETAILS = 'serviceDetails',
+  SERVICE_CENTER_NAME = 'serviceCenterName',
+  SERVICE_COST = 'serviceCost',
+  SERVICE_STATUS = 'serviceStatus',
+  RESERVATION_STATUS = 'reservationStatus',
+  VEHICLE_SERVICE = 'Vehicle Service',
+}

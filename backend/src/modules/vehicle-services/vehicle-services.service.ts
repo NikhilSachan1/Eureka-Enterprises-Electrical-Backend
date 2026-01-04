@@ -16,6 +16,7 @@ import {
   VehicleServiceType,
   VehicleServiceStatus,
   VehicleServiceFileType,
+  VehicleServiceEntityFields,
 } from './constants/vehicle-services.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { VehicleMastersService } from '../vehicle-masters/vehicle-masters.service';
@@ -31,6 +32,7 @@ import {
   buildServiceAnalyticsQuery,
 } from './queries/vehicle-services.queries';
 import { DateTimeService } from 'src/utils/datetime';
+import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class VehicleServicesService {
@@ -85,7 +87,7 @@ export class VehicleServicesService {
     createDto: CreateVehicleServiceDto & { createdBy: string },
     serviceFiles?: string[],
     timezone?: string,
-  ): Promise<VehicleServiceEntity> {
+  ): Promise<{ message: string }> {
     const { vehicleMasterId, serviceDate, serviceType, createdBy } = createDto;
 
     await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleMasterId } });
@@ -131,7 +133,10 @@ export class VehicleServicesService {
         );
       }
 
-      return service;
+      return this.utilityService.getSuccessMessage(
+        VehicleServiceEntityFields.VEHICLE_SERVICE,
+        DataSuccessOperationType.CREATE,
+      );
     });
   }
 
@@ -257,7 +262,10 @@ export class VehicleServicesService {
         );
       }
 
-      return { message: VEHICLE_SERVICES_SUCCESS.SERVICE_UPDATED };
+      return this.utilityService.getSuccessMessage(
+        VehicleServiceEntityFields.VEHICLE_SERVICE,
+        DataSuccessOperationType.UPDATE,
+      );
     });
   }
 
