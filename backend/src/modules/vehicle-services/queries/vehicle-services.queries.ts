@@ -1,6 +1,6 @@
 import { VehicleServiceQueryDto } from '../dto/vehicle-service-query.dto';
 import { ServiceAnalyticsQueryDto } from '../dto/service-analytics-query.dto';
-import { VehicleServiceStatus } from '../constants/vehicle-services.constants';
+import { VehicleServiceStatus, VehicleServiceType } from '../constants/vehicle-services.constants';
 
 export const buildVehicleServiceListQuery = (query: VehicleServiceQueryDto) => {
   const {
@@ -55,7 +55,10 @@ export const buildVehicleServiceListQuery = (query: VehicleServiceQueryDto) => {
     filters.push(`(
       vs."serviceCenterName" ILIKE $${paramIndex} OR
       vs."serviceDetails" ILIKE $${paramIndex} OR
-      vs."remarks" ILIKE $${paramIndex}
+      vs."remarks" ILIKE $${paramIndex} OR
+      vm."registrationNo" ILIKE $${paramIndex} OR
+      vv."brand" ILIKE $${paramIndex} OR
+      vv."model" ILIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
@@ -88,15 +91,49 @@ export const buildVehicleServiceListQuery = (query: VehicleServiceQueryDto) => {
       vs."remarks",
       vs."createdAt",
       vs."updatedAt",
-      vm."registrationNo" as "vehicleNumber",
+      -- Vehicle details
+      json_build_object(
+        'id', vm."id",
+        'registrationNo', vm."registrationNo",
+        'brand', vv."brand",
+        'model', vv."model",
+        'fuelType', vv."fuelType",
+        'status', vv."status"
+      ) as "vehicle",
+      -- Created by user with employeeId
       json_build_object(
         'id', cb."id",
         'firstName', cb."firstName",
         'lastName', cb."lastName",
-        'email', cb."email"
-      ) as "createdByUser"
+        'email', cb."email",
+        'employeeId', cb."employeeId"
+      ) as "createdByUser",
+      -- Service files/docs
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', vsf."id",
+              'fileKey', vsf."fileKey",
+              'fileType', vsf."fileType",
+              'label', vsf."label"
+            )
+          )
+          FROM "vehicle_service_files" vsf
+          WHERE vsf."vehicleServiceId" = vs."id" AND vsf."deletedAt" IS NULL
+        ),
+        '[]'
+      ) as "serviceFiles"
     FROM vehicle_services vs
     INNER JOIN vehicle_masters vm ON vm."id" = vs."vehicleMasterId" AND vm."deletedAt" IS NULL
+    LEFT JOIN LATERAL (
+      SELECT *
+      FROM "vehicle_versions"
+      WHERE "vehicleMasterId" = vm."id"
+        AND "isActive" = true
+        AND "deletedAt" IS NULL
+      LIMIT 1
+    ) vv ON true
     LEFT JOIN users cb ON cb."id" = vs."createdBy"
     ${whereClause}
     ORDER BY ${orderByColumn} ${sortOrder}
@@ -107,12 +144,49 @@ export const buildVehicleServiceListQuery = (query: VehicleServiceQueryDto) => {
     SELECT COUNT(*)::int as total
     FROM vehicle_services vs
     INNER JOIN vehicle_masters vm ON vm."id" = vs."vehicleMasterId" AND vm."deletedAt" IS NULL
+    LEFT JOIN LATERAL (
+      SELECT *
+      FROM "vehicle_versions"
+      WHERE "vehicleMasterId" = vm."id"
+        AND "isActive" = true
+        AND "deletedAt" IS NULL
+      LIMIT 1
+    ) vv ON true
+    ${whereClause}
+  `;
+
+  // Stats query - totals for filtered data
+  const statsQuery = `
+    SELECT 
+      COUNT(*)::int as "totalServices",
+      COALESCE(SUM(vs."serviceCost"), 0)::decimal as "totalCost",
+      COALESCE(AVG(vs."serviceCost"), 0)::decimal as "averageCost",
+      COUNT(CASE WHEN vs."serviceStatus" = '${VehicleServiceStatus.PENDING}' THEN 1 END)::int as "pendingCount",
+      COUNT(CASE WHEN vs."serviceStatus" = '${VehicleServiceStatus.COMPLETED}' THEN 1 END)::int as "completedCount",
+      COUNT(CASE WHEN vs."serviceStatus" = '${VehicleServiceStatus.CANCELLED}' THEN 1 END)::int as "cancelledCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.REGULAR_SERVICE}' THEN 1 END)::int as "regularServiceCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.EMERGENCY_SERVICE}' THEN 1 END)::int as "emergencyServiceCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.BREAKDOWN_REPAIR}' THEN 1 END)::int as "breakdownRepairCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.ACCIDENT_REPAIR}' THEN 1 END)::int as "accidentRepairCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.TYRE_CHANGE}' THEN 1 END)::int as "tyreChangeCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.BATTERY_REPLACEMENT}' THEN 1 END)::int as "batteryReplacementCount",
+      COUNT(CASE WHEN vs."serviceType" = '${VehicleServiceType.OTHER}' THEN 1 END)::int as "otherCount"
+    FROM vehicle_services vs
+    INNER JOIN vehicle_masters vm ON vm."id" = vs."vehicleMasterId" AND vm."deletedAt" IS NULL
+    LEFT JOIN LATERAL (
+      SELECT *
+      FROM "vehicle_versions"
+      WHERE "vehicleMasterId" = vm."id"
+        AND "isActive" = true
+        AND "deletedAt" IS NULL
+      LIMIT 1
+    ) vv ON true
     ${whereClause}
   `;
 
   params.push(pageSize, offset);
 
-  return { dataQuery, countQuery, params };
+  return { dataQuery, countQuery, statsQuery, params };
 };
 
 export const buildServiceAnalyticsQuery = (query: ServiceAnalyticsQueryDto) => {

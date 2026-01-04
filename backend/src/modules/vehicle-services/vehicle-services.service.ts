@@ -160,14 +160,39 @@ export class VehicleServicesService {
   }
 
   async findAll(query: VehicleServiceQueryDto) {
-    const { dataQuery, countQuery, params } = buildVehicleServiceListQuery(query);
+    const { dataQuery, countQuery, statsQuery, params } = buildVehicleServiceListQuery(query);
 
-    const [services, countResult] = await Promise.all([
+    const [services, countResult, statsResult] = await Promise.all([
       this.vehicleServicesRepository.executeRawQuery(dataQuery, params),
       this.vehicleServicesRepository.executeRawQuery(countQuery, params.slice(0, -2)),
+      this.vehicleServicesRepository.executeRawQuery(statsQuery, params.slice(0, -2)),
     ]);
 
-    return this.utilityService.listResponse(services, countResult[0]?.total || 0);
+    const stats = statsResult[0] || {};
+
+    return {
+      stats: {
+        totalServices: stats.totalServices || 0,
+        totalCost: parseFloat(stats.totalCost || 0),
+        averageCost: parseFloat(stats.averageCost || 0),
+        byStatus: {
+          pending: stats.pendingCount || 0,
+          completed: stats.completedCount || 0,
+          cancelled: stats.cancelledCount || 0,
+        },
+        byServiceType: {
+          REGULAR_SERVICE: stats.regularServiceCount || 0,
+          EMERGENCY_SERVICE: stats.emergencyServiceCount || 0,
+          BREAKDOWN_REPAIR: stats.breakdownRepairCount || 0,
+          ACCIDENT_REPAIR: stats.accidentRepairCount || 0,
+          TYRE_CHANGE: stats.tyreChangeCount || 0,
+          BATTERY_REPLACEMENT: stats.batteryReplacementCount || 0,
+          OTHER: stats.otherCount || 0,
+        },
+      },
+      records: services,
+      totalRecords: countResult[0]?.total || 0,
+    };
   }
 
   async findOne(
