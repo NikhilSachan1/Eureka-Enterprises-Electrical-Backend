@@ -1,4 +1,7 @@
-import { VehicleEventTypes } from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
+import {
+  VehicleEventTypes,
+  VehicleStatus,
+} from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
 
 export const VEHICLE_EVENTS_ERRORS = {
   INVALID_ACTION: 'Invalid action',
@@ -10,7 +13,47 @@ export const VEHICLE_EVENTS_ERRORS = {
   VEHICLE_NOT_FOUND: 'Vehicle not found',
   NO_PENDING_HANDOVER: 'No pending handover found for this vehicle',
   UNAUTHORIZED_HANDOVER_ACTION: 'You are not authorized to perform this handover action',
+  INVALID_STATE_TRANSITION:
+    'Invalid action: {action} is not allowed when vehicle status is {status}',
+  HANDOVER_ALREADY_PENDING: 'A handover is already pending for this vehicle',
+  NO_HANDOVER_PENDING: 'No handover is pending for this vehicle',
+  ONLY_TARGET_USER_CAN_ACCEPT: 'Only the target user of the handover can accept it',
+  ONLY_TARGET_USER_CAN_REJECT: 'Only the target user of the handover can reject it',
+  ONLY_INITIATOR_CAN_CANCEL: 'Only the initiator of the handover can cancel it',
 };
+
+export const VALID_ACTIONS_BY_STATUS: Record<string, VehicleEventTypes[]> = {
+  [VehicleStatus.AVAILABLE]: [
+    VehicleEventTypes.HANDOVER_INITIATED,
+    VehicleEventTypes.UNDER_MAINTENANCE,
+    VehicleEventTypes.DAMAGED,
+    VehicleEventTypes.RETIRED,
+  ],
+  [VehicleStatus.ASSIGNED]: [
+    VehicleEventTypes.HANDOVER_INITIATED,
+    VehicleEventTypes.DEALLOCATED,
+    VehicleEventTypes.UNDER_MAINTENANCE,
+    VehicleEventTypes.DAMAGED,
+    VehicleEventTypes.RETIRED,
+  ],
+  [VehicleStatus.UNDER_MAINTENANCE]: [
+    VehicleEventTypes.AVAILABLE,
+    VehicleEventTypes.DAMAGED,
+    VehicleEventTypes.RETIRED,
+  ],
+  [VehicleStatus.DAMAGED]: [
+    VehicleEventTypes.AVAILABLE,
+    VehicleEventTypes.UNDER_MAINTENANCE,
+    VehicleEventTypes.RETIRED,
+  ],
+  [VehicleStatus.RETIRED]: [],
+};
+
+export const HANDOVER_RESPONSE_ACTIONS = [
+  VehicleEventTypes.HANDOVER_ACCEPTED,
+  VehicleEventTypes.HANDOVER_REJECTED,
+  VehicleEventTypes.HANDOVER_CANCELLED,
+];
 
 export const VEHICLE_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
   [VehicleEventTypes.HANDOVER_INITIATED]: 'Handover initiated successfully',

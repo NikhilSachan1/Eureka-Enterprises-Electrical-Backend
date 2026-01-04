@@ -11,6 +11,8 @@ import {
 import {
   VEHICLE_EVENTS_ERRORS,
   VEHICLE_EVENTS_SUCCESS_MESSAGES,
+  VALID_ACTIONS_BY_STATUS,
+  HANDOVER_RESPONSE_ACTIONS,
 } from './constants/vehicle-events.constants';
 import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
@@ -19,6 +21,8 @@ import {
   buildVehicleEventsQuery,
 } from './queries/vehicle-events.queries';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
+import { VehicleEventEntity } from './entities/vehicle-event.entity';
+import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class VehicleEventsService {
@@ -80,6 +84,70 @@ export class VehicleEventsService {
     }
   }
 
+  private async getLastEvent(vehicleMasterId: string): Promise<VehicleEventEntity | null> {
+    const result = await this.vehicleEventsRepository.findOne({
+      where: { vehicleMasterId },
+      order: { createdAt: SortOrder.DESC },
+    });
+    return result || null;
+  }
+
+  private async getPendingHandover(vehicleMasterId: string): Promise<VehicleEventEntity | null> {
+    const lastEvent = await this.getLastEvent(vehicleMasterId);
+
+    if (lastEvent?.eventType === VehicleEventTypes.HANDOVER_INITIATED) {
+      return lastEvent;
+    }
+    return null;
+  }
+
+  private validateStateTransition(
+    currentStatus: string,
+    action: VehicleEventTypes,
+    pendingHandover: VehicleEventEntity | null,
+  ): void {
+    if (HANDOVER_RESPONSE_ACTIONS.includes(action)) {
+      if (!pendingHandover) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.NO_HANDOVER_PENDING);
+      }
+      return;
+    }
+
+    if (pendingHandover) {
+      throw new BadRequestException(VEHICLE_EVENTS_ERRORS.HANDOVER_ALREADY_PENDING);
+    }
+
+    const validActions = VALID_ACTIONS_BY_STATUS[currentStatus] || [];
+    if (!validActions.includes(action)) {
+      throw new BadRequestException(
+        VEHICLE_EVENTS_ERRORS.INVALID_STATE_TRANSITION.replace('{action}', action).replace(
+          '{status}',
+          currentStatus,
+        ),
+      );
+    }
+  }
+
+  private validateHandoverPermissions(
+    action: VehicleEventTypes,
+    pendingHandover: VehicleEventEntity,
+    currentUserId: string,
+  ): void {
+    if (action === VehicleEventTypes.HANDOVER_ACCEPTED) {
+      if (pendingHandover.toUser !== currentUserId) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.ONLY_TARGET_USER_CAN_ACCEPT);
+      }
+    } else if (action === VehicleEventTypes.HANDOVER_REJECTED) {
+      if (pendingHandover.toUser !== currentUserId) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.ONLY_TARGET_USER_CAN_REJECT);
+      }
+    } else if (action === VehicleEventTypes.HANDOVER_CANCELLED) {
+      if (pendingHandover.createdBy !== currentUserId) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.ONLY_INITIATOR_CAN_CANCEL);
+      }
+    }
+  }
+
   async action(
     vehicleActionDto: VehicleActionDto & { fromUserId: string },
     vehicleFiles: string[],
@@ -88,14 +156,25 @@ export class VehicleEventsService {
     try {
       const { vehicleMasterId, action, toUserId, fromUserId, metadata } = vehicleActionDto;
 
-      // Validate action-specific requirements
+      // Validate action-specific requirements (files, toUserId etc)
       this.validateActionRequirements(action, toUserId, vehicleFiles);
 
-      await this.dataSource.transaction(async (entityManager: EntityManager) => {
-        const activeVersion = await this.vehicleVersionsService.findOne({
-          where: { vehicleMasterId, isActive: true },
-        });
+      // Get current vehicle state
+      const activeVersion = await this.vehicleVersionsService.findOne({
+        where: { vehicleMasterId, isActive: true },
+      });
 
+      const currentStatus = activeVersion?.status || 'AVAILABLE';
+
+      const pendingHandover = await this.getPendingHandover(vehicleMasterId);
+
+      this.validateStateTransition(currentStatus, action, pendingHandover);
+
+      if (HANDOVER_RESPONSE_ACTIONS.includes(action) && pendingHandover) {
+        this.validateHandoverPermissions(action, pendingHandover, fromUserId);
+      }
+
+      await this.dataSource.transaction(async (entityManager: EntityManager) => {
         switch (action) {
           // Handover Initiate - requires toUserId and files
           case VehicleEventTypes.HANDOVER_INITIATED: {
