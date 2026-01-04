@@ -11,6 +11,7 @@ import {
   Min,
   IsBoolean,
 } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { VehicleServiceType, VehicleServiceStatus } from '../constants/vehicle-services.constants';
 
 export class CreateVehicleServiceDto {
@@ -35,6 +36,7 @@ export class CreateVehicleServiceDto {
     example: 45000,
   })
   @IsNotEmpty()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   odometerReading: number;
@@ -71,6 +73,7 @@ export class CreateVehicleServiceDto {
     example: 5500.5,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   serviceCost?: number;
@@ -90,6 +93,7 @@ export class CreateVehicleServiceDto {
     example: true,
   })
   @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   resetsServiceInterval?: boolean;
 
