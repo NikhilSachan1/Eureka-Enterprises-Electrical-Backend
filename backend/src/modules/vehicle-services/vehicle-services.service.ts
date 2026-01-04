@@ -8,6 +8,7 @@ import {
   UpdateVehicleServiceDto,
   VehicleServiceQueryDto,
   ServiceAnalyticsQueryDto,
+  BulkDeleteVehicleServiceDto,
 } from './dto';
 import {
   VEHICLE_SERVICES_ERRORS,
@@ -276,6 +277,56 @@ export class VehicleServicesService {
     await this.findOneOrFail({ where: identifierConditions });
     await this.vehicleServicesRepository.delete(identifierConditions, deletedBy);
     return { message: VEHICLE_SERVICES_SUCCESS.SERVICE_DELETED };
+  }
+
+  async bulkDeleteServices(bulkDeleteDto: BulkDeleteVehicleServiceDto) {
+    const { serviceIds, deletedBy } = bulkDeleteDto;
+    const result = [];
+    const errors = [];
+
+    for (const serviceId of serviceIds) {
+      try {
+        const deletedService = await this.validateAndDeleteService(serviceId, deletedBy);
+        result.push(deletedService);
+      } catch (error) {
+        errors.push({
+          serviceId,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: VEHICLE_SERVICES_SUCCESS.BULK_DELETE_PROCESSED.replace(
+        '{length}',
+        serviceIds.length.toString(),
+      )
+        .replace('{success}', result.length.toString())
+        .replace('{error}', errors.length.toString()),
+      result,
+      errors,
+    };
+  }
+
+  private async validateAndDeleteService(serviceId: string, deletedBy: string) {
+    const service = await this.vehicleServicesRepository.findOne({ where: { id: serviceId } });
+
+    if (!service) {
+      throw new NotFoundException(VEHICLE_SERVICES_ERRORS.SERVICE_NOT_FOUND);
+    }
+
+    if (service.deletedAt) {
+      throw new BadRequestException(VEHICLE_SERVICES_ERRORS.SERVICE_ALREADY_DELETED);
+    }
+
+    await this.vehicleServicesRepository.delete({ id: serviceId }, deletedBy);
+
+    return {
+      serviceId,
+      message: VEHICLE_SERVICES_SUCCESS.SERVICE_DELETED,
+      serviceType: service.serviceType,
+      serviceStatus: service.serviceStatus,
+    };
   }
 
   async getServiceAnalytics(query: ServiceAnalyticsQueryDto) {

@@ -3,12 +3,15 @@ export const VEHICLE_SERVICES_ERRORS = {
   VEHICLE_NOT_FOUND: 'Vehicle not found',
   INVALID_ODOMETER: 'Odometer reading cannot be less than last recorded reading',
   INVALID_SERVICE_DATE: 'Service date cannot be in the future',
+  SERVICE_ALREADY_DELETED: 'Vehicle service has already been deleted',
 };
 
 export const VEHICLE_SERVICES_SUCCESS = {
   SERVICE_CREATED: 'Vehicle service created successfully',
   SERVICE_UPDATED: 'Vehicle service updated successfully',
   SERVICE_DELETED: 'Vehicle service deleted successfully',
+  BULK_DELETE_PROCESSED:
+    'Bulk delete processed: {length} requested, {success} deleted successfully, {error} failed',
 };
 
 export enum VehicleServiceType {

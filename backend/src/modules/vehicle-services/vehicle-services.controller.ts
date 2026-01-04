@@ -19,6 +19,7 @@ import {
   UpdateVehicleServiceDto,
   VehicleServiceQueryDto,
   ServiceAnalyticsQueryDto,
+  BulkDeleteVehicleServiceDto,
 } from './dto';
 import {
   FIELD_NAMES,
@@ -97,6 +98,17 @@ export class VehicleServicesController {
       { ...updateDto, updatedBy: req.user.id },
       req.timezone,
     );
+  }
+
+  @Delete('bulk')
+  async bulkDeleteServices(
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Body() bulkDeleteDto: BulkDeleteVehicleServiceDto,
+  ) {
+    return await this.vehicleServicesService.bulkDeleteServices({
+      ...bulkDeleteDto,
+      deletedBy,
+    });
   }
 
   @Delete(':id')
