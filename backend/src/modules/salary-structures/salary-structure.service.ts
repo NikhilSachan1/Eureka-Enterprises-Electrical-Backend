@@ -11,10 +11,14 @@ import {
 } from './dto';
 import { SalaryStructureEntity } from './entities/salary-structure.entity';
 import { SalaryChangeType } from '../salary-change-logs/constants/salary-change-log.constants';
-import { SALARY_STRUCTURE_ERRORS, IncrementType } from './constants/salary-structure.constants';
+import {
+  SALARY_STRUCTURE_ERRORS,
+  IncrementType,
+  SALARY_FIELD_NAMES,
+} from './constants/salary-structure.constants';
 import { buildSalaryHistoryQuery } from './queries/salary-structure.queries';
 import { IsNull, LessThanOrEqual } from 'typeorm';
-import { SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import {
@@ -22,6 +26,7 @@ import {
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
 import { DateTimeService } from 'src/utils/datetime';
+import { UtilityService } from 'src/utils/utility/utility.service';
 
 @Injectable()
 export class SalaryStructureService {
@@ -32,6 +37,7 @@ export class SalaryStructureService {
     private readonly configSettingService: ConfigSettingService,
     @InjectDataSource() private dataSource: DataSource,
     private readonly dateTimeService: DateTimeService,
+    private readonly utilityService: UtilityService,
   ) {}
 
   async create(
@@ -86,7 +92,7 @@ export class SalaryStructureService {
     id: string,
     updateDto: UpdateSalaryStructureDto,
     updatedBy: string,
-  ): Promise<SalaryStructureEntity> {
+  ): Promise<{ message: string } | null> {
     const existing = await this.salaryStructureRepository.findOne({ where: { id } });
     if (!existing) {
       throw new NotFoundException(SALARY_STRUCTURE_ERRORS.NOT_FOUND);
@@ -107,7 +113,7 @@ export class SalaryStructureService {
       await this.validateEsic(mergedDto as any);
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       await this.salaryStructureRepository.update({ id }, updatedData, manager);
 
       // Fetch updated record
@@ -128,6 +134,11 @@ export class SalaryStructureService {
 
       return updated;
     });
+
+    return this.utilityService.getSuccessMessage(
+      SALARY_FIELD_NAMES.SALARY_STRUCTURE,
+      DataSuccessOperationType.UPDATE,
+    );
   }
 
   async applyIncrement(
