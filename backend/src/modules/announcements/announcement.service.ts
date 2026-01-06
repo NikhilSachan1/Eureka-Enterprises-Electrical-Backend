@@ -5,6 +5,7 @@ import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import {
   ANNOUNCEMENT_ERRORS,
   ANNOUNCEMENT_FIELD_NAMES,
+  ANNOUNCEMENT_SUCCESS_MESSAGES,
   AnnouncementStatus,
   AnnouncementTargetType,
 } from './constants/announcement.constants';
@@ -36,7 +37,7 @@ export class AnnouncementService {
   async create(
     createAnnouncementDto: CreateAnnouncementDto,
     userId: string,
-  ): Promise<AnnouncementEntity> {
+  ): Promise<{ message: string }> {
     try {
       if (createAnnouncementDto.startAt && createAnnouncementDto.expiryAt) {
         const startDate = new Date(createAnnouncementDto.startAt);
@@ -67,7 +68,7 @@ export class AnnouncementService {
         await this.announcementRepository.createTargets(targetEntities);
       }
 
-      return announcement;
+      return { message: ANNOUNCEMENT_SUCCESS_MESSAGES.CREATED };
     } catch (error) {
       throw error;
     }
