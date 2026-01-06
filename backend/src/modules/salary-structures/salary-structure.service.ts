@@ -146,7 +146,35 @@ export class SalaryStructureService {
     appliedBy: string,
     timezone?: string,
   ): Promise<SalaryStructureEntity> {
-    const { userId, incrementPercentage, incrementType, effectiveFrom, remarks } = incrementDto;
+    const {
+      userId,
+      incrementType,
+      effectiveFrom,
+      remarks,
+      incrementPercentage,
+      basic,
+      hra,
+      foodAllowance,
+      conveyanceAllowance,
+      medicalAllowance,
+      specialAllowance,
+      employeePf,
+      employerPf,
+      tds,
+      esic,
+      professionalTax,
+    } = incrementDto;
+
+    // Validate ESIC
+    await this.validateEsic({
+      basic,
+      hra,
+      foodAllowance,
+      conveyanceAllowance,
+      medicalAllowance,
+      specialAllowance,
+      esic,
+    });
 
     // Validate effective date is not in past (timezone-aware)
     const effectiveDateStr =
@@ -167,24 +195,22 @@ export class SalaryStructureService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      // Calculate new salary components
-      const multiplier = 1 + incrementPercentage / 100;
+      // Use values directly from DTO - no automatic calculation
       const newSalaryData: Partial<SalaryStructureEntity> = {
         userId,
-        basic:
-          incrementDto.basicOverride ?? Math.round(Number(currentStructure.basic) * multiplier),
-        hra: incrementDto.hraOverride ?? Math.round(Number(currentStructure.hra) * multiplier),
-        foodAllowance: Math.round(Number(currentStructure.foodAllowance) * multiplier),
-        conveyanceAllowance: Math.round(Number(currentStructure.conveyanceAllowance) * multiplier),
-        medicalAllowance: Math.round(Number(currentStructure.medicalAllowance) * multiplier),
-        specialAllowance: Math.round(Number(currentStructure.specialAllowance) * multiplier),
-        employeePf: currentStructure.employeePf, // Keep same or recalculate
-        employerPf: currentStructure.employerPf,
-        tds: currentStructure.tds,
-        esic: currentStructure.esic,
-        professionalTax: currentStructure.professionalTax,
+        basic,
+        hra,
+        foodAllowance,
+        conveyanceAllowance,
+        medicalAllowance,
+        specialAllowance,
+        employeePf,
+        employerPf,
+        tds,
+        esic,
+        professionalTax,
         effectiveFrom: effectiveDate,
-        incrementPercentage,
+        incrementPercentage: incrementPercentage || 0,
         incrementType,
         previousStructureId: currentStructure.id,
         remarks,
@@ -208,6 +234,7 @@ export class SalaryStructureService {
       const newStructure = await this.salaryStructureRepository.create(newSalaryData, manager);
 
       // Log the increment
+      const incrementInfo = incrementPercentage ? ` (${incrementPercentage}%)` : '';
       await this.salaryChangeLogRepository.create(
         {
           salaryStructureId: newStructure.id,
@@ -215,7 +242,7 @@ export class SalaryStructureService {
           previousValues: this.getSalarySnapshot(currentStructure),
           newValues: this.getSalarySnapshot(newStructure),
           changedBy: appliedBy,
-          reason: `${incrementType} increment of ${incrementPercentage}%`,
+          reason: `${incrementType} increment${incrementInfo}`,
         },
         manager,
       );
