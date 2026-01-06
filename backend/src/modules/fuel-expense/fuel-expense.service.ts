@@ -660,14 +660,30 @@ export class FuelExpenseService {
       // Get the original fuel expense ID (could be this expense or an ancestor)
       const originalFuelExpenseId = fuelExpense.originalFuelExpenseId || fuelExpense.id;
 
-      // Find all versions of this fuel expense
+      // Find all versions of this fuel expense (including the original)
       const [history] = await this.fuelExpenseRepository.findAll({
         where: [
+          { id: originalFuelExpenseId }, // The original fuel expense itself
           { originalFuelExpenseId }, // All subsequent versions
         ],
         relations: ['user', 'approvalByUser', 'vehicle', 'card'],
         order: { versionNumber: SortOrder.ASC },
       });
+
+      // Fetch file keys for all fuel expense versions
+      const fuelExpenseIds = history.map((record) => record.id);
+      const allFiles = await this.fuelExpenseFilesService.findAll({
+        where: { fuelExpenseId: In(fuelExpenseIds) },
+      });
+
+      // Group files by fuelExpenseId
+      const filesByFuelExpenseId = allFiles.reduce((acc, file) => {
+        if (!acc[file.fuelExpenseId]) {
+          acc[file.fuelExpenseId] = [];
+        }
+        acc[file.fuelExpenseId].push(file.fileKey);
+        return acc;
+      }, {} as Record<string, string[]>);
 
       return {
         originalFuelExpenseId,
@@ -686,13 +702,20 @@ export class FuelExpenseService {
           paymentMode: record.paymentMode,
           transactionId: record.transactionId,
           description: record.description,
+          transactionType: record.transactionType,
+          expenseEntryType: record.expenseEntryType,
+          entrySourceType: record.entrySourceType,
           approvalStatus: record.approvalStatus,
+          approvalAt: record.approvalAt,
+          approvalReason: record.approvalReason,
           isActive: record.isActive,
           editReason: record.editReason,
+          parentFuelExpenseId: record.parentFuelExpenseId,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
           createdBy: record.createdBy,
           updatedBy: record.updatedBy,
+          fileKeys: filesByFuelExpenseId[record.id] || [],
           user: {
             id: record.user?.id,
             firstName: record.user?.firstName,
@@ -707,6 +730,19 @@ export class FuelExpenseService {
                 lastName: record.approvalByUser.lastName,
                 email: record.approvalByUser.email,
                 employeeId: record.approvalByUser.employeeId,
+              }
+            : null,
+          vehicle: record.vehicle
+            ? {
+                id: record.vehicle.id,
+                registrationNo: record.vehicle.registrationNo,
+              }
+            : null,
+          card: record.card
+            ? {
+                id: record.card.id,
+                cardNumber: record.card.cardNumber,
+                cardType: record.card.cardType,
               }
             : null,
         })),
