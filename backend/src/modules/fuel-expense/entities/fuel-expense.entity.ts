@@ -15,7 +15,7 @@ import { FuelExpenseFilesEntity } from '../../fuel-expense-files/entities/fuel-e
 @Index('idx_fuel_expense_is_active', ['isActive'])
 @Index('idx_fuel_expense_original_fuel_expense_id', ['originalFuelExpenseId'])
 export class FuelExpenseEntity extends BaseEntity {
-  @Column({ type: 'uuid', nullable: false })
+  @Column({ type: 'uuid', nullable: true })
   vehicleId: string;
 
   @Column({ type: 'uuid', nullable: true })
@@ -27,10 +27,10 @@ export class FuelExpenseEntity extends BaseEntity {
   @Column({ type: 'timestamp', nullable: false })
   fillDate: Date;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false })
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   odometerKm: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false })
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   fuelLiters: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false })
@@ -85,7 +85,7 @@ export class FuelExpenseEntity extends BaseEntity {
   editReason: string;
 
   // Relationships
-  @ManyToOne(() => VehicleMasterEntity, { nullable: false })
+  @ManyToOne(() => VehicleMasterEntity, { nullable: true })
   @JoinColumn({ name: 'vehicleId' })
   vehicle: VehicleMasterEntity;
 
