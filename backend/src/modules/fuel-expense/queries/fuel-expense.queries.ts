@@ -124,7 +124,15 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       LAG(fe."odometerKm") OVER (
         PARTITION BY fe."vehicleId" 
         ORDER BY fe."fillDate" ASC, fe."odometerKm" ASC
-      ) as "previousOdometerKm"
+      ) as "previousOdometerKm",
+      LAG(fe."fuelLiters") OVER (
+        PARTITION BY fe."vehicleId" 
+        ORDER BY fe."fillDate" ASC, fe."odometerKm" ASC
+      ) as "previousFuelLiters",
+      LAG(fe."odometerKm", 2) OVER (
+        PARTITION BY fe."vehicleId" 
+        ORDER BY fe."fillDate" ASC, fe."odometerKm" ASC
+      ) as "secondPreviousOdometerKm"
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "users" ab ON fe."approvalBy" = ab."id"

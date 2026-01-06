@@ -406,13 +406,10 @@ export class FuelExpenseService {
           );
         }
 
-        // Calculate and return vehicle average
-        const vehicleAverage = await this.calculateVehicleAverage(vehicleId, entityManager);
-
-        return {
-          ...newFuelExpense,
-          vehicleAverage,
-        };
+        return this.utilityService.getSuccessMessage(
+          FuelExpenseEntityFields.FUEL_EXPENSE,
+          DataSuccessOperationType.UPDATE,
+        );
       });
     } catch (error) {
       throw error;
@@ -536,10 +533,39 @@ export class FuelExpenseService {
           const fuelLiters = Number(record.fuelLiters);
 
           if (distanceTraveled > 0 && fuelLiters > 0) {
+            const currentKmPerLiter = Number((distanceTraveled / fuelLiters).toFixed(2));
+
+            // Calculate previous efficiency if we have the data
+            let previousKmPerLiter = null;
+            let efficiencyChange = null;
+            let efficiencyChangePercent = null;
+
+            if (
+              record.secondPreviousOdometerKm &&
+              record.previousFuelLiters &&
+              Number(record.previousFuelLiters) > 0
+            ) {
+              const previousDistance =
+                Number(record.previousOdometerKm) - Number(record.secondPreviousOdometerKm);
+              if (previousDistance > 0) {
+                previousKmPerLiter = Number(
+                  (previousDistance / Number(record.previousFuelLiters)).toFixed(2),
+                );
+
+                // Calculate percentage change: positive = improvement, negative = decline
+                const change = currentKmPerLiter - previousKmPerLiter;
+                efficiencyChange = Number(change.toFixed(2));
+                efficiencyChangePercent = Number(((change / previousKmPerLiter) * 100).toFixed(2));
+              }
+            }
+
             fuelEfficiency = {
               distanceTraveled: distanceTraveled,
-              kmPerLiter: Number((distanceTraveled / fuelLiters).toFixed(2)),
+              kmPerLiter: currentKmPerLiter,
               previousOdometerKm: Number(record.previousOdometerKm),
+              previousKmPerLiter,
+              efficiencyChange,
+              efficiencyChangePercent,
             };
           }
         }

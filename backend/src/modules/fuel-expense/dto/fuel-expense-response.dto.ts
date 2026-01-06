@@ -139,11 +139,15 @@ export class FuelExpenseRecordDto {
   fileKeys: string[];
 
   @ApiProperty({
-    description: 'Fuel efficiency data for this fill (distance traveled from previous fill)',
+    description:
+      'Fuel efficiency data with comparison to previous fill. Positive efficiencyChangePercent = improvement, negative = decline',
     example: {
       distanceTraveled: 450,
       kmPerLiter: 15.5,
       previousOdometerKm: 14550,
+      previousKmPerLiter: 14.2,
+      efficiencyChange: 1.3,
+      efficiencyChangePercent: 9.15,
     },
     required: false,
   })
@@ -151,6 +155,9 @@ export class FuelExpenseRecordDto {
     distanceTraveled: number;
     kmPerLiter: number;
     previousOdometerKm: number;
+    previousKmPerLiter: number | null;
+    efficiencyChange: number | null;
+    efficiencyChangePercent: number | null;
   };
 }
 
