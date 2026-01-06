@@ -319,6 +319,36 @@ export class PayrollService {
     return payroll;
   }
 
+  async findByUserMonthYear(userId: string, month: number, year: number): Promise<PayrollEntity> {
+    const payroll = await this.payrollRepository.findOne({
+      where: { userId, month, year },
+      relations: ['user', 'salaryStructure', 'approver'],
+    });
+    if (!payroll) {
+      throw new NotFoundException(PAYROLL_ERRORS.NOT_FOUND);
+    }
+    return payroll;
+  }
+
+  async generatePayslipPdf(payrollId: string): Promise<{ pdfBuffer: Buffer; filename: string }> {
+    const payroll = await this.findOne(payrollId);
+    const pdfBuffer = await this.payslipService.generatePayslipPDF(payrollId);
+    const monthName = this.utilityService.getMonthName(payroll.month, true);
+    const filename = `Payslip_${monthName}_${payroll.year}_${
+      payroll.user?.employeeId || payroll.userId
+    }.pdf`;
+    return { pdfBuffer, filename };
+  }
+
+  async generatePayslipPdfByUserMonthYear(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<{ pdfBuffer: Buffer; filename: string }> {
+    const payroll = await this.findByUserMonthYear(userId, month, year);
+    return this.generatePayslipPdf(payroll.id);
+  }
+
   private async getPayrollByUserAndMonth(
     userId: string,
     month: number,

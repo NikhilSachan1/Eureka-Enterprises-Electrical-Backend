@@ -127,7 +127,7 @@ export class UtilityService {
     return new Date().getFullYear();
   }
 
-  getMonthName(month: number): string {
+  getMonthName(month: number, short = false): string {
     const months = [
       'January',
       'February',
@@ -142,7 +142,8 @@ export class UtilityService {
       'November',
       'December',
     ];
-    return months[month - 1] || '';
+    const monthName = months[month - 1] || '';
+    return short ? monthName.slice(0, 3) : monthName;
   }
 
   numberToWords(num: number): string {

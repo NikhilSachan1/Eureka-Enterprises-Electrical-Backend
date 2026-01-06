@@ -16,6 +16,7 @@ import { PayrollService } from './payroll.service';
 import { PayslipService } from './payslip/payslip.service';
 import { GeneratePayrollDto, GenerateBulkPayrollDto, GetPayrollDto, UpdatePayrollDto } from './dto';
 import { PayrollUserInterceptor } from './interceptors/payroll-user.interceptor';
+import { PayrollPayslipUserInterceptor } from './interceptors/payroll-payslip-user.interceptor';
 
 @ApiTags('Payroll')
 @ApiBearerAuth('JWT-auth')
@@ -23,7 +24,7 @@ import { PayrollUserInterceptor } from './interceptors/payroll-user.interceptor'
 export class PayrollController {
   constructor(
     private readonly payrollService: PayrollService,
-    private readonly payslipService: PayslipService,
+    private readonly payslipService: PayslipService, // Kept for send-payslip endpoint
   ) {}
 
   @Post('generate')
@@ -49,6 +50,33 @@ export class PayrollController {
     return await this.payrollService.getSummary(parseInt(month), parseInt(year));
   }
 
+  @Get('user/:userId/:month/:year')
+  @UseInterceptors(PayrollPayslipUserInterceptor)
+  async findByUserMonthYear(
+    @Param('userId') userId: string,
+    @Param('month') month: string,
+    @Param('year') year: string,
+  ) {
+    return await this.payrollService.findByUserMonthYear(userId, parseInt(month), parseInt(year));
+  }
+
+  @Get('user/:userId/:month/:year/payslip')
+  @UseInterceptors(PayrollPayslipUserInterceptor)
+  @ApiProduces('application/pdf')
+  async downloadPayslipByUserMonthYear(
+    @Param('userId') userId: string,
+    @Param('month') month: string,
+    @Param('year') year: string,
+    @Res() res: Response,
+  ) {
+    const { pdfBuffer, filename } = await this.payrollService.generatePayslipPdfByUserMonthYear(
+      userId,
+      parseInt(month),
+      parseInt(year),
+    );
+    this.sendPdfResponse(res, pdfBuffer, filename);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return await this.payrollService.findOne(id);
@@ -64,40 +92,22 @@ export class PayrollController {
   @Get(':id/payslip')
   @ApiProduces('application/pdf')
   async downloadPayslip(@Param('id') id: string, @Res() res: Response) {
-    const pdfBuffer = await this.payslipService.generatePayslipPDF(id);
-
-    // Get payroll details for filename
-    const payroll = await this.payrollService.findOne(id);
-    const monthNames = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const filename = `Payslip_${monthNames[payroll.month - 1]}_${payroll.year}_${
-      payroll.user?.employeeId || payroll.userId
-    }.pdf`;
-
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': pdfBuffer.length,
-    });
-
-    res.end(pdfBuffer);
+    const { pdfBuffer, filename } = await this.payrollService.generatePayslipPdf(id);
+    this.sendPdfResponse(res, pdfBuffer, filename);
   }
 
   @Post(':id/send-payslip')
   async sendPayslip(@Param('id') id: string) {
     await this.payslipService.generateAndSendPayslip({ payrollId: id, sendEmail: true });
     return { message: 'Payslip sent successfully' };
+  }
+
+  private sendPdfResponse(res: Response, pdfBuffer: Buffer, filename: string): void {
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': pdfBuffer.length,
+    });
+    res.end(pdfBuffer);
   }
 }
