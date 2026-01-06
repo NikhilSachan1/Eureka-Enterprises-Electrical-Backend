@@ -131,3 +131,53 @@ export const buildUserExitCheckQuery = (userId: string) => {
 
   return { query, params: [userId] };
 };
+
+export const buildSalaryReportQuery = (options: {
+  year: number;
+  startMonth: number;
+  endMonth: number;
+  userId?: string;
+  status?: string;
+}) => {
+  const { year, startMonth, endMonth, userId, status } = options;
+  const params: (string | number)[] = [year, startMonth, endMonth];
+  let paramIndex = 4;
+
+  let query = `
+    SELECT 
+      p."id",
+      p."userId",
+      u."firstName",
+      u."lastName",
+      u."employeeId",
+      u."email",
+      p."month",
+      p."year",
+      p."grossEarnings",
+      p."totalDeductions",
+      p."netPayable",
+      p."status",
+      p."paidAt"
+    FROM "payroll" p
+    LEFT JOIN "users" u ON u."id" = p."userId"
+    WHERE p."year" = $1
+      AND p."month" >= $2
+      AND p."month" <= $3
+  `;
+
+  if (userId) {
+    query += ` AND p."userId" = $${paramIndex}`;
+    params.push(userId);
+    paramIndex++;
+  }
+
+  if (status) {
+    query += ` AND p."status" = $${paramIndex}`;
+    params.push(status);
+    paramIndex++;
+  }
+
+  query += ` ORDER BY u."firstName" ASC, u."lastName" ASC, p."month" ASC`;
+
+  return { query, params };
+};

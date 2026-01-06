@@ -14,7 +14,13 @@ import { ApiBearerAuth, ApiBody, ApiProduces, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PayrollService } from './payroll.service';
 import { PayslipService } from './payslip/payslip.service';
-import { GeneratePayrollDto, GenerateBulkPayrollDto, GetPayrollDto, UpdatePayrollDto } from './dto';
+import {
+  GeneratePayrollDto,
+  GenerateBulkPayrollDto,
+  GetPayrollDto,
+  UpdatePayrollDto,
+  GetSalaryReportDto,
+} from './dto';
 import { PayrollUserInterceptor } from './interceptors/payroll-user.interceptor';
 import { PayrollPayslipUserInterceptor } from './interceptors/payroll-payslip-user.interceptor';
 
@@ -48,6 +54,11 @@ export class PayrollController {
   @Get('summary/:month/:year')
   async getSummary(@Param('month') month: string, @Param('year') year: string) {
     return await this.payrollService.getSummary(parseInt(month), parseInt(year));
+  }
+
+  @Get('salary-report')
+  async getSalaryReport(@Query() query: GetSalaryReportDto) {
+    return await this.payrollService.getSalaryReport(query);
   }
 
   @Get('user/:userId/:month/:year')

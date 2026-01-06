@@ -25,6 +25,7 @@ import {
   buildLeaveSummaryForPayrollQuery,
   buildPresentDatesForPayrollQuery,
   buildUserExitCheckQuery,
+  buildSalaryReportQuery,
 } from './queries/payroll.queries';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -1018,5 +1019,56 @@ export class PayrollService {
         );
       }
     }
+  }
+
+  async getSalaryReport(queryDto: {
+    year: number;
+    startMonth?: number;
+    endMonth?: number;
+    userId?: string;
+    status?: string;
+  }): Promise<{
+    records: any[];
+    summary: {
+      totalNetPaid: number;
+      totalGrossEarnings: number;
+      totalDeductions: number;
+      recordCount: number;
+    };
+  }> {
+    const { year, startMonth = 1, endMonth = 12, userId, status } = queryDto;
+
+    const { query, params } = buildSalaryReportQuery({
+      year,
+      startMonth,
+      endMonth,
+      userId,
+      status,
+    });
+
+    const records = await this.payrollRepository.executeRawQuery(query, params);
+
+    // Calculate summary
+    const summary = records.reduce(
+      (acc: any, record: any) => {
+        acc.totalNetPaid += parseFloat(record.netPayable) || 0;
+        acc.totalGrossEarnings += parseFloat(record.grossEarnings) || 0;
+        acc.totalDeductions += parseFloat(record.totalDeductions) || 0;
+        acc.recordCount += 1;
+        return acc;
+      },
+      { totalNetPaid: 0, totalGrossEarnings: 0, totalDeductions: 0, recordCount: 0 },
+    );
+
+    // Format records with month name
+    const formattedRecords = records.map((record: any) => ({
+      ...record,
+      monthName: this.utilityService.getMonthName(record.month),
+      grossEarnings: parseFloat(record.grossEarnings) || 0,
+      totalDeductions: parseFloat(record.totalDeductions) || 0,
+      netPayable: parseFloat(record.netPayable) || 0,
+    }));
+
+    return { records: formattedRecords, summary };
   }
 }
