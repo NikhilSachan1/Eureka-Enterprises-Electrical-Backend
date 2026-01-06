@@ -47,6 +47,7 @@ import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
 import { AuditLogModule } from 'src/modules/audit-logs/audit-log.module';
 import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/request-audit.interceptor';
 import { FnfModule } from 'src/modules/fnf/fnf.module';
+import { CommunicationLogModule } from 'src/modules/common/communication-logs/communication-log.module';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { FnfModule } from 'src/modules/fnf/fnf.module';
     CronLogModule,
     AuditLogModule,
     FnfModule,
+    CommunicationLogModule,
   ],
   controllers: [AppController],
   providers: [

@@ -19,6 +19,10 @@ export interface IEmailDataValues {
   adminPortalUrl?: string;
   portalUrl?: string;
 
+  // For communication logging
+  referenceId?: string;
+  referenceType?: string;
+
   // Forget Password
   firstName?: string;
   lastName?: string;

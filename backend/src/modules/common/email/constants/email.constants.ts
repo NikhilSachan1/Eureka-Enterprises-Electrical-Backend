@@ -1,3 +1,5 @@
+import { CommunicationCategory } from '../../communication-logs/constants/communication-log.constants';
+
 export const EMAIL_SUBJECT = {
   FORGET_PASSWORD: 'Eureka HRMS - Password Reset Request',
   FY_LEAVE_CONFIG_REMINDER: 'Eureka HRMS - Financial Year Leave Configuration Reminder',
@@ -55,7 +57,7 @@ export const EMAIL_TEMPLATE = {
   LEAVE_APPROVAL_REMINDER: 'leaveApprovalReminder',
   ATTENDANCE_APPROVAL_REMINDER: 'attendanceApprovalReminder',
   PAYSLIP: 'payslip',
-  FNF_DOCUMENTS: 'fnf-documents',
+  FNF_DOCUMENTS: 'fnfDocuments',
   // Approval Notifications
   ATTENDANCE_APPROVAL: 'attendanceApproval',
   EXPENSE_APPROVAL: 'expenseApproval',
@@ -68,4 +70,25 @@ export const EMAIL_REDIRECT_ROUTES = {
   EXPENSES: '/expenses',
   FUEL_EXPENSES: '/fuel-expenses',
   LEAVES: '/leaves',
+};
+
+export const TEMPLATE_CATEGORY_MAP: Record<string, CommunicationCategory> = {
+  attendanceApproval: CommunicationCategory.ATTENDANCE_APPROVAL,
+  expenseApproval: CommunicationCategory.EXPENSE_APPROVAL,
+  fuelExpenseApproval: CommunicationCategory.FUEL_EXPENSE_APPROVAL,
+  leaveApproval: CommunicationCategory.LEAVE_APPROVAL,
+  leaveApprovalReminder: CommunicationCategory.LEAVE_APPROVAL_REMINDER,
+  attendanceApprovalReminder: CommunicationCategory.ATTENDANCE_APPROVAL_REMINDER,
+  pendingExpenseReminder: CommunicationCategory.EXPENSE_APPROVAL_REMINDER,
+  vehicleDocumentExpiry: CommunicationCategory.VEHICLE_DOCUMENT_EXPIRY,
+  assetWarrantyExpiry: CommunicationCategory.ASSET_WARRANTY_EXPIRY,
+  assetCalibrationExpiry: CommunicationCategory.ASSET_CALIBRATION_EXPIRY,
+  cardExpiry: CommunicationCategory.CARD_EXPIRY,
+  vehicleServiceDue: CommunicationCategory.VEHICLE_SERVICE_DUE,
+  birthdayWish: CommunicationCategory.BIRTHDAY_WISH,
+  workAnniversary: CommunicationCategory.WORK_ANNIVERSARY,
+  payslip: CommunicationCategory.PAYSLIP,
+  fnfDocuments: CommunicationCategory.FNF_DOCUMENTS,
+  forgetPassword: CommunicationCategory.FORGET_PASSWORD,
+  fyLeaveConfigReminder: CommunicationCategory.FY_LEAVE_CONFIG_REMINDER,
 };
