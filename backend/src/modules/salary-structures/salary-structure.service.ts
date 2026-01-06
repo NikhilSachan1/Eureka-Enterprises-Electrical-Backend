@@ -220,7 +220,13 @@ export class SalaryStructureService {
   async findOne(id: string): Promise<SalaryStructureEntity> {
     const structure = await this.salaryStructureRepository.findOne({
       where: { id },
-      relations: ['user', 'changeLogs', 'changeLogs.changedByUser'],
+      relations: [
+        'user',
+        'createdByUser',
+        'updatedByUser',
+        'changeLogs',
+        'changeLogs.changedByUser',
+      ],
     });
     if (!structure) {
       throw new NotFoundException(SALARY_STRUCTURE_ERRORS.NOT_FOUND);

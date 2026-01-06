@@ -47,6 +47,8 @@ export class SalaryStructureRepository {
       const queryBuilder = repo
         .createQueryBuilder('salary')
         .leftJoinAndSelect('salary.user', 'user')
+        .leftJoinAndSelect('salary.createdByUser', 'createdByUser')
+        .leftJoinAndSelect('salary.updatedByUser', 'updatedByUser')
         .select([
           'salary',
           'user.id',
@@ -54,6 +56,16 @@ export class SalaryStructureRepository {
           'user.lastName',
           'user.email',
           'user.employeeId',
+          'createdByUser.id',
+          'createdByUser.firstName',
+          'createdByUser.lastName',
+          'createdByUser.email',
+          'createdByUser.employeeId',
+          'updatedByUser.id',
+          'updatedByUser.firstName',
+          'updatedByUser.lastName',
+          'updatedByUser.email',
+          'updatedByUser.employeeId',
         ]);
 
       if (userId) {
