@@ -117,8 +117,8 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       ${getUserSelectFields('u')},
       ${getUserSelectFields('ab', 'approvalBy')},
       v."registrationNo" as "registrationNumber",
-      v."vehicleType",
-      v."vehicleModel",
+      vv."brand" as "vehicleType",
+      vv."model" as "vehicleModel",
       c."cardNumber",
       c."cardType",
       LAG(fe."odometerKm") OVER (
@@ -129,6 +129,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "users" ab ON fe."approvalBy" = ab."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+    LEFT JOIN "vehicle_versions" vv ON v."id" = vv."vehicleMasterId" AND vv."isActive" = true
     LEFT JOIN "cards" c ON fe."cardId" = c."id"
     ${whereClause}
     ORDER BY fe."${sortField}" ${sortOrder}
