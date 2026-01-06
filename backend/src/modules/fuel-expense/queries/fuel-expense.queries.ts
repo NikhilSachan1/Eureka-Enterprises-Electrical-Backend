@@ -81,7 +81,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
       LOWER(fe."description") LIKE LOWER($${paramIndex}) OR 
       LOWER(fe."transactionId") LIKE LOWER($${paramIndex}) OR
-      LOWER(v."registrationNumber") LIKE LOWER($${paramIndex})
+      LOWER(v."registrationNo") LIKE LOWER($${paramIndex})
     )`);
     params.push(`%${search}%`);
     paramIndex++;
@@ -116,7 +116,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       fe."updatedAt",
       ${getUserSelectFields('u')},
       ${getUserSelectFields('ab', 'approvalBy')},
-      v."registrationNumber",
+      v."registrationNo" as "registrationNumber",
       v."vehicleType",
       v."vehicleModel",
       c."cardNumber",
@@ -203,7 +203,7 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
       LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
       LOWER(fe."description") LIKE LOWER($${paramIndex}) OR 
       LOWER(fe."transactionId") LIKE LOWER($${paramIndex}) OR
-      LOWER(v."registrationNumber") LIKE LOWER($${paramIndex})
+      LOWER(v."registrationNo") LIKE LOWER($${paramIndex})
     )`);
     params.push(`%${search}%`);
     paramIndex++;
@@ -359,7 +359,7 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
       LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
       LOWER(fe."description") LIKE LOWER($${paramIndex}) OR 
       LOWER(fe."transactionId") LIKE LOWER($${paramIndex}) OR
-      LOWER(v."registrationNumber") LIKE LOWER($${paramIndex})
+      LOWER(v."registrationNo") LIKE LOWER($${paramIndex})
     )`);
     params.push(`%${search}%`);
     paramIndex++;
