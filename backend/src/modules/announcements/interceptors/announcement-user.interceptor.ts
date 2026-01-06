@@ -10,11 +10,11 @@ export class AnnouncementUserInterceptor implements NestInterceptor {
 
     // Admin and HR can see all announcements
     // Other roles only see announcements targeted to them
-    const isPrivilegedRole = user.role === Roles.ADMIN || user.role === Roles.HR;
+    const isPrivilegedRole = user.activeRole === Roles.ADMIN || user.activeRole === Roles.HR;
 
     if (!isPrivilegedRole) {
+      // Only set userId - roleIds are fetched from DB in the service
       request.query.userId = user.id;
-      request.query.roleIds = Array.isArray(user.role) ? user.role : [user.role];
     }
 
     return next.handle();
