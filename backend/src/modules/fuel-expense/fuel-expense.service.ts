@@ -1186,7 +1186,7 @@ export class FuelExpenseService {
   async calculateVehicleAverage(
     vehicleId: string,
     entityManager?: EntityManager,
-  ): Promise<{ average: number; averageKmPerLiter: number }> {
+  ): Promise<{ average: number | null; averageKmPerLiter: number | null; message?: string }> {
     try {
       // Get all approved fuel expenses for this vehicle, ordered by fill date and odometer
       const [fuelExpenses] = await this.fuelExpenseRepository.findAll(
@@ -1206,7 +1206,10 @@ export class FuelExpenseService {
       );
 
       if (fuelExpenses.length < 2) {
-        throw new BadRequestException(FUEL_EXPENSE_ERRORS.INSUFFICIENT_DATA_TO_CALCULATE_AVERAGE);
+        return {
+          average: null,
+          averageKmPerLiter: null,
+        };
       }
 
       let totalDistance = 0;
@@ -1230,7 +1233,10 @@ export class FuelExpenseService {
         return { average, averageKmPerLiter: average };
       }
 
-      throw new BadRequestException(FUEL_EXPENSE_ERRORS.INSUFFICIENT_DATA_TO_CALCULATE_AVERAGE);
+      return {
+        average: null,
+        averageKmPerLiter: null,
+      };
     } catch (error) {
       throw error;
     }
