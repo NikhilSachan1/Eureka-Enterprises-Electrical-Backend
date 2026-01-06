@@ -665,7 +665,7 @@ export class FuelExpenseService {
         where: [
           { originalFuelExpenseId }, // All subsequent versions
         ],
-        relations: ['user', 'approvedByUser', 'vehicle', 'card'],
+        relations: ['user', 'approvalByUser', 'vehicle', 'card'],
         order: { versionNumber: SortOrder.ASC },
       });
 
