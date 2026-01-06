@@ -20,6 +20,7 @@ import {
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import {
   CreateFuelExpenseDto,
+  ForceFuelExpenseDto,
   CreateCreditFuelExpenseDto,
   EditFuelExpenseDto,
   FuelExpenseQueryDto,
@@ -67,21 +68,21 @@ export class FuelExpenseController {
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    type: CreateFuelExpenseDto,
+    type: ForceFuelExpenseDto,
     required: true,
   })
   async forceFuelExpense(
     @Request() req: RequestWithTimezone,
-    @Body() createFuelExpenseDto: CreateFuelExpenseDto,
+    @Body() forceFuelExpenseDto: ForceFuelExpenseDto,
     @DetectSource() sourceType: EntrySourceType,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
     { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
-    const userId = req.user.id;
+    const loggedInUserId = req.user.id;
     return this.fuelExpenseService.forceFuelExpense({
-      ...createFuelExpenseDto,
-      userId: createFuelExpenseDto.userId || userId,
-      createdBy: userId,
+      ...forceFuelExpenseDto,
+      userId: forceFuelExpenseDto.userId || loggedInUserId,
+      createdBy: loggedInUserId,
       fileKeys,
       entrySourceType: sourceType,
       timezone: req.timezone,

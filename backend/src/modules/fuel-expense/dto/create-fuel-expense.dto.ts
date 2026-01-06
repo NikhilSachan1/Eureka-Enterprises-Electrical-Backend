@@ -5,18 +5,9 @@ import { FUEL_EXPENSE_ERRORS } from '../constants/fuel-expense.constants';
 
 /**
  * Create Fuel Expense DTO
- * Used for creating new fuel expense records
+ * Used for creating new fuel expense records (userId is taken from logged-in user)
  */
 export class CreateFuelExpenseDto {
-  @ApiProperty({
-    description: 'User ID (optional for force, required for regular create)',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-    required: false,
-  })
-  @IsOptional()
-  @IsUUID()
-  userId?: string;
-
   @ApiProperty({
     description: 'Vehicle ID',
     example: '123e4567-e89b-12d3-a456-426614174000',

@@ -1,4 +1,5 @@
 export * from './create-fuel-expense.dto';
+export * from './force-fuel-expense.dto';
 export * from './create-credit-fuel-expense.dto';
 export * from './update-fuel-expense.dto';
 export * from './edit-fuel-expense.dto';
