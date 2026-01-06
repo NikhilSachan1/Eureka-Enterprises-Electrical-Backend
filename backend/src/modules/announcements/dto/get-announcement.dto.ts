@@ -48,5 +48,6 @@ export class GetAllAnnouncementsDto extends BaseGetDto {
 
   @IsOptional()
   @IsArray()
+  @IsUUID('4', { each: true })
   roleIds?: string[];
 }
