@@ -19,7 +19,9 @@ export class SalaryStructureRepository {
       const repo = entityManager
         ? entityManager.getRepository(SalaryStructureEntity)
         : this.repository;
-      return await repo.save(data);
+      // Create entity instance first to trigger lifecycle hooks (@BeforeInsert)
+      const entity = repo.create(data);
+      return await repo.save(entity);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
@@ -111,7 +113,13 @@ export class SalaryStructureRepository {
       const repo = entityManager
         ? entityManager.getRepository(SalaryStructureEntity)
         : this.repository;
-      return await repo.update(identifierConditions, updateData);
+      const existing = await repo.findOne({ where: identifierConditions });
+      if (!existing) {
+        return null;
+      }
+
+      const mergedEntity = repo.create({ ...existing, ...updateData });
+      return await repo.save(mergedEntity);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
