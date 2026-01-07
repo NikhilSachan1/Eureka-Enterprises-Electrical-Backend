@@ -111,7 +111,6 @@ export class SalaryStructureEntity extends BaseEntity {
     this.grossSalary =
       Number(this.basic || 0) +
       Number(this.hra || 0) +
-      Number(this.foodAllowance || 0) +
       Number(this.conveyanceAllowance || 0) +
       Number(this.medicalAllowance || 0) +
       Number(this.specialAllowance || 0);
