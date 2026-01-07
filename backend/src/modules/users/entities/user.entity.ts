@@ -146,6 +146,16 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 20, nullable: true })
   passportNumber: string;
 
+  // ==================== WhatsApp Preferences ====================
+  @Column({ type: 'boolean', default: false })
+  whatsappOptIn: boolean;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  whatsappNumber: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  whatsappOptInAt: Date;
+
   // ==================== Relations ====================
   @OneToMany(() => UserRoleEntity, (userRole) => userRole.user)
   userRoles: UserRoleEntity[];

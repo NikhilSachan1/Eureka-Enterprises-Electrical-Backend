@@ -46,4 +46,11 @@ export const Environments = {
 
   // Feature flags
   ENFORCE_REQUIRED_HEADERS: process.env.ENFORCE_REQUIRED_HEADERS === 'true',
+
+  // Twilio WhatsApp configuration
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
+  TWILIO_WHATSAPP_NUMBER: process.env.TWILIO_WHATSAPP_NUMBER,
+  WHATSAPP_ENABLED: process.env.WHATSAPP_ENABLED === 'true',
+  WHATSAPP_MODE: process.env.WHATSAPP_MODE || 'sandbox', // 'sandbox' or 'production'
 };

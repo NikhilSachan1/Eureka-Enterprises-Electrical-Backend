@@ -50,6 +50,7 @@ import { UserService } from '../users/user.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { Environments } from 'env-configs';
 import {
   EMAIL_SUBJECT,
@@ -70,6 +71,7 @@ export class LeaveApplicationsService {
     private readonly userService: UserService,
     private readonly dateTimeService: DateTimeService,
     private readonly emailService: EmailService,
+    private readonly whatsAppService: WhatsAppService,
   ) {}
 
   async create(
@@ -1041,8 +1043,13 @@ export class LeaveApplicationsService {
           timezone,
         );
 
-        // Send approval email notification
-        this.sendLeaveApprovalEmail(leaveApplication, approvalBy, approvalStatus, approvalComment);
+        // Send approval notification (email + WhatsApp)
+        this.sendLeaveApprovalNotification(
+          leaveApplication,
+          approvalBy,
+          approvalStatus,
+          approvalComment,
+        );
 
         return {
           message: LEAVE_APPLICATION_SUCCESS_MESSAGES.LEAVE_APPLICATION_APPROVAL_SUCCESS.replace(
@@ -1435,7 +1442,7 @@ export class LeaveApplicationsService {
     }
   }
 
-  private async sendLeaveApprovalEmail(
+  private async sendLeaveApprovalNotification(
     leaveApplication: LeaveApplicationsEntity,
     approvalById: string,
     approvalStatus: string,
@@ -1445,7 +1452,7 @@ export class LeaveApplicationsService {
       const approver = await this.userService.findOne({ id: approvalById });
       const employee = leaveApplication.user;
 
-      if (!employee?.email) return;
+      if (!employee) return;
 
       const isApproved = approvalStatus === ApprovalStatus.APPROVED;
 
@@ -1466,37 +1473,66 @@ export class LeaveApplicationsService {
         totalDays = 0.5;
       }
 
-      const subjectKey = isApproved ? EMAIL_SUBJECT.LEAVE_APPROVED : EMAIL_SUBJECT.LEAVE_REJECTED;
+      const approverName = approver
+        ? `${approver.firstName} ${approver.lastName}`
+        : LEAVE_EMAIL_CONSTANTS.SYSTEM_USER;
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
+      const formattedFromDate = this.formatDateForEmail(leaveApplication.fromDate);
+      const formattedToDate = this.formatDateForEmail(leaveApplication.toDate);
 
-      await this.emailService.sendMail({
-        receiverEmails: employee.email,
-        subject: subjectKey.replace('{leaveCategory}', leaveApplication.leaveCategory),
-        template: EMAIL_TEMPLATE.LEAVE_APPROVAL,
-        emailData: {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          isApproved,
-          applicationId: leaveApplication.id.substring(0, 8).toUpperCase(),
-          leaveType: leaveApplication.leaveCategory,
-          leaveTypeClass,
-          leaveCategory:
-            leaveApplication.leaveType === LeaveType.HALF_DAY
-              ? LEAVE_EMAIL_CONSTANTS.HALF_DAY
-              : LEAVE_EMAIL_CONSTANTS.FULL_DAY,
-          fromDate: this.formatDateForEmail(leaveApplication.fromDate),
-          toDate: this.formatDateForEmail(leaveApplication.toDate),
-          totalDays,
-          reason: leaveApplication.reason || LEAVE_EMAIL_CONSTANTS.NOT_APPLICABLE,
-          approverName: approver
-            ? `${approver.firstName} ${approver.lastName}`
-            : LEAVE_EMAIL_CONSTANTS.SYSTEM_USER,
-          approvalDate: this.formatDateForEmail(new Date()),
-          remarks: approvalComment,
-          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.LEAVES}`,
-        },
-      });
+      // Send Email notification
+      if (employee.email) {
+        const subjectKey = isApproved ? EMAIL_SUBJECT.LEAVE_APPROVED : EMAIL_SUBJECT.LEAVE_REJECTED;
+
+        await this.emailService.sendMail({
+          receiverEmails: employee.email,
+          subject: subjectKey.replace('{leaveCategory}', leaveApplication.leaveCategory),
+          template: EMAIL_TEMPLATE.LEAVE_APPROVAL,
+          emailData: {
+            employeeName,
+            isApproved,
+            applicationId: leaveApplication.id.substring(0, 8).toUpperCase(),
+            leaveType: leaveApplication.leaveCategory,
+            leaveTypeClass,
+            leaveCategory:
+              leaveApplication.leaveType === LeaveType.HALF_DAY
+                ? LEAVE_EMAIL_CONSTANTS.HALF_DAY
+                : LEAVE_EMAIL_CONSTANTS.FULL_DAY,
+            fromDate: formattedFromDate,
+            toDate: formattedToDate,
+            totalDays,
+            reason: leaveApplication.reason || LEAVE_EMAIL_CONSTANTS.NOT_APPLICABLE,
+            approverName,
+            approvalDate: this.formatDateForEmail(new Date()),
+            remarks: approvalComment,
+            portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.LEAVES}`,
+          },
+        });
+      }
+
+      // Send WhatsApp notification (if user has opted in)
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (employee.whatsappOptIn && whatsappNumber) {
+        await this.whatsAppService.sendLeaveApproval(
+          whatsappNumber,
+          {
+            employeeName,
+            leaveType: leaveApplication.leaveCategory,
+            fromDate: formattedFromDate,
+            toDate: formattedToDate,
+            totalDays: String(totalDays),
+            approverName,
+            remarks: approvalComment,
+            isApproved,
+          },
+          {
+            referenceId: leaveApplication.id,
+            recipientId: employee.id,
+          },
+        );
+      }
     } catch (error) {
-      // Log error but don't fail the approval process
-      Logger.error('Failed to send leave approval email:', error);
+      Logger.error('Failed to send leave approval notification:', error);
     }
   }
 

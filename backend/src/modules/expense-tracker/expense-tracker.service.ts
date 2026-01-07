@@ -43,6 +43,7 @@ import {
 import { ExpenseFilesService } from '../expense-files/expense-files.service';
 import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { UserService } from '../users/user.service';
 import { Environments } from 'env-configs';
 import {
@@ -62,6 +63,7 @@ export class ExpenseTrackerService {
     private readonly expenseFilesService: ExpenseFilesService,
     private readonly dateTimeService: DateTimeService,
     private readonly emailService: EmailService,
+    private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
   ) {}
 
@@ -792,8 +794,8 @@ export class ExpenseTrackerService {
           entrySourceType,
         );
 
-        // Send approval email notification
-        this.sendExpenseApprovalEmail(expense, approvalBy, approvalStatus, approvalComment);
+        // Send approval notification (email + WhatsApp)
+        this.sendExpenseApprovalNotification(expense, approvalBy, approvalStatus, approvalComment);
 
         return {
           message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_APPROVAL_SUCCESS.replace(
@@ -1208,7 +1210,7 @@ export class ExpenseTrackerService {
     };
   }
 
-  private async sendExpenseApprovalEmail(
+  private async sendExpenseApprovalNotification(
     expense: ExpenseTrackerEntity,
     approvalById: string,
     approvalStatus: string,
@@ -1218,37 +1220,63 @@ export class ExpenseTrackerService {
       const approver = await this.userService.findOne({ id: approvalById });
       const employee = expense.user;
 
-      if (!employee?.email) return;
+      if (!employee) return;
 
       const isApproved = approvalStatus === ApprovalStatus.APPROVED;
-      const subjectKey = isApproved
-        ? EMAIL_SUBJECT.EXPENSE_APPROVED
-        : EMAIL_SUBJECT.EXPENSE_REJECTED;
+      const approverName = approver
+        ? `${approver.firstName} ${approver.lastName}`
+        : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
+      const amount = `₹${Number(expense.amount).toLocaleString('en-IN')}`;
 
-      await this.emailService.sendMail({
-        receiverEmails: employee.email,
-        subject: subjectKey.replace('{category}', expense.category),
-        template: EMAIL_TEMPLATE.EXPENSE_APPROVAL,
-        emailData: {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          isApproved,
-          expenseId: expense.id.substring(0, 8).toUpperCase(),
-          amount: `₹${Number(expense.amount).toLocaleString('en-IN')}`,
-          category: expense.category,
-          expenseDate: this.formatDateForEmail(expense.expenseDate),
-          description: expense.description || EXPENSE_EMAIL_CONSTANTS.NOT_APPLICABLE,
-          paymentMode: expense.paymentMode,
-          approverName: approver
-            ? `${approver.firstName} ${approver.lastName}`
-            : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
-          approvalDate: this.formatDateForEmail(new Date()),
-          remarks: approvalComment,
-          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.EXPENSES}`,
-        },
-      });
+      // Send Email notification
+      if (employee.email) {
+        const subjectKey = isApproved
+          ? EMAIL_SUBJECT.EXPENSE_APPROVED
+          : EMAIL_SUBJECT.EXPENSE_REJECTED;
+
+        await this.emailService.sendMail({
+          receiverEmails: employee.email,
+          subject: subjectKey.replace('{category}', expense.category),
+          template: EMAIL_TEMPLATE.EXPENSE_APPROVAL,
+          emailData: {
+            employeeName,
+            isApproved,
+            expenseId: expense.id.substring(0, 8).toUpperCase(),
+            amount,
+            category: expense.category,
+            expenseDate: this.formatDateForEmail(expense.expenseDate),
+            description: expense.description || EXPENSE_EMAIL_CONSTANTS.NOT_APPLICABLE,
+            paymentMode: expense.paymentMode,
+            approverName,
+            approvalDate: this.formatDateForEmail(new Date()),
+            remarks: approvalComment,
+            portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.EXPENSES}`,
+          },
+        });
+      }
+
+      // Send WhatsApp notification (if user has opted in)
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (employee.whatsappOptIn && whatsappNumber) {
+        await this.whatsAppService.sendExpenseApproval(
+          whatsappNumber,
+          {
+            employeeName,
+            amount,
+            category: expense.category,
+            approverName,
+            remarks: approvalComment,
+            isApproved,
+          },
+          {
+            referenceId: expense.id,
+            recipientId: employee.id,
+          },
+        );
+      }
     } catch (error) {
-      // Log error but don't fail the approval process
-      Logger.error('Failed to send expense approval email:', error);
+      Logger.error('Failed to send expense approval notification:', error);
     }
   }
 

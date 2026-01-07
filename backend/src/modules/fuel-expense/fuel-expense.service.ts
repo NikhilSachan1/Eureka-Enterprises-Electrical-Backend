@@ -51,6 +51,7 @@ import {
   buildFuelExpenseSummaryQuery,
 } from './queries/fuel-expense.queries';
 import { EmailService } from '../common/email/email.service';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { Environments } from 'env-configs';
 import {
   EMAIL_SUBJECT,
@@ -73,6 +74,7 @@ export class FuelExpenseService {
     private readonly utilityService: UtilityService,
     private readonly dateTimeService: DateTimeService,
     private readonly emailService: EmailService,
+    private readonly whatsAppService: WhatsAppService,
   ) {}
 
   async create(
@@ -893,8 +895,13 @@ export class FuelExpenseService {
           entityManager,
         );
 
-        // Send approval email notification
-        this.sendFuelExpenseApprovalEmail(fuelExpense, approvalBy, approvalStatus, approvalReason);
+        // Send approval notification (email + WhatsApp)
+        this.sendFuelExpenseApprovalNotification(
+          fuelExpense,
+          approvalBy,
+          approvalStatus,
+          approvalReason,
+        );
 
         return {
           message:
@@ -1391,7 +1398,7 @@ export class FuelExpenseService {
     }
   }
 
-  private async sendFuelExpenseApprovalEmail(
+  private async sendFuelExpenseApprovalNotification(
     fuelExpense: FuelExpenseEntity,
     approvalById: string,
     approvalStatus: string,
@@ -1401,7 +1408,7 @@ export class FuelExpenseService {
       const approver = await this.userService.findOne({ id: approvalById });
       const employee = fuelExpense.user;
 
-      if (!employee?.email) return;
+      if (!employee) return;
 
       const isApproved = approvalStatus === ApprovalStatus.APPROVED;
 
@@ -1426,37 +1433,63 @@ export class FuelExpenseService {
           ? (Number(fuelExpense.fuelAmount) / Number(fuelExpense.fuelLiters)).toFixed(2)
           : '0';
 
-      const subjectKey = isApproved
-        ? EMAIL_SUBJECT.FUEL_EXPENSE_APPROVED
-        : EMAIL_SUBJECT.FUEL_EXPENSE_REJECTED;
+      const approverName = approver
+        ? `${approver.firstName} ${approver.lastName}`
+        : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
+      const amount = `₹${Number(fuelExpense.fuelAmount).toLocaleString('en-IN')}`;
 
-      await this.emailService.sendMail({
-        receiverEmails: employee.email,
-        subject: subjectKey.replace('{vehicleNo}', vehicleNo),
-        template: EMAIL_TEMPLATE.FUEL_EXPENSE_APPROVAL,
-        emailData: {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          isApproved,
-          expenseId: fuelExpense.id.substring(0, 8).toUpperCase(),
-          amount: `₹${Number(fuelExpense.fuelAmount).toLocaleString('en-IN')}`,
-          fuelLiters: Number(fuelExpense.fuelLiters).toFixed(2),
-          vehicleNumber: vehicleNo,
-          fuelType,
-          fuelTypeClass,
-          fuelDate: this.formatDateForEmail(fuelExpense.fillDate),
-          odometerReading: Number(fuelExpense.odometerKm).toLocaleString('en-IN'),
-          pricePerLiter: `₹${pricePerLiter}`,
-          approverName: approver
-            ? `${approver.firstName} ${approver.lastName}`
-            : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
-          approvalDate: this.formatDateForEmail(new Date()),
-          remarks: approvalReason,
-          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.FUEL_EXPENSES}`,
-        },
-      });
+      // Send Email notification
+      if (employee.email) {
+        const subjectKey = isApproved
+          ? EMAIL_SUBJECT.FUEL_EXPENSE_APPROVED
+          : EMAIL_SUBJECT.FUEL_EXPENSE_REJECTED;
+
+        await this.emailService.sendMail({
+          receiverEmails: employee.email,
+          subject: subjectKey.replace('{vehicleNo}', vehicleNo),
+          template: EMAIL_TEMPLATE.FUEL_EXPENSE_APPROVAL,
+          emailData: {
+            employeeName,
+            isApproved,
+            expenseId: fuelExpense.id.substring(0, 8).toUpperCase(),
+            amount,
+            fuelLiters: Number(fuelExpense.fuelLiters).toFixed(2),
+            vehicleNumber: vehicleNo,
+            fuelType,
+            fuelTypeClass,
+            fuelDate: this.formatDateForEmail(fuelExpense.fillDate),
+            odometerReading: Number(fuelExpense.odometerKm).toLocaleString('en-IN'),
+            pricePerLiter: `₹${pricePerLiter}`,
+            approverName,
+            approvalDate: this.formatDateForEmail(new Date()),
+            remarks: approvalReason,
+            portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.FUEL_EXPENSES}`,
+          },
+        });
+      }
+
+      // Send WhatsApp notification (if user has opted in)
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (employee.whatsappOptIn && whatsappNumber) {
+        await this.whatsAppService.sendFuelExpenseApproval(
+          whatsappNumber,
+          {
+            employeeName,
+            amount,
+            vehicleNumber: vehicleNo,
+            approverName,
+            remarks: approvalReason,
+            isApproved,
+          },
+          {
+            referenceId: fuelExpense.id,
+            recipientId: employee.id,
+          },
+        );
+      }
     } catch (error) {
-      // Log error but don't fail the approval process
-      Logger.error('Failed to send fuel expense approval email:', error);
+      Logger.error('Failed to send fuel expense approval notification:', error);
     }
   }
 

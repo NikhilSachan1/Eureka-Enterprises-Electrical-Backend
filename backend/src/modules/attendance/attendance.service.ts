@@ -37,6 +37,7 @@ import { AttendanceHistoryDto } from './dto/attendance-history.dto';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { UserService } from '../users/user.service';
 import { Environments } from 'env-configs';
 import {
@@ -54,6 +55,7 @@ export class AttendanceService {
     private readonly utilityService: UtilityService,
     private readonly dateTimeService: DateTimeService,
     private readonly emailService: EmailService,
+    private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
   ) {}
 
@@ -1610,8 +1612,13 @@ export class AttendanceService {
         entityManager,
       );
 
-      // Send approval email notification
-      this.sendAttendanceApprovalEmail(attendance, approvalBy, approvalStatus, approvalComment);
+      // Send approval notification (email + WhatsApp)
+      this.sendAttendanceApprovalNotification(
+        attendance,
+        approvalBy,
+        approvalStatus,
+        approvalComment,
+      );
 
       return {
         message: ATTENDANCE_RESPONSES.ATTENDANCE_APPROVAL_SUCCESS.replace(
@@ -1625,7 +1632,7 @@ export class AttendanceService {
     });
   }
 
-  private async sendAttendanceApprovalEmail(
+  private async sendAttendanceApprovalNotification(
     attendance: AttendanceEntity,
     approvalById: string,
     approvalStatus: string,
@@ -1635,7 +1642,7 @@ export class AttendanceService {
       const approver = await this.userService.findOne({ id: approvalById });
       const employee = attendance.user;
 
-      if (!employee?.email) return;
+      if (!employee) return;
 
       const isApproved = approvalStatus === ApprovalStatus.APPROVED;
       const checkInTime = attendance.checkInTime ? this.formatTime(attendance.checkInTime) : 'N/A';
@@ -1654,32 +1661,57 @@ export class AttendanceService {
       }
 
       const dateStr = this.formatDateForEmail(attendance.attendanceDate);
-      const subjectKey = isApproved
-        ? EMAIL_SUBJECT.ATTENDANCE_APPROVED
-        : EMAIL_SUBJECT.ATTENDANCE_REJECTED;
+      const approverName = approver
+        ? `${approver.firstName} ${approver.lastName}`
+        : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER;
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
 
-      await this.emailService.sendMail({
-        receiverEmails: employee.email,
-        subject: subjectKey.replace('{date}', dateStr),
-        template: EMAIL_TEMPLATE.ATTENDANCE_APPROVAL,
-        emailData: {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          isApproved,
-          attendanceDate: dateStr,
-          checkInTime,
-          checkOutTime,
-          totalHours,
-          approverName: approver
-            ? `${approver.firstName} ${approver.lastName}`
-            : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER,
-          approvalDate: this.formatDateForEmail(new Date()),
-          remarks: approvalComment,
-          portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.ATTENDANCE}`,
-        },
-      });
+      // Send Email notification
+      if (employee.email) {
+        const subjectKey = isApproved
+          ? EMAIL_SUBJECT.ATTENDANCE_APPROVED
+          : EMAIL_SUBJECT.ATTENDANCE_REJECTED;
+
+        await this.emailService.sendMail({
+          receiverEmails: employee.email,
+          subject: subjectKey.replace('{date}', dateStr),
+          template: EMAIL_TEMPLATE.ATTENDANCE_APPROVAL,
+          emailData: {
+            employeeName,
+            isApproved,
+            attendanceDate: dateStr,
+            checkInTime,
+            checkOutTime,
+            totalHours,
+            approverName,
+            approvalDate: this.formatDateForEmail(new Date()),
+            remarks: approvalComment,
+            portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.ATTENDANCE}`,
+          },
+        });
+      }
+
+      // Send WhatsApp notification (if user has opted in)
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (employee.whatsappOptIn && whatsappNumber) {
+        await this.whatsAppService.sendAttendanceApproval(
+          whatsappNumber,
+          {
+            employeeName,
+            date: dateStr,
+            approverName,
+            remarks: approvalComment,
+            isApproved,
+          },
+          {
+            referenceId: attendance.id,
+            recipientId: employee.id,
+          },
+        );
+      }
     } catch (error) {
       // Log error but don't fail the approval process
-      Logger.error('Failed to send attendance approval email:', error);
+      Logger.error('Failed to send attendance approval notification:', error);
     }
   }
 
