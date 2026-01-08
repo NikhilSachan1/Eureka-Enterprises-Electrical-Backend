@@ -193,6 +193,40 @@ export class WhatsAppService {
     });
   }
 
+  async sendAttendanceRegularization(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      date: string;
+      originalStatus: string;
+      newStatus: string;
+      regularizedByName: string;
+      notes?: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ATTENDANCE_REGULARIZED,
+      templateData: {
+        employeeName: data.employeeName,
+        date: data.date,
+        originalStatus: data.originalStatus,
+        newStatus: data.newStatus,
+        regularizedByName: data.regularizedByName,
+        notes: data.notes,
+      },
+      category: CommunicationCategory.ATTENDANCE_REGULARIZATION,
+      referenceId: options?.referenceId,
+      referenceType: 'ATTENDANCE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
   async sendExpenseApproval(
     phoneNumber: string,
     data: {

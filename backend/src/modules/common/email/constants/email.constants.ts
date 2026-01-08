@@ -35,6 +35,7 @@ export const EMAIL_SUBJECT = {
   // Approval Notifications
   ATTENDANCE_APPROVED: 'Attendance Approved - {date}',
   ATTENDANCE_REJECTED: 'Attendance Rejected - {date}',
+  ATTENDANCE_REGULARIZED: 'Attendance Regularized - {date}',
   EXPENSE_APPROVED: 'Expense Approved - {category}',
   EXPENSE_REJECTED: 'Expense Rejected - {category}',
   FUEL_EXPENSE_APPROVED: 'Fuel Expense Approved - {vehicleNo}',
@@ -60,6 +61,7 @@ export const EMAIL_TEMPLATE = {
   FNF_DOCUMENTS: 'fnfDocuments',
   // Approval Notifications
   ATTENDANCE_APPROVAL: 'attendanceApproval',
+  ATTENDANCE_REGULARIZATION: 'attendanceRegularization',
   EXPENSE_APPROVAL: 'expenseApproval',
   FUEL_EXPENSE_APPROVAL: 'fuelExpenseApproval',
   LEAVE_APPROVAL: 'leaveApproval',
@@ -74,6 +76,7 @@ export const EMAIL_REDIRECT_ROUTES = {
 
 export const TEMPLATE_CATEGORY_MAP: Record<string, CommunicationCategory> = {
   attendanceApproval: CommunicationCategory.ATTENDANCE_APPROVAL,
+  attendanceRegularization: CommunicationCategory.ATTENDANCE_REGULARIZATION,
   expenseApproval: CommunicationCategory.EXPENSE_APPROVAL,
   fuelExpenseApproval: CommunicationCategory.FUEL_EXPENSE_APPROVAL,
   leaveApproval: CommunicationCategory.LEAVE_APPROVAL,

@@ -4,6 +4,7 @@ export const WHATSAPP_SENDER = 'Eureka HRMS';
 export const WHATSAPP_TEMPLATE_KEYS = {
   ATTENDANCE_APPROVED: 'ATTENDANCE_APPROVED',
   ATTENDANCE_REJECTED: 'ATTENDANCE_REJECTED',
+  ATTENDANCE_REGULARIZED: 'ATTENDANCE_REGULARIZED',
   EXPENSE_APPROVED: 'EXPENSE_APPROVED',
   EXPENSE_REJECTED: 'EXPENSE_REJECTED',
   FUEL_EXPENSE_APPROVED: 'FUEL_EXPENSE_APPROVED',
@@ -44,6 +45,26 @@ export const WHATSAPP_TEMPLATES = {
         data.date
       }* has been rejected by *${data.approverName}*.${
         data.remarks ? `\n\nReason: ${data.remarks}` : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ATTENDANCE_REGULARIZED: {
+    name: 'attendance_regularized',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      date: string;
+      originalStatus: string;
+      newStatus: string;
+      regularizedByName: string;
+      notes?: string;
+    }) =>
+      `🔄 *Attendance Regularized*\n\nHi *${data.employeeName}*,\n\nYour attendance for *${
+        data.date
+      }* has been regularized by *${data.regularizedByName}*.\n\n📊 *Status Change:* ${
+        data.originalStatus
+      } → ${data.newStatus}${
+        data.notes ? `\n\n📝 *Notes:* ${data.notes}` : ''
       }\n\n- *${WHATSAPP_SENDER}*`,
   },
 

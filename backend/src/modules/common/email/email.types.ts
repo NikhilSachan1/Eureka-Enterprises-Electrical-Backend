@@ -73,6 +73,13 @@ export interface IEmailDataValues {
   checkOutTime?: string;
   totalHours?: string;
 
+  // Attendance Regularization
+  originalStatus?: string;
+  newStatus?: string;
+  regularizedByName?: string;
+  regularizedOn?: string;
+  notes?: string;
+
   // Expense Approval
   expenseId?: string;
   amount?: string;
@@ -223,5 +230,19 @@ export interface ILeaveApprovalEmailData {
   approverName: string;
   approvalDate: string;
   remarks?: string;
+  portalUrl: string;
+}
+
+export interface IAttendanceRegularizationEmailData {
+  employeeName: string;
+  attendanceDate: string;
+  originalStatus: string;
+  newStatus: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  totalHours?: string;
+  regularizedByName: string;
+  regularizedOn: string;
+  notes?: string;
   portalUrl: string;
 }

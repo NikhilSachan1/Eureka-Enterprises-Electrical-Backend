@@ -778,6 +778,19 @@ export class AttendanceService {
         default:
           throw new BadRequestException(ATTENDANCE_ERRORS.INVALID_STATUS);
       }
+
+      // Send regularization notification to the employee
+      await this.sendRegularizationNotification(
+        userId,
+        userId, // regularizedBy is the same as userId in current implementation
+        existingAttendance.attendanceDate,
+        existingAttendance.status,
+        status,
+        checkInTimeUTC,
+        checkOutTimeUTC,
+        notes,
+      );
+
       return {
         message: ATTENDANCE_RESPONSES.ATTENDANCE_REGULARIZED,
         attendanceId,
@@ -1723,5 +1736,85 @@ export class AttendanceService {
   private formatTime(date: Date | string): string {
     const d = new Date(date);
     return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
+  async sendRegularizationNotification(
+    employeeId: string,
+    regularizedById: string,
+    attendanceDate: Date | string,
+    originalStatus: string,
+    newStatus: string,
+    checkInTime?: Date,
+    checkOutTime?: Date,
+    notes?: string,
+  ) {
+    try {
+      const employee = await this.userService.findOne({ id: employeeId });
+      const regularizedBy = await this.userService.findOne({ id: regularizedById });
+
+      if (!employee) return;
+
+      const employeeName = `${employee.firstName} ${employee.lastName}`;
+      const regularizedByName = regularizedBy
+        ? `${regularizedBy.firstName} ${regularizedBy.lastName}`
+        : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER;
+
+      const dateStr = this.formatDateForEmail(attendanceDate);
+      const checkInTimeStr = checkInTime ? this.formatTime(checkInTime) : null;
+      const checkOutTimeStr = checkOutTime ? this.formatTime(checkOutTime) : null;
+
+      // Calculate total hours
+      let totalHours: string | null = null;
+      if (checkInTime && checkOutTime) {
+        const diffMs = new Date(checkOutTime).getTime() - new Date(checkInTime).getTime();
+        const hours = Math.floor(diffMs / (1000 * 60 * 60));
+        const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        totalHours = `${hours}h ${minutes}m`;
+      }
+
+      // Send Email notification
+      if (employee.email) {
+        await this.emailService.sendMail({
+          receiverEmails: employee.email,
+          subject: EMAIL_SUBJECT.ATTENDANCE_REGULARIZED.replace('{date}', dateStr),
+          template: EMAIL_TEMPLATE.ATTENDANCE_REGULARIZATION,
+          emailData: {
+            employeeName,
+            attendanceDate: dateStr,
+            originalStatus: originalStatus.toUpperCase().replace(/_/g, ' '),
+            newStatus: newStatus.toUpperCase().replace(/_/g, ' '),
+            checkInTime: checkInTimeStr,
+            checkOutTime: checkOutTimeStr,
+            totalHours,
+            regularizedByName,
+            regularizedOn: this.formatDateForEmail(new Date()),
+            notes,
+            portalUrl: `${Environments.FE_BASE_URL}${EMAIL_REDIRECT_ROUTES.ATTENDANCE}`,
+          },
+        });
+      }
+
+      // Send WhatsApp notification (if user has opted in)
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (employee.whatsappOptIn && whatsappNumber) {
+        await this.whatsAppService.sendAttendanceRegularization(
+          whatsappNumber,
+          {
+            employeeName,
+            date: dateStr,
+            originalStatus: originalStatus.toUpperCase().replace(/_/g, ' '),
+            newStatus: newStatus.toUpperCase().replace(/_/g, ' '),
+            regularizedByName,
+            notes,
+          },
+          {
+            referenceId: employeeId,
+            recipientId: employee.id,
+          },
+        );
+      }
+    } catch (error) {
+      Logger.error('Failed to send attendance regularization notification:', error);
+    }
   }
 }
