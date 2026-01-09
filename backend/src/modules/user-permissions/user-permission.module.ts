@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { UserPermissionController } from './user-permission.controller';
 import { UserPermissionService } from './user-permission.service';
 import { UserPermissionRepository } from './user-permission.repository';
@@ -16,7 +16,7 @@ import { UsersModule } from '../users/user.module';
     SharedModule,
     PermissionsModule,
     RolesModule,
-    UsersModule,
+    forwardRef(() => UsersModule),
   ],
   controllers: [UserPermissionController],
   providers: [UserPermissionService, UserPermissionRepository, UtilityService],

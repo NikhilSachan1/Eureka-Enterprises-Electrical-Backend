@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, forwardRef, Inject, Injectable } from '@nestjs/common';
 import { UserPermissionRepository } from './user-permission.repository';
 import { EntityManager } from 'typeorm';
 import { UserPermissionEntity } from './entities/user-permission.entity';
@@ -26,6 +26,7 @@ import { NotFoundException } from '@nestjs/common';
 export class UserPermissionService {
   constructor(
     private readonly userPermissionRepository: UserPermissionRepository,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly permissionService: PermissionService,
   ) {}
@@ -282,6 +283,23 @@ export class UserPermissionService {
         totalRecords: parseInt(countResult[0].total_users),
         systemTotalPermissions: users.length > 0 ? parseInt(users[0].system_total_permissions) : 0,
       };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async deleteAllForUser(
+    userId: string,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{ deletedCount: number }> {
+    try {
+      const result = await this.userPermissionRepository.update(
+        { userId, deletedAt: null },
+        { deletedBy, deletedAt: new Date() },
+        entityManager,
+      );
+      return { deletedCount: result.affected || 0 };
     } catch (error) {
       throw error;
     }

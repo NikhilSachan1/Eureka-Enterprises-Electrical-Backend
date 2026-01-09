@@ -341,5 +341,3 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
     params,
   };
 };
-
-// TODO: Confirm the query is correct, whenever tested with the frontend.
