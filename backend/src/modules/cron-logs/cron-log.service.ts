@@ -15,12 +15,26 @@ import {
   buildCronLogStatsQuery,
   buildRecentFailuresQuery,
 } from './queries/cron-log.queries';
+import { EmailService } from '../common/email/email.service';
+import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
+import { ConfigurationService } from '../configurations/configuration.service';
+import { ConfigSettingService } from '../config-settings/config-setting.service';
+import {
+  CONFIGURATION_KEYS,
+  CONFIGURATION_MODULES,
+  COMPANY_DETAILS,
+} from 'src/utils/master-constants/master-constants';
 
 @Injectable()
 export class CronLogService {
   private readonly logger = new Logger(CronLogService.name);
 
-  constructor(private readonly cronLogRepository: CronLogRepository) {}
+  constructor(
+    private readonly cronLogRepository: CronLogRepository,
+    private readonly emailService: EmailService,
+    private readonly configurationService: ConfigurationService,
+    private readonly configSettingService: ConfigSettingService,
+  ) {}
 
   async start(
     jobName: string,
@@ -89,16 +103,87 @@ export class CronLogService {
 
     this.logger.error(`[${log.jobName}] Failed after ${durationMs}ms - Error: ${errorMessage}`);
 
-    // TODO: Send email notification for failed cron jobs
-    // await this.emailService.sendCronFailureNotification({
-    //   jobName: log.jobName,
-    //   jobType: log.jobType,
-    //   errorMessage,
-    //   errorStack,
-    //   startedAt: log.startedAt,
-    //   failedAt: completedAt,
-    //   durationMs,
-    // });
+    // Send email notification for failed cron jobs
+    await this.sendCronFailureNotification({
+      jobName: log.jobName,
+      jobType: log.jobType,
+      errorMessage,
+      errorStack,
+      startedAt: log.startedAt,
+      failedAt: completedAt,
+      durationMs,
+    });
+  }
+
+  private async sendCronFailureNotification(data: {
+    jobName: string;
+    jobType: string;
+    errorMessage: string;
+    errorStack?: string;
+    startedAt: Date;
+    failedAt: Date;
+    durationMs: number;
+  }): Promise<void> {
+    try {
+      const recipientEmails = await this.getNotificationEmails();
+
+      if (recipientEmails.length === 0) {
+        this.logger.warn('No notification emails configured for cron failure alerts');
+        return;
+      }
+
+      await this.emailService.sendMail({
+        receiverEmails: recipientEmails,
+        subject: EMAIL_SUBJECT.CRON_FAILURE,
+        template: EMAIL_TEMPLATE.CRON_FAILURE,
+        emailData: {
+          jobName: data.jobName,
+          jobType: data.jobType,
+          errorMessage: data.errorMessage,
+          errorStack: data.errorStack,
+          startedAt: data.startedAt.toISOString(),
+          failedAt: data.failedAt.toISOString(),
+          durationMs: data.durationMs,
+          companyName: COMPANY_DETAILS.NAME,
+          currentYear: new Date().getFullYear(),
+        },
+      });
+
+      this.logger.log(`Cron failure notification sent for ${data.jobName}`);
+    } catch (error) {
+      this.logger.error('Failed to send cron failure notification:', error);
+    }
+  }
+
+  private async getNotificationEmails(): Promise<string[]> {
+    try {
+      const config = await this.configurationService.findOne({
+        where: {
+          key: CONFIGURATION_KEYS.NOTIFICATION_EMAILS,
+          module: CONFIGURATION_MODULES.SYSTEM,
+        },
+      });
+
+      if (!config) {
+        return [];
+      }
+
+      const configSetting = await this.configSettingService.findOne({
+        where: {
+          configId: config.id,
+          isActive: true,
+        },
+      });
+
+      if (!configSetting?.value?.cronFailureEmails) {
+        return [];
+      }
+
+      return configSetting.value.cronFailureEmails;
+    } catch (error) {
+      this.logger.error('Error fetching notification emails:', error);
+      return [];
+    }
   }
 
   async execute<T>(

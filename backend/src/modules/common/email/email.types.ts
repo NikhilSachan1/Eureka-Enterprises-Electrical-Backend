@@ -117,6 +117,16 @@ export interface IEmailDataValues {
   toDate?: string;
   totalDays?: number;
   reason?: string;
+
+  // Cron Failure
+  jobName?: string;
+  jobType?: string;
+  errorMessage?: string;
+  errorStack?: string;
+  startedAt?: string;
+  failedAt?: string;
+  durationMs?: number;
+  serverName?: string;
 }
 
 export interface VehicleDocumentEmailItem {

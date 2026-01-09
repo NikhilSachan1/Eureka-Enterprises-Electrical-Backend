@@ -50,6 +50,9 @@ export enum CommunicationCategory {
   // Config
   FY_LEAVE_CONFIG_REMINDER = 'FY_LEAVE_CONFIG_REMINDER',
 
+  // System Alerts
+  CRON_FAILURE = 'CRON_FAILURE',
+
   // General
   OTHER = 'OTHER',
 }

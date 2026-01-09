@@ -1541,5 +1541,3 @@ export class LeaveApplicationsService {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   }
 }
-
-// TODO: Holiday validation is pending and need to be done in force leave and approvals logic.

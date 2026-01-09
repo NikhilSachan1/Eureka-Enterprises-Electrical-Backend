@@ -1,6 +1,7 @@
 import { CommunicationCategory } from '../../communication-logs/constants/communication-log.constants';
 
 export const EMAIL_SUBJECT = {
+  CRON_FAILURE: '🚨 ALERT: Eureka HRMS - Cron Job Failed',
   WELCOME_EMPLOYEE: '🎉 Welcome to Eureka HRMS - Your Account Details',
   FORGET_PASSWORD: 'Eureka HRMS - Password Reset Request',
   FY_LEAVE_CONFIG_REMINDER: 'Eureka HRMS - Financial Year Leave Configuration Reminder',
@@ -46,6 +47,7 @@ export const EMAIL_SUBJECT = {
 };
 
 export const EMAIL_TEMPLATE = {
+  CRON_FAILURE: 'cronFailure',
   WELCOME_EMPLOYEE: 'welcomeEmployee',
   FORGET_PASSWORD: 'forgetPassword',
   FY_LEAVE_CONFIG_REMINDER: 'fyLeaveConfigReminder',
@@ -97,4 +99,5 @@ export const TEMPLATE_CATEGORY_MAP: Record<string, CommunicationCategory> = {
   forgetPassword: CommunicationCategory.FORGET_PASSWORD,
   fyLeaveConfigReminder: CommunicationCategory.FY_LEAVE_CONFIG_REMINDER,
   welcomeEmployee: CommunicationCategory.WELCOME_EMPLOYEE,
+  cronFailure: CommunicationCategory.CRON_FAILURE,
 };
