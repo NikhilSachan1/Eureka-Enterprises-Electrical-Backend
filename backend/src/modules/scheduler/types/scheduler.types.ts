@@ -3,5 +3,6 @@ export interface NotificationEmailsConfig {
   hrEmails: string[];
   financeEmails: string[];
   assetManagerEmails: string[];
+  cronFailureEmails: string[];
   allNotificationEmails: string[];
 }

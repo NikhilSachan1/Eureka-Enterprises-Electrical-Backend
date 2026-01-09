@@ -5,18 +5,19 @@ export class SeedNotificationEmailsConfig1797000000000 implements MigrationInter
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create the configuration entry for notification_emails
-    await queryRunner.query(`
-      INSERT INTO configurations (id, key, module, description, "createdAt", "updatedAt")
-      VALUES (
-        gen_random_uuid(),
-        'notification_emails',
+    await queryRunner.query(
+      `INSERT INTO configurations (module, key, label, "valueType", description, "isEditable", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+       ON CONFLICT (module, key) DO NOTHING`,
+      [
         'system',
+        'notification_emails',
+        'Notification Emails',
+        'json',
         'Email addresses for system notifications (cron failures, alerts, etc.)',
-        NOW(),
-        NOW()
-      )
-      ON CONFLICT (key, module) DO NOTHING
-    `);
+        true,
+      ],
+    );
 
     // Get the configuration ID
     const configResult = await queryRunner.query(`

@@ -88,6 +88,7 @@ export class SchedulerService {
         hrEmails: emailConfig.hrEmails || [],
         financeEmails: emailConfig.financeEmails || [],
         assetManagerEmails: emailConfig.assetManagerEmails || [],
+        cronFailureEmails: emailConfig.cronFailureEmails || [],
         allNotificationEmails,
       };
     } catch (error) {
@@ -129,6 +130,7 @@ export class SchedulerService {
       hrEmails: [],
       financeEmails: [],
       assetManagerEmails: [],
+      cronFailureEmails: [],
       allNotificationEmails: [],
     };
   }
