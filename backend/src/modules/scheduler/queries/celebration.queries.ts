@@ -127,3 +127,95 @@ export const getYearsText = (years: number): string => {
   }
   return `${years} Years`;
 };
+
+/**
+ * Parameterized queries for manual trigger with specific date
+ */
+export const getBirthdayEmployeesForDateQuery = (targetDate: string) => {
+  return {
+    query: `
+      SELECT
+        u.id,
+        u."firstName",
+        u."lastName",
+        u.email,
+        u."dateOfBirth",
+        u."profilePicture",
+        u.designation
+      FROM users u
+      WHERE u."deletedAt" IS NULL
+        AND u.status = 'ACTIVE'
+        AND u."dateOfBirth" IS NOT NULL
+        AND (
+          -- Normal case: birthday matches target date's month and day
+          (
+            EXTRACT(MONTH FROM u."dateOfBirth") = EXTRACT(MONTH FROM $1::date)
+            AND EXTRACT(DAY FROM u."dateOfBirth") = EXTRACT(DAY FROM $1::date)
+          )
+          OR
+          -- Leap year case: Feb 29 birthdays celebrated on Feb 28 in non-leap years
+          (
+            EXTRACT(MONTH FROM u."dateOfBirth") = 2
+            AND EXTRACT(DAY FROM u."dateOfBirth") = 29
+            AND EXTRACT(MONTH FROM $1::date) = 2
+            AND EXTRACT(DAY FROM $1::date) = 28
+            AND NOT (
+              EXTRACT(YEAR FROM $1::date)::int % 4 = 0
+              AND (
+                EXTRACT(YEAR FROM $1::date)::int % 100 != 0
+                OR EXTRACT(YEAR FROM $1::date)::int % 400 = 0
+              )
+            )
+          )
+        )
+      ORDER BY u."firstName", u."lastName"
+    `,
+    params: [targetDate],
+  };
+};
+
+export const getAnniversaryEmployeesForDateQuery = (targetDate: string) => {
+  return {
+    query: `
+      SELECT
+        u.id,
+        u."firstName",
+        u."lastName",
+        u.email,
+        u."dateOfJoining",
+        u."profilePicture",
+        u.designation,
+        EXTRACT(YEAR FROM AGE($1::date, u."dateOfJoining"))::int as "yearsOfService"
+      FROM users u
+      WHERE u."deletedAt" IS NULL
+        AND u.status = 'ACTIVE'
+        AND u."dateOfJoining" IS NOT NULL
+        -- Must have completed at least 1 year
+        AND u."dateOfJoining" <= $1::date - INTERVAL '1 year'
+        AND (
+          -- Normal case: anniversary matches target date's month and day
+          (
+            EXTRACT(MONTH FROM u."dateOfJoining") = EXTRACT(MONTH FROM $1::date)
+            AND EXTRACT(DAY FROM u."dateOfJoining") = EXTRACT(DAY FROM $1::date)
+          )
+          OR
+          -- Leap year case: Feb 29 anniversaries celebrated on Feb 28 in non-leap years
+          (
+            EXTRACT(MONTH FROM u."dateOfJoining") = 2
+            AND EXTRACT(DAY FROM u."dateOfJoining") = 29
+            AND EXTRACT(MONTH FROM $1::date) = 2
+            AND EXTRACT(DAY FROM $1::date) = 28
+            AND NOT (
+              EXTRACT(YEAR FROM $1::date)::int % 4 = 0
+              AND (
+                EXTRACT(YEAR FROM $1::date)::int % 100 != 0
+                OR EXTRACT(YEAR FROM $1::date)::int % 400 = 0
+              )
+            )
+          )
+        )
+      ORDER BY "yearsOfService" DESC, u."firstName", u."lastName"
+    `,
+    params: [targetDate],
+  };
+};

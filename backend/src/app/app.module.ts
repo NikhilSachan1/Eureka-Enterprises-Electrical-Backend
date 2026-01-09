@@ -44,6 +44,7 @@ import { PayrollModule } from 'src/modules/payroll/payroll.module';
 import { DateTimeModule } from 'src/utils/datetime';
 import { TimezoneInterceptor } from 'src/utils/middleware/timezone.interceptor';
 import { CronLogModule } from 'src/modules/cron-logs/cron-log.module';
+import { CronTriggerModule } from 'src/modules/cron-trigger/cron-trigger.module';
 import { AuditLogModule } from 'src/modules/audit-logs/audit-log.module';
 import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/request-audit.interceptor';
 import { FnfModule } from 'src/modules/fnf/fnf.module';
@@ -88,6 +89,7 @@ import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
     SchedulerModule,
     DateTimeModule,
     CronLogModule,
+    CronTriggerModule,
     AuditLogModule,
     FnfModule,
     CommunicationLogModule,

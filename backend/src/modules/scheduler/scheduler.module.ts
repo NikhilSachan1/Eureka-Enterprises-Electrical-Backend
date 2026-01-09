@@ -51,6 +51,21 @@ import { CronLogModule } from '../cron-logs/cron-log.module';
     // Orchestrator (manages grouped crons)
     CronOrchestratorService,
   ],
-  exports: [SchedulerService],
+  exports: [
+    SchedulerService,
+    // Export cron services for manual triggering
+    AttendanceCronService,
+    LeaveCronService,
+    PayrollCronService,
+    AnnouncementCronService,
+    VehicleCronService,
+    AssetCronService,
+    CardCronService,
+    ExpenseCronService,
+    CelebrationCronService,
+    SalaryStructureCronService,
+    ConfigSettingCronService,
+    CronOrchestratorService,
+  ],
 })
 export class SchedulerModule {}

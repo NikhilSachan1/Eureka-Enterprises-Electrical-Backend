@@ -173,9 +173,12 @@ export class LeaveCronService {
   }
 
   /**
-   * Direct execution method - called by orchestrator
+   * Direct execution method - called by orchestrator or manual trigger
+   * @param targetYear - Optional year to process (e.g., 2025 for FY 2025-26)
    */
-  async handleFYLeaveConfigAutoCopyDirect(): Promise<FYLeaveConfigAutoCopyResult> {
+  async handleFYLeaveConfigAutoCopyDirect(
+    targetYear?: number,
+  ): Promise<FYLeaveConfigAutoCopyResult> {
     const cronName = CRON_NAMES.FY_LEAVE_CONFIG_AUTO_COPY;
 
     const result: FYLeaveConfigAutoCopyResult = {
@@ -184,7 +187,10 @@ export class LeaveCronService {
       errors: [],
     };
 
-    const currentDate = this.schedulerService.getCurrentDateIST();
+    // Use target year or current date to calculate FY
+    const currentDate = targetYear
+      ? new Date(targetYear, 3, 1) // April 1st of target year
+      : this.schedulerService.getCurrentDateIST();
     const { previousFY, currentFY, newFYEffectiveFrom, newFYEffectiveTo } =
       this.calculateFYDates(currentDate);
 
@@ -338,9 +344,10 @@ export class LeaveCronService {
   }
 
   /**
-   * Direct execution method - called by orchestrator
+   * Direct execution method - called by orchestrator or manual trigger
+   * @param targetYear - Optional year to process (e.g., 2025 for FY 2025-26)
    */
-  async handleLeaveCarryForwardDirect(): Promise<LeaveCarryForwardResult> {
+  async handleLeaveCarryForwardDirect(targetYear?: number): Promise<LeaveCarryForwardResult> {
     const cronName = CRON_NAMES.LEAVE_CARRY_FORWARD;
 
     const result: LeaveCarryForwardResult = {
@@ -349,7 +356,10 @@ export class LeaveCronService {
       errors: [],
     };
 
-    const currentDate = this.schedulerService.getCurrentDateIST();
+    // Use target year or current date to calculate FY
+    const currentDate = targetYear
+      ? new Date(targetYear, 3, 1) // April 1st of target year
+      : this.schedulerService.getCurrentDateIST();
     const { currentFY } = this.calculateFYDates(currentDate);
 
     // Get leave categories config for current FY
@@ -640,6 +650,112 @@ export class LeaveCronService {
 
       return result;
     });
+  }
+
+  /**
+   * Manual trigger for monthly leave accrual with specific month/year
+   */
+  async handleMonthlyLeaveAccrualManual(
+    targetMonth?: number,
+    targetYear?: number,
+  ): Promise<MonthlyLeaveAccrualResult> {
+    const cronName = CRON_NAMES.MONTHLY_LEAVE_ACCRUAL;
+
+    const result: MonthlyLeaveAccrualResult = {
+      usersProcessed: 0,
+      categoriesProcessed: 0,
+      leavesCredited: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    // Use provided month/year or default to current
+    let effectiveDate: Date;
+    if (targetMonth && targetYear) {
+      effectiveDate = new Date(targetYear, targetMonth - 1, 1);
+    } else {
+      effectiveDate = this.schedulerService.getCurrentDateIST();
+    }
+
+    const financialYear = this.utilityService.getFinancialYear(effectiveDate);
+    const currentMonth = this.getMonthInFinancialYear(effectiveDate);
+
+    this.logger.log(
+      `[${cronName}] Manual trigger - Processing for FY: ${financialYear}, Month in FY: ${currentMonth}`,
+    );
+
+    const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(financialYear);
+
+    if (!leaveCategoriesConfig) {
+      this.logger.warn(`[${cronName}] No leave categories config found for ${financialYear}`);
+      return result;
+    }
+
+    const leaveConfigId = await this.getLeaveConfigSettingId(financialYear);
+
+    const { query: usersQuery, params: usersParams } = getActiveUsersQuery();
+    const activeUsers: Array<{ id: string }> = await this.dataSource.query(usersQuery, usersParams);
+
+    if (activeUsers.length === 0) {
+      this.logger.log(`[${cronName}] No active users found`);
+      return result;
+    }
+
+    this.logger.log(`[${cronName}] Processing ${activeUsers.length} active users`);
+
+    const leaveCategories = Object.keys(leaveCategoriesConfig);
+
+    await this.dataSource.transaction(async (entityManager) => {
+      for (const category of leaveCategories) {
+        const categoryConfig = leaveCategoriesConfig[category]?.actual;
+
+        if (!categoryConfig) {
+          this.logger.warn(`[${cronName}] No config found for category: ${category}`);
+          continue;
+        }
+
+        if (categoryConfig.creditFrequency !== 'monthly') {
+          this.logger.log(`[${cronName}] Skipping ${category} - creditFrequency is not monthly`);
+          result.skipped++;
+          continue;
+        }
+
+        result.categoriesProcessed++;
+
+        const annualQuota = Number(categoryConfig.annualQuota) || 0;
+        const monthlyQuota = annualQuota / 12;
+        const shouldHaveCreditedByNow = Math.floor(monthlyQuota * currentMonth * 100) / 100;
+
+        for (const user of activeUsers) {
+          try {
+            const credited = await this.creditLeavesForUser(
+              user.id,
+              category,
+              financialYear,
+              leaveConfigId,
+              shouldHaveCreditedByNow,
+              currentMonth,
+              entityManager,
+              cronName,
+            );
+
+            if (credited > 0) {
+              result.leavesCredited += credited;
+            }
+          } catch (error) {
+            result.errors.push(`User ${user.id}, ${category}: ${error.message}`);
+            this.logger.error(
+              `[${cronName}] Error processing ${category} for user ${user.id}`,
+              error,
+            );
+          }
+        }
+      }
+
+      result.usersProcessed = activeUsers.length;
+    });
+
+    return result;
   }
 
   private getMonthInFinancialYear(date: Date): number {

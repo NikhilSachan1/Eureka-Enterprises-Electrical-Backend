@@ -165,4 +165,96 @@ export class PayrollCronService {
 
     return { month: currentMonth - 1, year: currentYear };
   }
+
+  /**
+   * Manual trigger method for generating payroll for a specific month/year
+   * Can optionally target a specific user
+   */
+  async handleMonthlyPayrollGenerationManual(
+    targetMonth?: number,
+    targetYear?: number,
+    userId?: string,
+  ): Promise<MonthlyPayrollGenerationResult> {
+    const cronName = CRON_NAMES.MONTHLY_PAYROLL_GENERATION;
+
+    // Use provided month/year or default to previous month
+    let month = targetMonth;
+    let year = targetYear;
+
+    if (!month || !year) {
+      const currentDate = this.schedulerService.getCurrentDateIST();
+      const prev = this.getPreviousMonth(currentDate);
+      month = month || prev.month;
+      year = year || prev.year;
+    }
+
+    const result: MonthlyPayrollGenerationResult = {
+      month,
+      year,
+      totalProcessed: 0,
+      activeUsersProcessed: 0,
+      archivedUsersProcessed: 0,
+      successCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      skipped: [],
+      errors: [],
+    };
+
+    this.logger.log(`[${cronName}] Manual trigger: Generating DRAFT payroll for ${month}/${year}`);
+
+    // If specific user, process only that user
+    if (userId) {
+      const processResult = await this.processUserPayroll(userId, month, year, cronName);
+      result.totalProcessed = 1;
+
+      if (processResult.status === CronProcessStatus.SUCCESS) {
+        result.successCount++;
+      } else if (processResult.status === CronProcessStatus.SKIPPED) {
+        result.skippedCount++;
+        result.skipped.push({ userId, reason: processResult.reason });
+      } else {
+        result.failedCount++;
+        result.errors.push({ userId, error: processResult.reason });
+      }
+
+      return result;
+    }
+
+    // Process all eligible users
+    const { query, params } = getEligibleUsersForPayrollQuery(month, year);
+    const eligibleUsers = await this.dataSource.query(query, params);
+
+    if (eligibleUsers.length === 0) {
+      this.logger.warn(`[${cronName}] No eligible users found for payroll generation`);
+      return result;
+    }
+
+    const activeUsers = eligibleUsers.filter((u: any) => u.userStatus === UserStatus.ACTIVE);
+    const archivedUsers = eligibleUsers.filter((u: any) => u.userStatus === UserStatus.ARCHIVED);
+
+    result.totalProcessed = eligibleUsers.length;
+    result.activeUsersProcessed = activeUsers.length;
+    result.archivedUsersProcessed = archivedUsers.length;
+
+    for (const user of eligibleUsers) {
+      const processResult = await this.processUserPayroll(user.userId, month, year, cronName);
+
+      if (processResult.status === CronProcessStatus.SUCCESS) {
+        result.successCount++;
+      } else if (processResult.status === CronProcessStatus.SKIPPED) {
+        result.skippedCount++;
+        result.skipped.push({ userId: user.userId, reason: processResult.reason });
+      } else {
+        result.failedCount++;
+        result.errors.push({ userId: user.userId, error: processResult.reason });
+      }
+    }
+
+    this.logger.log(
+      `[${cronName}] Manual trigger completed: Success=${result.successCount}, Skipped=${result.skippedCount}, Failed=${result.failedCount}`,
+    );
+
+    return result;
+  }
 }

@@ -91,7 +91,7 @@ export class AttendanceCronService {
     });
   }
 
-  async handleDailyAttendanceEntryDirect(): Promise<DailyAttendanceResult> {
+  async handleDailyAttendanceEntryDirect(targetDate?: string): Promise<DailyAttendanceResult> {
     const cronName = CRON_NAMES.DAILY_ATTENDANCE_ENTRY;
 
     const result: DailyAttendanceResult = {
@@ -104,7 +104,8 @@ export class AttendanceCronService {
       errors: [],
     };
 
-    const today = this.schedulerService.getTodayDateIST();
+    // Use provided date or default to today
+    const today: Date = targetDate ? new Date(targetDate) : this.schedulerService.getTodayDateIST();
     const financialYear = this.utilityService.getFinancialYear(today);
 
     // 1. Check if today is a holiday
@@ -330,6 +331,38 @@ export class AttendanceCronService {
 
       return result;
     });
+  }
+
+  async handleEndOfDayAttendanceDirect(targetDate?: string): Promise<EndOfDayAttendanceResult> {
+    const result: EndOfDayAttendanceResult = {
+      autoCheckouts: 0,
+      markedAbsent: 0,
+      newAbsentRecords: 0,
+      errors: [],
+    };
+
+    const today: Date = targetDate ? new Date(targetDate) : this.schedulerService.getTodayDateIST();
+    const shiftEndTime = await this.getShiftEndTime(today);
+
+    await this.dataSource.transaction(async (entityManager) => {
+      const autoCheckoutResult = await this.autoCheckoutForgottenUsers(
+        today,
+        shiftEndTime,
+        entityManager,
+      );
+      result.autoCheckouts = autoCheckoutResult.count;
+      result.errors.push(...autoCheckoutResult.errors);
+
+      const markAbsentResult = await this.markAbsentNotCheckedInUsers(today, entityManager);
+      result.markedAbsent = markAbsentResult.count;
+      result.errors.push(...markAbsentResult.errors);
+
+      const newAbsentResult = await this.createAbsentForMissingUsers(today, entityManager);
+      result.newAbsentRecords = newAbsentResult.count;
+      result.errors.push(...newAbsentResult.errors);
+    });
+
+    return result;
   }
 
   private async getShiftEndTime(today: Date): Promise<Date> {
