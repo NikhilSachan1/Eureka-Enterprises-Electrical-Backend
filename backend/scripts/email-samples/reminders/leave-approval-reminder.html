@@ -1,0 +1,487 @@
+<html lang='en' dir='ltr'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <meta name='color-scheme' content='light' />
+    <meta name='supported-color-schemes' content='light' />
+    <title>Eureka Enterprises Pvt Ltd - Pending Leave Approvals</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
+      sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
+      .email-wrapper { padding: 40px 20px; background-color: #f7fafc; } .email-container {
+      max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0
+      4px 6px rgba(0, 0, 0, 0.07); overflow: hidden; } .header { background: linear-gradient(135deg,
+      #1a365d 0%, #2c5282 100%); padding: 32px 40px; text-align: center; } .header.critical {
+      background: linear-gradient(135deg, #742a2a 0%, #c53030 100%); } .header.urgent {
+      background: linear-gradient(135deg, #744210 0%, #c05621 100%); } .logo { max-width: 120px;
+      height: auto; display: block; margin: 0 auto 16px; border-radius: 8px; } .company-name {
+      color: #ffffff; font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.5px; }
+      .content { padding: 40px; } .greeting { font-size: 16px; color: #1a365d; margin-bottom: 20px;
+      } .message-text { color: #4a5568; margin-bottom: 24px; line-height: 1.7; } /* Countdown Box */
+      .countdown-box { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid
+      #f59e0b; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center; }
+      .countdown-box.critical { background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
+      border-color: #c53030; } .countdown-box.urgent { background: linear-gradient(135deg, #feebc8 0%,
+      #fbd38d 100%); border-color: #dd6b20; } .countdown-days { font-size: 56px; font-weight: 800;
+      color: #92400e; line-height: 1; } .countdown-box.critical .countdown-days { color: #c53030; }
+      .countdown-box.urgent .countdown-days { color: #c05621; } .countdown-label { font-size: 14px;
+      color: #78350f; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top:
+      8px; } .countdown-box.critical .countdown-label { color: #9b2c2c; } .countdown-box.urgent
+      .countdown-label { color: #9c4221; } .countdown-date { font-size: 13px; color: #92400e;
+      margin-top: 12px; } .countdown-box.critical .countdown-date { color: #c53030; }
+      .countdown-box.urgent .countdown-date { color: #c05621; } /* Section Headers */ .section-header
+      { display: flex; align-items: center; gap: 12px; margin: 32px 0 16px 0; } .section-header.urgent
+      { color: #c53030; } .section-header.pending { color: #2c5282; } .section-icon { width: 28px;
+      height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: bold; } .section-header.urgent .section-icon { background-color:
+      #fed7d7; color: #c53030; } .section-header.pending .section-icon { background-color: #bee3f8;
+      color: #2c5282; } .section-title { font-size: 16px; font-weight: 600; margin: 0; } /* Leave
+      Item */ .leave-item { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      margin-bottom: 12px; overflow: hidden; } .leave-item.urgent { border-left: 4px solid #c53030; }
+      .leave-item.pending { border-left: 4px solid #3182ce; } .leave-header { padding: 14px 20px;
+      background-color: #edf2f7; border-bottom: 1px solid #e2e8f0; } .leave-employee { font-size:
+      15px; font-weight: 600; color: #1a365d; margin: 0; } .leave-body { padding: 14px 20px; } /*
+      Status Badge */ .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-top: 10px; } .status-badge.urgent { background-color: #fed7d7; color: #c53030; }
+      .status-badge.pending { background-color: #bee3f8; color: #2c5282; } /* Category Badge */
+      .category-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size:
+      10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background-color:
+      #e9d8fd; color: #553c9a; } /* Legend */ .legend { display: flex; gap: 24px; margin: 24px 0;
+      padding: 16px 20px; background-color: #f7fafc; border-radius: 6px; } .legend-item { display:
+      flex; align-items: center; gap: 8px; font-size: 12px; color: #4a5568; } .legend-dot { width:
+      12px; height: 12px; border-radius: 50%; } .legend-dot.urgent { background-color: #c53030; }
+      .legend-dot.pending { background-color: #3182ce; } /* Button */ .button-container { text-align:
+      center; margin: 32px 0; } .button { display: inline-block; padding: 14px 32px; background:
+      linear-gradient(135deg, #2c5282 0%, #1a365d 100%); color: #ffffff !important; text-decoration:
+      none; border-radius: 6px; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; } .divider
+      { height: 1px; background-color: #e2e8f0; margin: 28px 0; } .signature { margin-top: 28px;
+      color: #4a5568; } .signature-name { color: #1a365d; font-weight: 600; } .footer {
+      background-color: #f7fafc; text-align: center; padding: 24px 40px; border-top: 1px solid
+      #e2e8f0; } .footer-text { color: #718096; font-size: 12px; margin: 0 0 8px 0; } .footer-company
+      { color: #a0aec0; font-size: 11px; margin: 0; } /* Note Box */ .note-box { background-color:
+      #dcfce7; border: 1px solid #4ade80; border-left: 4px solid #16a34a; padding: 16px 20px;
+      border-radius: 0 6px 6px 0; margin: 24px 0; } .note-box p { margin: 0; color: #14532d;
+      font-size: 14px; } .note-box strong { color: #166534; } /* Warning Box */ .warning-box {
+      background-color: #fef3c7; border: 1px solid #f59e0b; border-left: 4px solid #d97706; padding:
+      16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .warning-box p { margin: 0; color:
+      #92400e; font-size: 14px; } .warning-box strong { color: #78350f; } /* Critical Box */
+      .critical-box { background-color: #fed7d7; border: 1px solid #fc8181; border-left: 4px solid
+      #c53030; padding: 16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .critical-box p {
+      margin: 0; color: #9b2c2c; font-size: 14px; } .critical-box strong { color: #742a2a; } @media
+      screen and (max-width: 600px) { .content { padding: 28px 24px; } .header { padding: 24px; }
+      .footer { padding: 20px 24px; } .legend { flex-direction: column; gap: 12px; } .countdown-days
+      { font-size: 42px; } }
+    </style>
+  </head>
+  <body>
+    <div class='email-wrapper'>
+      <div class='email-container'>
+        <div class='header urgent'>
+          <img
+            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+            alt='Eureka Enterprises Pvt Ltd'
+            class='logo'
+          />
+          <p class='company-name'>Eureka Enterprises Pvt Ltd</p>
+        </div>
+
+        <div class='content'>
+          <p class='greeting'><strong>📋 Pending Leave Approvals</strong></p>
+
+          <p class='message-text'>
+            This is a reminder about leave applications awaiting your approval. Pending leaves will
+            be <strong>automatically approved</strong> on the 1st of next month for payroll
+            processing.
+          </p>
+
+          <!-- Countdown Box -->
+          <div class='countdown-box urgent'>
+            <div class='countdown-days'>3</div>
+            <div class='countdown-label'>
+              Days Until Auto-Approval
+            </div>
+            <div class='countdown-date'>Auto-approval on: February 1, 2026</div>
+          </div>
+
+          <!-- Summary Cards - Table Based -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
+            <!-- Row 1: Total Pending | Days Remaining -->
+            <tr>
+              <td style='padding-right: 8px; width: 50%;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #ebf8ff 0%, #bee3f8 100%); border: 1px solid #90cdf4; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #2c5282;'
+                      >5</div>
+                      <div
+                        style='font-size: 11px; color: #2b6cb0; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Total Pending</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+              <td style='padding-left: 8px; width: 50%;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #feebc8 0%, #fbd38d 100%); border: 1px solid #f6ad55; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #c05621;'
+                      >3</div>
+                      <div
+                        style='font-size: 11px; color: #9c4221; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Days Left</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Row 2: Urgent Leaves Warning (only if exists) -->
+            <tr>
+              <td colspan='2' style='padding-top: 16px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); border: 1px solid #fc8181; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #c53030;'
+                      >⚠️ 2</div>
+                      <div
+                        style='font-size: 11px; color: #9b2c2c; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Pending 5+ Days - Need Urgent Attention</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Category Summary -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 16px 0;'>
+            <tr>
+              <td style='background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;'>
+                <div style='font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;'>Pending by Category</div>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td style='text-align: center; padding: 4px;'>
+                      <div style='font-size: 24px; font-weight: 700; color: #1a365d;'>2</div>
+                      <div style='font-size: 10px; color: #718096; text-transform: uppercase;'>Casual Leave</div>
+                    </td>
+                    <td style='text-align: center; padding: 4px;'>
+                      <div style='font-size: 24px; font-weight: 700; color: #1a365d;'>2</div>
+                      <div style='font-size: 10px; color: #718096; text-transform: uppercase;'>Earned Leave</div>
+                    </td>
+                    <td style='text-align: center; padding: 4px;'>
+                      <div style='font-size: 24px; font-weight: 700; color: #1a365d;'>1</div>
+                      <div style='font-size: 10px; color: #718096; text-transform: uppercase;'>Sick Leave</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Legend -->
+          <div class='legend'>
+            <div class='legend-item'>
+              <span class='legend-dot urgent'></span>
+              <span>Urgent - Pending 5+ days</span>
+            </div>
+            <div class='legend-item'>
+              <span class='legend-dot pending'></span>
+              <span>Pending - Awaiting approval</span>
+            </div>
+          </div>
+
+            <!-- Urgent Leaves Section -->
+            <div class='section-header urgent'>
+              <div class='section-icon'>!</div>
+              <h3 class='section-title'>Urgent Leave Requests (2)</h3>
+            </div>
+
+            <div class='critical-box'>
+              <p>
+                <strong>⚠️ Requires Immediate Attention:</strong>
+                These leave applications have been pending for more than 5 days.
+                Please review and take action promptly.
+              </p>
+            </div>
+
+              <div class='leave-item urgent'>
+                <div class='leave-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='leave-employee'>Deepak Verma</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='category-badge'>Casual Leave</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='leave-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Leave Dates</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >January 15, 2026 - January 16, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Duration</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >2 Days (Full Day)</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Applied On</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >January 3, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Reason</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
+                          >Personal work</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style='text-align: center;'>
+                    <span class='status-badge urgent'>Pending 7 days</span>
+                  </div>
+                </div>
+              </div>
+
+            <!-- Pending Leaves Section -->
+            <div class='section-header pending'>
+              <div class='section-icon'>⏳</div>
+              <h3 class='section-title'>Pending Leave Requests</h3>
+            </div>
+
+              <div class='leave-item pending'>
+                <div class='leave-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='leave-employee'>Priya Patel</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='category-badge'>Sick Leave</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='leave-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Leave Dates</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >January 12, 2026 - January 12, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Duration</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >1 Day (Full Day)</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Applied On</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >January 10, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Reason</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
+                          >Not feeling well</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style='text-align: center;'>
+                    <span class='status-badge pending'>Applied today</span>
+                  </div>
+                </div>
+              </div>
+              <div class='leave-item pending'>
+                <div class='leave-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='leave-employee'>Ankit Mehta</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='category-badge'>Earned Leave</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='leave-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Leave Dates</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >January 20, 2026 - January 22, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Duration</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >3 Days (Full Day)</div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Applied On</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600;'
+                          >January 9, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div
+                          style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'
+                        >
+                          <div
+                            style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'
+                          >Reason</div>
+                          <div
+                            style='font-size: 13px; color: #2d3748; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
+                          >Family function</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style='text-align: center;'>
+                    <span class='status-badge pending'>Pending 1 day</span>
+                  </div>
+                </div>
+              </div>
+
+          <!-- Warning/Info Box based on urgency -->
+          <div class='warning-box'>
+            <p>
+              <strong>⚠️ Action Required:</strong>
+              Auto-approval is approaching in 3 days. 
+              Please review pending leaves before payroll processing begins.
+            </p>
+          </div>
+
+          <div class='button-container'>
+            <a href='https://hrms.eurekaenterprises.com/admin' class='button'>Review Pending Leaves</a>
+          </div>
+
+          <div class='divider'></div>
+
+          <p class='message-text' style='font-size: 13px;'>
+            <strong>Why timely approval matters:</strong>
+          </p>
+          <ul style='color: #4a5568; font-size: 13px; margin: 0 0 20px 0; padding-left: 20px;'>
+            <li>Ensures accurate attendance records for payroll</li>
+            <li>Allows managers to plan team capacity effectively</li>
+            <li>Gives employees clarity on their leave status</li>
+            <li>Prevents last-minute auto-approvals without proper review</li>
+          </ul>
+
+          <div class='signature'>
+            <p>
+              Best regards,<br />
+              <span class='signature-name'>Eureka Enterprises Pvt Ltd HRMS</span>
+            </p>
+          </div>
+        </div>
+
+        <div class='footer'>
+          <p class='footer-text'>This is an automated reminder. Please do not reply directly to
+            this email.</p>
+          <p class='footer-company'>&copy;
+            2026
+            Eureka Enterprises Pvt Ltd. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+

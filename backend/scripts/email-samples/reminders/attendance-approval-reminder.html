@@ -1,0 +1,419 @@
+<html lang='en' dir='ltr'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <meta name='color-scheme' content='light' />
+    <meta name='supported-color-schemes' content='light' />
+    <title>Eureka Enterprises Pvt Ltd - Pending Attendance Approvals</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
+      sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
+      .email-wrapper { padding: 40px 20px; background-color: #f7fafc; } .email-container {
+      max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0
+      4px 6px rgba(0, 0, 0, 0.07); overflow: hidden; } .header { background: linear-gradient(135deg,
+      #065f46 0%, #047857 100%); padding: 32px 40px; text-align: center; } .header.critical {
+      background: linear-gradient(135deg, #742a2a 0%, #c53030 100%); } .header.urgent {
+      background: linear-gradient(135deg, #744210 0%, #c05621 100%); } .logo { max-width: 120px;
+      height: auto; display: block; margin: 0 auto 16px; border-radius: 8px; } .company-name {
+      color: #ffffff; font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.5px; }
+      .content { padding: 40px; } .greeting { font-size: 16px; color: #065f46; margin-bottom: 20px;
+      } .message-text { color: #4a5568; margin-bottom: 24px; line-height: 1.7; } /* Countdown Box */
+      .countdown-box { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 2px solid
+      #10b981; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center; }
+      .countdown-box.critical { background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
+      border-color: #c53030; } .countdown-box.urgent { background: linear-gradient(135deg, #feebc8 0%,
+      #fbd38d 100%); border-color: #dd6b20; } .countdown-days { font-size: 56px; font-weight: 800;
+      color: #047857; line-height: 1; } .countdown-box.critical .countdown-days { color: #c53030; }
+      .countdown-box.urgent .countdown-days { color: #c05621; } .countdown-label { font-size: 14px;
+      color: #065f46; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top:
+      8px; } .countdown-box.critical .countdown-label { color: #9b2c2c; } .countdown-box.urgent
+      .countdown-label { color: #9c4221; } .countdown-date { font-size: 13px; color: #047857;
+      margin-top: 12px; } .countdown-box.critical .countdown-date { color: #c53030; }
+      .countdown-box.urgent .countdown-date { color: #c05621; } /* Section Headers */ .section-header
+      { display: flex; align-items: center; gap: 12px; margin: 32px 0 16px 0; } .section-header.urgent
+      { color: #c53030; } .section-header.pending { color: #047857; } .section-icon { width: 28px;
+      height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: bold; } .section-header.urgent .section-icon { background-color:
+      #fed7d7; color: #c53030; } .section-header.pending .section-icon { background-color: #d1fae5;
+      color: #047857; } .section-title { font-size: 16px; font-weight: 600; margin: 0; } /* Attendance
+      Item */ .attendance-item { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      margin-bottom: 12px; overflow: hidden; } .attendance-item.urgent { border-left: 4px solid #c53030; }
+      .attendance-item.pending { border-left: 4px solid #10b981; } .attendance-header { padding: 14px 20px;
+      background-color: #edf2f7; border-bottom: 1px solid #e2e8f0; } .attendance-employee { font-size:
+      15px; font-weight: 600; color: #1a365d; margin: 0; } .attendance-body { padding: 14px 20px; } /*
+      Status Badge */ .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-top: 10px; } .status-badge.urgent { background-color: #fed7d7; color: #c53030; }
+      .status-badge.pending { background-color: #d1fae5; color: #047857; } /* Status Type Badge */
+      .type-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 10px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; } .type-badge.absent {
+      background-color: #fed7d7; color: #c53030; } .type-badge.checkedOut { background-color: #d1fae5;
+      color: #047857; } .type-badge.halfDay { background-color: #fef3c7; color: #92400e; }
+      .type-badge.leave { background-color: #e9d8fd; color: #553c9a; } /* Legend */ .legend { display: flex;
+      gap: 24px; margin: 24px 0; padding: 16px 20px; background-color: #f7fafc; border-radius: 6px;
+      flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px;
+      color: #4a5568; } .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+      .legend-dot.absent { background-color: #c53030; } .legend-dot.checkedOut { background-color:
+      #10b981; } .legend-dot.halfDay { background-color: #f59e0b; } .legend-dot.leave {
+      background-color: #8b5cf6; } /* Button */ .button-container { text-align: center; margin: 32px 0; }
+      .button { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #047857 0%,
+      #065f46 100%); color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight:
+      600; font-size: 14px; letter-spacing: 0.5px; } .divider { height: 1px; background-color: #e2e8f0;
+      margin: 28px 0; } .signature { margin-top: 28px; color: #4a5568; } .signature-name { color:
+      #065f46; font-weight: 600; } .footer { background-color: #f7fafc; text-align: center; padding:
+      24px 40px; border-top: 1px solid #e2e8f0; } .footer-text { color: #718096; font-size: 12px;
+      margin: 0 0 8px 0; } .footer-company { color: #a0aec0; font-size: 11px; margin: 0; } /* Note Box */
+      .note-box { background-color: #dcfce7; border: 1px solid #4ade80; border-left: 4px solid #16a34a;
+      padding: 16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .note-box p { margin: 0; color:
+      #14532d; font-size: 14px; } .note-box strong { color: #166534; } /* Warning Box */ .warning-box {
+      background-color: #fef3c7; border: 1px solid #f59e0b; border-left: 4px solid #d97706; padding:
+      16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .warning-box p { margin: 0; color:
+      #92400e; font-size: 14px; } .warning-box strong { color: #78350f; } /* Critical Box */
+      .critical-box { background-color: #fed7d7; border: 1px solid #fc8181; border-left: 4px solid
+      #c53030; padding: 16px 20px; border-radius: 0 6px 6px 0; margin: 24px 0; } .critical-box p {
+      margin: 0; color: #9b2c2c; font-size: 14px; } .critical-box strong { color: #742a2a; } @media
+      screen and (max-width: 600px) { .content { padding: 28px 24px; } .header { padding: 24px; }
+      .footer { padding: 20px 24px; } .legend { flex-direction: column; gap: 12px; } .countdown-days
+      { font-size: 42px; } }
+    </style>
+  </head>
+  <body>
+    <div class='email-wrapper'>
+      <div class='email-container'>
+        <div class='header critical'>
+          <img
+            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+            alt='Eureka Enterprises Pvt Ltd'
+            class='logo'
+          />
+          <p class='company-name'>Eureka Enterprises Pvt Ltd</p>
+        </div>
+
+        <div class='content'>
+          <p class='greeting'><strong>📊 Pending Attendance Approvals</strong></p>
+
+          <p class='message-text'>
+            This is a reminder about attendance records awaiting your approval. Pending attendance 
+            will be <strong>automatically approved</strong> on the 1st of next month for payroll
+            processing.
+          </p>
+
+          <!-- Countdown Box -->
+          <div class='countdown-box critical'>
+            <div class='countdown-days'>1</div>
+            <div class='countdown-label'>
+              Day Until Auto-Approval
+            </div>
+            <div class='countdown-date'>Auto-approval on: February 1, 2026</div>
+          </div>
+
+          <!-- Summary Cards - Table Based -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
+            <!-- Row 1: Total Pending | Days Remaining -->
+            <tr>
+              <td style='padding-right: 8px; width: 50%;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #10b981; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #047857;'
+                      >8</div>
+                      <div
+                        style='font-size: 11px; color: #065f46; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Total Pending</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+              <td style='padding-left: 8px; width: 50%;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); border: 1px solid #fc8181; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #c53030;'
+                      >1</div>
+                      <div
+                        style='font-size: 11px; color: #9b2c2c; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Days Left</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Row 2: Urgent Warning (only if exists) -->
+            <tr>
+              <td colspan='2' style='padding-top: 16px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td
+                      style='background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); border: 1px solid #fc8181; border-radius: 8px; padding: 16px; text-align: center;'
+                    >
+                      <div
+                        style='font-size: 32px; font-weight: 700; line-height: 1; color: #c53030;'
+                      >⚠️ 3</div>
+                      <div
+                        style='font-size: 11px; color: #9b2c2c; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;'
+                      >Absent Records - Need Review</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Status Summary -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 16px 0;'>
+            <tr>
+              <td style='background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;'>
+                <div style='font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;'>Pending by Status</div>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td style='text-align: center; padding: 4px;'>
+                      <div style='font-size: 24px; font-weight: 700; color: #1a365d;'>4</div>
+                      <div style='font-size: 10px; color: #718096; text-transform: uppercase;'>Checked Out</div>
+                    </td>
+                    <td style='text-align: center; padding: 4px;'>
+                      <div style='font-size: 24px; font-weight: 700; color: #1a365d;'>3</div>
+                      <div style='font-size: 10px; color: #718096; text-transform: uppercase;'>Absent</div>
+                    </td>
+                    <td style='text-align: center; padding: 4px;'>
+                      <div style='font-size: 24px; font-weight: 700; color: #1a365d;'>1</div>
+                      <div style='font-size: 10px; color: #718096; text-transform: uppercase;'>Half Day</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Legend -->
+          <div class='legend'>
+            <div class='legend-item'>
+              <span class='legend-dot absent'></span>
+              <span>Absent</span>
+            </div>
+            <div class='legend-item'>
+              <span class='legend-dot checkedOut'></span>
+              <span>Checked Out</span>
+            </div>
+            <div class='legend-item'>
+              <span class='legend-dot halfDay'></span>
+              <span>Half Day</span>
+            </div>
+            <div class='legend-item'>
+              <span class='legend-dot leave'></span>
+              <span>Leave</span>
+            </div>
+          </div>
+
+            <!-- Urgent Attendance Section (Absent records need review) -->
+            <div class='section-header urgent'>
+              <div class='section-icon'>!</div>
+              <h3 class='section-title'>Absent Records - Review Required (3)</h3>
+            </div>
+
+            <div class='critical-box'>
+              <p>
+                <strong>⚠️ Review Required:</strong>
+                These employees were marked absent. Please verify if they should remain absent
+                or if attendance needs correction.
+              </p>
+            </div>
+
+              <div class='attendance-item urgent'>
+                <div class='attendance-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='attendance-employee'>Ramesh Kumar</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='type-badge absent'>Absent</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='attendance-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Date</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>January 8, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Notes</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>No check-in recorded</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+              <div class='attendance-item urgent'>
+                <div class='attendance-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='attendance-employee'>Sunil Yadav</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='type-badge absent'>Absent</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='attendance-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Date</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>January 9, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 50%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Notes</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>Employee reported sick</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+
+            <!-- Pending Attendance Section -->
+            <div class='section-header pending'>
+              <div class='section-icon'>⏳</div>
+              <h3 class='section-title'>Pending Attendance Records</h3>
+            </div>
+
+              <div class='attendance-item pending'>
+                <div class='attendance-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='attendance-employee'>Amit Kumar</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='type-badge checkedOut'>Checked Out</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='attendance-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 33%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Date</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>January 9, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 33%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Check-In</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>09:30 AM</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 33%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Check-Out</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>06:45 PM</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+              <div class='attendance-item pending'>
+                <div class='attendance-header'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td>
+                        <p class='attendance-employee'>Vikram Singh</p>
+                      </td>
+                      <td style='text-align: right;'>
+                        <span class='type-badge halfDay'>Half Day</span>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <div class='attendance-body'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td style='padding: 4px; width: 33%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Date</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>January 9, 2026</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 33%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Check-In</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>02:00 PM</div>
+                        </div>
+                      </td>
+                      <td style='padding: 4px; width: 33%;'>
+                        <div style='padding: 8px; background-color: #ffffff; border-radius: 4px; border: 1px solid #e2e8f0;'>
+                          <div style='font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;'>Check-Out</div>
+                          <div style='font-size: 13px; color: #2d3748; font-weight: 600;'>06:30 PM</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+
+          <!-- Warning/Info Box based on urgency -->
+          <div class='critical-box'>
+            <p>
+              <strong>🚨 Final Reminder:</strong>
+              Attendance will be auto-approved <strong>tomorrow</strong> for payroll processing. 
+              Please review and take action today to ensure accurate payroll calculations.
+            </p>
+          </div>
+
+          <div class='button-container'>
+            <a href='https://hrms.eurekaenterprises.com/admin' class='button'>Review Pending Attendance</a>
+          </div>
+
+          <div class='divider'></div>
+
+          <p class='message-text' style='font-size: 13px;'>
+            <strong>Why timely approval matters:</strong>
+          </p>
+          <ul style='color: #4a5568; font-size: 13px; margin: 0 0 20px 0; padding-left: 20px;'>
+            <li>Ensures accurate payroll calculations</li>
+            <li>Maintains proper attendance records for compliance</li>
+            <li>Allows employees to track their attendance status</li>
+            <li>Prevents incorrect auto-approvals without review</li>
+          </ul>
+
+          <div class='signature'>
+            <p>
+              Best regards,<br />
+              <span class='signature-name'>Eureka Enterprises Pvt Ltd HRMS</span>
+            </p>
+          </div>
+        </div>
+
+        <div class='footer'>
+          <p class='footer-text'>This is an automated reminder. Please do not reply directly to
+            this email.</p>
+          <p class='footer-company'>&copy;
+            2026
+            Eureka Enterprises Pvt Ltd. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+

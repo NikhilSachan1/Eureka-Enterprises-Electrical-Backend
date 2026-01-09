@@ -4,7 +4,7 @@
     <meta name='viewport' content='width=device-width, initial-scale=1.0' />
     <meta name='color-scheme' content='light' />
     <meta name='supported-color-schemes' content='light' />
-    <title>{{companyName}} - Vehicle Service Due Reminder</title>
+    <title>Eureka Enterprises Pvt Ltd - Vehicle Service Due Reminder</title>
     <style>
       body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
       sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
@@ -79,11 +79,11 @@
       <div class='email-container'>
         <div class='header'>
           <img
-            src='{{companyLogo}}'
-            alt='{{companyName}}'
+            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+            alt='Eureka Enterprises Pvt Ltd'
             class='logo'
           />
-          <p class='company-name'>{{companyName}}</p>
+          <p class='company-name'>Eureka Enterprises Pvt Ltd</p>
         </div>
 
         <div class='content'>
@@ -98,17 +98,16 @@
           <div class='config-box'>
             <div class='config-item'>
               <div class='config-label'>Service Interval</div>
-              <div class='config-value'>{{serviceIntervalKm}} km</div>
+              <div class='config-value'>10,000 km</div>
             </div>
             <div class='config-item'>
               <div class='config-label'>Warning Threshold</div>
-              <div class='config-value'>{{warningKm}} km</div>
+              <div class='config-value'>1,000 km</div>
             </div>
           </div>
 
           <!-- Summary Cards -->
           <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
-            {{#if hasOverdue}}
               <tr>
                 <td style='padding-bottom: 16px;'>
                   <table width='100%' cellpadding='0' cellspacing='0' border='0'>
@@ -121,7 +120,7 @@
                             <td width='80' style='text-align: center; vertical-align: middle;'>
                               <div
                                 style='font-size: 48px; font-weight: 700; line-height: 1; color: #c53030;'
-                              >{{totalOverdue}}</div>
+                              >2</div>
                             </td>
                             <td
                               style='text-align: left; vertical-align: middle; padding-left: 16px;'
@@ -140,8 +139,6 @@
                   </table>
                 </td>
               </tr>
-            {{/if}}
-            {{#if hasDueSoon}}
               <tr>
                 <td>
                   <table width='100%' cellpadding='0' cellspacing='0' border='0'>
@@ -154,7 +151,7 @@
                             <td width='80' style='text-align: center; vertical-align: middle;'>
                               <div
                                 style='font-size: 48px; font-weight: 700; line-height: 1; color: #92400e;'
-                              >{{totalDueSoon}}</div>
+                              >3</div>
                             </td>
                             <td
                               style='text-align: left; vertical-align: middle; padding-left: 16px;'
@@ -172,10 +169,8 @@
                   </table>
                 </td>
               </tr>
-            {{/if}}
           </table>
 
-          {{#if hasOverdue}}
             <!-- Overdue Vehicles Section -->
             <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 32px 0 16px 0;'>
               <tr>
@@ -185,43 +180,42 @@
                   </div>
                 </td>
                 <td style='vertical-align: middle; padding-left: 8px;'>
-                  <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #c53030;'>Service Overdue ({{totalOverdue}})</h3>
+                  <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #c53030;'>Service Overdue (2)</h3>
                 </td>
               </tr>
             </table>
 
-            {{#each overdueVehicles}}
               <div class='vehicle-card overdue'>
                 <div class='vehicle-header'>
-                  <p class='vehicle-reg'>{{registrationNo}}</p>
-                  <p class='vehicle-info'>{{brand}}
-                    {{model}}
+                  <p class='vehicle-reg'>UP-32 AB 1234</p>
+                  <p class='vehicle-info'>Mahindra
+                    Bolero
                     •
-                    {{vehicleNumber}}
+                    VH-001
                     • Assigned:
-                    {{assignedTo}}</p>
+                    Vikram Singh</p>
                 </div>
                 <div class='vehicle-body'>
                   <div class='service-grid'>
                     <div class='service-item'>
                       <div class='service-label'>Last Service</div>
-                      <div class='service-value'>{{lastServiceKm}}</div>
+                      <div class='service-value'>32,500 km</div>
                     </div>
                     <div class='service-item'>
                       <div class='service-label'>Last Service Date</div>
-                      <div class='service-value'>{{lastServiceDate}}</div>
+                      <div class='service-value'>November 15, 2025</div>
                     </div>
                     <div class='service-item'>
                       <div class='service-label'>Current Odometer</div>
-                      <div class='service-value highlight'>{{currentOdometerKm}}</div>
+                      <div class='service-value highlight'>44,200 km</div>
                     </div>
                     <div class='service-item'>
                       <div class='service-label'>Service Due At</div>
-                      <div class='service-value'>{{nextServiceDueKm}}</div>
+                      <div class='service-value'>42,500 km</div>
                     </div>
                   </div>
                   <div style='text-align: center;'>
-                    <span class='status-badge {{statusClass}}'>{{kmStatus}}</span>
+                    <span class='status-badge overdue'>1,700 km overdue</span>
                   </div>
                   <div class='progress-container'>
                     <div class='progress-label'>
@@ -234,10 +228,50 @@
                   </div>
                 </div>
               </div>
-            {{/each}}
-          {{/if}}
+              <div class='vehicle-card overdue'>
+                <div class='vehicle-header'>
+                  <p class='vehicle-reg'>UP-32 CD 5678</p>
+                  <p class='vehicle-info'>Tata
+                    Ace
+                    •
+                    VH-002
+                    • Assigned:
+                    Ramesh Kumar</p>
+                </div>
+                <div class='vehicle-body'>
+                  <div class='service-grid'>
+                    <div class='service-item'>
+                      <div class='service-label'>Last Service</div>
+                      <div class='service-value'>28,000 km</div>
+                    </div>
+                    <div class='service-item'>
+                      <div class='service-label'>Last Service Date</div>
+                      <div class='service-value'>October 20, 2025</div>
+                    </div>
+                    <div class='service-item'>
+                      <div class='service-label'>Current Odometer</div>
+                      <div class='service-value highlight'>39,500 km</div>
+                    </div>
+                    <div class='service-item'>
+                      <div class='service-label'>Service Due At</div>
+                      <div class='service-value'>38,000 km</div>
+                    </div>
+                  </div>
+                  <div style='text-align: center;'>
+                    <span class='status-badge overdue'>1,500 km overdue</span>
+                  </div>
+                  <div class='progress-container'>
+                    <div class='progress-label'>
+                      <span>Last Service</span>
+                      <span>Next Due</span>
+                    </div>
+                    <div class='progress-bar'>
+                      <div class='progress-fill overdue'></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-          {{#if hasDueSoon}}
             <!-- Due Soon Vehicles Section -->
             <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 32px 0 16px 0;'>
               <tr>
@@ -247,48 +281,45 @@
                   </div>
                 </td>
                 <td style='vertical-align: middle; padding-left: 8px;'>
-                  <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #92400e;'>Service Due Soon ({{totalDueSoon}})</h3>
+                  <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #92400e;'>Service Due Soon (3)</h3>
                 </td>
               </tr>
             </table>
 
-            {{#each dueSoonVehicles}}
               <div class='vehicle-card due-soon'>
                 <div class='vehicle-header'>
-                  <p class='vehicle-reg'>{{registrationNo}}</p>
-                  <p class='vehicle-info'>{{brand}}
-                    {{model}}
+                  <p class='vehicle-reg'>UP-32 EF 9012</p>
+                  <p class='vehicle-info'>Mahindra
+                    Scorpio
                     •
-                    {{vehicleNumber}}
+                    VH-003
                     • Assigned:
-                    {{assignedTo}}</p>
+                    Sunil Yadav</p>
                 </div>
                 <div class='vehicle-body'>
                   <div class='service-grid'>
                     <div class='service-item'>
                       <div class='service-label'>Last Service</div>
-                      <div class='service-value'>{{lastServiceKm}}</div>
+                      <div class='service-value'>45,000 km</div>
                     </div>
                     <div class='service-item'>
                       <div class='service-label'>Last Service Date</div>
-                      <div class='service-value'>{{lastServiceDate}}</div>
+                      <div class='service-value'>December 10, 2025</div>
                     </div>
                     <div class='service-item'>
                       <div class='service-label'>Current Odometer</div>
-                      <div class='service-value highlight'>{{currentOdometerKm}}</div>
+                      <div class='service-value highlight'>54,200 km</div>
                     </div>
                     <div class='service-item'>
                       <div class='service-label'>Service Due At</div>
-                      <div class='service-value'>{{nextServiceDueKm}}</div>
+                      <div class='service-value'>55,000 km</div>
                     </div>
                   </div>
                   <div style='text-align: center;'>
-                    <span class='status-badge {{statusClass}}'>{{kmStatus}}</span>
+                    <span class='status-badge due-soon'>800 km remaining</span>
                   </div>
                 </div>
               </div>
-            {{/each}}
-          {{/if}}
 
           <div class='tip-box'>
             <p>
@@ -299,7 +330,7 @@
           </div>
 
           <div class='button-container'>
-            <a href='{{adminPortalUrl}}' class='button'>View Vehicle Dashboard</a>
+            <a href='https://hrms.eurekaenterprises.com/admin' class='button'>View Vehicle Dashboard</a>
           </div>
 
           <div class='divider'></div>
@@ -307,7 +338,7 @@
           <div class='signature'>
             <p>
               Best regards,<br />
-              <span class='signature-name'>{{companyName}} HRMS</span>
+              <span class='signature-name'>Eureka Enterprises Pvt Ltd HRMS</span>
             </p>
           </div>
         </div>
@@ -316,8 +347,8 @@
           <p class='footer-text'>This is an automated reminder. Please do not reply directly to this
             email.</p>
           <p class='footer-company'>&copy;
-            {{currentYear}}
-            {{companyName}}. All rights reserved.</p>
+            2026
+            Eureka Enterprises Pvt Ltd. All rights reserved.</p>
         </div>
       </div>
     </div>

@@ -1,0 +1,292 @@
+<html lang='en' dir='ltr'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <meta name='color-scheme' content='light' />
+    <meta name='supported-color-schemes' content='light' />
+    <title>Eureka Enterprises Pvt Ltd - Asset Calibration Expiry Alert</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
+      sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
+      .email-wrapper { padding: 40px 20px; background-color: #f7fafc; } .email-container {
+      max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0
+      4px 6px rgba(0, 0, 0, 0.07); overflow: hidden; } .header { background: linear-gradient(135deg,
+      #1a365d 0%, #2c5282 100%); padding: 32px 40px; text-align: center; } .logo { max-width: 120px;
+      height: auto; display: block; margin: 0 auto 16px; border-radius: 8px; } .company-name {
+      color: #ffffff; font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.5px; }
+      .content { padding: 40px; } .greeting { font-size: 16px; color: #1a365d; margin-bottom: 20px;
+      } .message-text { color: #4a5568; margin-bottom: 24px; line-height: 1.7; } /* Summary Cards */
+      .summary-card { padding: 20px; border-radius: 8px; text-align: center; } .summary-card.expired
+      { background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); border: 1px solid #fc8181; }
+      .summary-card.expiring { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 1px solid #f59e0b; } .summary-count { font-size: 42px; font-weight: 700; line-height:
+      1; } .summary-card.expired .summary-count { color: #c53030; } .summary-card.expiring
+      .summary-count { color: #92400e; } .summary-label { font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; } .summary-card.expired
+      .summary-label { color: #c53030; } .summary-card.expiring .summary-label { color: #92400e; }
+      /* Section Headers */ .section-header { display: flex; align-items: center; gap: 12px; margin:
+      32px 0 16px 0; } .section-header.expired { color: #c53030; } .section-header.expiring { color:
+      #92400e; } .section-icon { width: 28px; height: 28px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+      .section-header.expired .section-icon { background-color: #fed7d7; color: #c53030; }
+      .section-header.expiring .section-icon { background-color: #fef3c7; color: #92400e; }
+      .section-title { font-size: 16px; font-weight: 600; margin: 0; } /* Asset Cards */ .asset-card
+      { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom:
+      16px; overflow: hidden; } .asset-card.expired { border-left: 4px solid #c53030; }
+      .asset-card.expiring { border-left: 4px solid #f59e0b; } .asset-header { padding: 16px 20px;
+      background-color: #edf2f7; border-bottom: 1px solid #e2e8f0; } .asset-id { font-size: 18px;
+      font-weight: 700; color: #1a365d; margin: 0 0 4px 0; } .asset-name { font-size: 14px; color:
+      #4a5568; margin: 0; font-weight: 500; } .asset-body { padding: 16px 20px; } /* Info Grid */
+      .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; } .info-item {
+      padding: 10px; background-color: #ffffff; border-radius: 6px; border: 1px solid #e2e8f0; }
+      .info-label { font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing:
+      0.5px; margin-bottom: 2px; } .info-value { font-size: 13px; color: #2d3748; font-weight: 600;
+      } /* Status Badge */ .status-badge { display: inline-block; padding: 4px 12px; border-radius:
+      12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-top: 12px; } .status-badge.expired { background-color: #fed7d7; color: #c53030; }
+      .status-badge.expiring-soon { background-color: #fef3c7; color: #92400e; } /* Legend */
+      .legend { display: flex; gap: 24px; margin: 24px 0; padding: 16px 20px; background-color:
+      #f7fafc; border-radius: 6px; } .legend-item { display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: #4a5568; } .legend-dot { width: 12px; height: 12px; border-radius:
+      50%; } .legend-dot.expired { background-color: #c53030; } .legend-dot.expiring {
+      background-color: #f59e0b; } /* Button */ .button-container { text-align: center; margin: 32px
+      0; } .button { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg,
+      #2c5282 0%, #1a365d 100%); color: #ffffff !important; text-decoration: none; border-radius:
+      6px; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; } .divider { height: 1px;
+      background-color: #e2e8f0; margin: 28px 0; } .signature { margin-top: 28px; color: #4a5568; }
+      .signature-name { color: #1a365d; font-weight: 600; } .footer { background-color: #f7fafc;
+      text-align: center; padding: 24px 40px; border-top: 1px solid #e2e8f0; } .footer-text { color:
+      #718096; font-size: 12px; margin: 0 0 8px 0; } .footer-company { color: #a0aec0; font-size:
+      11px; margin: 0; } /* Note Box */ .note-box { background-color: #dcfce7; border: 1px solid
+      #4ade80; border-left: 4px solid #16a34a; padding: 16px 20px; border-radius: 0 6px 6px 0;
+      margin: 24px 0; } .note-box p { margin: 0; color: #14532d; font-size: 14px; } .note-box strong
+      { color: #166534; } @media screen and (max-width: 600px) { .content { padding: 28px 24px; }
+      .header { padding: 24px; } .footer { padding: 20px 24px; } .summary-count { font-size: 32px; }
+      .asset-header { padding: 12px 16px; } .asset-body { padding: 12px 16px; } .info-grid {
+      grid-template-columns: 1fr; } .legend { flex-direction: column; gap: 12px; } }
+    </style>
+  </head>
+  <body>
+    <div class='email-wrapper'>
+      <div class='email-container'>
+        <div class='header'>
+          <img
+            src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg'
+            alt='Eureka Enterprises Pvt Ltd'
+            class='logo'
+          />
+          <p class='company-name'>Eureka Enterprises Pvt Ltd</p>
+        </div>
+
+        <div class='content'>
+          <p class='greeting'><strong>🔬 Asset Calibration Expiry Alert</strong></p>
+
+          <p class='message-text'>
+            This is an automated alert regarding assets that require calibration attention. Regular
+            calibration ensures measurement accuracy, compliance with quality standards, and
+            reliable equipment performance.
+          </p>
+
+          <!-- Summary Cards -->
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
+              <tr>
+                <td style='padding-bottom: 16px;'>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td
+                        style='background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%); border: 1px solid #fc8181; border-radius: 8px; padding: 20px; text-align: center;'
+                      >
+                        <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                          <tr>
+                            <td width='80' style='text-align: center; vertical-align: middle;'>
+                              <div
+                                style='font-size: 48px; font-weight: 700; line-height: 1; color: #c53030;'
+                              >1</div>
+                            </td>
+                            <td
+                              style='text-align: left; vertical-align: middle; padding-left: 16px;'
+                            >
+                              <div
+                                style='font-size: 16px; font-weight: 700; color: #c53030;'
+                              >Calibrations Expired</div>
+                              <div
+                                style='font-size: 12px; color: #9b2c2c; margin-top: 2px;'
+                              >Requires immediate recalibration</div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                    <tr>
+                      <td
+                        style='background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 8px; padding: 20px; text-align: center;'
+                      >
+                        <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                          <tr>
+                            <td width='80' style='text-align: center; vertical-align: middle;'>
+                              <div
+                                style='font-size: 48px; font-weight: 700; line-height: 1; color: #92400e;'
+                              >2</div>
+                            </td>
+                            <td
+                              style='text-align: left; vertical-align: middle; padding-left: 16px;'
+                            >
+                              <div
+                                style='font-size: 16px; font-weight: 700; color: #92400e;'
+                              >Expiring Soon</div>
+                              <div
+                                style='font-size: 12px; color: #78350f; margin-top: 2px;'
+                              >Schedule calibration in advance</div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+          </table>
+
+          <!-- Legend -->
+          <div class='legend'>
+            <div class='legend-item'>
+              <span class='legend-dot expired'></span>
+              <span>Expired - Immediate action required</span>
+            </div>
+            <div class='legend-item'>
+              <span class='legend-dot expiring'></span>
+              <span>Expiring Soon - Plan calibration</span>
+            </div>
+          </div>
+
+            <!-- Expired Assets Section -->
+            <div class='section-header expired'>
+              <div class='section-icon'>!</div>
+              <h3 class='section-title'>Calibration Expired (1)</h3>
+            </div>
+
+              <div class='asset-card expired'>
+                <div class='asset-header'>
+                  <p class='asset-id'>AST-2024-0042</p>
+                  <p class='asset-name'> </p>
+                </div>
+                <div class='asset-body'>
+                  <div class='info-grid'>
+                    <div class='info-item'>
+                      <div class='info-label'>Serial Number</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Category</div>
+                      <div class='info-value'>Test Equipment</div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Calibration Source</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Frequency</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Calibration End Date</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Assigned To</div>
+                      <div class='info-value'>Lab Team</div>
+                    </div>
+                  </div>
+                  <div style='text-align: center;'>
+                    <span class='status-badge expired'>Expired 5 days ago</span>
+                  </div>
+                </div>
+              </div>
+
+            <!-- Expiring Soon Assets Section -->
+            <div class='section-header expiring'>
+              <div class='section-icon'>⚠</div>
+              <h3 class='section-title'>Expiring Soon (2)</h3>
+            </div>
+
+              <div class='asset-card expiring'>
+                <div class='asset-header'>
+                  <p class='asset-id'>AST-2024-0043</p>
+                  <p class='asset-name'> </p>
+                </div>
+                <div class='asset-body'>
+                  <div class='info-grid'>
+                    <div class='info-item'>
+                      <div class='info-label'>Serial Number</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Category</div>
+                      <div class='info-value'>Measuring Instruments</div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Calibration Source</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Frequency</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Calibration End Date</div>
+                      <div class='info-value'></div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Assigned To</div>
+                      <div class='info-value'>Production Team</div>
+                    </div>
+                  </div>
+                  <div style='text-align: center;'>
+                    <span class='status-badge expiring-soon'>Expires in 10 days</span>
+                  </div>
+                </div>
+              </div>
+
+          <div class='button-container'>
+            <a href='https://hrms.eurekaenterprises.com/admin' class='button'>View Asset Dashboard</a>
+          </div>
+
+          <div class='divider'></div>
+
+          <div class='note-box'>
+            <p>
+              <strong>📋 Why Calibration Matters:</strong>
+            </p>
+          </div>
+          <ul style='color: #4a5568; font-size: 13px; margin: 0 0 20px 0; padding-left: 20px;'>
+            <li>Ensures measurement accuracy and precision</li>
+            <li>Maintains compliance with quality standards (ISO, NABL)</li>
+            <li>Prevents production defects and rework</li>
+            <li>Provides traceability for audits</li>
+          </ul>
+
+          <div class='signature'>
+            <p>
+              Best regards,<br />
+              <span class='signature-name'>Eureka Enterprises Pvt Ltd HRMS</span>
+            </p>
+          </div>
+        </div>
+
+        <div class='footer'>
+          <p class='footer-text'>This is an automated alert. Please do not reply directly to this
+            email.</p>
+          <p class='footer-company'>&copy;
+            2026
+            Eureka Enterprises Pvt Ltd. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

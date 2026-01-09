@@ -121,7 +121,7 @@ export class ConfigSettingService {
     // Determine isActive: use explicit value if provided, otherwise use FY logic
     const shouldBeActive = data.isActive !== undefined ? data.isActive : isCurrentFinancialYear;
 
-    // TODO: Actual value check for config setting with AJV.
+    //TODO: (LAST TASK)Actual value check for config setting with AJV.
     return await queryRunner.transaction(async (transactionManager) => {
       // Deactivate all existing active records for this configId
       // NOTE: current financial year is not allowed to be updated (unless system operation)

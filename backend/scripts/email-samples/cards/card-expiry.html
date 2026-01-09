@@ -4,7 +4,7 @@
     <meta name='viewport' content='width=device-width, initial-scale=1.0' />
     <meta name='color-scheme' content='light' />
     <meta name='supported-color-schemes' content='light' />
-    <title>{{companyName}} - Card Expiry Alert</title>
+    <title>Eureka Enterprises Pvt Ltd - Card Expiry Alert</title>
     <style>
       body { margin: 0; padding: 0; width: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana,
       sans-serif; font-size: 15px; line-height: 1.6; color: #2d3748; background-color: #f7fafc; }
@@ -70,8 +70,8 @@
     <div class='email-wrapper'>
       <div class='email-container'>
         <div class='header'>
-          <img src='{{companyLogo}}' alt='{{companyName}}' class='logo' />
-          <p class='company-name'>{{companyName}}</p>
+          <img src='https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg' alt='Eureka Enterprises Pvt Ltd' class='logo' />
+          <p class='company-name'>Eureka Enterprises Pvt Ltd</p>
         </div>
 
         <div class='content'>
@@ -85,7 +85,6 @@
 
           <!-- Summary Cards -->
           <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>
-            {{#if hasExpired}}
               <tr>
                 <td style='padding-bottom: 16px;'>
                   <table width='100%' cellpadding='0' cellspacing='0' border='0'>
@@ -98,7 +97,7 @@
                             <td width='80' style='text-align: center; vertical-align: middle;'>
                               <div
                                 style='font-size: 48px; font-weight: 700; line-height: 1; color: #c53030;'
-                              >{{totalExpired}}</div>
+                              >2</div>
                             </td>
                             <td
                               style='text-align: left; vertical-align: middle; padding-left: 16px;'
@@ -115,8 +114,6 @@
                   </table>
                 </td>
               </tr>
-            {{/if}}
-            {{#if hasExpiringSoon}}
               <tr>
                 <td>
                   <table width='100%' cellpadding='0' cellspacing='0' border='0'>
@@ -129,7 +126,7 @@
                             <td width='80' style='text-align: center; vertical-align: middle;'>
                               <div
                                 style='font-size: 48px; font-weight: 700; line-height: 1; color: #92400e;'
-                              >{{totalExpiringSoon}}</div>
+                              >3</div>
                             </td>
                             <td
                               style='text-align: left; vertical-align: middle; padding-left: 16px;'
@@ -148,7 +145,6 @@
                   </table>
                 </td>
               </tr>
-            {{/if}}
           </table>
 
           <!-- Legend -->
@@ -163,7 +159,6 @@
             </div>
           </div>
 
-          {{#if hasExpired}}
             <!-- Expired Cards Section -->
             <table
               width='100%'
@@ -182,54 +177,88 @@
                 </td>
                 <td style='vertical-align: middle; padding-left: 8px;'>
                   <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #c53030;'>Expired
-                    Cards ({{totalExpired}})</h3>
+                    Cards (2)</h3>
                 </td>
               </tr>
             </table>
 
-            {{#each expiredCards}}
               <div class='card-item expired'>
                 <div class='card-header'>
-                  <p class='card-number'>{{maskedCardNumber}}</p>
-                  <span class='card-type-badge'>{{cardTypeLabel}}</span>
+                  <p class='card-number'>**** **** **** 4523</p>
+                  <span class='card-type-badge'>Petrol Card</span>
                 </div>
                 <div class='card-body'>
                   <div class='card-visual'>
-                    <div class='card-visual-number'>{{maskedCardNumber}}</div>
+                    <div class='card-visual-number'>**** **** **** 4523</div>
                     <div class='card-visual-row'>
                       <div>
                         <span class='card-visual-label'>Card Holder</span><br />
-                        <span class='card-visual-value'>{{holderName}}</span>
+                        <span class='card-visual-value'>Vikram Singh</span>
                       </div>
                       <div>
                         <span class='card-visual-label'>Valid Thru</span><br />
-                        <span class='card-visual-value'>{{expiryDate}}</span>
+                        <span class='card-visual-value'>12/2025</span>
                       </div>
                     </div>
                   </div>
                   <div class='info-grid'>
                     <div class='info-item'>
                       <div class='info-label'>Card Type</div>
-                      <div class='info-value'>{{cardTypeLabel}}</div>
+                      <div class='info-value'>Petrol Card</div>
                     </div>
                     <div class='info-item'>
                       <div class='info-label'>Holder Name</div>
-                      <div class='info-value'>{{holderName}}</div>
+                      <div class='info-value'>Vikram Singh</div>
                     </div>
                     <div class='info-item'>
                       <div class='info-label'>Expiry Date</div>
-                      <div class='info-value'>{{expiryDate}}</div>
+                      <div class='info-value'>12/2025</div>
                     </div>
                   </div>
                   <div style='text-align: center;'>
-                    <span class='status-badge {{statusClass}}'>{{daysText}}</span>
+                    <span class='status-badge expired'>Expired 10 days ago</span>
                   </div>
                 </div>
               </div>
-            {{/each}}
-          {{/if}}
+              <div class='card-item expired'>
+                <div class='card-header'>
+                  <p class='card-number'>**** **** **** 7890</p>
+                  <span class='card-type-badge'>Toll Card</span>
+                </div>
+                <div class='card-body'>
+                  <div class='card-visual'>
+                    <div class='card-visual-number'>**** **** **** 7890</div>
+                    <div class='card-visual-row'>
+                      <div>
+                        <span class='card-visual-label'>Card Holder</span><br />
+                        <span class='card-visual-value'>Fleet Account</span>
+                      </div>
+                      <div>
+                        <span class='card-visual-label'>Valid Thru</span><br />
+                        <span class='card-visual-value'>01/2026</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class='info-grid'>
+                    <div class='info-item'>
+                      <div class='info-label'>Card Type</div>
+                      <div class='info-value'>Toll Card</div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Holder Name</div>
+                      <div class='info-value'>Fleet Account</div>
+                    </div>
+                    <div class='info-item'>
+                      <div class='info-label'>Expiry Date</div>
+                      <div class='info-value'>01/2026</div>
+                    </div>
+                  </div>
+                  <div style='text-align: center;'>
+                    <span class='status-badge expired'>Expired 5 days ago</span>
+                  </div>
+                </div>
+              </div>
 
-          {{#if hasExpiringSoon}}
             <!-- Expiring Soon Section -->
             <table
               width='100%'
@@ -248,52 +277,49 @@
                 </td>
                 <td style='vertical-align: middle; padding-left: 8px;'>
                   <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #92400e;'>Expiring
-                    Soon ({{totalExpiringSoon}})</h3>
+                    Soon (3)</h3>
                 </td>
               </tr>
             </table>
 
-            {{#each expiringSoonCards}}
               <div class='card-item expiring'>
                 <div class='card-header'>
-                  <p class='card-number'>{{maskedCardNumber}}</p>
-                  <span class='card-type-badge'>{{cardTypeLabel}}</span>
+                  <p class='card-number'>**** **** **** 1234</p>
+                  <span class='card-type-badge'>Fleet Card</span>
                 </div>
                 <div class='card-body'>
                   <div class='card-visual'>
-                    <div class='card-visual-number'>{{maskedCardNumber}}</div>
+                    <div class='card-visual-number'>**** **** **** 1234</div>
                     <div class='card-visual-row'>
                       <div>
                         <span class='card-visual-label'>Card Holder</span><br />
-                        <span class='card-visual-value'>{{holderName}}</span>
+                        <span class='card-visual-value'>Ramesh Kumar</span>
                       </div>
                       <div>
                         <span class='card-visual-label'>Valid Thru</span><br />
-                        <span class='card-visual-value'>{{expiryDate}}</span>
+                        <span class='card-visual-value'>02/2026</span>
                       </div>
                     </div>
                   </div>
                   <div class='info-grid'>
                     <div class='info-item'>
                       <div class='info-label'>Card Type</div>
-                      <div class='info-value'>{{cardTypeLabel}}</div>
+                      <div class='info-value'>Fleet Card</div>
                     </div>
                     <div class='info-item'>
                       <div class='info-label'>Holder Name</div>
-                      <div class='info-value'>{{holderName}}</div>
+                      <div class='info-value'>Ramesh Kumar</div>
                     </div>
                     <div class='info-item'>
                       <div class='info-label'>Expiry Date</div>
-                      <div class='info-value'>{{expiryDate}}</div>
+                      <div class='info-value'>02/2026</div>
                     </div>
                   </div>
                   <div style='text-align: center;'>
-                    <span class='status-badge {{statusClass}}'>{{daysText}}</span>
+                    <span class='status-badge expiring-soon'>Expires in 25 days</span>
                   </div>
                 </div>
               </div>
-            {{/each}}
-          {{/if}}
 
           <div class='note-box'>
             <p>
@@ -304,7 +330,7 @@
           </div>
 
           <div class='button-container'>
-            <a href='{{adminPortalUrl}}' class='button'>View Card Dashboard</a>
+            <a href='https://hrms.eurekaenterprises.com/admin' class='button'>View Card Dashboard</a>
           </div>
 
           <div class='divider'></div>
@@ -323,7 +349,7 @@
           <div class='signature'>
             <p>
               Best regards,<br />
-              <span class='signature-name'>{{companyName}} HRMS</span>
+              <span class='signature-name'>Eureka Enterprises Pvt Ltd HRMS</span>
             </p>
           </div>
         </div>
@@ -332,8 +358,8 @@
           <p class='footer-text'>This is an automated alert. Please do not reply directly to this
             email.</p>
           <p class='footer-company'>&copy;
-            {{currentYear}}
-            {{companyName}}. All rights reserved.</p>
+            2026
+            Eureka Enterprises Pvt Ltd. All rights reserved.</p>
         </div>
       </div>
     </div>
