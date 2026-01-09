@@ -788,6 +788,11 @@ export class PayrollService {
     const daysInMonth = new Date(year, month, 0).getDate();
     let workingDays = 0;
 
+    // Fetch holidays if holiday calendar is enabled
+    const holidayDates = config.useHolidayCalendar
+      ? await this.getHolidayDatesForMonth(month, year)
+      : [];
+
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
       const dayOfWeek = date.getDay();
@@ -799,7 +804,14 @@ export class PayrollService {
       if (config.excludeSundays && isSunday) continue;
       if (config.excludeSaturdays && isSaturday) continue;
 
-      // TODO: If useHolidayCalendar is true, check holiday_calendar config
+      // Check if it's a holiday
+      if (config.useHolidayCalendar && holidayDates.length > 0) {
+        const dateString = `${year}-${month.toString().padStart(2, '0')}-${day
+          .toString()
+          .padStart(2, '0')}`;
+        if (holidayDates.includes(dateString)) continue;
+      }
+
       workingDays++;
     }
 
