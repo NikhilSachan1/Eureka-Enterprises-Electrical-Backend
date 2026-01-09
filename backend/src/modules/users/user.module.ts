@@ -13,6 +13,7 @@ import { FilesModule } from '../common/file-upload/files.module';
 import { UserDocumentModule } from '../user-documents/user-document.module';
 import { SalaryStructureModule } from '../salary-structures/salary-structure.module';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
+import { EmailModule } from '../common/email/email.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
     UserDocumentModule,
     forwardRef(() => SalaryStructureModule),
     LeaveBalancesModule,
+    EmailModule,
   ],
   providers: [UserService, UserRepository],
   exports: [UserService],

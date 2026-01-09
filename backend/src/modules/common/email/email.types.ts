@@ -23,10 +23,21 @@ export interface IEmailDataValues {
   referenceId?: string;
   referenceType?: string;
 
-  // Forget Password
+  // Forget Password / Welcome Email
   firstName?: string;
   lastName?: string;
   resetPasswordLink?: string;
+
+  // Welcome Employee
+  email?: string;
+  tempPassword?: string;
+  employeeId?: string;
+  designation?: string;
+  department?: string;
+  dateOfJoining?: string;
+  reportingManager?: string;
+  loginUrl?: string;
+  companyLogo?: string;
 
   // Payslip / FNF
   employeeName?: string;

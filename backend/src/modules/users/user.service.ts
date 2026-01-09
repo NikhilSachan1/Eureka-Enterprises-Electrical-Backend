@@ -47,6 +47,9 @@ import { LeaveCreditService } from '../leave-balances/leave-credit.service';
 import { Environments } from 'env-configs';
 import { AUTH_REDIRECT_ROUTES } from '../auth/constants/auth.constants';
 import { LEAVE_CREDIT_LOG_MESSAGES } from '../leave-balances/constants/leave-credit.constants';
+import { EmailService } from '../common/email/email.service';
+import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
+import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 
 @Injectable()
 export class UserService {
@@ -64,6 +67,7 @@ export class UserService {
     private leaveCreditService: LeaveCreditService,
     @InjectDataSource() private dataSource: DataSource,
     private jwtService: JwtService,
+    private emailService: EmailService,
   ) {}
 
   private validateNotSystemUser(userId: string, operation: 'update' | 'delete' | 'archive'): void {
@@ -339,9 +343,16 @@ export class UserService {
           );
         }
 
-        // TODO: Send welcome email with credentials to the employee
-        // await this.sendWelcomeEmail(email, generatedPassword, createEmployeeDto.firstName);
-        Logger.log(`TODO: Send welcome email to ${email} with generated password`);
+        // Send welcome email with credentials to the employee
+        await this.sendWelcomeEmail({
+          email,
+          tempPassword: generatedPassword,
+          firstName: createEmployeeDto.firstName,
+          lastName: createEmployeeDto.lastName,
+          employeeId: user.employeeId,
+          designation: createEmployeeDto.designation,
+          dateOfJoining: createEmployeeDto.dateOfJoining,
+        });
 
         return {
           id: user.id,
@@ -802,6 +813,55 @@ export class UserService {
       } catch (error) {
         Logger.error(`Failed to cleanup ${field}: ${key}`, error);
       }
+    }
+  }
+
+  private async sendWelcomeEmail(data: {
+    email: string;
+    tempPassword: string;
+    firstName: string;
+    lastName?: string;
+    employeeId: string;
+    designation?: string;
+    dateOfJoining?: string;
+  }): Promise<void> {
+    try {
+      const loginUrl = Environments.FE_BASE_URL;
+
+      await this.emailService.sendMail({
+        receiverEmails: data.email,
+        subject: EMAIL_SUBJECT.WELCOME_EMPLOYEE,
+        template: EMAIL_TEMPLATE.WELCOME_EMPLOYEE,
+        emailData: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          tempPassword: data.tempPassword,
+          employeeId: data.employeeId,
+          designation: data.designation || 'To be assigned',
+          dateOfJoining: data.dateOfJoining
+            ? new Date(data.dateOfJoining).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })
+            : new Date().toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              }),
+          loginUrl,
+          companyName: COMPANY_DETAILS.NAME,
+          companyLogo: COMPANY_DETAILS.LOGO_URL,
+          currentYear: new Date().getFullYear(),
+          referenceType: 'USER',
+        },
+      });
+
+      Logger.log(`Welcome email sent to ${data.email}`);
+    } catch (error) {
+      // Log error but don't fail employee creation
+      Logger.error(`Failed to send welcome email to ${data.email}:`, error);
     }
   }
 
