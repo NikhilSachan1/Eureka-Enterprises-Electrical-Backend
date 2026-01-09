@@ -92,7 +92,6 @@ export class LeaveCronService {
         (nextFYStart.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
       );
 
-      // TODO: Fetch HR/Admin emails from user roles dynamically
       const hrEmails = await this.getHRAdminEmails();
 
       if (hrEmails.length === 0) {
@@ -138,21 +137,8 @@ export class LeaveCronService {
     return `${fyStartYear}-${(fyStartYear + 1).toString().slice(-2)}`;
   }
 
-  /**
-   * Get HR/Admin emails for sending reminders
-   * TODO: Replace with dynamic fetching from user roles (HR, ADMIN roles)
-   */
   private async getHRAdminEmails(): Promise<string[]> {
-    // TODO: Implement dynamic email fetching from users with HR/ADMIN roles
-    // Example query:
-    // SELECT DISTINCT u.email FROM users u
-    // INNER JOIN user_roles ur ON u.id = ur."userId"
-    // INNER JOIN roles r ON ur."roleId" = r.id
-    // WHERE r.name IN ('HR', 'ADMIN') AND u."deletedAt" IS NULL
-
-    // For now, return placeholder emails
-    // Replace this with actual query when role-based email fetching is implemented
-    return ['hr@company.com'];
+    return this.schedulerService.getNotificationEmails(['admin']);
   }
 
   /**
@@ -390,7 +376,7 @@ export class LeaveCronService {
         continue;
       }
 
-      // TODO: Implement actual carry forward logic when required
+      // FUTURE: Implement actual carry forward logic when required
       this.logger.log(
         `[${cronName}] ${category} has carryForward: true - would carry forward (NOT IMPLEMENTED)`,
       );

@@ -676,9 +676,7 @@ export class AssetCronService {
    * TODO: Fetch dynamically from user roles (ADMIN, ASSET_MANAGER)
    */
   private async getRecipientEmails(): Promise<string[]> {
-    // TODO: Implement dynamic fetching from user roles
-    // const users = await this.userService.findByRole(['ADMIN', 'ASSET_MANAGER']);
-    // return users.map(u => u.email).filter(Boolean);
-    return ['akhil.sachan@coditas.com']; // Placeholder
+    // Get notification emails from configuration (Admin + Asset Manager for asset alerts)
+    return this.schedulerService.getNotificationEmails(['admin']);
   }
 }

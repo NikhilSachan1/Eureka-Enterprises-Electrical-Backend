@@ -1,4 +1,6 @@
 export const CONFIGURATION_KEYS = {
+  // SYSTEM / NOTIFICATIONS
+  NOTIFICATION_EMAILS: 'notification_emails',
   //ATTENDANCE
   MODULES: 'modules',
   SHIFT_CONFIGS: 'shift_configs',
@@ -82,6 +84,7 @@ export const CONFIGURATION_KEYS = {
 };
 
 export const CONFIGURATION_MODULES = {
+  SYSTEM: 'system',
   PERMISSION: 'permission',
   ATTENDANCE: 'attendance',
   LEAVE: 'leave',

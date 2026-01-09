@@ -947,8 +947,7 @@ export class AttendanceCronService {
   }
 
   private async getHRAdminEmailsForAttendance(): Promise<string[]> {
-    // TODO: Implement dynamic email fetching from users with HR/ADMIN roles
-    return ['hr@company.com'];
+    return this.schedulerService.getNotificationEmails(['admin']);
   }
 
   private async getAttendanceApprovalReminderThreshold(): Promise<number> {

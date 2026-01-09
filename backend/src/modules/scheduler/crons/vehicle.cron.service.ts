@@ -818,9 +818,6 @@ export class VehicleCronService {
    * TODO: Fetch dynamically from user roles (ADMIN)
    */
   private async getRecipientEmails(): Promise<string[]> {
-    // TODO: Implement dynamic fetching from user roles
-    // const users = await this.userService.findByRole(['ADMIN']);
-    // return users.map(u => u.email).filter(Boolean);
-    return ['akhil.sachan@coditas.com']; // Placeholder
+    return this.schedulerService.getNotificationEmails(['admin']);
   }
 }
