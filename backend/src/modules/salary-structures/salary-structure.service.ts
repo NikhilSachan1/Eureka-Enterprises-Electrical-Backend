@@ -372,6 +372,16 @@ export class SalaryStructureService {
   }
 
   private getSalarySnapshot(structure: SalaryStructureEntity): Record<string, any> {
+    // Normalize effectiveFrom to YYYY-MM-DD string format for consistent storage
+    let effectiveFromStr: string | null = null;
+    if (structure.effectiveFrom) {
+      const date =
+        structure.effectiveFrom instanceof Date
+          ? structure.effectiveFrom
+          : new Date(structure.effectiveFrom);
+      effectiveFromStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    }
+
     return {
       basic: structure.basic,
       hra: structure.hra,
@@ -388,7 +398,7 @@ export class SalaryStructureService {
       totalDeductions: structure.totalDeductions,
       netSalary: structure.netSalary,
       ctc: structure.ctc,
-      effectiveFrom: structure.effectiveFrom,
+      effectiveFrom: effectiveFromStr,
     };
   }
 
