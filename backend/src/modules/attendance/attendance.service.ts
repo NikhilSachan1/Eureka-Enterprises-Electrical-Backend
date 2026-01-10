@@ -551,7 +551,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
-            //
+            //nothing to be done here.
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
