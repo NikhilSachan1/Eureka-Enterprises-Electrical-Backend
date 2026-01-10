@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, FindOptionsWhere, FindOneOptions } from 'typeorm';
 import { AttendanceRepository } from './attendance.repository';
@@ -24,6 +31,7 @@ import {
   DEFAULT_APPROVAL_COMMENT,
   ShiftStatus,
   AttendanceEntityFields,
+  FOOD_EXPENSE_CONSTANTS,
 } from './constants/attendance.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import {
@@ -39,6 +47,8 @@ import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { UserService } from '../users/user.service';
+import { SalaryStructureService } from '../salary-structures/salary-structure.service';
+import { ExpenseTrackerService } from '../expense-tracker/expense-tracker.service';
 import { Environments } from 'env-configs';
 import {
   EMAIL_SUBJECT,
@@ -48,6 +58,8 @@ import {
 
 @Injectable()
 export class AttendanceService {
+  private readonly logger = new Logger(AttendanceService.name);
+
   constructor(
     private readonly attendanceRepository: AttendanceRepository,
     private readonly configurationService: ConfigurationService,
@@ -57,6 +69,10 @@ export class AttendanceService {
     private readonly emailService: EmailService,
     private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
+    @Inject(forwardRef(() => SalaryStructureService))
+    private readonly salaryStructureService: SalaryStructureService,
+    @Inject(forwardRef(() => ExpenseTrackerService))
+    private readonly expenseTrackerService: ExpenseTrackerService,
   ) {}
 
   async create(attendance: Partial<AttendanceEntity>, entityManager?: EntityManager) {
@@ -1602,6 +1618,9 @@ export class AttendanceService {
         );
       }
 
+      // Store previous approval status for food expense handling
+      const previousApprovalStatus = attendance.approvalStatus;
+
       const currentTime = new Date();
       const updateAttendanceRecord: Partial<AttendanceEntity> = {
         approvalStatus,
@@ -1623,6 +1642,14 @@ export class AttendanceService {
         { id: attendanceId },
         updateAttendanceRecord,
         entityManager,
+      );
+
+      // Handle food expense crediting/reversal based on approval status
+      await this.handleFoodExpenseForApproval(
+        attendance,
+        approvalStatus,
+        previousApprovalStatus,
+        approvalBy,
       );
 
       // Send approval notification (email + WhatsApp)
@@ -1816,5 +1843,142 @@ export class AttendanceService {
     } catch (error) {
       Logger.error('Failed to send attendance regularization notification:', error);
     }
+  }
+
+  // ==================== Food Expense Handling ====================
+
+  /**
+   * Handle food expense crediting/reversal based on attendance approval
+   * - On approval: Credit daily food allowance (+ holiday bonus if applicable)
+   * - On rejection: If previously approved, reverse the credit
+   */
+  private async handleFoodExpenseForApproval(
+    attendance: AttendanceEntity,
+    newApprovalStatus: string,
+    previousApprovalStatus: string,
+    approvalBy: string,
+  ): Promise<void> {
+    try {
+      const userId = attendance.userId;
+      const attendanceDate = attendance.attendanceDate;
+      const dateStr = this.dateTimeService.toDateString(attendanceDate);
+
+      if (newApprovalStatus === ApprovalStatus.APPROVED) {
+        // Credit food expense for approved attendance
+        await this.creditFoodExpenseForAttendance(userId, attendanceDate, dateStr, approvalBy);
+      } else if (
+        newApprovalStatus === ApprovalStatus.REJECTED &&
+        previousApprovalStatus === ApprovalStatus.APPROVED
+      ) {
+        // Reverse food expense if previously approved and now rejected
+        await this.reverseFoodExpenseForAttendance(userId, attendanceDate, dateStr, approvalBy);
+      }
+    } catch (error) {
+      // Log error but don't fail the approval process
+      this.logger.error(
+        `Failed to handle food expense for attendance ${attendance.id}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Credit food expense for an approved attendance
+   * Calculates daily food allowance from salary and credits it
+   */
+  private async creditFoodExpenseForAttendance(
+    userId: string,
+    attendanceDate: Date,
+    dateStr: string,
+    approvalBy: string,
+  ): Promise<void> {
+    // Get user's active salary structure
+    const salaryStructure = await this.getSalaryStructureForUser(userId);
+    if (!salaryStructure || !salaryStructure.foodAllowance) {
+      this.logger.warn(`No salary structure or food allowance found for user ${userId}`);
+      return;
+    }
+
+    // Calculate daily food allowance
+    const dailyFoodAllowance = this.calculateDailyFoodAllowance(
+      Number(salaryStructure.foodAllowance),
+      attendanceDate,
+    );
+
+    if (dailyFoodAllowance <= 0) {
+      return;
+    }
+
+    // Credit food expense for attendance
+    await this.expenseTrackerService.createSystemExpense({
+      userId,
+      category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+      amount: dailyFoodAllowance,
+      description: FOOD_EXPENSE_CONSTANTS.DESCRIPTION.replace('{date}', dateStr),
+      createdBy: approvalBy,
+      referenceId: `ATT_FOOD_${userId}_${dateStr}`,
+      referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+    });
+
+    this.logger.log(
+      `Credited food expense ₹${dailyFoodAllowance} for user ${userId} on ${dateStr}`,
+    );
+  }
+
+  /**
+   * Reverse food expense when attendance is rejected after being approved
+   * Creates a negative entry to reverse the credit
+   */
+  private async reverseFoodExpenseForAttendance(
+    userId: string,
+    attendanceDate: Date,
+    dateStr: string,
+    approvalBy: string,
+  ): Promise<void> {
+    // Get user's active salary structure
+    const salaryStructure = await this.getSalaryStructureForUser(userId);
+    if (!salaryStructure || !salaryStructure.foodAllowance) {
+      return;
+    }
+
+    // Calculate daily food allowance
+    const dailyFoodAllowance = this.calculateDailyFoodAllowance(
+      Number(salaryStructure.foodAllowance),
+      attendanceDate,
+    );
+
+    if (dailyFoodAllowance <= 0) {
+      return;
+    }
+
+    // Reverse food expense (create negative credit entry)
+    await this.expenseTrackerService.createSystemExpense({
+      userId,
+      category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+      amount: -dailyFoodAllowance, // Negative amount for reversal
+      description: FOOD_EXPENSE_CONSTANTS.REVERSAL_DESCRIPTION.replace('{date}', dateStr),
+      createdBy: approvalBy,
+      referenceId: `ATT_FOOD_REV_${userId}_${dateStr}`,
+      referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+    });
+
+    this.logger.log(
+      `Reversed food expense ₹${dailyFoodAllowance} for user ${userId} on ${dateStr}`,
+    );
+  }
+
+  private async getSalaryStructureForUser(userId: string) {
+    try {
+      return await this.salaryStructureService.findActiveByUserId(userId);
+    } catch {
+      return null;
+    }
+  }
+
+  private calculateDailyFoodAllowance(monthlyFoodAllowance: number, date: Date): number {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const dailyAmount = monthlyFoodAllowance / daysInMonth;
+    return Math.round(dailyAmount * 100) / 100;
   }
 }
