@@ -655,6 +655,7 @@ export class AttendanceService {
             );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
+            // Holiday to leave is not allowed for regularization
             throw new BadRequestException(
               ATTENDANCE_ERRORS.HOLIDAY_NOT_ALLOWED_AS_LEAVE_REGULARIZE,
             );
