@@ -760,7 +760,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
-            // TODO: MARK HOLIDAY
+            //nothing to be done here for checked in to holiday regularization
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
