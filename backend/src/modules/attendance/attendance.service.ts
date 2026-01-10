@@ -598,7 +598,7 @@ export class AttendanceService {
             );
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
-            //Nothing to be done here
+            //Nothing to be done here for checked in to absent regularization
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
