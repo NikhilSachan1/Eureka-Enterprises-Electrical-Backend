@@ -104,11 +104,6 @@ export class SalaryChangeLogRepository {
     }
   }
 
-  /**
-   * Get change history for a salary structure with limited user fields
-   * Returns changedByUser with only: id, firstName, lastName, email, employeeId
-   * Only the most recent record (first in array) has isActive: true, rest have false
-   */
   async getChangeHistoryWithLimitedFields(
     salaryStructureId: string,
     entityManager?: EntityManager,
