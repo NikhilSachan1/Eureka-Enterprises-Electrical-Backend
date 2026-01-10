@@ -490,6 +490,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
+            //credit food expense is done here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
