@@ -385,6 +385,7 @@ export class AttendanceService {
       switch (status) {
         case AttendanceStatus.PRESENT:
           if (existingAttendance.status === AttendanceStatus.ABSENT) {
+            //crediting food expense here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
@@ -415,6 +416,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
+            //crediting food expense here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
