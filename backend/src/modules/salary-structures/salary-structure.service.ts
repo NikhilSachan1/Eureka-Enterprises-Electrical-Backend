@@ -297,11 +297,7 @@ export class SalaryStructureService {
   }
 
   async getChangeHistory(salaryStructureId: string) {
-    return this.salaryChangeLogRepository.findAll({
-      where: { salaryStructureId },
-      relations: ['changedByUser'],
-      order: { changedAt: SortOrder.DESC },
-    });
+    return this.salaryChangeLogRepository.getChangeHistoryWithLimitedFields(salaryStructureId);
   }
 
   private async getActiveByUserId(userId: string): Promise<SalaryStructureEntity | null> {
