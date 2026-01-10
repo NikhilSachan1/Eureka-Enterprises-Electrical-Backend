@@ -59,7 +59,11 @@ import { SalaryStructureService } from '../salary-structures/salary-structure.se
 import { ExpenseTrackerService } from '../expense-tracker/expense-tracker.service';
 import { LeaveApplicationsService } from '../leave-applications/leave-applications.service';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
-import { ApprovalStatus as LeaveApprovalStatus } from '../leave-applications/constants/leave-application.constants';
+import {
+  LeaveApplicationType,
+  ApprovalStatus as LeaveApprovalStatus,
+  LeaveType,
+} from '../leave-applications/constants/leave-application.constants';
 import { Environments } from 'env-configs';
 import {
   EMAIL_SUBJECT,
@@ -342,6 +346,7 @@ export class AttendanceService {
       timezone,
       entrySourceType,
       attendanceType,
+      leaveCategory,
     } = regularizeAttendanceDto;
     const existingAttendance = await this.findOneOrFail({
       where: {
@@ -635,32 +640,19 @@ export class AttendanceService {
               AttendanceStatus.CHECKED_IN,
             ].includes(existingAttendance.status as AttendanceStatus)
           ) {
-            // TODO: apply leave and mark leave in attendance -> only leave debit is pending (force leavve)
-            await this.attendanceRepository.update(
-              { id: attendanceId },
-              {
-                isActive: false,
-                updatedBy: userId,
-              },
-            );
-
-            await this.attendanceRepository.create({
+            // Force leave - debit leave balance and mark as leave
+            await this.forceLeaveAndDebitBalance(
               userId,
-              attendanceDate: existingAttendance.attendanceDate,
-              status: AttendanceStatus.LEAVE,
+              existingAttendance.attendanceDate,
+              attendanceId,
+              existingAttendance.status as AttendanceStatus,
+              leaveCategory,
               notes,
               attendanceType,
               entrySourceType,
-              approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
-              approvalAt: new Date(),
-              approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
-              shiftConfigId: existingAttendance.shiftConfigId,
-              isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
-            });
+              existingAttendance.shiftConfigId,
+              entityManager,
+            );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
             throw new BadRequestException(
@@ -2278,6 +2270,124 @@ export class AttendanceService {
         approvalBy: userId,
         approvalAt: new Date(),
         approvalComment: DEFAULT_APPROVAL_COMMENT.ABSENT,
+        regularizedBy: userId,
+        shiftConfigId,
+        isActive: true,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      entityManager,
+    );
+  }
+
+  /**
+   * Force leave - debit leave balance and mark attendance as leave
+   * Used when regularizing to LEAVE status from other statuses
+   */
+  private async forceLeaveAndDebitBalance(
+    userId: string,
+    attendanceDate: Date,
+    attendanceId: string,
+    previousStatus: AttendanceStatus,
+    leaveCategory: string,
+    notes: string,
+    attendanceType: string,
+    entrySourceType: string,
+    shiftConfigId: string,
+    entityManager: EntityManager,
+  ): Promise<void> {
+    const dateStr = this.dateTimeService.toDateString(attendanceDate);
+    const financialYear = this.utilityService.getFinancialYear(attendanceDate);
+
+    // Check if user has leave balance for this category
+    const leaveBalance = await this.leaveBalancesService.findOne({
+      where: {
+        userId,
+        leaveCategory,
+        financialYear,
+      },
+    });
+
+    if (!leaveBalance) {
+      throw new BadRequestException(
+        `No leave balance found for category "${leaveCategory}" in financial year ${financialYear}`,
+      );
+    }
+
+    const availableBalance =
+      parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
+    if (availableBalance < 1) {
+      throw new BadRequestException(
+        `Insufficient leave balance for "${leaveCategory}". Available: ${availableBalance} days`,
+      );
+    }
+
+    // Debit 1 day from leave balance (increment consumed)
+    await this.leaveBalancesService.update(
+      {
+        userId,
+        leaveCategory,
+        financialYear,
+      },
+      { consumed: () => '(consumed::int + 1)::varchar' } as any,
+      entityManager,
+    );
+
+    this.logger.log(`Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr}`);
+
+    // Create a forced leave application record
+    await this.leaveApplicationsService.create(
+      {
+        userId,
+        leaveConfigId: leaveBalance.leaveConfigId,
+        leaveType: LeaveType.FULL_DAY,
+        leaveCategory,
+        entrySourceType,
+        leaveApplicationType: LeaveApplicationType.FORCED,
+        fromDate: attendanceDate,
+        toDate: attendanceDate,
+        reason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace('{date}', dateStr),
+        approvalStatus: LeaveApprovalStatus.APPROVED,
+        approvalBy: userId,
+        approvalAt: new Date(),
+        approvalReason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace(
+          '{date}',
+          dateStr,
+        ),
+        createdBy: userId,
+      },
+      entityManager,
+    );
+
+    // If previous status was PRESENT, reverse food expense
+    if (previousStatus === AttendanceStatus.PRESENT) {
+      await this.reverseFoodExpenseForAttendance(userId, attendanceDate, dateStr, userId);
+      this.logger.log(`Reversed food expense for user ${userId} on ${dateStr} (was PRESENT)`);
+    }
+
+    // Deactivate old attendance record
+    await this.attendanceRepository.update(
+      { id: attendanceId },
+      {
+        isActive: false,
+        updatedBy: userId,
+      },
+      entityManager,
+    );
+
+    // Create new attendance record as LEAVE
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate,
+        status: AttendanceStatus.LEAVE,
+        notes: notes || LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_NOTES.replace('{date}', dateStr),
+        attendanceType,
+        entrySourceType,
+        approvalStatus: ApprovalStatus.APPROVED,
+        approvalBy: userId,
+        approvalAt: new Date(),
+        approvalComment: DEFAULT_APPROVAL_COMMENT.LEAVE,
         regularizedBy: userId,
         shiftConfigId,
         isActive: true,

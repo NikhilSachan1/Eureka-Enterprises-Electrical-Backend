@@ -155,4 +155,6 @@ export const LEAVE_REGULARIZATION_CONSTANTS = {
   LEAVE_CANCELLED_REASON_ABSENT: 'Leave cancelled - Attendance regularized as absent on {date}',
   REGULARIZATION_NOTES_PRESENT: 'Regularized from leave to present on {date}',
   REGULARIZATION_NOTES_ABSENT: 'Regularized from leave to absent on {date}',
+  FORCE_LEAVE_NOTES: 'Regularized to leave on {date}',
+  FORCE_LEAVE_REASON: 'Forced leave applied via attendance regularization on {date}',
 };

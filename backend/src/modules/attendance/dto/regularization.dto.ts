@@ -54,6 +54,17 @@ export class RegularizeAttendanceDto {
   @IsNotEmpty()
   userId: string;
 
+  @ApiProperty({
+    description: 'Leave category to apply when regularizing to leave status',
+    example: 'Casual Leave',
+    required: false,
+  })
+  @ValidateIf((obj) => obj.status === AttendanceStatus.LEAVE)
+  @IsNotEmpty({ message: 'Leave category is required when status is leave' })
+  @IsString()
+  @IsOptional()
+  leaveCategory?: string;
+
   @IsEnum(EntrySourceType)
   @IsOptional()
   entrySourceType: EntrySourceType;
