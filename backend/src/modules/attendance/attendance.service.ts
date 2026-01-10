@@ -492,7 +492,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
-            //credit food expense is done here
+            //crediting food expense is done here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
@@ -523,6 +523,7 @@ export class AttendanceService {
           break;
         case AttendanceStatus.ABSENT:
           if (existingAttendance.status === AttendanceStatus.PRESENT) {
+            //reverting food expense here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
