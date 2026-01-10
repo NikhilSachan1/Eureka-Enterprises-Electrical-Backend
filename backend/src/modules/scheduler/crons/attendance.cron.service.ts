@@ -526,6 +526,7 @@ export class AttendanceCronService {
   // ==================== MARK APPROVAL PENDING ====================
 
   /**
+   * CRON 23
    * Mark Approval Pending
    * Runs at midnight (12:00 AM IST) via DailyMidnightOrchestrator
    *

@@ -50,6 +50,7 @@ import { RequestAuditInterceptor } from 'src/modules/audit-logs/interceptors/req
 import { FnfModule } from 'src/modules/fnf/fnf.module';
 import { CommunicationLogModule } from 'src/modules/common/communication-logs/communication-log.module';
 import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
+import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
     FnfModule,
     CommunicationLogModule,
     WhatsAppModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
