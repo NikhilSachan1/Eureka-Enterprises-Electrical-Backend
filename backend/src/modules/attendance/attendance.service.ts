@@ -663,7 +663,7 @@ export class AttendanceService {
           break;
         case AttendanceStatus.HOLIDAY:
           if (existingAttendance.status === AttendanceStatus.PRESENT) {
-            // TODO: MARK HOLIDAY, force leave
+            //Reverted food expense here.
 
             await this.attendanceRepository.update(
               { id: attendanceId },
