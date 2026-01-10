@@ -523,7 +523,7 @@ export class AttendanceService {
           break;
         case AttendanceStatus.ABSENT:
           if (existingAttendance.status === AttendanceStatus.PRESENT) {
-            //reverting food expense here
+            //reverted food expense here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
@@ -551,6 +551,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
+            //
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
