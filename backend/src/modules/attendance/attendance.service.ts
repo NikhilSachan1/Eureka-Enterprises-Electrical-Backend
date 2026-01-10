@@ -7,7 +7,14 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOptionsWhere, FindOneOptions } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  FindOneOptions,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+} from 'typeorm';
 import { AttendanceRepository } from './attendance.repository';
 import {
   AttendanceActionDto,
@@ -32,6 +39,7 @@ import {
   ShiftStatus,
   AttendanceEntityFields,
   FOOD_EXPENSE_CONSTANTS,
+  LEAVE_REGULARIZATION_CONSTANTS,
 } from './constants/attendance.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import {
@@ -49,6 +57,9 @@ import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { UserService } from '../users/user.service';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
 import { ExpenseTrackerService } from '../expense-tracker/expense-tracker.service';
+import { LeaveApplicationsService } from '../leave-applications/leave-applications.service';
+import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
+import { ApprovalStatus as LeaveApprovalStatus } from '../leave-applications/constants/leave-application.constants';
 import { Environments } from 'env-configs';
 import {
   EMAIL_SUBJECT,
@@ -73,6 +84,10 @@ export class AttendanceService {
     private readonly salaryStructureService: SalaryStructureService,
     @Inject(forwardRef(() => ExpenseTrackerService))
     private readonly expenseTrackerService: ExpenseTrackerService,
+    @Inject(forwardRef(() => LeaveApplicationsService))
+    private readonly leaveApplicationsService: LeaveApplicationsService,
+    @Inject(forwardRef(() => LeaveBalancesService))
+    private readonly leaveBalancesService: LeaveBalancesService,
   ) {}
 
   async create(attendance: Partial<AttendanceEntity>, entityManager?: EntityManager) {
@@ -430,7 +445,19 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.LEAVE) {
-            //   TODO: LEAVE REVERT and credit back and mark present
+            // Revert leave, credit back leave balance, and mark present
+            await this.revertLeaveAndMarkPresent(
+              userId,
+              existingAttendance.attendanceDate,
+              attendanceId,
+              checkInTimeUTC,
+              checkOutTimeUTC,
+              notes,
+              attendanceType,
+              entrySourceType,
+              existingAttendance.shiftConfigId,
+              entityManager,
+            );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
             //   TODO: HOLIDAY REVERT AND PROVIDE 1 LEAVE
@@ -1977,7 +2004,10 @@ export class AttendanceService {
       amount: dailyFoodAllowance,
       description: FOOD_EXPENSE_CONSTANTS.DESCRIPTION.replace('{date}', dateStr),
       createdBy: approvalBy,
-      referenceId: `ATT_FOOD_${userId}_${dateStr}`,
+      referenceId: FOOD_EXPENSE_CONSTANTS.REFERENCE_ID.replace('{userId}', userId).replace(
+        '{date}',
+        dateStr,
+      ),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
     });
 
@@ -2019,7 +2049,10 @@ export class AttendanceService {
       amount: -dailyFoodAllowance, // Negative amount for reversal
       description: FOOD_EXPENSE_CONSTANTS.REVERSAL_DESCRIPTION.replace('{date}', dateStr),
       createdBy: approvalBy,
-      referenceId: `ATT_FOOD_REV_${userId}_${dateStr}`,
+      referenceId: FOOD_EXPENSE_CONSTANTS.REVERSAL_REFERENCE_ID.replace('{userId}', userId).replace(
+        '{date}',
+        dateStr,
+      ),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
     });
 
@@ -2042,5 +2075,137 @@ export class AttendanceService {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const dailyAmount = monthlyFoodAllowance / daysInMonth;
     return Math.round(dailyAmount * 100) / 100;
+  }
+
+  /**
+   * Revert leave, credit back leave balance, and mark attendance as present
+   * Used when regularizing from LEAVE to PRESENT status
+   */
+  private async revertLeaveAndMarkPresent(
+    userId: string,
+    attendanceDate: Date,
+    attendanceId: string,
+    checkInTimeUTC: Date,
+    checkOutTimeUTC: Date,
+    notes: string,
+    attendanceType: string,
+    entrySourceType: string,
+    shiftConfigId: string,
+    entityManager: EntityManager,
+  ): Promise<void> {
+    // Find the leave application for this date
+    const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
+
+    if (leaveApplication) {
+      const financialYear = this.utilityService.getFinancialYear(attendanceDate);
+
+      // Credit back 1 day to leave balance (decrement consumed)
+      await this.leaveBalancesService.update(
+        {
+          userId,
+          leaveCategory: leaveApplication.leaveCategory,
+          financialYear,
+        },
+        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+        entityManager,
+      );
+
+      this.logger.log(
+        `Credited back 1 day of ${
+          leaveApplication.leaveCategory
+        } leave for user ${userId} on ${this.dateTimeService.toDateString(attendanceDate)}`,
+      );
+
+      // If it's a single-day leave, update the leave application status
+      const fromDate = new Date(leaveApplication.fromDate);
+      const toDate = new Date(leaveApplication.toDate);
+      const isSingleDayLeave = fromDate.toDateString() === toDate.toDateString();
+
+      if (isSingleDayLeave) {
+        const dateStr = this.dateTimeService.toDateString(attendanceDate);
+        // Cancel the entire leave application
+        await this.leaveApplicationsService.update(
+          { id: leaveApplication.id },
+          {
+            approvalStatus: LeaveApprovalStatus.CANCELLED,
+            approvalReason: LEAVE_REGULARIZATION_CONSTANTS.LEAVE_CANCELLED_REASON.replace(
+              '{date}',
+              dateStr,
+            ),
+            approvalBy: userId,
+            approvalAt: new Date(),
+            updatedBy: userId,
+          },
+          entityManager,
+        );
+        this.logger.log(`Cancelled single-day leave application ${leaveApplication.id}`);
+      } else {
+        // For multi-day leave, just log (we still credited back 1 day)
+        this.logger.log(
+          `Multi-day leave application ${leaveApplication.id} - credited back 1 day but leave application not cancelled`,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `No leave application found for user ${userId} on ${this.dateTimeService.toDateString(
+          attendanceDate,
+        )}`,
+      );
+    }
+
+    // Deactivate old attendance record
+    await this.attendanceRepository.update(
+      { id: attendanceId },
+      {
+        isActive: false,
+        updatedBy: userId,
+      },
+      entityManager,
+    );
+
+    // Create new attendance record as PRESENT
+    const dateStr = this.dateTimeService.toDateString(attendanceDate);
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate,
+        checkInTime: checkInTimeUTC,
+        checkOutTime: checkOutTimeUTC,
+        status: AttendanceStatus.PRESENT,
+        notes:
+          notes || LEAVE_REGULARIZATION_CONSTANTS.REGULARIZATION_NOTES.replace('{date}', dateStr),
+        attendanceType,
+        entrySourceType,
+        approvalStatus: ApprovalStatus.APPROVED,
+        approvalBy: userId,
+        approvalAt: new Date(),
+        approvalComment: DEFAULT_APPROVAL_COMMENT.PRESENT,
+        regularizedBy: userId,
+        shiftConfigId,
+        isActive: true,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      entityManager,
+    );
+  }
+
+  private async findLeaveApplicationForDate(userId: string, date: Date): Promise<any | null> {
+    try {
+      // Find approved leave application where the date falls between fromDate and toDate
+      const leaveApplication = await this.leaveApplicationsService.findOne({
+        where: {
+          userId,
+          approvalStatus: LeaveApprovalStatus.APPROVED,
+          fromDate: LessThanOrEqual(date),
+          toDate: MoreThanOrEqual(date),
+        },
+      });
+
+      return leaveApplication;
+    } catch (error) {
+      this.logger.error(`Error finding leave application for date: ${error.message}`);
+      return null;
+    }
   }
 }

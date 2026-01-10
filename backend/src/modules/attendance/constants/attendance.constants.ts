@@ -146,4 +146,11 @@ export const FOOD_EXPENSE_CONSTANTS = {
   REFERENCE_TYPE: 'ATTENDANCE_FOOD_ALLOWANCE',
   DESCRIPTION: 'Food allowance for attendance on {date}',
   REVERSAL_DESCRIPTION: 'Reversal: Food allowance for {date} (attendance rejected)',
+  REFERENCE_ID: 'ATT_FOOD_{userId}_{date}',
+  REVERSAL_REFERENCE_ID: 'ATT_FOOD_REV_{userId}_{date}',
+};
+
+export const LEAVE_REGULARIZATION_CONSTANTS = {
+  LEAVE_CANCELLED_REASON: 'Leave cancelled - Attendance regularized as present on {date}',
+  REGULARIZATION_NOTES: 'Regularized from leave to present on {date}',
 };

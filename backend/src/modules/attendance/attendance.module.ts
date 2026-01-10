@@ -10,6 +10,8 @@ import { EmailModule } from '../common/email/email.module';
 import { UsersModule } from '../users/user.module';
 import { SalaryStructureModule } from '../salary-structures/salary-structure.module';
 import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module';
+import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
+import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module'
     UsersModule,
     forwardRef(() => SalaryStructureModule),
     forwardRef(() => ExpenseTrackerModule),
+    forwardRef(() => LeaveApplicationsModule),
+    forwardRef(() => LeaveBalancesModule),
   ],
   providers: [AttendanceService, AttendanceRepository],
   exports: [AttendanceService],
