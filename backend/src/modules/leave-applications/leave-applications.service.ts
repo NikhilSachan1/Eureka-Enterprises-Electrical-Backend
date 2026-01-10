@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { LeaveApplicationsEntity } from './entities/leave-application.entity';
 import {
   DataSource,
@@ -66,6 +73,7 @@ export class LeaveApplicationsService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly leaveBalanceService: LeaveBalancesService,
+    @Inject(forwardRef(() => AttendanceService))
     private readonly attendanceService: AttendanceService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly userService: UserService,

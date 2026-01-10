@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { LeaveApplicationsService } from './leave-applications.service';
 import { LeaveApplicationsController } from './leave-applications.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -20,10 +20,11 @@ import { EmailModule } from '../common/email/email.module';
     ConfigSettingsModule,
     LeaveBalancesModule,
     UsersModule,
-    AttendanceModule,
+    forwardRef(() => AttendanceModule),
     EmailModule,
   ],
   controllers: [LeaveApplicationsController],
   providers: [LeaveApplicationsService, LeaveApplicationsRepository],
+  exports: [LeaveApplicationsService],
 })
 export class LeaveApplicationsModule {}
