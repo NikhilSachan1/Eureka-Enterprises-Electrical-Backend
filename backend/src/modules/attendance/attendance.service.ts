@@ -795,6 +795,15 @@ export class AttendanceService {
           throw new BadRequestException(ATTENDANCE_ERRORS.INVALID_STATUS);
       }
 
+      // Handle food expense crediting/reversal based on status change
+      await this.handleFoodExpenseForStatusChange(
+        userId,
+        existingAttendance.attendanceDate,
+        existingAttendance.status as AttendanceStatus,
+        status as AttendanceStatus,
+        userId,
+      );
+
       // Send regularization notification to the employee
       await this.sendRegularizationNotification(
         userId,
@@ -1223,6 +1232,17 @@ export class AttendanceService {
       entityManager,
     );
 
+    // Credit food expense for force attendance with APPROVED status and PRESENT status
+    if (status === AttendanceStatus.PRESENT) {
+      await this.handleFoodExpenseForStatusChange(
+        userId,
+        targetDate,
+        AttendanceStatus.NOT_CHECKED_IN_YET, // Previous status (no attendance existed)
+        status,
+        createdBy,
+      );
+    }
+
     const workDurationSeconds = (checkOutTimeUTC.getTime() - checkInTimeUTC.getTime()) / 1000;
 
     return {
@@ -1288,6 +1308,17 @@ export class AttendanceService {
       },
       entityManager,
     );
+
+    // Credit food expense for force attendance with APPROVED status and PRESENT status
+    if (status === AttendanceStatus.PRESENT) {
+      await this.handleFoodExpenseForStatusChange(
+        userId,
+        targetDate,
+        AttendanceStatus.NOT_CHECKED_IN_YET, // Previous status (no attendance existed)
+        status,
+        createdBy,
+      );
+    }
 
     const workDurationSeconds = (checkOutTimeUTC.getTime() - checkInTimeUTC.getTime()) / 1000;
 
@@ -1849,7 +1880,7 @@ export class AttendanceService {
 
   /**
    * Handle food expense crediting/reversal based on attendance approval
-   * - On approval: Credit daily food allowance (+ holiday bonus if applicable)
+   * - On approval: Credit daily food allowance
    * - On rejection: If previously approved, reverse the credit
    */
   private async handleFoodExpenseForApproval(
@@ -1877,6 +1908,37 @@ export class AttendanceService {
       // Log error but don't fail the approval process
       this.logger.error(
         `Failed to handle food expense for attendance ${attendance.id}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Handle food expense for regularization/force attendance status changes
+   * - previousStatus PRESENT and newStatus not PRESENT: Reverse food credit
+   * - previousStatus not PRESENT and newStatus PRESENT: Credit food
+   */
+  private async handleFoodExpenseForStatusChange(
+    userId: string,
+    attendanceDate: Date,
+    previousStatus: AttendanceStatus,
+    newStatus: AttendanceStatus,
+    actionBy: string,
+  ): Promise<void> {
+    try {
+      const dateStr = this.dateTimeService.toDateString(attendanceDate);
+      const wasPresentBefore = previousStatus === AttendanceStatus.PRESENT;
+      const isPresentNow = newStatus === AttendanceStatus.PRESENT;
+
+      if (!wasPresentBefore && isPresentNow) {
+        // Transitioning to PRESENT - credit food expense
+        await this.creditFoodExpenseForAttendance(userId, attendanceDate, dateStr, actionBy);
+      } else if (wasPresentBefore && !isPresentNow) {
+        // Transitioning from PRESENT to something else - reverse food expense
+        await this.reverseFoodExpenseForAttendance(userId, attendanceDate, dateStr, actionBy);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle food expense for status change (${previousStatus} -> ${newStatus}): ${error.message}`,
       );
     }
   }
