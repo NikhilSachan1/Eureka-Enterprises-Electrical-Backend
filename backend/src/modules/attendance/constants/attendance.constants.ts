@@ -151,6 +151,8 @@ export const FOOD_EXPENSE_CONSTANTS = {
 };
 
 export const LEAVE_REGULARIZATION_CONSTANTS = {
-  LEAVE_CANCELLED_REASON: 'Leave cancelled - Attendance regularized as present on {date}',
-  REGULARIZATION_NOTES: 'Regularized from leave to present on {date}',
+  LEAVE_CANCELLED_REASON_PRESENT: 'Leave cancelled - Attendance regularized as present on {date}',
+  LEAVE_CANCELLED_REASON_ABSENT: 'Leave cancelled - Attendance regularized as absent on {date}',
+  REGULARIZATION_NOTES_PRESENT: 'Regularized from leave to present on {date}',
+  REGULARIZATION_NOTES_ABSENT: 'Regularized from leave to absent on {date}',
 };
