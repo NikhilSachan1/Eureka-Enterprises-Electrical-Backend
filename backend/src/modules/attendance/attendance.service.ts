@@ -733,7 +733,7 @@ export class AttendanceService {
             );
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
-            //nothing to be done here
+            //nothing to be done here for approval pending to holiday regularization
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
