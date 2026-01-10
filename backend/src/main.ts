@@ -88,6 +88,13 @@ async function bootstrap() {
           schema: { type: 'string', example: 'web' },
           description: 'Client type (web/mobile/desktop)',
         },
+        {
+          name: 'X-Timezone',
+          in: 'header' as const,
+          required: true,
+          schema: { type: 'string', example: 'Asia/Kolkata' },
+          description: 'User timezone (IANA timezone format, e.g., Asia/Kolkata, America/New_York)',
+        },
       ];
 
       // Add headers to all paths/operations
