@@ -2040,6 +2040,7 @@ export class AttendanceService {
       AttendanceStatus.CHECKED_OUT,
       AttendanceStatus.HALF_DAY,
       AttendanceStatus.PRESENT,
+      AttendanceStatus.APPROVAL_PENDING,
     ];
 
     if (!workingStatuses.includes(status as AttendanceStatus)) {

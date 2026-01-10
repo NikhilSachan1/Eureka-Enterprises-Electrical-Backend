@@ -63,7 +63,7 @@ export const buildAttendanceSummaryForPayrollQuery = (
 ) => {
   const query = `
     SELECT
-      COUNT(CASE WHEN a."status" = '${AttendanceStatus.PRESENT}' THEN 1 END)::int as "presentDays",
+      COUNT(CASE WHEN a."status" IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.APPROVAL_PENDING}') THEN 1 END)::int as "presentDays",
       COUNT(CASE WHEN a."status" = '${AttendanceStatus.ABSENT}' THEN 1 END)::int as "absentDays",
       COUNT(CASE WHEN a."status" = '${AttendanceStatus.HALF_DAY}' THEN 1 END)::int as "halfDays",
       COUNT(CASE WHEN a."status" = '${AttendanceStatus.LEAVE}' THEN 1 END)::int as "paidLeaveDays",
@@ -115,7 +115,7 @@ export const buildPresentDatesForPayrollQuery = (
       AND a."attendanceDate" <= $3::date
       AND a."isActive" = true
       AND a."approvalStatus" = 'approved'
-      AND a."status" IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.CHECKED_IN}', '${AttendanceStatus.CHECKED_OUT}')
+      AND a."status" IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.CHECKED_IN}', '${AttendanceStatus.CHECKED_OUT}', '${AttendanceStatus.APPROVAL_PENDING}')
   `;
 
   return { query, params: [userId, startDate, endDate] };
