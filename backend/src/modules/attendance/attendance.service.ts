@@ -720,34 +720,20 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.LEAVE) {
-            // TODO: PROVIDE 1 LEAVE and mark holiday
-            await this.attendanceRepository.update(
-              { id: attendanceId },
-              {
-                isActive: false,
-                updatedBy: userId,
-              },
-            );
-            await this.attendanceRepository.create({
+            // Credited back leave and mark as holiday
+            await this.revertLeaveAndMarkHoliday(
               userId,
-              attendanceDate: existingAttendance.attendanceDate,
-              status: AttendanceStatus.HOLIDAY,
+              existingAttendance.attendanceDate,
+              attendanceId,
               notes,
               attendanceType,
               entrySourceType,
-              approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
-              approvalAt: new Date(),
-              approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
-              shiftConfigId: existingAttendance.shiftConfigId,
-              isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
-            });
+              existingAttendance.shiftConfigId,
+              entityManager,
+            );
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
-            // TODO: MARK HOLIDAY
+            //nothing to be done here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
@@ -2271,6 +2257,113 @@ export class AttendanceService {
         approvalBy: userId,
         approvalAt: new Date(),
         approvalComment: DEFAULT_APPROVAL_COMMENT.ABSENT,
+        regularizedBy: userId,
+        shiftConfigId,
+        isActive: true,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+      entityManager,
+    );
+  }
+
+  /**
+   * Revert leave, credit back leave balance, and mark attendance as holiday
+   * Used when regularizing from LEAVE to HOLIDAY status
+   */
+  private async revertLeaveAndMarkHoliday(
+    userId: string,
+    attendanceDate: Date,
+    attendanceId: string,
+    notes: string,
+    attendanceType: string,
+    entrySourceType: string,
+    shiftConfigId: string,
+    entityManager: EntityManager,
+  ): Promise<void> {
+    // Find the leave application for this date
+    const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
+
+    if (leaveApplication) {
+      const financialYear = this.utilityService.getFinancialYear(attendanceDate);
+      const dateStr = this.dateTimeService.toDateString(attendanceDate);
+
+      // Credit back 1 day to leave balance (decrement consumed)
+      await this.leaveBalancesService.update(
+        {
+          userId,
+          leaveCategory: leaveApplication.leaveCategory,
+          financialYear,
+        },
+        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+        entityManager,
+      );
+
+      this.logger.log(
+        `Credited back 1 day of ${leaveApplication.leaveCategory} leave for user ${userId} on ${dateStr}`,
+      );
+
+      // If it's a single-day leave, update the leave application status
+      const fromDate = new Date(leaveApplication.fromDate);
+      const toDate = new Date(leaveApplication.toDate);
+      const isSingleDayLeave = fromDate.toDateString() === toDate.toDateString();
+
+      if (isSingleDayLeave) {
+        // Cancel the entire leave application
+        await this.leaveApplicationsService.update(
+          { id: leaveApplication.id },
+          {
+            approvalStatus: LeaveApprovalStatus.CANCELLED,
+            approvalReason: LEAVE_REGULARIZATION_CONSTANTS.LEAVE_CANCELLED_REASON_HOLIDAY.replace(
+              '{date}',
+              dateStr,
+            ),
+            approvalBy: userId,
+            approvalAt: new Date(),
+            updatedBy: userId,
+          },
+          entityManager,
+        );
+        this.logger.log(`Cancelled single-day leave application ${leaveApplication.id}`);
+      } else {
+        this.logger.log(
+          `Multi-day leave application ${leaveApplication.id} - credited back 1 day but leave application not cancelled`,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `No leave application found for user ${userId} on ${this.dateTimeService.toDateString(
+          attendanceDate,
+        )}`,
+      );
+    }
+
+    // Deactivate old attendance record
+    await this.attendanceRepository.update(
+      { id: attendanceId },
+      {
+        isActive: false,
+        updatedBy: userId,
+      },
+      entityManager,
+    );
+
+    // Create new attendance record as HOLIDAY
+    const dateStr = this.dateTimeService.toDateString(attendanceDate);
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate,
+        status: AttendanceStatus.HOLIDAY,
+        notes:
+          notes ||
+          LEAVE_REGULARIZATION_CONSTANTS.REGULARIZATION_NOTES_HOLIDAY.replace('{date}', dateStr),
+        attendanceType,
+        entrySourceType,
+        approvalStatus: ApprovalStatus.APPROVED,
+        approvalBy: userId,
+        approvalAt: new Date(),
+        approvalComment: DEFAULT_APPROVAL_COMMENT.HOLIDAY,
         regularizedBy: userId,
         shiftConfigId,
         isActive: true,
