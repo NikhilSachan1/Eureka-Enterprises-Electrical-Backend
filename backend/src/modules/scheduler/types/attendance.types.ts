@@ -59,6 +59,7 @@ export interface AutoApproveAttendanceResult {
     halfDay: number;
     leave: number;
     leaveWithoutPay: number;
+    approvalPending: number;
     other: number;
   };
   errors: string[];

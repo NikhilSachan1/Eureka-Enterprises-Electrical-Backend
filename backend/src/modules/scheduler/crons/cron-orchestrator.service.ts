@@ -35,6 +35,8 @@ export class CronOrchestratorService {
         this.configSettingCronService.handleConfigSettingActivationDirect(),
       [CRON_NAMES.SALARY_STRUCTURE_ACTIVATION]: () =>
         this.salaryStructureCronService.handleSalaryStructureActivationDirect(),
+      [CRON_NAMES.MARK_APPROVAL_PENDING]: () =>
+        this.attendanceCronService.handleMarkApprovalPendingDirect(),
       [CRON_NAMES.DAILY_ATTENDANCE_ENTRY]: () =>
         this.attendanceCronService.handleDailyAttendanceEntryDirect(),
 
@@ -181,11 +183,13 @@ export class CronOrchestratorService {
    * Sequence:
    * 1. Config Setting Activation - Activates/deactivates configs based on effectiveFrom/To
    * 2. Salary Structure Activation - Activates/deactivates salary structures
-   * 3. Daily Attendance Entry - Creates attendance records for all users
+   * 3. Mark Approval Pending - Changes previous day's CHECKED_OUT to APPROVAL_PENDING
+   * 4. Daily Attendance Entry - Creates attendance records for all users
    *
    * Reason for sequence:
    * - Config must be active before attendance uses it
    * - Salary structure depends on configs
+   * - Previous day's attendance finalized before creating new records
    * - Attendance entry uses active configs
    */
   @Cron(CRON_SCHEDULES.DAILY_MIDNIGHT_ORCHESTRATOR)

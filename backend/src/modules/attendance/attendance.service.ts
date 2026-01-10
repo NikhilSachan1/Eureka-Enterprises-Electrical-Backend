@@ -2030,6 +2030,31 @@ export class AttendanceService {
     );
   }
 
+  async creditFoodExpenseForAutoApproval(
+    userId: string,
+    attendanceDate: Date,
+    status: string,
+  ): Promise<void> {
+    // Only credit food for working statuses
+    const workingStatuses = [
+      AttendanceStatus.CHECKED_OUT,
+      AttendanceStatus.HALF_DAY,
+      AttendanceStatus.PRESENT,
+    ];
+
+    if (!workingStatuses.includes(status as AttendanceStatus)) {
+      return;
+    }
+
+    const dateStr = this.dateTimeService.toDateString(attendanceDate);
+    await this.creditFoodExpenseForAttendance(
+      userId,
+      attendanceDate,
+      dateStr,
+      'SYSTEM', // Auto-approved by system
+    );
+  }
+
   private async getSalaryStructureForUser(userId: string) {
     try {
       return await this.salaryStructureService.findActiveByUserId(userId);

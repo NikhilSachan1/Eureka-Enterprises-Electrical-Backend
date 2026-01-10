@@ -50,6 +50,8 @@ import {
   getPendingAttendanceForCurrentMonthQuery,
   getPendingAttendanceByStatusQuery,
   autoApproveAttendanceQuery,
+  getCheckedOutPendingFromPreviousDayQuery,
+  markApprovalPendingQuery,
 } from '../queries';
 import { DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD } from '../constants/scheduler.constants';
 
@@ -521,6 +523,88 @@ export class AttendanceCronService {
     return { count, errors };
   }
 
+  // ==================== MARK APPROVAL PENDING ====================
+
+  /**
+   * Mark Approval Pending
+   * Runs at midnight (12:00 AM IST) via DailyMidnightOrchestrator
+   *
+   * Changes previous day's CHECKED_OUT attendance records (with PENDING approval)
+   * to APPROVAL_PENDING status.
+   *
+   * Flow:
+   * - Day 1, 7:00 PM: Status = CHECKED_OUT, approvalStatus = PENDING
+   * - Day 2, 12:00 AM: Status → APPROVAL_PENDING (day ended, now awaiting approval)
+   */
+  async handleMarkApprovalPending(): Promise<{ markedPending: number; errors: string[] }> {
+    const cronName = CRON_NAMES.MARK_APPROVAL_PENDING;
+
+    return this.cronLogService.execute(cronName, CronJobType.ATTENDANCE, async () => {
+      return this.handleMarkApprovalPendingDirect();
+    });
+  }
+
+  /**
+   * Direct execution method - called by orchestrator
+   */
+  async handleMarkApprovalPendingDirect(): Promise<{ markedPending: number; errors: string[] }> {
+    const cronName = CRON_NAMES.MARK_APPROVAL_PENDING;
+    const result = { markedPending: 0, errors: [] as string[] };
+
+    // Get previous day's date
+    const today = this.schedulerService.getTodayDateIST();
+    const previousDay = new Date(today);
+    previousDay.setDate(previousDay.getDate() - 1);
+
+    this.logger.log(
+      `[${cronName}] Marking CHECKED_OUT attendance from ${
+        previousDay.toISOString().split('T')[0]
+      } as APPROVAL_PENDING`,
+    );
+
+    const { query, params } = getCheckedOutPendingFromPreviousDayQuery(previousDay);
+    const checkedOutRecords: Array<{ id: string; userId: string }> = await this.dataSource.query(
+      query,
+      params,
+    );
+
+    if (checkedOutRecords.length === 0) {
+      this.logger.log(`[${cronName}] No CHECKED_OUT records found from previous day`);
+      return result;
+    }
+
+    this.logger.log(
+      `[${cronName}] Found ${checkedOutRecords.length} CHECKED_OUT records to mark as APPROVAL_PENDING`,
+    );
+
+    await this.dataSource.transaction(async (entityManager) => {
+      for (const record of checkedOutRecords) {
+        try {
+          const { query: updateQuery, params: updateParams } = markApprovalPendingQuery(
+            record.id,
+            SYSTEM_NOTES.MARKED_APPROVAL_PENDING,
+          );
+          await entityManager.query(updateQuery, updateParams);
+          result.markedPending++;
+        } catch (error) {
+          result.errors.push(`Failed to mark approval pending for ${record.id}: ${error.message}`);
+          this.logger.error(
+            `[${cronName}] Failed to mark approval pending for ${record.id}`,
+            error,
+          );
+        }
+      }
+    });
+
+    this.logger.log(
+      `[${cronName}] Marked ${result.markedPending} attendance records as APPROVAL_PENDING`,
+    );
+
+    return result;
+  }
+
+  // ==================== AUTO APPROVE ATTENDANCE ====================
+
   /**
    * CRON 21: Auto Approve Pending Attendance
    * Runs on 1st of every month at 12:00 AM IST (before payroll generation)
@@ -562,6 +646,7 @@ export class AttendanceCronService {
         halfDay: 0,
         leave: 0,
         leaveWithoutPay: 0,
+        approvalPending: 0,
         other: 0,
       },
       errors: [],
@@ -602,8 +687,25 @@ export class AttendanceCronService {
 
           const statusChanged =
             attendance.status === AttendanceStatus.CHECKED_OUT ||
-            attendance.status === AttendanceStatus.HALF_DAY;
+            attendance.status === AttendanceStatus.HALF_DAY ||
+            attendance.status === AttendanceStatus.APPROVAL_PENDING;
           const newStatus = statusChanged ? AttendanceStatus.PRESENT : attendance.status;
+
+          // Credit food expense for working statuses (CHECKED_OUT, HALF_DAY)
+          if (statusChanged) {
+            try {
+              await this.attendanceService.creditFoodExpenseForAutoApproval(
+                attendance.userId,
+                new Date(attendance.attendanceDate),
+                attendance.status,
+              );
+            } catch (foodExpenseError) {
+              this.logger.warn(
+                `[${cronName}] Failed to credit food expense for attendance ${attendance.id}: ${foodExpenseError.message}`,
+              );
+              // Don't fail the overall approval, just log the warning
+            }
+          }
 
           this.logger.debug(
             `[${cronName}] Auto-approved attendance ${attendance.id} (${attendance.status} → ${newStatus})`,
@@ -618,8 +720,9 @@ export class AttendanceCronService {
     this.logger.log(
       `[${cronName}] Summary: ${result.attendanceApproved} approved ` +
         `(Absent: ${result.byStatus.absent}, CheckedOut: ${result.byStatus.checkedOut}, ` +
-        `HalfDay: ${result.byStatus.halfDay}, Leave: ${result.byStatus.leave}, ` +
-        `LWP: ${result.byStatus.leaveWithoutPay}, Other: ${result.byStatus.other})`,
+        `HalfDay: ${result.byStatus.halfDay}, ApprovalPending: ${result.byStatus.approvalPending}, ` +
+        `Leave: ${result.byStatus.leave}, LWP: ${result.byStatus.leaveWithoutPay}, ` +
+        `Other: ${result.byStatus.other})`,
     );
 
     return result;
@@ -648,7 +751,7 @@ export class AttendanceCronService {
   private async getPendingAttendancesForPeriod(
     startDate: string,
     endDate: string,
-  ): Promise<Array<{ id: string; userId: string; status: string }>> {
+  ): Promise<Array<{ id: string; userId: string; status: string; attendanceDate: Date }>> {
     const { query, params } = getPendingAttendancesForPeriodQuery(startDate, endDate);
     return await this.dataSource.query(query, params);
   }
@@ -672,6 +775,9 @@ export class AttendanceCronService {
         break;
       case AttendanceStatus.LEAVE_WITHOUT_PAY:
         byStatus.leaveWithoutPay++;
+        break;
+      case AttendanceStatus.APPROVAL_PENDING:
+        byStatus.approvalPending++;
         break;
       default:
         byStatus.other++;

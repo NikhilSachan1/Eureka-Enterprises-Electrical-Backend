@@ -1,5 +1,5 @@
 import { ApprovalStatus as LeaveApprovalStatus } from '../../leave-applications/constants/leave-application.constants';
-import { AttendanceStatus } from '../../attendance/constants/attendance.constants';
+import { AttendanceStatus, ApprovalStatus } from '../../attendance/constants/attendance.constants';
 
 /**
  * CRON 1
@@ -118,12 +118,10 @@ export const getUsersWithoutAttendanceQuery = (status: string, date: Date) => {
  * Auto Approve Pending Attendance
  * Get all pending attendance records for a date range (previous month)
  */
-import { ApprovalStatus } from '../../attendance/constants/attendance.constants';
-
 export const getPendingAttendancesForPeriodQuery = (startDate: string, endDate: string) => {
   return {
     query: `
-      SELECT id, "userId", "status"
+      SELECT id, "userId", "status", "attendanceDate"
       FROM attendances
       WHERE "approvalStatus" = $1
         AND "attendanceDate" >= $2::date
@@ -189,7 +187,7 @@ export const ATTENDANCE_URGENT_THRESHOLD_DAYS = 20;
 /**
  * CRON 21
  * Auto-approve attendance with conditional status change:
- * - CHECKED_OUT, HALF_DAY → PRESENT (work done, approval confirms it)
+ * - CHECKED_OUT, HALF_DAY, APPROVAL_PENDING → PRESENT (work done, approval confirms it)
  * - ABSENT, LEAVE, LEAVE_WITHOUT_PAY → Keep original status (just approve)
  */
 export const autoApproveAttendanceQuery = (
@@ -200,7 +198,9 @@ export const autoApproveAttendanceQuery = (
 ) => {
   // Only change to PRESENT if it was a working day attendance
   const shouldChangeToPRESENT =
-    currentStatus === AttendanceStatus.CHECKED_OUT || currentStatus === AttendanceStatus.HALF_DAY;
+    currentStatus === AttendanceStatus.CHECKED_OUT ||
+    currentStatus === AttendanceStatus.HALF_DAY ||
+    currentStatus === AttendanceStatus.APPROVAL_PENDING;
 
   if (shouldChangeToPRESENT) {
     return {
@@ -239,5 +239,36 @@ export const autoApproveAttendanceQuery = (
       WHERE id = $5
     `,
     params: [ApprovalStatus.APPROVED, new Date(), approvalReason, systemUserId, attendanceId],
+  };
+};
+
+export const getCheckedOutPendingFromPreviousDayQuery = (previousDate: Date) => {
+  return {
+    query: `
+      SELECT id, "userId"
+      FROM attendances
+      WHERE "attendanceDate" = $1::date
+        AND "status" = $2
+        AND "approvalStatus" = $3
+        AND "deletedAt" IS NULL
+        AND "isActive" = true
+    `,
+    params: [previousDate, AttendanceStatus.CHECKED_OUT, ApprovalStatus.PENDING],
+  };
+};
+
+export const markApprovalPendingQuery = (attendanceId: string, systemNote: string) => {
+  return {
+    query: `
+      UPDATE attendances
+      SET "status" = $1,
+          "notes" = CASE 
+            WHEN "notes" IS NULL OR "notes" = '' THEN $2
+            ELSE "notes" || ' / ' || $2
+          END,
+          "updatedAt" = $3
+      WHERE id = $4
+    `,
+    params: [AttendanceStatus.APPROVAL_PENDING, systemNote, new Date(), attendanceId],
   };
 };
