@@ -692,7 +692,7 @@ export class AttendanceService {
             });
           }
           if (existingAttendance.status === AttendanceStatus.ABSENT) {
-            // TODO: MARK HOLIDAY
+            //nothing to be done here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
