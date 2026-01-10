@@ -20,7 +20,10 @@ import {
   GetPayrollDto,
   UpdatePayrollDto,
   GetSalaryReportDto,
+  BulkCancelPayrollDto,
+  BulkUpdatePayrollStatusDto,
 } from './dto';
+import { PAYROLL_RESPONSES } from './constants/payroll.constants';
 import { PayrollUserInterceptor } from './interceptors/payroll-user.interceptor';
 import { PayrollPayslipUserInterceptor } from './interceptors/payroll-payslip-user.interceptor';
 
@@ -43,6 +46,42 @@ export class PayrollController {
   async generateBulkPayroll(@Body() generateDto: GenerateBulkPayrollDto, @Request() req: any) {
     const generatedBy = req?.user?.id;
     return await this.payrollService.generateBulkPayroll(generateDto, generatedBy);
+  }
+
+  @Post('bulk-cancel')
+  @ApiBody({ type: BulkCancelPayrollDto })
+  async bulkCancel(@Body() bulkCancelDto: BulkCancelPayrollDto, @Request() req: any) {
+    const cancelledBy = req?.user?.id;
+    const result = await this.payrollService.bulkCancel(
+      bulkCancelDto.payrollIds,
+      cancelledBy,
+      bulkCancelDto.reason,
+    );
+    return {
+      message: PAYROLL_RESPONSES.BULK_CANCELLED.replace(
+        '{success}',
+        String(result.success),
+      ).replace('{failed}', String(result.failed)),
+      ...result,
+    };
+  }
+
+  @Post('bulk-status-update')
+  @ApiBody({ type: BulkUpdatePayrollStatusDto })
+  async bulkUpdateStatus(@Body() bulkUpdateDto: BulkUpdatePayrollStatusDto, @Request() req: any) {
+    const updatedBy = req?.user?.id;
+    const result = await this.payrollService.bulkUpdateStatus(
+      bulkUpdateDto.payrollIds,
+      bulkUpdateDto.targetStatus,
+      updatedBy,
+    );
+    return {
+      message: PAYROLL_RESPONSES.BULK_STATUS_UPDATED.replace(
+        '{success}',
+        String(result.success),
+      ).replace('{failed}', String(result.failed)),
+      ...result,
+    };
   }
 
   @Get()

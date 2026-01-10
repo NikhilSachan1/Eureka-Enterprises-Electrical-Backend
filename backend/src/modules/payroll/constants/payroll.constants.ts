@@ -27,6 +27,9 @@ export const PAYROLL_ERRORS = {
   WORKING_DAYS_CONFIG_SETTING_NOT_FOUND: 'Working days calculation config setting not found',
   USER_EXITING_USE_FNF:
     'Employee is exiting this month (last working date: {lastWorkingDate}). Please use FNF settlement instead of regular payroll.',
+  NO_PAYROLL_IDS_PROVIDED: 'No payroll IDs provided',
+  INVALID_TARGET_STATUS: 'Invalid target status for bulk update',
+  CANNOT_UPDATE_TO_CANCELLED: 'Cannot update to CANCELLED status. Use the cancel endpoint instead.',
 };
 
 export const PAYROLL_RESPONSES = {
@@ -37,6 +40,8 @@ export const PAYROLL_RESPONSES = {
   UPDATED: 'Payroll updated successfully',
   DELETED: 'Payroll deleted successfully',
   BULK_GENERATED: 'Bulk payroll generation completed. Success: {success}, Failed: {failed}',
+  BULK_CANCELLED: 'Bulk payroll cancellation completed. Success: {success}, Failed: {failed}',
+  BULK_STATUS_UPDATED: 'Bulk payroll status update completed. Success: {success}, Failed: {failed}',
 };
 
 export const PAYROLL_FIELD_NAMES = {

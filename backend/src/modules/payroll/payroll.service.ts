@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, Not } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { PayrollRepository } from './payroll.repository';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
@@ -71,8 +71,8 @@ export class PayrollService {
     // Check if user is exiting this month (should use FNF instead)
     await this.validateUserNotExitingThisMonth(userId, month, year);
 
-    // Check if payroll already exists
-    const existing = await this.getPayrollByUserAndMonth(userId, month, year);
+    // Check if active (non-cancelled) payroll already exists
+    const existing = await this.getActivePayrollByUserAndMonth(userId, month, year);
     if (existing) {
       throw new BadRequestException(PAYROLL_ERRORS.ALREADY_EXISTS);
     }
@@ -360,6 +360,21 @@ export class PayrollService {
     });
   }
 
+  private async getActivePayrollByUserAndMonth(
+    userId: string,
+    month: number,
+    year: number,
+  ): Promise<PayrollEntity | null> {
+    return await this.payrollRepository.findOne({
+      where: {
+        userId,
+        month,
+        year,
+        status: Not(PayrollStatus.CANCELLED),
+      },
+    });
+  }
+
   async update(
     id: string,
     updateDto: UpdatePayrollDto,
@@ -444,6 +459,132 @@ export class PayrollService {
     const { query, params } = buildPayrollSummaryQuery(month, year);
     const results = await this.payrollRepository.executeRawQuery(query, params);
     return results?.[0] || null;
+  }
+
+  // ==================== Bulk Operations ====================
+
+  /**
+   * Bulk cancel payrolls by IDs.
+   * Only non-cancelled and non-paid payrolls can be cancelled.
+   */
+  async bulkCancel(
+    payrollIds: string[],
+    cancelledBy: string,
+    reason?: string,
+  ): Promise<{ success: number; failed: number; errors: { id: string; error: string }[] }> {
+    if (!payrollIds || payrollIds.length === 0) {
+      throw new BadRequestException(PAYROLL_ERRORS.NO_PAYROLL_IDS_PROVIDED);
+    }
+
+    const results = { success: 0, failed: 0, errors: [] as { id: string; error: string }[] };
+
+    for (const payrollId of payrollIds) {
+      try {
+        const payroll = await this.payrollRepository.findOne({ where: { id: payrollId } });
+
+        if (!payroll) {
+          results.failed++;
+          results.errors.push({ id: payrollId, error: PAYROLL_ERRORS.NOT_FOUND });
+          continue;
+        }
+
+        if (payroll.status === PayrollStatus.CANCELLED) {
+          results.failed++;
+          results.errors.push({ id: payrollId, error: PAYROLL_ERRORS.ALREADY_CANCELLED });
+          continue;
+        }
+
+        if (payroll.status === PayrollStatus.PAID) {
+          results.failed++;
+          results.errors.push({ id: payrollId, error: PAYROLL_ERRORS.ALREADY_PAID });
+          continue;
+        }
+
+        await this.payrollRepository.update(
+          { id: payrollId },
+          {
+            status: PayrollStatus.CANCELLED,
+            remarks: reason || payroll.remarks,
+            updatedBy: cancelledBy,
+          },
+        );
+
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({ id: payrollId, error: error.message });
+      }
+    }
+
+    return results;
+  }
+
+  async bulkUpdateStatus(
+    payrollIds: string[],
+    targetStatus: PayrollStatus,
+    updatedBy: string,
+  ): Promise<{ success: number; failed: number; errors: { id: string; error: string }[] }> {
+    if (!payrollIds || payrollIds.length === 0) {
+      throw new BadRequestException(PAYROLL_ERRORS.NO_PAYROLL_IDS_PROVIDED);
+    }
+
+    if (targetStatus === PayrollStatus.CANCELLED) {
+      throw new BadRequestException(PAYROLL_ERRORS.CANNOT_UPDATE_TO_CANCELLED);
+    }
+
+    const results = { success: 0, failed: 0, errors: [] as { id: string; error: string }[] };
+
+    for (const payrollId of payrollIds) {
+      try {
+        const payroll = await this.payrollRepository.findOne({ where: { id: payrollId } });
+
+        if (!payroll) {
+          results.failed++;
+          results.errors.push({ id: payrollId, error: PAYROLL_ERRORS.NOT_FOUND });
+          continue;
+        }
+
+        // Validate status transition
+        try {
+          this.validateStatusTransition(payroll.status, targetStatus);
+        } catch (validationError) {
+          results.failed++;
+          results.errors.push({ id: payrollId, error: validationError.message });
+          continue;
+        }
+
+        const updateData: Partial<PayrollEntity> = {
+          status: targetStatus,
+          updatedBy,
+        };
+
+        // Add timestamps based on status change
+        if (targetStatus === PayrollStatus.APPROVED) {
+          updateData.approvedBy = updatedBy;
+          updateData.approvedAt = new Date();
+        } else if (targetStatus === PayrollStatus.PAID) {
+          updateData.paidAt = new Date();
+        }
+
+        await this.payrollRepository.update({ id: payrollId }, updateData);
+
+        // If marking as paid, send payslip
+        if (targetStatus === PayrollStatus.PAID) {
+          this.payslipService
+            .generateAndSendPayslip({ payrollId, sendEmail: true })
+            .catch((error) => {
+              Logger.error(`Failed to generate/send payslip for payroll ${payrollId}:`, error);
+            });
+        }
+
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({ id: payrollId, error: error.message });
+      }
+    }
+
+    return results;
   }
 
   // ==================== FNF Salary Calculation ====================
