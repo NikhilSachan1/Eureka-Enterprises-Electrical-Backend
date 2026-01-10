@@ -327,6 +327,263 @@ const cardExpiryData = {
   ],
 };
 
+// --- ATTENDANCE REGULARIZATION ---
+const attendanceRegularizationData = {
+  ...COMPANY_DETAILS,
+  employeeName: 'Deepak Verma',
+  attendanceDate: 'January 8, 2026',
+  originalStatus: 'ABSENT',
+  newStatus: 'PRESENT',
+  checkInTime: '09:30 AM',
+  checkOutTime: '06:30 PM',
+  totalHours: '9h 00m',
+  regularizedByName: 'HR Admin',
+  regularizedOn: 'January 10, 2026',
+  notes: 'Employee was on field duty. Regularized based on manager confirmation.',
+};
+
+// --- WORK ANNIVERSARY MILESTONE ---
+const workAnniversaryMilestoneData = {
+  ...COMPANY_DETAILS,
+  firstName: 'Sunita',
+  yearsText: '10 Years',
+  yearsOfService: 10,
+  dateOfJoining: 'January 10, 2016',
+  isMilestone: true,
+  milestoneMessage:
+    'A decade of dedication, excellence, and unwavering commitment. Your journey with us has been truly inspiring.',
+};
+
+// --- FY LEAVE CONFIG REMINDER ---
+const fyLeaveConfigReminderData = {
+  ...COMPANY_DETAILS,
+  daysRemaining: 45,
+  nextFinancialYear: '2026-27',
+};
+
+// --- VEHICLE DOCUMENT EXPIRY ---
+const vehicleDocumentExpiryData = {
+  ...COMPANY_DETAILS,
+  hasExpired: true,
+  hasExpiringSoon: true,
+  totalExpired: 2,
+  totalExpiringSoon: 1,
+  expiredVehicles: [
+    {
+      registrationNo: 'UP-32 AB 1234',
+      brand: 'Mahindra',
+      model: 'Bolero',
+      vehicleNumber: 'VH-001',
+      assignedTo: 'Vikram Singh',
+      documentType: 'Insurance',
+      documentTypeLabel: 'Insurance',
+      expiryDate: 'December 31, 2025',
+      statusClass: 'expired',
+      daysText: 'Expired 10 days ago',
+    },
+  ],
+  expiringSoonVehicles: [
+    {
+      registrationNo: 'UP-32 EF 9012',
+      brand: 'Mahindra',
+      model: 'Scorpio',
+      vehicleNumber: 'VH-003',
+      assignedTo: 'Sunil Yadav',
+      documentType: 'Road Tax',
+      documentTypeLabel: 'Road Tax',
+      expiryDate: 'January 25, 2026',
+      statusClass: 'expiring-soon',
+      daysText: 'Expires in 15 days',
+    },
+  ],
+};
+
+// --- ASSET CALIBRATION EXPIRY ---
+const assetCalibrationExpiryData = {
+  ...COMPANY_DETAILS,
+  hasExpired: true,
+  hasExpiringSoon: true,
+  totalExpired: 1,
+  totalExpiringSoon: 1,
+  expiredAssets: [
+    {
+      assetId: 'AST-2024-0042',
+      assetName: 'Digital Multimeter',
+      category: 'Test Equipment',
+      assignedTo: 'Lab Team',
+      assignedUserEmail: 'lab@eurekaenterprises.com',
+      lastCalibrationDate: 'January 10, 2025',
+      calibrationDueDate: 'January 5, 2026',
+      statusClass: 'expired',
+      daysText: 'Expired 5 days ago',
+    },
+  ],
+  expiringSoonAssets: [
+    {
+      assetId: 'AST-2024-0043',
+      assetName: 'Pressure Gauge',
+      category: 'Measuring Instruments',
+      assignedTo: 'Production Team',
+      assignedUserEmail: 'production@eurekaenterprises.com',
+      lastCalibrationDate: 'January 20, 2025',
+      calibrationDueDate: 'January 20, 2026',
+      statusClass: 'expiring-soon',
+      daysText: 'Expires in 10 days',
+    },
+  ],
+};
+
+// --- ASSET WARRANTY EXPIRY ---
+const assetWarrantyExpiryData = {
+  ...COMPANY_DETAILS,
+  hasExpired: true,
+  hasExpiringSoon: true,
+  totalExpired: 1,
+  totalExpiringSoon: 1,
+  expiredAssets: [
+    {
+      assetId: 'AST-2023-0125',
+      assetName: 'Dell Laptop XPS 15',
+      category: 'IT Equipment',
+      assignedTo: 'Rahul Sharma',
+      assignedUserEmail: 'rahul.sharma@eurekaenterprises.com',
+      purchaseDate: 'January 5, 2024',
+      warrantyExpiryDate: 'January 5, 2026',
+      statusClass: 'expired',
+      daysText: 'Warranty expired 5 days ago',
+    },
+  ],
+  expiringSoonAssets: [
+    {
+      assetId: 'AST-2023-0126',
+      assetName: 'HP Printer LaserJet Pro',
+      category: 'Office Equipment',
+      assignedTo: 'Admin Office',
+      assignedUserEmail: 'admin@eurekaenterprises.com',
+      purchaseDate: 'January 25, 2024',
+      warrantyExpiryDate: 'January 25, 2026',
+      statusClass: 'expiring-soon',
+      daysText: 'Warranty expires in 15 days',
+    },
+  ],
+};
+
+// --- PENDING EXPENSE REMINDER ---
+const pendingExpenseReminderData = {
+  ...COMPANY_DETAILS,
+  totalPending: 5,
+  totalAmount: '₹45,000',
+  totalRegular: 3,
+  totalFuel: 2,
+  hasUrgent: true,
+  totalUrgent: 2,
+  urgentThresholdDays: 7,
+  hasPending: true,
+  urgentExpenses: [
+    {
+      employeeName: 'Amit Kumar',
+      expenseTypeLabel: 'Regular',
+      isFuelExpense: false,
+      category: 'Travel',
+      amount: '₹15,000',
+      expenseDate: 'January 2, 2026',
+      description: 'Client meeting travel',
+      daysText: 'Pending 8 days',
+    },
+  ],
+  pendingExpenses: [
+    {
+      employeeName: 'Sneha Reddy',
+      expenseTypeLabel: 'Regular',
+      isFuelExpense: false,
+      category: 'Office Supplies',
+      amount: '₹2,500',
+      expenseDate: 'January 8, 2026',
+      description: 'Stationery purchase',
+      daysText: 'Pending 2 days',
+    },
+  ],
+};
+
+// --- LEAVE APPROVAL REMINDER ---
+const leaveApprovalReminderData = {
+  ...COMPANY_DETAILS,
+  totalPending: 5,
+  daysUntilAutoApproval: 3,
+  autoApprovalDate: 'February 1, 2026',
+  urgencyLevel: 'urgent',
+  hasUrgent: true,
+  hasPending: true,
+  totalUrgent: 2,
+  categorySummaries: [
+    { displayName: 'Casual Leave', count: 2 },
+    { displayName: 'Earned Leave', count: 2 },
+    { displayName: 'Sick Leave', count: 1 },
+  ],
+  urgentLeaves: [
+    {
+      employeeName: 'Deepak Verma',
+      leaveCategory: 'Casual Leave',
+      leaveType: 'Full Day',
+      fromDate: 'January 15, 2026',
+      toDate: 'January 16, 2026',
+      totalDays: 2,
+      reason: 'Personal work',
+      appliedOn: 'January 3, 2026',
+      daysText: 'Pending 7 days',
+    },
+  ],
+  pendingLeaves: [
+    {
+      employeeName: 'Priya Patel',
+      leaveCategory: 'Sick Leave',
+      leaveType: 'Full Day',
+      fromDate: 'January 12, 2026',
+      toDate: 'January 12, 2026',
+      totalDays: 1,
+      reason: 'Not feeling well',
+      appliedOn: 'January 10, 2026',
+      daysText: 'Applied today',
+    },
+  ],
+};
+
+// --- ATTENDANCE APPROVAL REMINDER ---
+const attendanceApprovalReminderData = {
+  ...COMPANY_DETAILS,
+  totalPending: 8,
+  daysUntilAutoApproval: 1,
+  autoApprovalDate: 'February 1, 2026',
+  urgencyLevel: 'critical',
+  hasUrgent: true,
+  hasPending: true,
+  totalUrgent: 3,
+  statusSummaries: [
+    { displayName: 'Checked Out', count: 4 },
+    { displayName: 'Absent', count: 3 },
+    { displayName: 'Half Day', count: 1 },
+  ],
+  urgentAttendance: [
+    {
+      employeeName: 'Ramesh Kumar',
+      statusDisplayName: 'Absent',
+      status: 'absent',
+      attendanceDate: 'January 8, 2026',
+      notes: 'No check-in recorded',
+    },
+  ],
+  pendingAttendance: [
+    {
+      employeeName: 'Amit Kumar',
+      statusDisplayName: 'Checked Out',
+      status: 'checkedOut',
+      attendanceDate: 'January 9, 2026',
+      checkInTime: '09:30 AM',
+      checkOutTime: '06:45 PM',
+    },
+  ],
+};
+
 // ============================================================================
 // EMAIL DEFINITIONS - Templates to send
 // ============================================================================
@@ -441,6 +698,78 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
     subject: '💳 [SAMPLE] Card Expiry Alert - 2 Expired, 1 Expiring Soon',
     data: cardExpiryData,
     category: 'Cards',
+  },
+
+  // Attendance Regularization
+  {
+    templateName: 'attendanceRegularization',
+    subject: '🔄 [SAMPLE] Attendance Regularized - January 8, 2026',
+    data: attendanceRegularizationData,
+    category: 'Attendance',
+  },
+
+  // Work Anniversary Milestone
+  {
+    templateName: 'workAnniversary',
+    subject: '🏆 [SAMPLE] Happy 10th Work Anniversary Sunita! (Milestone)',
+    data: workAnniversaryMilestoneData,
+    category: 'Celebration',
+  },
+
+  // FY Leave Config Reminder
+  {
+    templateName: 'fyLeaveConfigReminder',
+    subject: '⚙️ [SAMPLE] Configure Leave Settings for FY 2026-27',
+    data: fyLeaveConfigReminderData,
+    category: 'Reminders',
+  },
+
+  // Vehicle Document Expiry
+  {
+    templateName: 'vehicleDocumentExpiry',
+    subject: '📄 [SAMPLE] Vehicle Document Expiry Alert',
+    data: vehicleDocumentExpiryData,
+    category: 'Vehicle',
+  },
+
+  // Asset Calibration Expiry
+  {
+    templateName: 'assetCalibrationExpiry',
+    subject: '🔧 [SAMPLE] Asset Calibration Due Alert',
+    data: assetCalibrationExpiryData,
+    category: 'Assets',
+  },
+
+  // Asset Warranty Expiry
+  {
+    templateName: 'assetWarrantyExpiry',
+    subject: '🛡️ [SAMPLE] Asset Warranty Expiry Alert',
+    data: assetWarrantyExpiryData,
+    category: 'Assets',
+  },
+
+  // Pending Expense Reminder
+  {
+    templateName: 'pendingExpenseReminder',
+    subject: '💰 [SAMPLE] Pending Expense Approvals - 5 Awaiting Review',
+    data: pendingExpenseReminderData,
+    category: 'Reminders',
+  },
+
+  // Leave Approval Reminder
+  {
+    templateName: 'leaveApprovalReminder',
+    subject: '📋 [SAMPLE] Pending Leave Approvals - 5 Awaiting Review',
+    data: leaveApprovalReminderData,
+    category: 'Reminders',
+  },
+
+  // Attendance Approval Reminder
+  {
+    templateName: 'attendanceApprovalReminder',
+    subject: '⏰ [SAMPLE] Pending Attendance Approvals - 8 Awaiting Review',
+    data: attendanceApprovalReminderData,
+    category: 'Reminders',
   },
 ];
 

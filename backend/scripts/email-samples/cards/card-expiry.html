@@ -148,16 +148,60 @@
           </table>
 
           <!-- Legend -->
-          <div class='legend'>
-            <div class='legend-item'>
-              <span class='legend-dot expired'></span>
-              <span>Expired - Renew immediately</span>
-            </div>
-            <div class='legend-item'>
-              <span class='legend-dot expiring'></span>
-              <span>Expiring Soon - Plan renewal</span>
-            </div>
-          </div>
+          <table
+            width='100%'
+            cellpadding='0'
+            cellspacing='0'
+            border='0'
+            style='background-color: #f7fafc; border-radius: 8px; margin: 24px 0;'
+          >
+            <tr>
+              <td style='padding: 16px 20px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <!-- Expired Legend Item -->
+                  <tr>
+                    <td style='padding-bottom: 12px;'>
+                      <table cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td style='width: 20px; vertical-align: middle;'>
+                            <div
+                              style='width: 12px; height: 12px; min-width: 12px; min-height: 12px; max-width: 12px; max-height: 12px; background-color: #c53030; border-radius: 50%;'
+                            ></div>
+                          </td>
+                          <td
+                            style='padding-left: 12px; vertical-align: middle; font-size: 13px; color: #4a5568;'
+                          >
+                            <strong style='color: #c53030;'>Expired</strong>
+                            - Renew immediately
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <!-- Expiring Soon Legend Item -->
+                  <tr>
+                    <td>
+                      <table cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td style='width: 20px; vertical-align: middle;'>
+                            <div
+                              style='width: 12px; height: 12px; min-width: 12px; min-height: 12px; max-width: 12px; max-height: 12px; background-color: #f59e0b; border-radius: 50%;'
+                            ></div>
+                          </td>
+                          <td
+                            style='padding-left: 12px; vertical-align: middle; font-size: 13px; color: #4a5568;'
+                          >
+                            <strong style='color: #92400e;'>Expiring Soon</strong>
+                            - Plan renewal
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
 
             <!-- Expired Cards Section -->
             <table

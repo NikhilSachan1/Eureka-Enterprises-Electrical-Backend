@@ -95,16 +95,24 @@
           </p>
 
           <!-- Config Info -->
-          <div class='config-box'>
-            <div class='config-item'>
-              <div class='config-label'>Service Interval</div>
-              <div class='config-value'>{{serviceIntervalKm}} km</div>
-            </div>
-            <div class='config-item'>
-              <div class='config-label'>Warning Threshold</div>
-              <div class='config-value'>{{warningKm}} km</div>
-            </div>
-          </div>
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='background: linear-gradient(135deg, #e6f4ff 0%, #d0ebff 100%); border: 1px solid #74c0fc; border-radius: 8px; margin: 20px 0;'>
+            <tr>
+              <td style='padding: 16px 20px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td style='width: 50%; padding: 8px 12px 8px 0; vertical-align: top;'>
+                      <div style='font-size: 11px; color: #1971c2; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;'>Service Interval</div>
+                      <div style='font-size: 18px; color: #1864ab; font-weight: 700;'>{{serviceIntervalKm}} km</div>
+                    </td>
+                    <td style='width: 50%; padding: 8px 0 8px 12px; vertical-align: top; border-left: 1px solid #74c0fc;'>
+                      <div style='font-size: 11px; color: #1971c2; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;'>Warning Threshold</div>
+                      <div style='font-size: 18px; color: #1864ab; font-weight: 700;'>{{warningKm}} km</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
 
           <!-- Summary Cards -->
           <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 24px 0;'>

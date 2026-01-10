@@ -54,31 +54,61 @@
 
         <div class='content'>
           <h3 class='section-title'>📋 Job Details</h3>
-          <table class='info-table' cellpadding='0' cellspacing='0' border='0'>
+          <table
+            width='100%'
+            cellpadding='0'
+            cellspacing='0'
+            border='0'
+            style='margin-bottom: 24px;'
+          >
             <tr>
-              <td>Job Name</td>
-              <td><span class='job-name'>{{jobName}}</span></td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; font-weight: 600; width: 120px; vertical-align: top;'
+              >Job Name</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #1f2937; font-size: 14px; text-align: right;'
+              ><span class='job-name'>{{jobName}}</span></td>
             </tr>
             <tr>
-              <td>Job Type</td>
-              <td><span class='job-type'>{{jobType}}</span></td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; font-weight: 600; vertical-align: top;'
+              >Job Type</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #1f2937; font-size: 14px; text-align: right;'
+              ><span class='job-type'>{{jobType}}</span></td>
             </tr>
             <tr>
-              <td>Started At</td>
-              <td class='timestamp'>{{startedAt}}</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; font-weight: 600; vertical-align: top;'
+              >Started At</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; text-align: right;'
+              >{{startedAt}}</td>
             </tr>
             <tr>
-              <td>Failed At</td>
-              <td class='timestamp'>{{failedAt}}</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; font-weight: 600; vertical-align: top;'
+              >Failed At</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; text-align: right;'
+              >{{failedAt}}</td>
             </tr>
             <tr>
-              <td>Duration</td>
-              <td><span class='duration'>{{durationMs}} ms</span></td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #6b7280; font-size: 13px; font-weight: 600; vertical-align: top;'
+              >Duration</td>
+              <td
+                style='padding: 12px 0; border-bottom: 1px solid #fee2e2; color: #1f2937; font-size: 14px; text-align: right;'
+              ><span class='duration'>{{durationMs}} ms</span></td>
             </tr>
             {{#if serverName}}
               <tr>
-                <td>Server</td>
-                <td>{{serverName}}</td>
+                <td
+                  style='padding: 12px 0; color: #6b7280; font-size: 13px; font-weight: 600; vertical-align: top;'
+                >Server</td>
+                <td
+                  style='padding: 12px 0; color: #1f2937; font-size: 14px; text-align: right;'
+                >{{serverName}}</td>
               </tr>
             {{/if}}
           </table>

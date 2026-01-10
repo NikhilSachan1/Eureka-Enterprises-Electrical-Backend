@@ -189,31 +189,73 @@
           {{/if}}
 
           <!-- Legend -->
-          <div class='legend'>
-            <div class='legend-item'>
-              <span class='legend-dot absent'></span>
-              <span>Absent</span>
-            </div>
-            <div class='legend-item'>
-              <span class='legend-dot checkedOut'></span>
-              <span>Checked Out</span>
-            </div>
-            <div class='legend-item'>
-              <span class='legend-dot halfDay'></span>
-              <span>Half Day</span>
-            </div>
-            <div class='legend-item'>
-              <span class='legend-dot leave'></span>
-              <span>Leave</span>
-            </div>
-          </div>
+          <table width='100%' cellpadding='0' cellspacing='0' border='0' style='background-color: #f7fafc; border-radius: 8px; margin: 24px 0;'>
+            <tr>
+              <td style='padding: 16px 20px;'>
+                <table width='100%' cellpadding='0' cellspacing='0' border='0'>
+                  <tr>
+                    <td style='padding-bottom: 10px;'>
+                      <table cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td style='width: 20px; vertical-align: middle;'>
+                            <div style='width: 12px; height: 12px; min-width: 12px; min-height: 12px; max-width: 12px; max-height: 12px; background-color: #c53030; border-radius: 50%;'></div>
+                          </td>
+                          <td style='padding-left: 12px; vertical-align: middle; font-size: 13px; color: #4a5568;'>Absent</td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td style='padding-bottom: 10px;'>
+                      <table cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td style='width: 20px; vertical-align: middle;'>
+                            <div style='width: 12px; height: 12px; min-width: 12px; min-height: 12px; max-width: 12px; max-height: 12px; background-color: #10b981; border-radius: 50%;'></div>
+                          </td>
+                          <td style='padding-left: 12px; vertical-align: middle; font-size: 13px; color: #4a5568;'>Checked Out</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <table cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td style='width: 20px; vertical-align: middle;'>
+                            <div style='width: 12px; height: 12px; min-width: 12px; min-height: 12px; max-width: 12px; max-height: 12px; background-color: #f59e0b; border-radius: 50%;'></div>
+                          </td>
+                          <td style='padding-left: 12px; vertical-align: middle; font-size: 13px; color: #4a5568;'>Half Day</td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td>
+                      <table cellpadding='0' cellspacing='0' border='0'>
+                        <tr>
+                          <td style='width: 20px; vertical-align: middle;'>
+                            <div style='width: 12px; height: 12px; min-width: 12px; min-height: 12px; max-width: 12px; max-height: 12px; background-color: #8b5cf6; border-radius: 50%;'></div>
+                          </td>
+                          <td style='padding-left: 12px; vertical-align: middle; font-size: 13px; color: #4a5568;'>Leave</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
 
           {{#if hasUrgent}}
             <!-- Urgent Attendance Section (Absent records need review) -->
-            <div class='section-header urgent'>
-              <div class='section-icon'>!</div>
-              <h3 class='section-title'>Absent Records - Review Required ({{totalUrgent}})</h3>
-            </div>
+            <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 32px 0 16px 0;'>
+              <tr>
+                <td width='36' style='vertical-align: middle;'>
+                  <div style='width: 28px; height: 28px; min-width: 28px; min-height: 28px; max-width: 28px; max-height: 28px; background-color: #fed7d7; border-radius: 50%; text-align: center; line-height: 28px;'>
+                    <span style='font-size: 16px;'>🚫</span>
+                  </div>
+                </td>
+                <td style='vertical-align: middle; padding-left: 8px;'>
+                  <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #c53030;'>Absent Records - Review Required ({{totalUrgent}})</h3>
+                </td>
+              </tr>
+            </table>
 
             <div class='critical-box'>
               <p>
@@ -261,10 +303,18 @@
 
           {{#if hasPending}}
             <!-- Pending Attendance Section -->
-            <div class='section-header pending'>
-              <div class='section-icon'>⏳</div>
-              <h3 class='section-title'>Pending Attendance Records</h3>
-            </div>
+            <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin: 32px 0 16px 0;'>
+              <tr>
+                <td width='36' style='vertical-align: middle;'>
+                  <div style='width: 28px; height: 28px; min-width: 28px; min-height: 28px; max-width: 28px; max-height: 28px; background-color: #d1fae5; border-radius: 50%; text-align: center; line-height: 28px;'>
+                    <span style='font-size: 16px;'>⏳</span>
+                  </div>
+                </td>
+                <td style='vertical-align: middle; padding-left: 8px;'>
+                  <h3 style='font-size: 16px; font-weight: 600; margin: 0; color: #047857;'>Pending Attendance Records</h3>
+                </td>
+              </tr>
+            </table>
 
             {{#each pendingAttendance}}
               <div class='attendance-item pending'>
