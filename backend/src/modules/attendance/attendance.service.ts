@@ -460,8 +460,7 @@ export class AttendanceService {
             );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
-            //   TODO: HOLIDAY REVERT AND PROVIDE 1 LEAVE
-
+            //Credited food expense and bonus leave will be credited with payroll generation
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
