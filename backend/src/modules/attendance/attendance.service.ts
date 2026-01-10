@@ -592,12 +592,13 @@ export class AttendanceService {
             );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
-            //Holiday to absent is not allowed
+            //Holiday to absent is not allowed for regularization
             throw new BadRequestException(
               ATTENDANCE_ERRORS.HOLIDAY_NOT_ALLOWED_AS_ABSENT_REGULARIZE,
             );
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
+            //Nothing to be done here
             await this.attendanceRepository.update(
               { id: attendanceId },
               {
