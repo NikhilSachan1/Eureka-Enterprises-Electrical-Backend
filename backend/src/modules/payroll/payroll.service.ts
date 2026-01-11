@@ -268,22 +268,46 @@ export class PayrollService {
     generateDto: GenerateBulkPayrollDto,
     generatedBy: string,
     initialStatus: PayrollStatus = PayrollStatus.GENERATED,
-  ): Promise<{ message: string; success: number; failed: number; errors: any[] }> {
-    const { month, year } = generateDto;
+  ): Promise<{ message: string; success: number; failed: number; skipped: number; errors: any[] }> {
+    const { month, year, userIds } = generateDto;
 
     // Validate month/year is not in future
     this.validateNotFuture(month, year);
 
-    // Get all active users with salary structures
-    // Excludes users whose lastWorkingDate falls within the payroll month (handled by FNF)
+    // Get all active users with salary structures (excludes FNF users)
     const { query, params } = buildActiveUsersWithSalaryQuery(UserStatus.ACTIVE, month, year);
     const usersWithSalary = await this.payrollRepository.executeRawQuery(query, params);
+    const validUserIds = new Set<string>(
+      usersWithSalary.map((user: { userId: string }) => user.userId),
+    );
+
+    let targetUserIds: string[];
+    let skipped = 0;
+    const errors: any[] = [];
+
+    if (userIds && userIds.length > 0) {
+      // Filter provided userIds to only include valid users (active, has salary structure, not FNF)
+      targetUserIds = [];
+      for (const userId of userIds) {
+        if (validUserIds.has(userId)) {
+          targetUserIds.push(userId);
+        } else {
+          skipped++;
+          errors.push({
+            userId,
+            error: PAYROLL_ERRORS.USER_NOT_ELIGIBLE_FOR_PAYROLL,
+          });
+        }
+      }
+    } else {
+      // Use all valid users
+      targetUserIds = [...validUserIds];
+    }
 
     let success = 0;
     let failed = 0;
-    const errors: any[] = [];
 
-    for (const { userId } of usersWithSalary) {
+    for (const userId of targetUserIds) {
       try {
         await this.generatePayroll({ userId, month, year }, generatedBy, initialStatus);
         success++;
@@ -301,6 +325,7 @@ export class PayrollService {
       ),
       success,
       failed,
+      skipped,
       errors,
     };
   }

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GeneratePayrollDto {
@@ -26,6 +26,17 @@ export class GeneratePayrollDto {
 }
 
 export class GenerateBulkPayrollDto {
+  @ApiProperty({
+    description:
+      'Array of user IDs to generate payroll for (optional - if not provided, generates for all active users)',
+    required: false,
+    example: ['uuid-1', 'uuid-2'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  userIds?: string[];
+
   @ApiProperty({ description: 'Month (1-12)', example: 12 })
   @IsNumber()
   @Min(1)

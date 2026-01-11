@@ -30,6 +30,8 @@ export const PAYROLL_ERRORS = {
   NO_PAYROLL_IDS_PROVIDED: 'No payroll IDs provided',
   INVALID_TARGET_STATUS: 'Invalid target status for bulk update',
   CANNOT_UPDATE_TO_CANCELLED: 'Cannot update to CANCELLED status. Use the cancel endpoint instead.',
+  USER_NOT_ELIGIBLE_FOR_PAYROLL:
+    'User is inactive, has no salary structure, or is exiting this month (FNF)',
 };
 
 export const PAYROLL_RESPONSES = {
