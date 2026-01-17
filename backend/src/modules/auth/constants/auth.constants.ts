@@ -1,6 +1,6 @@
 export const AUTH_REDIRECT_ROUTES = {
-  RESET_PASSWORD_SUCCESS_REDIRECT: 'reset-password?resetToken={resetToken}&email={email}',
-  RESET_PASSWORD_FAILURE_REDIRECT: 'reset-password?expired=true&email=',
+  RESET_PASSWORD_SUCCESS_REDIRECT: 'auth/reset-password?resetToken={resetToken}&email={email}',
+  RESET_PASSWORD_FAILURE_REDIRECT: 'auth/reset-password?expired=true&email=',
   TOKEN_VALIDATION: 'auth/validate/',
 };
 

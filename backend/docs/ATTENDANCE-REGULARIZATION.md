@@ -469,7 +469,7 @@ PUT /api/v1/attendance/:attendanceId/regularize
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    EXPENSE TRACKER                           │
+│                    EXPENSE TRACKER                          │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Opening Balance                                             │
@@ -547,3 +547,4 @@ All regularization actions are logged with:
 
 *Last Updated: January 2026*
 
+ 
