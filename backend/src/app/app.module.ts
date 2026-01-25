@@ -53,6 +53,7 @@ import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
 import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
 import { CompanyModule } from 'src/modules/companies/company.module';
 import { ContractorModule } from 'src/modules/contractors/contractor.module';
+import { SiteModule } from 'src/modules/sites/site.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { ContractorModule } from 'src/modules/contractors/contractor.module';
     DashboardModule,
     CompanyModule,
     ContractorModule,
+    SiteModule,
   ],
   controllers: [AppController],
   providers: [
