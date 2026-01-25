@@ -51,6 +51,7 @@ import { FnfModule } from 'src/modules/fnf/fnf.module';
 import { CommunicationLogModule } from 'src/modules/common/communication-logs/communication-log.module';
 import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
 import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
+import { CompanyModule } from 'src/modules/companies/company.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
     CommunicationLogModule,
     WhatsAppModule,
     DashboardModule,
+    CompanyModule,
   ],
   controllers: [AppController],
   providers: [
