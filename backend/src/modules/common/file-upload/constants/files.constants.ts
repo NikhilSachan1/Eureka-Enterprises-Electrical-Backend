@@ -77,6 +77,7 @@ export const FIELD_NAMES = {
   AADHAR_DOC: 'aadharDoc',
   PAN_DOC: 'panDoc',
   DL_DOC: 'dlDoc',
+  COMPANY_LOGO: 'companyLogo',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -117,4 +118,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   EMPLOYEE_FILES: 'employee-files',
   PROFILE_PICTURES: 'profile-pictures',
   VEHICLE_SERVICE_FILES: 'vehicle-service-files',
+  COMPANY_LOGOS: 'company-logos',
 };
