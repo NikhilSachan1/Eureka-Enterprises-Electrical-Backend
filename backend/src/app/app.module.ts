@@ -52,6 +52,7 @@ import { CommunicationLogModule } from 'src/modules/common/communication-logs/co
 import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
 import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
 import { CompanyModule } from 'src/modules/companies/company.module';
+import { ContractorModule } from 'src/modules/contractors/contractor.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { CompanyModule } from 'src/modules/companies/company.module';
     WhatsAppModule,
     DashboardModule,
     CompanyModule,
+    ContractorModule,
   ],
   controllers: [AppController],
   providers: [
