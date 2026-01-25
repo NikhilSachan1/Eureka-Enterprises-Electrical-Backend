@@ -81,6 +81,9 @@ export const CONFIGURATION_KEYS = {
   FNF_EXIT_REASONS: 'fnf_exit_reasons',
   FNF_STATUSES: 'fnf_statuses',
   FNF_CLEARANCE_STATUSES: 'fnf_clearance_statuses',
+  // SITE
+  SITE_WORK_TYPES: 'site_work_types',
+  SITE_STATUSES: 'site_statuses',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -99,6 +102,7 @@ export const CONFIGURATION_MODULES = {
   PAYROLL: 'payroll',
   CARD: 'card',
   FNF: 'fnf',
+  SITE: 'site',
 };
 
 export enum LeaveCycleType {
