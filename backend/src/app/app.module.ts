@@ -54,6 +54,7 @@ import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
 import { CompanyModule } from 'src/modules/companies/company.module';
 import { ContractorModule } from 'src/modules/contractors/contractor.module';
 import { SiteModule } from 'src/modules/sites/site.module';
+import { SiteAllocationModule } from 'src/modules/site-allocations/site-allocation.module';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { SiteModule } from 'src/modules/sites/site.module';
     CompanyModule,
     ContractorModule,
     SiteModule,
+    SiteAllocationModule,
   ],
   controllers: [AppController],
   providers: [

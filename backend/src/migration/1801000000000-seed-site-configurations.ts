@@ -39,6 +39,52 @@ export class SeedSiteConfigurations1801000000000 implements MigrationInterface {
           { value: 'completed', label: 'Completed', description: 'Site work finished' },
         ],
       },
+      {
+        module: 'site',
+        key: 'site_allocation_types',
+        label: 'Site Allocation Types',
+        valueType: 'array',
+        description: 'Types of employee allocation to sites (full-time, part-time)',
+        isEditable: true,
+        values: [
+          {
+            value: 'full_time',
+            label: 'Full Time',
+            description: 'Employee works full-time at site',
+          },
+          {
+            value: 'part_time',
+            label: 'Part Time',
+            description: 'Employee works part-time at site',
+          },
+          { value: 'temporary', label: 'Temporary', description: 'Short-term assignment' },
+          { value: 'contract', label: 'Contract', description: 'Contract-based allocation' },
+        ],
+      },
+      {
+        module: 'site',
+        key: 'site_roles',
+        label: 'Site Roles',
+        valueType: 'array',
+        description: 'Roles that employees can have at a site',
+        isEditable: true,
+        values: [
+          { value: 'Engineer', label: 'Engineer', description: 'Technical engineer role' },
+          { value: 'Supervisor', label: 'Supervisor', description: 'Site supervisor role' },
+          { value: 'Technician', label: 'Technician', description: 'Technical support role' },
+          {
+            value: 'Project Manager',
+            label: 'Project Manager',
+            description: 'Project management role',
+          },
+          {
+            value: 'Site Incharge',
+            label: 'Site Incharge',
+            description: 'Overall site responsibility',
+          },
+          { value: 'Helper', label: 'Helper', description: 'General assistance role' },
+        ],
+      },
     ];
 
     for (const config of configs) {
@@ -76,7 +122,7 @@ export class SeedSiteConfigurations1801000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    const configKeys = ['site_work_types', 'site_statuses'];
+    const configKeys = ['site_work_types', 'site_statuses', 'site_allocation_types', 'site_roles'];
 
     // Delete config_settings first (due to foreign key)
     await queryRunner.query(
