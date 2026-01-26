@@ -84,6 +84,9 @@ export const CONFIGURATION_KEYS = {
   // SITE
   SITE_WORK_TYPES: 'site_work_types',
   SITE_STATUSES: 'site_statuses',
+  // SITE ALLOCATION
+  SITE_ALLOCATION_TYPES: 'site_allocation_types',
+  SITE_ROLES: 'site_roles',
 };
 
 export const CONFIGURATION_MODULES = {
