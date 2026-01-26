@@ -5,6 +5,7 @@ import { SiteService } from './site.service';
 import { SiteRepository } from './site.repository';
 import { SiteEntity } from './entities/site.entity';
 import { SiteContractorEntity } from './entities/site-contractor.entity';
+import { SiteStatusHistoryEntity } from './entities/site-status-history.entity';
 import { SharedModule } from '../shared/shared.module';
 import { CompanyModule } from '../companies/company.module';
 import { ContractorModule } from '../contractors/contractor.module';
@@ -13,7 +14,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SiteEntity, SiteContractorEntity]),
+    TypeOrmModule.forFeature([SiteEntity, SiteContractorEntity, SiteStatusHistoryEntity]),
     SharedModule,
     CompanyModule,
     ContractorModule,

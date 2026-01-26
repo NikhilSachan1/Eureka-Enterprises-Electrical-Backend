@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { SiteEntity } from './entities/site.entity';
 import { SiteContractorEntity } from './entities/site-contractor.entity';
+import { SiteStatusHistoryEntity } from './entities/site-status-history.entity';
 
 @Injectable()
 export class SiteRepository {
@@ -17,6 +18,8 @@ export class SiteRepository {
     private readonly repository: Repository<SiteEntity>,
     @InjectRepository(SiteContractorEntity)
     private readonly siteContractorRepository: Repository<SiteContractorEntity>,
+    @InjectRepository(SiteStatusHistoryEntity)
+    private readonly statusHistoryRepository: Repository<SiteStatusHistoryEntity>,
   ) {}
 
   async create(
@@ -174,6 +177,39 @@ export class SiteRepository {
     try {
       const repo = entityManager ? entityManager.getRepository(SiteEntity) : this.repository;
       return await repo.query(query, params);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async createStatusHistory(
+    data: Partial<SiteStatusHistoryEntity>,
+    entityManager?: EntityManager,
+  ): Promise<SiteStatusHistoryEntity> {
+    try {
+      const repo = entityManager
+        ? entityManager.getRepository(SiteStatusHistoryEntity)
+        : this.statusHistoryRepository;
+      const history = repo.create(data);
+      return await repo.save(history);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async getStatusHistory(
+    siteId: string,
+    entityManager?: EntityManager,
+  ): Promise<SiteStatusHistoryEntity[]> {
+    try {
+      const repo = entityManager
+        ? entityManager.getRepository(SiteStatusHistoryEntity)
+        : this.statusHistoryRepository;
+
+      return await repo.find({
+        where: { siteId },
+        order: { changedAt: 'DESC' },
+      });
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

@@ -43,6 +43,11 @@ export class SiteController {
     return await this.siteService.getContractors(id);
   }
 
+  @Get(':id/status-history')
+  async getStatusHistory(@Param('id', ParseUUIDPipe) id: string) {
+    return await this.siteService.getStatusHistory(id);
+  }
+
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
