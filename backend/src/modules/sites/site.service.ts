@@ -11,6 +11,7 @@ import { CreateSiteDto, UpdateSiteDto, GetSiteDto, UpdateSiteStatusDto } from '.
 import {
   SITE_ERRORS,
   SITE_RESPONSES,
+  SITE_STATUS_REASONS,
   SiteEntityFields,
   SiteStatus,
 } from './constants/site.constants';
@@ -90,6 +91,19 @@ export class SiteService {
 
       // Add contractors
       await this.siteRepository.addContractors(site.id, contractorIds, entityManager);
+
+      // Log initial status in history (fromStatus is null for new sites)
+      await this.siteRepository.createStatusHistory(
+        {
+          siteId: site.id,
+          fromStatus: null,
+          toStatus: status,
+          reason: SITE_STATUS_REASONS.SITE_CREATED,
+          changedBy: createdBy,
+          createdBy,
+        },
+        entityManager,
+      );
 
       return this.utilityService.getSuccessMessage(
         SiteEntityFields.SITE,
@@ -274,15 +288,32 @@ export class SiteService {
     // Validate status transition
     this.validateStatusTransition(site.status, updateStatusDto.status);
 
-    await this.siteRepository.update(
-      { id },
-      {
-        status: updateStatusDto.status,
-        updatedBy,
-      },
-    );
+    return await this.dataSource.transaction(async (entityManager) => {
+      // Update site status
+      await this.siteRepository.update(
+        { id },
+        {
+          status: updateStatusDto.status,
+          updatedBy,
+        },
+        entityManager,
+      );
 
-    return { message: SITE_RESPONSES.STATUS_UPDATED };
+      // Log status change in history
+      await this.siteRepository.createStatusHistory(
+        {
+          siteId: id,
+          fromStatus: site.status,
+          toStatus: updateStatusDto.status,
+          reason: updateStatusDto.reason || null,
+          changedBy: updatedBy,
+          createdBy: updatedBy,
+        },
+        entityManager,
+      );
+
+      return { message: SITE_RESPONSES.STATUS_UPDATED };
+    });
   }
 
   async remove(id: string, deletedBy: string) {
@@ -325,6 +356,18 @@ export class SiteService {
   async getContractors(siteId: string) {
     await this.findOneOrFail({ where: { id: siteId } });
     return await this.siteRepository.getContractorsBySiteId(siteId);
+  }
+
+  /**
+   * Get status history timeline for a site
+   */
+  async getStatusHistory(siteId: string) {
+    await this.findOneOrFail({ where: { id: siteId } });
+    const history = await this.siteRepository.getStatusHistory(siteId);
+    return {
+      message: SITE_RESPONSES.STATUS_HISTORY_FETCHED,
+      data: history,
+    };
   }
 
   private async validateContractors(contractorIds: string[]): Promise<void> {

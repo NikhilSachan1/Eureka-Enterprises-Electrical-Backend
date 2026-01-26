@@ -17,6 +17,12 @@ export const SITE_RESPONSES = {
   DELETED: 'Site deleted successfully',
   RESTORED: 'Site restored successfully',
   STATUS_UPDATED: 'Site status updated successfully',
+  STATUS_HISTORY_FETCHED: 'Site status history fetched successfully',
+};
+
+// Status history reasons
+export const SITE_STATUS_REASONS = {
+  SITE_CREATED: 'Site created',
 };
 
 export enum SiteStatus {
