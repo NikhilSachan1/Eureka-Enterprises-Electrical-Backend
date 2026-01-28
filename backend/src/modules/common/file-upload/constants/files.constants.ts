@@ -62,6 +62,13 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   aadharDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   panDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   dlDoc: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  siteDocumentFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  po: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  invoice: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  contract: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  workOrder: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  completionCertificate: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  other: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -78,6 +85,14 @@ export const FIELD_NAMES = {
   PAN_DOC: 'panDoc',
   DL_DOC: 'dlDoc',
   COMPANY_LOGO: 'companyLogo',
+  SITE_DOCUMENT_FILES: 'siteDocumentFiles',
+  // Site document type specific fields
+  SITE_DOC_PO: 'po',
+  SITE_DOC_INVOICE: 'invoice',
+  SITE_DOC_CONTRACT: 'contract',
+  SITE_DOC_WORK_ORDER: 'workOrder',
+  SITE_DOC_COMPLETION_CERTIFICATE: 'completionCertificate',
+  SITE_DOC_OTHER: 'other',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -119,4 +134,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   PROFILE_PICTURES: 'profile-pictures',
   VEHICLE_SERVICE_FILES: 'vehicle-service-files',
   COMPANY_LOGOS: 'company-logos',
+  SITE_DOCUMENT_FILES: 'site-document-files',
 };

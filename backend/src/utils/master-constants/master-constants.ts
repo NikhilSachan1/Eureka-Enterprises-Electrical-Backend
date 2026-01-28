@@ -87,6 +87,11 @@ export const CONFIGURATION_KEYS = {
   // SITE ALLOCATION
   SITE_ALLOCATION_TYPES: 'site_allocation_types',
   SITE_ROLES: 'site_roles',
+  // SITE DOCUMENTS
+  SITE_DOCUMENT_TYPES: 'site_document_types',
+  SITE_DOCUMENT_STATUSES: 'site_document_statuses',
+  SITE_DOCUMENT_PAYMENT_STATUSES: 'site_document_payment_statuses',
+  SITE_DOCUMENT_DIRECTIONS: 'site_document_directions',
 };
 
 export const CONFIGURATION_MODULES = {
