@@ -92,7 +92,7 @@ export class SeedSiteConfigurations1801000000000 implements MigrationInterface {
       await queryRunner.query(
         `INSERT INTO configurations (module, key, label, "valueType", description, "isEditable", "createdAt", "updatedAt")
          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-         ON CONFLICT (key) DO NOTHING`,
+         ON CONFLICT (module, key) DO NOTHING`,
         [
           config.module,
           config.key,
@@ -110,13 +110,20 @@ export class SeedSiteConfigurations1801000000000 implements MigrationInterface {
       );
 
       if (configRow) {
-        // Insert config settings with the values
-        await queryRunner.query(
-          `INSERT INTO config_settings ("configId", value, "isActive", "createdAt", "updatedAt")
-           VALUES ($1, $2, true, NOW(), NOW())
-           ON CONFLICT DO NOTHING`,
-          [configRow.id, JSON.stringify(config.values)],
+        // Check if config setting already exists
+        const [existingSetting] = await queryRunner.query(
+          `SELECT id FROM config_settings WHERE "configId" = $1`,
+          [configRow.id],
         );
+
+        // Insert config settings only if it doesn't exist
+        if (!existingSetting) {
+          await queryRunner.query(
+            `INSERT INTO config_settings ("configId", value, "isActive", "createdAt", "updatedAt")
+             VALUES ($1, $2, true, NOW(), NOW())`,
+            [configRow.id, JSON.stringify(config.values)],
+          );
+        }
       }
     }
   }
