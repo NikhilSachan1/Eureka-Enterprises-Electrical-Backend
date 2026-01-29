@@ -69,6 +69,7 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   workOrder: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   completionCertificate: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   other: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  dsrFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -93,6 +94,7 @@ export const FIELD_NAMES = {
   SITE_DOC_WORK_ORDER: 'workOrder',
   SITE_DOC_COMPLETION_CERTIFICATE: 'completionCertificate',
   SITE_DOC_OTHER: 'other',
+  DSR_FILES: 'dsrFiles',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -135,4 +137,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   VEHICLE_SERVICE_FILES: 'vehicle-service-files',
   COMPANY_LOGOS: 'company-logos',
   SITE_DOCUMENT_FILES: 'site-document-files',
+  DSR_FILES: 'dsr-files',
 };
