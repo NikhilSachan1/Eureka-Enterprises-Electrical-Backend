@@ -92,6 +92,9 @@ export const CONFIGURATION_KEYS = {
   SITE_DOCUMENT_STATUSES: 'site_document_statuses',
   SITE_DOCUMENT_PAYMENT_STATUSES: 'site_document_payment_statuses',
   SITE_DOCUMENT_DIRECTIONS: 'site_document_directions',
+  // DAILY STATUS REPORTS (DSR) - under site module
+  DSR_WEATHER_CONDITIONS: 'dsr_weather_conditions',
+  DSR_EDIT_CUTOFF: 'dsr_edit_cutoff',
 };
 
 export const CONFIGURATION_MODULES = {

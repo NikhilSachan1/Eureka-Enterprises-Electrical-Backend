@@ -55,6 +55,8 @@ import { CompanyModule } from 'src/modules/companies/company.module';
 import { ContractorModule } from 'src/modules/contractors/contractor.module';
 import { SiteModule } from 'src/modules/sites/site.module';
 import { SiteAllocationModule } from 'src/modules/site-allocations/site-allocation.module';
+import { SiteDocumentModule } from 'src/modules/site-documents/site-document.module';
+import { DsrModule } from 'src/modules/daily-status-reports/dsr.module';
 
 @Module({
   imports: [
@@ -104,6 +106,8 @@ import { SiteAllocationModule } from 'src/modules/site-allocations/site-allocati
     ContractorModule,
     SiteModule,
     SiteAllocationModule,
+    SiteDocumentModule,
+    DsrModule,
   ],
   controllers: [AppController],
   providers: [
