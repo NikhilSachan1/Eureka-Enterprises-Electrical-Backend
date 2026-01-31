@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions, Not } from 'typeorm';
+import { IsNull, ILike, FindOneOptions, Not, In } from 'typeorm';
 import { CompanyRepository } from './company.repository';
 import { CompanyEntity } from './entities/company.entity';
 import { CreateCompanyDto, UpdateCompanyDto, GetCompanyDto } from './dto';
@@ -82,16 +82,19 @@ export class CompanyService {
       where.name = ILike(`%${search}%`);
     }
 
-    if (city) {
-      where.city = ILike(`%${city}%`);
+    // Multi-select support for city (array of values)
+    if (city && city.length > 0) {
+      where.city = In(city);
     }
 
-    if (state) {
-      where.state = ILike(`%${state}%`);
+    // Multi-select support for state (array of values)
+    if (state && state.length > 0) {
+      where.state = In(state);
     }
 
-    if (parentCompanyId) {
-      where.parentCompanyId = parentCompanyId;
+    // Multi-select support for parentCompanyId (array of UUIDs)
+    if (parentCompanyId && parentCompanyId.length > 0) {
+      where.parentCompanyId = In(parentCompanyId);
     }
 
     if (onlyRootCompanies) {
