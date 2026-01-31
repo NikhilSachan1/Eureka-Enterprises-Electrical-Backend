@@ -95,6 +95,9 @@ export const CONFIGURATION_KEYS = {
   // DAILY STATUS REPORTS (DSR) - under site module
   DSR_WEATHER_CONDITIONS: 'dsr_weather_conditions',
   DSR_EDIT_CUTOFF: 'dsr_edit_cutoff',
+  // VEHICLE LOGS - under vehicle module
+  VEHICLE_LOG_ANOMALY_THRESHOLD: 'vehicle_log_anomaly_threshold',
+  VEHICLE_LOG_BACKFILL_DAYS_ALLOWED: 'vehicle_log_backfill_days_allowed',
 };
 
 export const CONFIGURATION_MODULES = {

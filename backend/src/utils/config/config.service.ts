@@ -41,6 +41,19 @@ import { RequestAuditLogEntity } from 'src/modules/audit-logs/entities/request-a
 import { EntityAuditLogEntity } from 'src/modules/audit-logs/entities/entity-audit-log.entity';
 import { RefreshTokenEntity } from 'src/modules/auth/entities/refresh-token.entity';
 import { CommunicationLogEntity } from 'src/modules/common/communication-logs/entities/communication-log.entity';
+import { CompanyEntity } from 'src/modules/companies/entities/company.entity';
+import { SiteAllocationEntity } from 'src/modules/site-allocations/entities/site-allocation.entity';
+import { SiteDocumentEntity } from 'src/modules/site-documents/entities/site-document.entity';
+import { VehicleLogEntity } from 'src/modules/vehicle-logs/entities/vehicle-log.entity';
+import { VehicleLogFileEntity } from 'src/modules/vehicle-logs/entities/vehicle-log-file.entity';
+import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+import { SiteStatusHistoryEntity } from 'src/modules/sites/entities/site-status-history.entity';
+import { SiteContractorEntity } from 'src/modules/sites/entities/site-contractor.entity';
+import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
+import { DailyStatusReportEntity } from 'src/modules/daily-status-reports/entities/daily-status-report.entity';
+import { DsrEditHistoryEntity } from 'src/modules/daily-status-reports/entities/dsr-edit-history.entity';
+import { DsrFileEntity } from 'src/modules/daily-status-reports/entities/dsr-file.entity';
+import { FnfEntity } from 'src/modules/fnf/entities/fnf.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -107,6 +120,19 @@ export class ConfigService {
         EntityAuditLogEntity,
         RefreshTokenEntity,
         CommunicationLogEntity,
+        CompanyEntity,
+        SiteAllocationEntity,
+        SiteDocumentEntity,
+        VehicleLogEntity,
+        VehicleLogFileEntity,
+        SiteEntity,
+        SiteStatusHistoryEntity,
+        SiteContractorEntity,
+        ContractorEntity,
+        DailyStatusReportEntity,
+        DsrEditHistoryEntity,
+        DsrFileEntity,
+        FnfEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,
