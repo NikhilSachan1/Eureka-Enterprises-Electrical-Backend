@@ -187,7 +187,7 @@ export class CompanyService {
   }
 
   async findById(id: string, includeChildren = false) {
-    const relations = ['parentCompany'];
+    const relations = ['parentCompany', 'createdByUser', 'updatedByUser'];
     if (includeChildren) {
       relations.push('childCompanies');
     }
@@ -197,7 +197,7 @@ export class CompanyService {
       relations,
     });
 
-    // Transform to only include required parent company fields (id, name, fullAddress, logo)
+    // Transform to only include required fields for related entities
     return {
       ...company,
       parentCompany: company.parentCompany
@@ -206,6 +206,26 @@ export class CompanyService {
             name: company.parentCompany.name,
             fullAddress: company.parentCompany.fullAddress,
             logo: company.parentCompany.logo,
+          }
+        : null,
+      // Include user details for createdBy
+      createdByUser: company.createdByUser
+        ? {
+            id: company.createdByUser.id,
+            firstName: company.createdByUser.firstName,
+            lastName: company.createdByUser.lastName,
+            email: company.createdByUser.email,
+            profilePicture: company.createdByUser.profilePicture,
+          }
+        : null,
+      // Include user details for updatedBy
+      updatedByUser: company.updatedByUser
+        ? {
+            id: company.updatedByUser.id,
+            firstName: company.updatedByUser.firstName,
+            lastName: company.updatedByUser.lastName,
+            email: company.updatedByUser.email,
+            profilePicture: company.updatedByUser.profilePicture,
           }
         : null,
     };
