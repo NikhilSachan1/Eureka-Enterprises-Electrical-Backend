@@ -2,6 +2,7 @@ export const COMPANY_ERRORS = {
   NOT_FOUND: 'Company not found',
   NAME_ALREADY_EXISTS: 'Company with this name already exists',
   EMAIL_ALREADY_EXISTS: 'Company with this email already exists',
+  GST_ALREADY_EXISTS: 'Company with this GST number already exists',
   INVALID_GST_FORMAT: 'Invalid GST number format. Expected format: 22AAAAA0000A1Z5',
   CANNOT_DELETE_HAS_SITES: 'Cannot delete company with existing sites',
   CANNOT_DELETE_HAS_CHILDREN:
