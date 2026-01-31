@@ -186,16 +186,29 @@ export class CompanyService {
     return company;
   }
 
-  async findById(id: string, includeChildren = false): Promise<CompanyEntity> {
+  async findById(id: string, includeChildren = false) {
     const relations = ['parentCompany'];
     if (includeChildren) {
       relations.push('childCompanies');
     }
 
-    return await this.findOneOrFail({
+    const company = await this.findOneOrFail({
       where: { id },
       relations,
     });
+
+    // Transform to only include required parent company fields (id, name, fullAddress, logo)
+    return {
+      ...company,
+      parentCompany: company.parentCompany
+        ? {
+            id: company.parentCompany.id,
+            name: company.parentCompany.name,
+            fullAddress: company.parentCompany.fullAddress,
+            logo: company.parentCompany.logo,
+          }
+        : null,
+    };
   }
 
   async update(id: string, updateDto: UpdateCompanyDto, updatedBy: string, logoKey?: string) {
@@ -290,7 +303,7 @@ export class CompanyService {
     );
   }
 
-  async restore(id: string): Promise<{ message: string; data: CompanyEntity }> {
+  async restore(id: string) {
     const company = await this.companyRepository.findOne({
       where: { id },
       withDeleted: true,
