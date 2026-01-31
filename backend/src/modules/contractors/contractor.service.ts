@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions, Not } from 'typeorm';
+import { IsNull, ILike, FindOneOptions, Not, DataSource } from 'typeorm';
 import { ContractorRepository } from './contractor.repository';
 import { ContractorEntity } from './entities/contractor.entity';
 import { CreateContractorDto, UpdateContractorDto, GetContractorDto } from './dto';
@@ -19,12 +19,41 @@ import {
   DefaultPaginationValues,
   DataSuccessOperationType,
 } from 'src/utils/utility/constants/utility.constants';
+import {
+  getSiteStatsByContractorQuery,
+  getDocumentStatsByContractorQuery,
+  getOverallContractorStatsQuery,
+} from './queries/contractor.queries';
+
+// Interface for individual contractor stats
+interface ContractorStats {
+  totalSites: number;
+  activeSites: number;
+  upcomingSites: number;
+  completedSites: number;
+  holdSites: number;
+  totalDocuments: number;
+  totalInvoices: number;
+  totalQuotations: number;
+  totalAmountBilled: number;
+  pendingPayments: number;
+}
+
+// Interface for overall contractor stats (aggregate)
+interface OverallContractorStats {
+  totalContractors: number;
+  activeContractors: number;
+  inactiveContractors: number;
+  archivedContractors: number;
+  selfContractors: number;
+}
 
 @Injectable()
 export class ContractorService {
   constructor(
     private readonly contractorRepository: ContractorRepository,
     private readonly utilityService: UtilityService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createDto: CreateContractorDto, createdBy: string) {
@@ -111,7 +140,38 @@ export class ContractorService {
       take: pageSize,
     });
 
-    return this.utilityService.listResponse(records, totalRecords);
+    // Get contractor IDs for stats computation
+    const contractorIds = records.map((c) => c.id);
+
+    // Fetch individual contractor stats and overall stats in parallel
+    const [statsMap, overallStats] = await Promise.all([
+      this.getContractorStats(contractorIds),
+      this.getOverallContractorStats(),
+    ]);
+
+    // Transform records to include stats
+    const transformedRecords = records.map((contractor) => ({
+      ...contractor,
+      stats: statsMap.get(contractor.id) || {
+        totalSites: 0,
+        activeSites: 0,
+        upcomingSites: 0,
+        completedSites: 0,
+        holdSites: 0,
+        totalDocuments: 0,
+        totalInvoices: 0,
+        totalQuotations: 0,
+        totalAmountBilled: 0,
+        pendingPayments: 0,
+      },
+    }));
+
+    // Return response with overall contractor stats
+    return {
+      records: transformedRecords,
+      totalRecords,
+      overallStats,
+    };
   }
 
   async findOne(options: FindOneOptions<ContractorEntity>) {
@@ -238,6 +298,82 @@ export class ContractorService {
     return {
       message: CONTRACTOR_RESPONSES.RESTORED,
       data: restoredContractor,
+    };
+  }
+
+  /**
+   * Get stats for multiple contractors in a single optimized query
+   * Returns a Map of contractorId -> ContractorStats
+   */
+  private async getContractorStats(contractorIds: string[]): Promise<Map<string, ContractorStats>> {
+    const statsMap = new Map<string, ContractorStats>();
+
+    if (contractorIds.length === 0) {
+      return statsMap;
+    }
+
+    // Execute both queries in parallel using imported queries
+    const [siteStats, documentStats] = await Promise.all([
+      this.dataSource.query(getSiteStatsByContractorQuery, [contractorIds]),
+      this.dataSource.query(getDocumentStatsByContractorQuery, [contractorIds]),
+    ]);
+
+    // Initialize stats for all contractors
+    for (const id of contractorIds) {
+      statsMap.set(id, {
+        totalSites: 0,
+        activeSites: 0,
+        upcomingSites: 0,
+        completedSites: 0,
+        holdSites: 0,
+        totalDocuments: 0,
+        totalInvoices: 0,
+        totalQuotations: 0,
+        totalAmountBilled: 0,
+        pendingPayments: 0,
+      });
+    }
+
+    // Populate site stats
+    for (const row of siteStats) {
+      const stats = statsMap.get(row.contractorId);
+      if (stats) {
+        stats.totalSites = parseInt(row.totalSites) || 0;
+        stats.activeSites = parseInt(row.activeSites) || 0;
+        stats.upcomingSites = parseInt(row.upcomingSites) || 0;
+        stats.completedSites = parseInt(row.completedSites) || 0;
+        stats.holdSites = parseInt(row.holdSites) || 0;
+      }
+    }
+
+    // Populate document stats
+    for (const row of documentStats) {
+      const stats = statsMap.get(row.contractorId);
+      if (stats) {
+        stats.totalDocuments = parseInt(row.totalDocuments) || 0;
+        stats.totalInvoices = parseInt(row.totalInvoices) || 0;
+        stats.totalQuotations = parseInt(row.totalQuotations) || 0;
+        stats.totalAmountBilled = parseFloat(row.totalAmountBilled) || 0;
+        stats.pendingPayments = parseInt(row.pendingPayments) || 0;
+      }
+    }
+
+    return statsMap;
+  }
+
+  /**
+   * Get overall contractor statistics (aggregate counts)
+   */
+  private async getOverallContractorStats(): Promise<OverallContractorStats> {
+    const result = await this.dataSource.query(getOverallContractorStatsQuery);
+    const row = result[0] || {};
+
+    return {
+      totalContractors: parseInt(row.totalContractors) || 0,
+      activeContractors: parseInt(row.activeContractors) || 0,
+      inactiveContractors: parseInt(row.inactiveContractors) || 0,
+      archivedContractors: parseInt(row.archivedContractors) || 0,
+      selfContractors: parseInt(row.selfContractors) || 0,
     };
   }
 
