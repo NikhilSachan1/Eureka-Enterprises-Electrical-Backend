@@ -114,8 +114,16 @@ export class CompanyService {
     }
 
     // Multi-select support for parentCompanyId (array of UUIDs)
-    if (parentCompanyId && parentCompanyId.length > 0) {
-      where.parentCompanyId = In(parentCompanyId);
+    // Returns both: the parent companies themselves AND their children
+    let useArrayWhere = false;
+    let whereConditions: any[] = [];
+
+    if (parentCompanyId && parentCompanyId.length > 0 && !onlyRootCompanies) {
+      useArrayWhere = true;
+      // Condition 1: Companies where id matches (parent itself)
+      whereConditions.push({ ...where, id: In(parentCompanyId) });
+      // Condition 2: Companies where parentCompanyId matches (children)
+      whereConditions.push({ ...where, parentCompanyId: In(parentCompanyId) });
     }
 
     if (onlyRootCompanies) {
@@ -124,6 +132,10 @@ export class CompanyService {
 
     if (isActive !== undefined) {
       where.isActive = isActive;
+      // Also apply isActive to array conditions if using them
+      if (useArrayWhere) {
+        whereConditions = whereConditions.map((cond) => ({ ...cond, isActive }));
+      }
     }
 
     const relations: string[] = ['parentCompany'];
@@ -131,10 +143,13 @@ export class CompanyService {
       relations.push('childCompanies');
     }
 
-    const totalRecords = await this.companyRepository.count({ where });
+    // Use array of conditions for OR, or single where object
+    const finalWhere = useArrayWhere ? whereConditions : where;
+
+    const totalRecords = await this.companyRepository.count({ where: finalWhere });
 
     const records = await this.companyRepository.findAll({
-      where,
+      where: finalWhere,
       relations,
       order: { [sortField]: sortOrder as SortOrder },
       skip: (page - 1) * pageSize,
