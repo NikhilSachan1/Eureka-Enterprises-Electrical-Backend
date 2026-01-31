@@ -28,11 +28,32 @@ export class CompanyService {
   ) {}
 
   async create(createDto: CreateCompanyDto, createdBy: string, logoKey?: string) {
+    // Check for unique name
     const existingCompany = await this.findOne({
       where: { name: ILike(createDto.name), deletedAt: IsNull() },
     });
     if (existingCompany) {
       throw new ConflictException(COMPANY_ERRORS.NAME_ALREADY_EXISTS);
+    }
+
+    // Check for unique email (if provided)
+    if (createDto.email) {
+      const emailConflict = await this.findOne({
+        where: { email: ILike(createDto.email), deletedAt: IsNull() },
+      });
+      if (emailConflict) {
+        throw new ConflictException(COMPANY_ERRORS.EMAIL_ALREADY_EXISTS);
+      }
+    }
+
+    // Check for unique GST number (if provided)
+    if (createDto.gstNumber) {
+      const gstConflict = await this.findOne({
+        where: { gstNumber: createDto.gstNumber, deletedAt: IsNull() },
+      });
+      if (gstConflict) {
+        throw new ConflictException(COMPANY_ERRORS.GST_ALREADY_EXISTS);
+      }
     }
 
     if (createDto.parentCompanyId) {
@@ -165,12 +186,33 @@ export class CompanyService {
   async update(id: string, updateDto: UpdateCompanyDto, updatedBy: string, logoKey?: string) {
     const existingCompany = await this.findOneOrFail({ where: { id } });
 
+    // Check for unique name (if being updated)
     if (updateDto.name && updateDto.name !== existingCompany.name) {
       const nameConflict = await this.findOne({
         where: { name: ILike(updateDto.name), deletedAt: IsNull(), id: Not(id) },
       });
       if (nameConflict) {
         throw new ConflictException(COMPANY_ERRORS.NAME_ALREADY_EXISTS);
+      }
+    }
+
+    // Check for unique email (if being updated)
+    if (updateDto.email && updateDto.email !== existingCompany.email) {
+      const emailConflict = await this.findOne({
+        where: { email: ILike(updateDto.email), deletedAt: IsNull(), id: Not(id) },
+      });
+      if (emailConflict) {
+        throw new ConflictException(COMPANY_ERRORS.EMAIL_ALREADY_EXISTS);
+      }
+    }
+
+    // Check for unique GST number (if being updated)
+    if (updateDto.gstNumber && updateDto.gstNumber !== existingCompany.gstNumber) {
+      const gstConflict = await this.findOne({
+        where: { gstNumber: updateDto.gstNumber, deletedAt: IsNull(), id: Not(id) },
+      });
+      if (gstConflict) {
+        throw new ConflictException(COMPANY_ERRORS.GST_ALREADY_EXISTS);
       }
     }
 
