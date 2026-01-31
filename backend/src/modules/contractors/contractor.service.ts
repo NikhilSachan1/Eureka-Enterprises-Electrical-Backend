@@ -128,8 +128,36 @@ export class ContractorService {
     return contractor;
   }
 
-  async findById(id: string): Promise<ContractorEntity> {
-    return await this.findOneOrFail({ where: { id } });
+  async findById(id: string) {
+    const contractor = await this.findOneOrFail({
+      where: { id },
+      relations: ['createdByUser', 'updatedByUser'],
+    });
+
+    // Transform to only include required fields for related user entities
+    return {
+      ...contractor,
+      // Include user details for createdBy
+      createdByUser: contractor.createdByUser
+        ? {
+            id: contractor.createdByUser.id,
+            firstName: contractor.createdByUser.firstName,
+            lastName: contractor.createdByUser.lastName,
+            email: contractor.createdByUser.email,
+            profilePicture: contractor.createdByUser.profilePicture,
+          }
+        : null,
+      // Include user details for updatedBy
+      updatedByUser: contractor.updatedByUser
+        ? {
+            id: contractor.updatedByUser.id,
+            firstName: contractor.updatedByUser.firstName,
+            lastName: contractor.updatedByUser.lastName,
+            email: contractor.updatedByUser.email,
+            profilePicture: contractor.updatedByUser.profilePicture,
+          }
+        : null,
+    };
   }
 
   async update(id: string, updateDto: UpdateContractorDto, updatedBy: string) {
@@ -193,7 +221,7 @@ export class ContractorService {
     );
   }
 
-  async restore(id: string): Promise<{ message: string; data: ContractorEntity }> {
+  async restore(id: string) {
     const contractor = await this.contractorRepository.findOne({
       where: { id },
       withDeleted: true,
