@@ -88,6 +88,15 @@ export class CreateSiteDto {
   baseDistanceKm?: number;
 
   @ApiPropertyOptional({
+    description: 'Estimated budget for the site (used for analytics and health score)',
+    example: 5000000,
+  })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  estimatedBudget?: number;
+
+  @ApiPropertyOptional({
     description: 'Initial site status',
     enum: SiteStatus,
     default: SiteStatus.UPCOMING,
