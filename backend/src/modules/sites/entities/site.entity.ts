@@ -42,6 +42,10 @@ export class SiteEntity extends BaseEntity {
   @Column({ type: 'integer', nullable: true })
   expectedVehicleDailyKm: number;
 
+  // Estimated budget for the site (optional, used for health score calculation)
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  estimatedBudget: number;
+
   // Status
   @Column({ type: 'varchar', length: 20, default: SiteStatus.UPCOMING })
   status: SiteStatus;
