@@ -52,3 +52,14 @@ export const getOverallContractorStatsQuery = `
     COUNT(*) FILTER (WHERE c."isSelfContractor" = true AND c."deletedAt" IS NULL) as "selfContractors"
   FROM contractors c
 `;
+
+/**
+ * Check if a contractor is assigned to any active (non-deleted) sites
+ * Returns: count of sites for the contractor
+ */
+export const getContractorSiteCountQuery = `
+  SELECT COUNT(*) as "siteCount"
+  FROM site_contractors sc
+  INNER JOIN sites s ON s.id = sc."siteId" AND s."deletedAt" IS NULL
+  WHERE sc."contractorId" = $1
+`;

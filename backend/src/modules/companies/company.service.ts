@@ -23,27 +23,9 @@ import {
   getSiteStatsByCompanyQuery,
   getChildCompanyStatsByParentQuery,
   getOverallCompanyStatsQuery,
+  getCompanySiteCountQuery,
 } from './queries/company.queries';
-
-// Interface for individual company stats
-interface CompanyStats {
-  totalSites: number;
-  activeSites: number; // ongoing
-  upcomingSites: number;
-  completedSites: number;
-  holdSites: number;
-  activeChildCompanies: number;
-  inactiveChildCompanies: number;
-  archivedChildCompanies: number;
-}
-
-// Interface for overall company stats (aggregate)
-interface OverallCompanyStats {
-  totalCompanies: number;
-  activeCompanies: number;
-  inactiveCompanies: number;
-  archivedCompanies: number;
-}
+import { CompanyStats, OverallCompanyStats } from './company.types';
 
 @Injectable()
 export class CompanyService {
@@ -437,7 +419,11 @@ export class CompanyService {
       throw new BadRequestException(COMPANY_ERRORS.CANNOT_DELETE_HAS_CHILDREN);
     }
 
-    // TODO: Check if company has sites (will be added when Site module is created)
+    // Check if company has sites
+    const hasSites = await this.hasActiveSites(id);
+    if (hasSites) {
+      throw new BadRequestException(COMPANY_ERRORS.CANNOT_DELETE_HAS_SITES);
+    }
 
     await this.companyRepository.update({ id }, { deletedBy });
     await this.companyRepository.softDelete({ id });
@@ -446,6 +432,90 @@ export class CompanyService {
       CompanyEntityFields.COMPANY,
       DataSuccessOperationType.DELETE,
     );
+  }
+
+  /**
+   * Check if a company has any active (non-deleted) sites
+   */
+  private async hasActiveSites(companyId: string): Promise<boolean> {
+    const result = await this.dataSource.query(getCompanySiteCountQuery, [companyId]);
+    const siteCount = parseInt(result[0]?.siteCount) || 0;
+    return siteCount > 0;
+  }
+
+  /**
+   * Bulk delete companies
+   * Returns results with success and error details for each company
+   */
+  async bulkDelete(companyIds: string[], deletedBy: string) {
+    const results: { id: string; success: boolean; message: string }[] = [];
+
+    for (const companyId of companyIds) {
+      try {
+        // Check if company exists
+        const company = await this.companyRepository.findOne({
+          where: { id: companyId, deletedAt: IsNull() },
+        });
+
+        if (!company) {
+          results.push({
+            id: companyId,
+            success: false,
+            message: COMPANY_ERRORS.NOT_FOUND,
+          });
+          continue;
+        }
+
+        // Check if company has children
+        const hasChildren = await this.hasChildCompanies(companyId);
+        if (hasChildren) {
+          results.push({
+            id: companyId,
+            success: false,
+            message: COMPANY_ERRORS.CANNOT_DELETE_HAS_CHILDREN,
+          });
+          continue;
+        }
+
+        // Check if company has sites
+        const hasSites = await this.hasActiveSites(companyId);
+        if (hasSites) {
+          results.push({
+            id: companyId,
+            success: false,
+            message: COMPANY_ERRORS.CANNOT_DELETE_HAS_SITES,
+          });
+          continue;
+        }
+
+        // Soft delete the company
+        await this.companyRepository.update({ id: companyId }, { deletedBy });
+        await this.companyRepository.softDelete({ id: companyId });
+
+        results.push({
+          id: companyId,
+          success: true,
+          message: 'Company deleted successfully',
+        });
+      } catch (error) {
+        results.push({
+          id: companyId,
+          success: false,
+          message: error.message || 'Failed to delete company',
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.filter((r) => !r.success).length;
+
+    return {
+      message: `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
+      totalRequested: companyIds.length,
+      successCount,
+      failureCount,
+      results,
+    };
   }
 
   async restore(id: string) {

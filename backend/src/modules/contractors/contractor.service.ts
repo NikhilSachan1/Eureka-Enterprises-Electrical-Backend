@@ -23,30 +23,9 @@ import {
   getSiteStatsByContractorQuery,
   getDocumentStatsByContractorQuery,
   getOverallContractorStatsQuery,
+  getContractorSiteCountQuery,
 } from './queries/contractor.queries';
-
-// Interface for individual contractor stats
-interface ContractorStats {
-  totalSites: number;
-  activeSites: number;
-  upcomingSites: number;
-  completedSites: number;
-  holdSites: number;
-  totalDocuments: number;
-  totalInvoices: number;
-  totalQuotations: number;
-  totalAmountBilled: number;
-  pendingPayments: number;
-}
-
-// Interface for overall contractor stats (aggregate)
-interface OverallContractorStats {
-  totalContractors: number;
-  activeContractors: number;
-  inactiveContractors: number;
-  archivedContractors: number;
-  selfContractors: number;
-}
+import { ContractorStats, OverallContractorStats } from './contractor.types';
 
 @Injectable()
 export class ContractorService {
@@ -270,7 +249,11 @@ export class ContractorService {
       throw new BadRequestException(CONTRACTOR_ERRORS.CANNOT_DELETE_SELF_CONTRACTOR);
     }
 
-    // TODO: Check if contractor has sites (will be added when Site module is created)
+    // Check if contractor has sites
+    const hasSites = await this.hasActiveSites(id);
+    if (hasSites) {
+      throw new BadRequestException(CONTRACTOR_ERRORS.CANNOT_DELETE_HAS_SITES);
+    }
 
     await this.contractorRepository.update({ id }, { deletedBy });
     await this.contractorRepository.softDelete({ id });
@@ -279,6 +262,89 @@ export class ContractorService {
       ContractorEntityFields.CONTRACTOR,
       DataSuccessOperationType.DELETE,
     );
+  }
+
+  /**
+   * Check if a contractor is assigned to any active (non-deleted) sites
+   */
+  private async hasActiveSites(contractorId: string): Promise<boolean> {
+    const result = await this.dataSource.query(getContractorSiteCountQuery, [contractorId]);
+    const siteCount = parseInt(result[0]?.siteCount) || 0;
+    return siteCount > 0;
+  }
+
+  /**
+   * Bulk delete contractors
+   * Returns results with success and error details for each contractor
+   */
+  async bulkDelete(contractorIds: string[], deletedBy: string) {
+    const results: { id: string; success: boolean; message: string }[] = [];
+
+    for (const contractorId of contractorIds) {
+      try {
+        // Check if contractor exists
+        const contractor = await this.contractorRepository.findOne({
+          where: { id: contractorId, deletedAt: IsNull() },
+        });
+
+        if (!contractor) {
+          results.push({
+            id: contractorId,
+            success: false,
+            message: CONTRACTOR_ERRORS.NOT_FOUND,
+          });
+          continue;
+        }
+
+        // Prevent deletion of self contractor
+        if (contractor.isSelfContractor) {
+          results.push({
+            id: contractorId,
+            success: false,
+            message: CONTRACTOR_ERRORS.CANNOT_DELETE_SELF_CONTRACTOR,
+          });
+          continue;
+        }
+
+        // Check if contractor has sites
+        const hasSites = await this.hasActiveSites(contractorId);
+        if (hasSites) {
+          results.push({
+            id: contractorId,
+            success: false,
+            message: CONTRACTOR_ERRORS.CANNOT_DELETE_HAS_SITES,
+          });
+          continue;
+        }
+
+        // Soft delete the contractor
+        await this.contractorRepository.update({ id: contractorId }, { deletedBy });
+        await this.contractorRepository.softDelete({ id: contractorId });
+
+        results.push({
+          id: contractorId,
+          success: true,
+          message: 'Contractor deleted successfully',
+        });
+      } catch (error) {
+        results.push({
+          id: contractorId,
+          success: false,
+          message: error.message || 'Failed to delete contractor',
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.filter((r) => !r.success).length;
+
+    return {
+      message: `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
+      totalRequested: contractorIds.length,
+      successCount,
+      failureCount,
+      results,
+    };
   }
 
   async restore(id: string) {

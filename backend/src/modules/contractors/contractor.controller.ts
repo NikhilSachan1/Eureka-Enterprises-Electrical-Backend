@@ -10,9 +10,14 @@ import {
   Request,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { ContractorService } from './contractor.service';
-import { CreateContractorDto, UpdateContractorDto, GetContractorDto } from './dto';
+import {
+  CreateContractorDto,
+  UpdateContractorDto,
+  GetContractorDto,
+  BulkDeleteContractorDto,
+} from './dto';
 
 @ApiTags('Contractors')
 @ApiBearerAuth('JWT-auth')
@@ -61,6 +66,19 @@ export class ContractorController {
     @Body() updateContractorDto: UpdateContractorDto,
   ) {
     return await this.contractorService.update(id, updateContractorDto, updatedBy);
+  }
+
+  @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete contractors',
+    description: 'Deletes multiple contractors in bulk based on the provided contractor IDs.',
+  })
+  @ApiBody({ type: BulkDeleteContractorDto })
+  async bulkDelete(
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Body() bulkDeleteDto: BulkDeleteContractorDto,
+  ) {
+    return await this.contractorService.bulkDelete(bulkDeleteDto.contractorIds, deletedBy);
   }
 
   @Delete(':id')
