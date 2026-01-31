@@ -117,7 +117,20 @@ export class CompanyService {
       take: pageSize,
     });
 
-    return this.utilityService.listResponse(records, totalRecords);
+    // Transform records to only include required parent company fields
+    const transformedRecords = records.map((company) => ({
+      ...company,
+      parentCompany: company.parentCompany
+        ? {
+            id: company.parentCompany.id,
+            name: company.parentCompany.name,
+            fullAddress: company.parentCompany.fullAddress,
+            logo: company.parentCompany.logo,
+          }
+        : null,
+    }));
+
+    return this.utilityService.listResponse(transformedRecords, totalRecords);
   }
 
   async findOne(options: FindOneOptions<CompanyEntity>) {
