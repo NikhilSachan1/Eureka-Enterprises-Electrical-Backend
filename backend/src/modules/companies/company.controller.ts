@@ -14,7 +14,7 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
-import { CreateCompanyDto, UpdateCompanyDto, GetCompanyDto } from './dto';
+import { CreateCompanyDto, UpdateCompanyDto, GetCompanyDto, BulkDeleteCompanyDto } from './dto';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import {
   FILE_UPLOAD_FOLDER_NAMES,
@@ -95,6 +95,19 @@ export class CompanyController {
   ) {
     const logoKey = uploadedFiles?.fileKeys?.[0] || undefined;
     return await this.companyService.update(id, updateCompanyDto, updatedBy, logoKey);
+  }
+
+  @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete companies',
+    description: 'Deletes multiple companies in bulk based on the provided company IDs.',
+  })
+  @ApiBody({ type: BulkDeleteCompanyDto })
+  async bulkDelete(
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Body() bulkDeleteDto: BulkDeleteCompanyDto,
+  ) {
+    return await this.companyService.bulkDelete(bulkDeleteDto.companyIds, deletedBy);
   }
 
   @Delete(':id')

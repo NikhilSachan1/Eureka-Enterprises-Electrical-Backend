@@ -48,3 +48,14 @@ export const getOverallCompanyStatsQuery = `
     COUNT(*) FILTER (WHERE c."deletedAt" IS NOT NULL) as "archivedCompanies"
   FROM companies c
 `;
+
+/**
+ * Check if a company has any active (non-deleted) sites
+ * Returns: count of sites for the company
+ */
+export const getCompanySiteCountQuery = `
+  SELECT COUNT(*) as "siteCount"
+  FROM sites s
+  WHERE s."companyId" = $1
+    AND s."deletedAt" IS NULL
+`;
