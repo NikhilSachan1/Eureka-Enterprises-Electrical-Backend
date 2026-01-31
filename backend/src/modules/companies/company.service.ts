@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions, Not, In } from 'typeorm';
+import { IsNull, ILike, FindOneOptions, Not, In, DataSource } from 'typeorm';
 import { CompanyRepository } from './company.repository';
 import { CompanyEntity } from './entities/company.entity';
 import { CreateCompanyDto, UpdateCompanyDto, GetCompanyDto } from './dto';
@@ -19,12 +19,38 @@ import {
   DefaultPaginationValues,
   DataSuccessOperationType,
 } from 'src/utils/utility/constants/utility.constants';
+import {
+  getSiteStatsByCompanyQuery,
+  getChildCompanyStatsByParentQuery,
+  getOverallCompanyStatsQuery,
+} from './queries/company.queries';
+
+// Interface for individual company stats
+interface CompanyStats {
+  totalSites: number;
+  activeSites: number; // ongoing
+  upcomingSites: number;
+  completedSites: number;
+  holdSites: number;
+  activeChildCompanies: number;
+  inactiveChildCompanies: number;
+  archivedChildCompanies: number;
+}
+
+// Interface for overall company stats (aggregate)
+interface OverallCompanyStats {
+  totalCompanies: number;
+  activeCompanies: number;
+  inactiveCompanies: number;
+  archivedCompanies: number;
+}
 
 @Injectable()
 export class CompanyService {
   constructor(
     private readonly companyRepository: CompanyRepository,
     private readonly utilityService: UtilityService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createDto: CreateCompanyDto, createdBy: string, logoKey?: string) {
@@ -156,7 +182,16 @@ export class CompanyService {
       take: pageSize,
     });
 
-    // Transform records to only include required parent company fields
+    // Get company IDs for stats computation
+    const companyIds = records.map((c) => c.id);
+
+    // Fetch individual company stats and overall stats in parallel
+    const [statsMap, overallStats] = await Promise.all([
+      this.getCompanyStats(companyIds),
+      this.getOverallCompanyStats(),
+    ]);
+
+    // Transform records to include required parent company fields and stats
     const transformedRecords = records.map((company) => ({
       ...company,
       parentCompany: company.parentCompany
@@ -167,9 +202,99 @@ export class CompanyService {
             logo: company.parentCompany.logo,
           }
         : null,
+      stats: statsMap.get(company.id) || {
+        totalSites: 0,
+        activeSites: 0,
+        upcomingSites: 0,
+        completedSites: 0,
+        holdSites: 0,
+        activeChildCompanies: 0,
+        inactiveChildCompanies: 0,
+        archivedChildCompanies: 0,
+      },
     }));
 
-    return this.utilityService.listResponse(transformedRecords, totalRecords);
+    // Return response with overall company stats
+    return {
+      records: transformedRecords,
+      totalRecords,
+      overallStats,
+    };
+  }
+
+  /**
+   * Get stats for multiple companies in a single optimized query
+   * Returns a Map of companyId -> CompanyStats
+   */
+  /**
+   * Get stats for multiple companies in a single optimized query
+   * Returns a Map of companyId -> CompanyStats
+   */
+  private async getCompanyStats(companyIds: string[]): Promise<Map<string, CompanyStats>> {
+    const statsMap = new Map<string, CompanyStats>();
+
+    if (companyIds.length === 0) {
+      return statsMap;
+    }
+
+    // Execute both queries in parallel using imported queries
+    const [siteStats, childStats] = await Promise.all([
+      this.dataSource.query(getSiteStatsByCompanyQuery, [companyIds]),
+      this.dataSource.query(getChildCompanyStatsByParentQuery, [companyIds]),
+    ]);
+
+    // Initialize stats for all companies
+    for (const id of companyIds) {
+      statsMap.set(id, {
+        totalSites: 0,
+        activeSites: 0,
+        upcomingSites: 0,
+        completedSites: 0,
+        holdSites: 0,
+        activeChildCompanies: 0,
+        inactiveChildCompanies: 0,
+        archivedChildCompanies: 0,
+      });
+    }
+
+    // Populate site stats
+    for (const row of siteStats) {
+      const stats = statsMap.get(row.companyId);
+      if (stats) {
+        stats.totalSites = parseInt(row.totalSites) || 0;
+        stats.activeSites = parseInt(row.activeSites) || 0;
+        stats.upcomingSites = parseInt(row.upcomingSites) || 0;
+        stats.completedSites = parseInt(row.completedSites) || 0;
+        stats.holdSites = parseInt(row.holdSites) || 0;
+      }
+    }
+
+    // Populate child company stats
+    for (const row of childStats) {
+      const stats = statsMap.get(row.parentCompanyId);
+      if (stats) {
+        stats.activeChildCompanies = parseInt(row.activeChildCompanies) || 0;
+        stats.inactiveChildCompanies = parseInt(row.inactiveChildCompanies) || 0;
+        stats.archivedChildCompanies = parseInt(row.archivedChildCompanies) || 0;
+      }
+    }
+
+    return statsMap;
+  }
+
+  /**
+   * Get overall company statistics (aggregate counts)
+   */
+  private async getOverallCompanyStats(): Promise<OverallCompanyStats> {
+    const result = await this.dataSource.query(getOverallCompanyStatsQuery);
+    const row = result[0] || {};
+
+    return {
+      totalCompanies: parseInt(row.totalCompanies) || 0,
+      activeCompanies: parseInt(row.activeCompanies) || 0,
+      inactiveCompanies: parseInt(row.inactiveCompanies) || 0,
+      archivedCompanies: parseInt(row.archivedCompanies) || 0,
+    };
   }
 
   async findOne(options: FindOneOptions<CompanyEntity>) {
