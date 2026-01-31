@@ -5,74 +5,80 @@ export class SeedVehicleLogConfig1810000000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // 1. Insert anomaly threshold configuration
-    const anomalyConfigResult = await queryRunner.query(`
-      INSERT INTO configurations (id, key, module, description, "isActive", "createdAt", "updatedAt")
-      VALUES (
-        uuid_generate_v4(),
-        'vehicle_log_anomaly_threshold',
-        'vehicle',
-        'Anomaly threshold multiplier for vehicle logs. If actual KM > expected KM × threshold, log is flagged. Default 1.5 means 150% of expected.',
-        true,
-        NOW(),
-        NOW()
-      )
-      ON CONFLICT (module, key) DO NOTHING
-      RETURNING id
-    `);
+    const existingAnomalyConfig = await queryRunner.query(
+      `SELECT id FROM configurations WHERE key = 'vehicle_log_anomaly_threshold' AND module = 'vehicle'`,
+    );
 
-    if (anomalyConfigResult && anomalyConfigResult.length > 0) {
-      await queryRunner.query(
-        `
-        INSERT INTO config_settings (id, "configId", label, value, "valueType", "isEditable", "isActive", "createdAt", "updatedAt")
-        VALUES (
-          uuid_generate_v4(),
-          $1,
-          'Anomaly Threshold',
-          '1.5',
+    let anomalyConfigId: string;
+    if (existingAnomalyConfig.length === 0) {
+      const [inserted] = await queryRunner.query(
+        `INSERT INTO configurations (module, key, label, "valueType", description, "isEditable", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+         RETURNING id`,
+        [
+          'vehicle',
+          'vehicle_log_anomaly_threshold',
+          'Vehicle Log Anomaly Threshold',
           'number',
+          'Anomaly threshold multiplier for vehicle logs. If actual KM > expected KM × threshold, log is flagged. Default 1.5 means 150% of expected.',
           true,
-          true,
-          NOW(),
-          NOW()
-        )
-      `,
-        [anomalyConfigResult[0].id],
+        ],
+      );
+      anomalyConfigId = inserted.id;
+    } else {
+      anomalyConfigId = existingAnomalyConfig[0].id;
+    }
+
+    // Check if setting already exists
+    const existingAnomalySetting = await queryRunner.query(
+      `SELECT id FROM config_settings WHERE "configId" = $1 AND "isActive" = true`,
+      [anomalyConfigId],
+    );
+
+    if (existingAnomalySetting.length === 0) {
+      await queryRunner.query(
+        `INSERT INTO config_settings ("configId", value, "isActive", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, NOW(), NOW())`,
+        [anomalyConfigId, JSON.stringify(1.5), true],
       );
     }
 
     // 2. Insert backfill days allowed configuration
-    const backfillConfigResult = await queryRunner.query(`
-      INSERT INTO configurations (id, key, module, description, "isActive", "createdAt", "updatedAt")
-      VALUES (
-        uuid_generate_v4(),
-        'vehicle_log_backfill_days_allowed',
-        'vehicle',
-        'Number of days back employees can create/edit vehicle logs. HR/Admin can always backfill beyond this. Default is 2 days.',
-        true,
-        NOW(),
-        NOW()
-      )
-      ON CONFLICT (module, key) DO NOTHING
-      RETURNING id
-    `);
+    const existingBackfillConfig = await queryRunner.query(
+      `SELECT id FROM configurations WHERE key = 'vehicle_log_backfill_days_allowed' AND module = 'vehicle'`,
+    );
 
-    if (backfillConfigResult && backfillConfigResult.length > 0) {
-      await queryRunner.query(
-        `
-        INSERT INTO config_settings (id, "configId", label, value, "valueType", "isEditable", "isActive", "createdAt", "updatedAt")
-        VALUES (
-          uuid_generate_v4(),
-          $1,
-          'Backfill Days Allowed',
-          '2',
+    let backfillConfigId: string;
+    if (existingBackfillConfig.length === 0) {
+      const [inserted] = await queryRunner.query(
+        `INSERT INTO configurations (module, key, label, "valueType", description, "isEditable", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+         RETURNING id`,
+        [
+          'vehicle',
+          'vehicle_log_backfill_days_allowed',
+          'Vehicle Log Backfill Days Allowed',
           'number',
+          'Number of days back employees can create/edit vehicle logs. HR/Admin can always backfill beyond this. Default is 2 days.',
           true,
-          true,
-          NOW(),
-          NOW()
-        )
-      `,
-        [backfillConfigResult[0].id],
+        ],
+      );
+      backfillConfigId = inserted.id;
+    } else {
+      backfillConfigId = existingBackfillConfig[0].id;
+    }
+
+    // Check if setting already exists
+    const existingBackfillSetting = await queryRunner.query(
+      `SELECT id FROM config_settings WHERE "configId" = $1 AND "isActive" = true`,
+      [backfillConfigId],
+    );
+
+    if (existingBackfillSetting.length === 0) {
+      await queryRunner.query(
+        `INSERT INTO config_settings ("configId", value, "isActive", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, NOW(), NOW())`,
+        [backfillConfigId, JSON.stringify(2), true],
       );
     }
   }

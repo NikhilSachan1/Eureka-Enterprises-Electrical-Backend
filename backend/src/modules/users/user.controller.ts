@@ -11,7 +11,7 @@ import {
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import {
   BulkDeleteUserDto,
@@ -29,33 +29,57 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all users',
+    description: 'Retrieves a paginated list of users with optional filtering and sorting.',
+  })
   async findAll(@Query() query: GetUsersDto) {
     return await this.userService.findAll(query);
   }
 
   @Get('dropdown-options')
+  @ApiOperation({
+    summary: 'Get user dropdown options',
+    description: 'Retrieves user options formatted for dropdown/select components.',
+  })
   async getDropdownOptions() {
     const data = await this.userService.getDropdownOptions();
     return { success: true, data };
   }
 
   @Get('next-employee-id')
+  @ApiOperation({
+    summary: 'Get next employee ID',
+    description: 'Generates and returns the next available employee ID in sequence.',
+  })
   async getNextEmployeeId() {
     const data = await this.userService.getNextEmployeeId();
     return { success: true, data };
   }
 
   @Get('me')
+  @ApiOperation({
+    summary: 'Get current user profile',
+    description: 'Retrieves the profile of the currently authenticated user.',
+  })
   async getMe(@Request() { user: { id: userId } }: { user: { id: string } }) {
     return await this.userService.findOneOrFail({ where: { id: userId } }, true);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get user by ID',
+    description: 'Retrieves a specific user by their unique identifier.',
+  })
   async findById(@Param('id') id: string) {
     return await this.userService.findOneOrFail({ where: { id } }, true);
   }
 
   @Post()
+  @ApiOperation({
+    summary: 'Create employee',
+    description: 'Creates a new employee with personal details, documents, and salary structure.',
+  })
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'profilePicture', maxCount: 1 },
@@ -220,6 +244,10 @@ export class UserController {
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Update employee',
+    description: 'Updates an existing employee with new details and documents.',
+  })
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'profilePicture', maxCount: 1 },
@@ -308,12 +336,20 @@ export class UserController {
   }
 
   @Post('resend-password-link')
+  @ApiOperation({
+    summary: 'Resend password link',
+    description: 'Resends the password reset link to specified users via email.',
+  })
   @ApiBody({ type: ResendPasswordLinkDto })
   async resendPasswordLink(@Body() dto: ResendPasswordLinkDto) {
     return await this.userService.resendPasswordLinks(dto);
   }
 
   @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete users',
+    description: 'Deletes multiple users at once based on provided user IDs.',
+  })
   @ApiBody({ type: BulkDeleteUserDto })
   async bulkDelete(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
@@ -326,6 +362,10 @@ export class UserController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete user',
+    description: 'Deletes a specific user by their unique identifier.',
+  })
   async delete(@Param('id') id: string, @Request() { user: { id: deletedBy } }: any) {
     return await this.userService.delete(id, deletedBy);
   }

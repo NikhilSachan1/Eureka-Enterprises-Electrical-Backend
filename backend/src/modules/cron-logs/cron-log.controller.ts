@@ -10,6 +10,10 @@ export class CronLogController {
   constructor(private readonly cronLogService: CronLogService) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all cron logs',
+    description: 'Retrieves a paginated list of cron job execution logs with optional filtering.',
+  })
   findAll(@Query() query: CronLogQueryDto) {
     return this.cronLogService.findAll(query);
   }
@@ -22,11 +26,19 @@ export class CronLogController {
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get cron log by ID',
+    description: 'Retrieves detailed information about a specific cron job execution log.',
+  })
   findOne(@Param('id') id: string) {
     return this.cronLogService.findOneOrFail(id);
   }
 
   @Post('cleanup')
+  @ApiOperation({
+    summary: 'Cleanup old cron logs',
+    description: 'Deletes cron logs older than the specified retention period (in days).',
+  })
   async cleanup(@Body() body: { retentionDays?: number }) {
     return await this.cronLogService.cleanup(body.retentionDays);
   }

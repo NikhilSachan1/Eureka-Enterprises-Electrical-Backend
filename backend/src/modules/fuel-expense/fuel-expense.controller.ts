@@ -11,7 +11,14 @@ import {
   Delete,
 } from '@nestjs/common';
 import { FuelExpenseService } from './fuel-expense.service';
-import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+  ApiResponse,
+  ApiOperation,
+} from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   FIELD_NAMES,
@@ -40,6 +47,11 @@ export class FuelExpenseController {
   constructor(private readonly fuelExpenseService: FuelExpenseService) {}
 
   @Post()
+  @ApiOperation({
+    summary: 'Create fuel expense entry',
+    description:
+      'Creates a new fuel expense entry with the provided details and optional file attachments.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -65,6 +77,11 @@ export class FuelExpenseController {
   }
 
   @Post('force')
+  @ApiOperation({
+    summary: 'Force create fuel expense entry',
+    description:
+      'Creates a fuel expense entry with forced approval, bypassing normal approval workflow.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -90,6 +107,11 @@ export class FuelExpenseController {
   }
 
   @Post('credit')
+  @ApiOperation({
+    summary: 'Create credit fuel expense entry',
+    description:
+      'Creates a new credit fuel expense entry with the provided details and optional file attachments.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -114,6 +136,11 @@ export class FuelExpenseController {
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Edit fuel expense entry',
+    description:
+      'Updates an existing fuel expense entry with the provided details and optional file attachments.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -140,6 +167,11 @@ export class FuelExpenseController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get fuel expense records',
+    description:
+      'Retrieves a list of fuel expense records based on the provided query parameters and filters.',
+  })
   @UseInterceptors(FuelExpenseUserInterceptor)
   @ApiResponse({ status: 200, type: FuelExpenseListResponseDto })
   async getFuelExpenseRecords(@Query() fuelExpenseQueryDto: FuelExpenseQueryDto) {
@@ -147,17 +179,31 @@ export class FuelExpenseController {
   }
 
   @Get(':id/history')
+  @ApiOperation({
+    summary: 'Get fuel expense history',
+    description:
+      'Retrieves the complete history and audit trail for a specific fuel expense entry.',
+  })
   async getFuelExpenseHistory(@Param('id') id: string) {
     return this.fuelExpenseService.getFuelExpenseHistory(id);
   }
 
   @Get('vehicle/:vehicleId/average')
+  @ApiOperation({
+    summary: 'Get vehicle fuel average',
+    description: 'Calculates and retrieves the average fuel consumption for a specific vehicle.',
+  })
   async getVehicleAverage(@Param('vehicleId') vehicleId: string) {
     const average = await this.fuelExpenseService.calculateVehicleAverage(vehicleId);
     return average;
   }
 
   @Post('approval')
+  @ApiOperation({
+    summary: 'Bulk approve fuel expense entries',
+    description:
+      'Approves multiple fuel expense entries in bulk based on the provided expense IDs.',
+  })
   async bulkApproveFuelExpenses(
     @Request() { user: { id: approvalBy } }: { user: { id: string } },
     @Body() bulkApprovalDto: FuelExpenseBulkApprovalDto,
@@ -171,6 +217,10 @@ export class FuelExpenseController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete fuel expense entry',
+    description: 'Deletes a specific fuel expense entry by its ID.',
+  })
   async deleteFuelExpense(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
     @Param('id') id: string,
@@ -179,6 +229,10 @@ export class FuelExpenseController {
   }
 
   @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete fuel expense entries',
+    description: 'Deletes multiple fuel expense entries in bulk based on the provided expense IDs.',
+  })
   @ApiBody({ type: BulkDeleteFuelExpenseDto })
   async bulkDeleteFuelExpenses(
     @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },

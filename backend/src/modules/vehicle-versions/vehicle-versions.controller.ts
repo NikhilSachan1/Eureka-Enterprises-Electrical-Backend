@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { VehicleVersionsService } from './vehicle-versions.service';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { VehicleVersionsQueryDto } from './dto';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
@@ -11,6 +11,10 @@ export class VehicleVersionsController {
   constructor(private readonly vehicleVersionsService: VehicleVersionsService) {}
 
   @Get(':vehicleMasterId')
+  @ApiOperation({
+    summary: 'Get vehicle versions',
+    description: 'Retrieves all versions/history records for a specific vehicle master record.',
+  })
   async findAll(
     @Param('vehicleMasterId') vehicleMasterId: string,
     @Query() query: VehicleVersionsQueryDto,

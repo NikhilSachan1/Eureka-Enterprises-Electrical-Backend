@@ -11,7 +11,7 @@ import {
   ParseUUIDPipe,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { SiteDocumentService } from './site-document.service';
 import {
@@ -36,6 +36,11 @@ export class SiteDocumentController {
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SITE_DOCUMENT_FILES, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateSiteDocumentDto })
+  @ApiOperation({
+    summary: 'Create a new site document',
+    description:
+      'Creates a new site document with file upload. Supports uploading a single document file along with document metadata.',
+  })
   async create(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() createDto: CreateSiteDocumentDto,
@@ -59,6 +64,11 @@ export class SiteDocumentController {
   )
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: BulkCreateSiteDocumentDto })
+  @ApiOperation({
+    summary: 'Bulk create site documents',
+    description:
+      'Creates multiple site documents at once with different document types (PO, Invoice, Contract, Work Order, Completion Certificate, Other). Each document type can have its own file upload.',
+  })
   async bulkCreate(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() bulkDto: BulkCreateSiteDocumentDto,
@@ -73,11 +83,21 @@ export class SiteDocumentController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all site documents',
+    description:
+      'Retrieves a list of all site documents with optional filtering, pagination, and sorting based on query parameters.',
+  })
   async findAll(@Query() query: GetSiteDocumentDto) {
     return await this.siteDocumentService.findAll(query);
   }
 
   @Get('site/:siteId')
+  @ApiOperation({
+    summary: 'Get documents by site ID',
+    description:
+      'Retrieves all documents associated with a specific site, with optional filtering and pagination.',
+  })
   async getDocumentsBySite(
     @Param('siteId', ParseUUIDPipe) siteId: string,
     @Query() query: GetSiteDocumentDto,
@@ -86,6 +106,11 @@ export class SiteDocumentController {
   }
 
   @Get('contractor/:contractorId')
+  @ApiOperation({
+    summary: 'Get documents by contractor ID',
+    description:
+      'Retrieves all documents associated with a specific contractor, with optional filtering and pagination.',
+  })
   async getDocumentsByContractor(
     @Param('contractorId', ParseUUIDPipe) contractorId: string,
     @Query() query: GetSiteDocumentDto,
@@ -94,6 +119,11 @@ export class SiteDocumentController {
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get a site document by ID',
+    description:
+      'Retrieves detailed information about a specific site document by its unique identifier.',
+  })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.siteDocumentService.findById(id);
   }
@@ -102,6 +132,11 @@ export class SiteDocumentController {
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SITE_DOCUMENT_FILES, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UpdateSiteDocumentDto })
+  @ApiOperation({
+    summary: 'Update a site document',
+    description:
+      'Updates the details of an existing site document. Optionally allows updating the document file. Only provided fields will be updated.',
+  })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
@@ -114,6 +149,11 @@ export class SiteDocumentController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a site document',
+    description:
+      'Soft deletes a site document by marking it as deleted. The document can be restored later if needed.',
+  })
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
@@ -122,6 +162,10 @@ export class SiteDocumentController {
   }
 
   @Post(':id/restore')
+  @ApiOperation({
+    summary: 'Restore a deleted site document',
+    description: 'Restores a previously soft-deleted site document, making it active again.',
+  })
   async restore(@Param('id', ParseUUIDPipe) id: string) {
     return await this.siteDocumentService.restore(id);
   }

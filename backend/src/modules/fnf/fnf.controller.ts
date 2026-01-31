@@ -11,7 +11,7 @@ import {
   ParseUUIDPipe,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { FnfService } from './fnf.service';
 import { InitiateFnfDto, UpdateFnfDto, UpdateClearanceDto, FnfQueryDto } from './dto';
@@ -26,27 +26,48 @@ export class FnfController {
   constructor(private readonly fnfService: FnfService) {}
 
   @Post('initiate')
+  @ApiOperation({
+    summary: 'Initiate FNF settlement',
+    description: 'Initiates a Full & Final (FNF) settlement process for an employee.',
+  })
   async initiate(@Body() createDto: InitiateFnfDto, @Request() req) {
     return this.fnfService.initiate(createDto, req.user.id);
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all FNF settlements',
+    description:
+      'Retrieves a list of FNF settlement records with optional filtering and pagination.',
+  })
   @UseInterceptors(FnfUserInterceptor)
   async findAll(@Query() query: FnfQueryDto) {
     return this.fnfService.findAll(query);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get FNF settlement by ID',
+    description: 'Retrieves a specific FNF settlement record by its ID.',
+  })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.fnfService.findOne(id);
   }
 
   @Post(':id/calculate')
+  @ApiOperation({
+    summary: 'Calculate FNF settlement',
+    description: 'Calculates the Full & Final settlement amount for a specific FNF record.',
+  })
   async calculate(@Param('id', ParseUUIDPipe) id: string, @Request() req: RequestWithTimezone) {
     return this.fnfService.calculate(id, req.user.id, req.timezone);
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Update FNF settlement',
+    description: 'Updates an existing FNF settlement record with the provided data.',
+  })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDto: UpdateFnfDto,
@@ -56,11 +77,19 @@ export class FnfController {
   }
 
   @Get(':id/clearance')
+  @ApiOperation({
+    summary: 'Get clearance status',
+    description: 'Retrieves the clearance status for a specific FNF settlement.',
+  })
   async getClearanceStatus(@Param('id', ParseUUIDPipe) id: string) {
     return this.fnfService.getClearanceStatus(id);
   }
 
   @Patch(':id/clearance')
+  @ApiOperation({
+    summary: 'Update clearance status',
+    description: 'Updates the clearance status for a specific FNF settlement.',
+  })
   async updateClearance(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDto: UpdateClearanceDto,
@@ -70,16 +99,28 @@ export class FnfController {
   }
 
   @Post(':id/approve')
+  @ApiOperation({
+    summary: 'Approve FNF settlement',
+    description: 'Approves a Full & Final settlement record.',
+  })
   async approve(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
     return this.fnfService.approve(id, req.user.id);
   }
 
   @Post(':id/complete')
+  @ApiOperation({
+    summary: 'Complete FNF settlement',
+    description: 'Marks a Full & Final settlement as completed.',
+  })
   async complete(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
     return this.fnfService.complete(id, req.user.id);
   }
 
   @Post(':id/cancel')
+  @ApiOperation({
+    summary: 'Cancel FNF settlement',
+    description: 'Cancels a Full & Final settlement with optional remarks.',
+  })
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('remarks') remarks: string,
@@ -89,11 +130,19 @@ export class FnfController {
   }
 
   @Post(':id/generate-documents')
+  @ApiOperation({
+    summary: 'Generate FNF documents',
+    description: 'Generates all required documents for a Full & Final settlement.',
+  })
   async generateDocuments(@Param('id', ParseUUIDPipe) id: string, @Request() req) {
     return this.fnfService.generateDocuments(id, req.user.id);
   }
 
   @Get(':id/documents/:type')
+  @ApiOperation({
+    summary: 'Download FNF document',
+    description: 'Downloads a specific FNF document (PDF) by type for a given settlement.',
+  })
   async downloadDocument(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('type') type: FnfDocumentType,
@@ -111,6 +160,10 @@ export class FnfController {
   }
 
   @Post(':id/send-documents')
+  @ApiOperation({
+    summary: 'Send FNF documents via email',
+    description: 'Sends all FNF documents to the employee via email.',
+  })
   async sendDocuments(@Param('id', ParseUUIDPipe) id: string) {
     return this.fnfService.sendDocumentsViaEmail(id);
   }

@@ -7,7 +7,7 @@ import {
   BulkDeleteCardDto,
   CardActionDto,
 } from './dto';
-import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Cards')
 @ApiBearerAuth('JWT-auth')
@@ -16,6 +16,10 @@ export class CardsController {
   constructor(private readonly cardsService: CardsService) {}
 
   @Post()
+  @ApiOperation({
+    summary: 'Create a new card',
+    description: 'Creates a new card record with the provided details.',
+  })
   create(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() createCardDto: CreateCardDto,
@@ -24,11 +28,19 @@ export class CardsController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all cards',
+    description: 'Retrieves a list of all cards with optional filtering and statistics.',
+  })
   findAll(@Query() query: CardsQueryDto) {
     return this.cardsService.findAllWithStats(query);
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a card',
+    description: 'Updates an existing card with the provided information.',
+  })
   update(
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Param('id') id: string,
@@ -38,6 +50,10 @@ export class CardsController {
   }
 
   @Post('action')
+  @ApiOperation({
+    summary: 'Perform card action',
+    description: 'Executes a specific action on a card (e.g., activate, deactivate, renew).',
+  })
   @ApiBody({ type: CardActionDto })
   action(
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
@@ -47,6 +63,10 @@ export class CardsController {
   }
 
   @Delete('bulk')
+  @ApiOperation({
+    summary: 'Bulk delete cards',
+    description: 'Deletes multiple cards at once based on the provided card IDs.',
+  })
   @ApiBody({ type: BulkDeleteCardDto })
   bulkDeleteCards(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },

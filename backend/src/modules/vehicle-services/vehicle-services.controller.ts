@@ -11,7 +11,7 @@ import {
   ParseUUIDPipe,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { VehicleServicesService } from './vehicle-services.service';
 import {
@@ -36,6 +36,11 @@ export class VehicleServicesController {
   @Post()
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SERVICE_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Create vehicle service record',
+    description:
+      'Creates a new vehicle service record with service details and optional file uploads (invoices, receipts, etc.).',
+  })
   @ApiBody({
     description: 'Create vehicle service record with optional file uploads',
     schema: {
@@ -73,16 +78,31 @@ export class VehicleServicesController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all vehicle services',
+    description:
+      'Retrieves a list of vehicle service records based on query parameters. Supports filtering, pagination, and sorting.',
+  })
   async findAll(@Query() query: VehicleServiceQueryDto) {
     return await this.vehicleServicesService.findAll(query);
   }
 
   @Get('analytics')
+  @ApiOperation({
+    summary: 'Get service analytics',
+    description:
+      'Retrieves analytics and statistics about vehicle services, including costs, frequency, and trends.',
+  })
   async getAnalytics(@Query() query: ServiceAnalyticsQueryDto) {
     return await this.vehicleServicesService.getServiceAnalytics(query);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get vehicle service details',
+    description:
+      'Retrieves detailed information about a specific vehicle service record by its ID, including associated files.',
+  })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.vehicleServicesService.findOneOrFail({
       where: { id },
@@ -91,6 +111,10 @@ export class VehicleServicesController {
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Update vehicle service record',
+    description: 'Updates an existing vehicle service record with new information.',
+  })
   async update(
     @Request() req: RequestWithTimezone,
     @Param('id', ParseUUIDPipe) id: string,
@@ -104,6 +128,11 @@ export class VehicleServicesController {
   }
 
   @Delete('bulk')
+  @ApiOperation({
+    summary: 'Bulk delete vehicle services',
+    description:
+      'Deletes multiple vehicle service records at once based on the provided list of service IDs.',
+  })
   async bulkDeleteServices(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
     @Body() bulkDeleteDto: BulkDeleteVehicleServiceDto,
@@ -115,6 +144,10 @@ export class VehicleServicesController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete vehicle service record',
+    description: 'Permanently deletes a specific vehicle service record by its ID.',
+  })
   async delete(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
     @Param('id', ParseUUIDPipe) id: string,

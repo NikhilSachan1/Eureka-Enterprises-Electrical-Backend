@@ -10,7 +10,7 @@ import {
   Request,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ContractorService } from './contractor.service';
 import { CreateContractorDto, UpdateContractorDto, GetContractorDto } from './dto';
 
@@ -21,6 +21,10 @@ export class ContractorController {
   constructor(private readonly contractorService: ContractorService) {}
 
   @Post()
+  @ApiOperation({
+    summary: 'Create a contractor',
+    description: 'Creates a new contractor record in the system.',
+  })
   async create(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() createContractorDto: CreateContractorDto,
@@ -29,16 +33,28 @@ export class ContractorController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all contractors',
+    description: 'Retrieves a list of contractors with optional filtering and pagination.',
+  })
   async findAll(@Query() query: GetContractorDto) {
     return await this.contractorService.findAll(query);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get a contractor by ID',
+    description: 'Retrieves a specific contractor by its unique identifier.',
+  })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.contractorService.findById(id);
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a contractor',
+    description: 'Updates an existing contractor record with new information.',
+  })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
@@ -48,6 +64,10 @@ export class ContractorController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a contractor',
+    description: 'Soft deletes a contractor by its unique identifier.',
+  })
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
@@ -56,6 +76,10 @@ export class ContractorController {
   }
 
   @Post(':id/restore')
+  @ApiOperation({
+    summary: 'Restore a deleted contractor',
+    description: 'Restores a previously soft-deleted contractor back to active status.',
+  })
   async restore(@Param('id', ParseUUIDPipe) id: string) {
     return await this.contractorService.restore(id);
   }

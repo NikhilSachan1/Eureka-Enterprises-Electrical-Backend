@@ -11,7 +11,14 @@ import {
   Delete,
 } from '@nestjs/common';
 import { ExpenseTrackerService } from './expense-tracker.service';
-import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+  ApiResponse,
+  ApiOperation,
+} from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   FIELD_NAMES,
@@ -41,6 +48,11 @@ export class ExpenseTrackerController {
   constructor(private readonly expenseTrackerService: ExpenseTrackerService) {}
 
   @Post('debit')
+  @ApiOperation({
+    summary: 'Create debit expense entry',
+    description:
+      'Creates a new debit expense entry with the provided details and optional file attachments.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -65,6 +77,11 @@ export class ExpenseTrackerController {
   }
 
   @Post('force')
+  @ApiOperation({
+    summary: 'Force create expense entry',
+    description:
+      'Creates an expense entry with forced approval, bypassing normal approval workflow.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -88,6 +105,11 @@ export class ExpenseTrackerController {
   }
 
   @Post('credit')
+  @ApiOperation({
+    summary: 'Create credit expense entry',
+    description:
+      'Creates a new credit expense entry with the provided details and optional file attachments.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -111,6 +133,11 @@ export class ExpenseTrackerController {
   }
 
   @Patch('/:id')
+  @ApiOperation({
+    summary: 'Edit expense entry',
+    description:
+      'Updates an existing expense entry with the provided details and optional file attachments.',
+  })
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -137,6 +164,10 @@ export class ExpenseTrackerController {
   }
 
   @Post('approval')
+  @ApiOperation({
+    summary: 'Bulk approve expense entries',
+    description: 'Approves multiple expense entries in bulk based on the provided expense IDs.',
+  })
   async expenseApproval(
     @Request() { user: { id: approvalBy } }: { user: { id: string } },
     @Body() expenseApprovalDto: ExpenseBulkApprovalDto,
@@ -150,6 +181,11 @@ export class ExpenseTrackerController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get expense records',
+    description:
+      'Retrieves a list of expense records based on the provided query parameters and filters.',
+  })
   @UseInterceptors(ExpenseUserInterceptor)
   @ApiResponse({ status: 200, type: ExpenseListResponseDto })
   async getExpenseRecords(@Query() expenseQueryDto: ExpenseQueryDto) {
@@ -157,12 +193,20 @@ export class ExpenseTrackerController {
   }
 
   @Get(':id/history')
+  @ApiOperation({
+    summary: 'Get expense history',
+    description: 'Retrieves the complete history and audit trail for a specific expense entry.',
+  })
   @ApiResponse({ status: 200, type: ExpenseHistoryResponseDto })
   async getExpenseHistory(@Param('id') id: string) {
     return this.expenseTrackerService.getExpenseHistory(id);
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete expense entry',
+    description: 'Deletes a specific expense entry by its ID.',
+  })
   async deleteExpense(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
     @Param('id') id: string,
@@ -171,6 +215,10 @@ export class ExpenseTrackerController {
   }
 
   @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete expense entries',
+    description: 'Deletes multiple expense entries in bulk based on the provided expense IDs.',
+  })
   @ApiBody({ type: BulkDeleteExpenseDto })
   async bulkDeleteExpenses(
     @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },

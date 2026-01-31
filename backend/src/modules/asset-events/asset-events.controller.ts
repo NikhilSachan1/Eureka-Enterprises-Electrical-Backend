@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query, Request } from '@nestjs/common';
 import { AssetEventsService } from './asset-events.service';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AssetEventsQueryDto } from './dto/asset-events-query.dto';
 import { RequestWithTimezone } from './asset-events.types';
 
@@ -11,6 +11,11 @@ export class AssetEventsController {
   constructor(private readonly assetEventsService: AssetEventsService) {}
 
   @Get(':assetMasterId')
+  @ApiOperation({
+    summary: 'Get asset events',
+    description:
+      'Retrieves all events associated with a specific asset by asset master ID. Events are returned with timezone-aware timestamps.',
+  })
   async findAll(
     @Request() req: RequestWithTimezone,
     @Param('assetMasterId') assetMasterId: string,
