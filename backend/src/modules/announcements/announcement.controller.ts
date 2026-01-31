@@ -10,7 +10,7 @@ import {
   Req,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AnnouncementService } from './announcement.service';
 import {
   CreateAnnouncementDto,
@@ -29,6 +29,11 @@ export class AnnouncementController {
   constructor(private readonly announcementService: AnnouncementService) {}
 
   @Post()
+  @ApiOperation({
+    summary: 'Create a new announcement',
+    description:
+      'Creates a new announcement with the provided details. The announcement will be associated with the authenticated user.',
+  })
   async create(
     @Body() createAnnouncementDto: CreateAnnouncementDto,
     @Req() req: AuthenticatedRequest,
@@ -37,17 +42,31 @@ export class AnnouncementController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all announcements',
+    description:
+      'Retrieves a list of all announcements based on the provided query parameters. Results are filtered based on user permissions.',
+  })
   @UseInterceptors(AnnouncementUserInterceptor)
   async findAll(@Query() query: GetAllAnnouncementsDto) {
     return await this.announcementService.findAll(query);
   }
 
   @Get('unacknowledged')
+  @ApiOperation({
+    summary: 'Get unacknowledged announcements',
+    description:
+      'Retrieves all announcements that the authenticated user has not yet acknowledged.',
+  })
   async getUnacknowledgedAnnouncements(@Req() req: AuthenticatedRequest) {
     return await this.announcementService.getUnacknowledgedAnnouncements(req.user.id);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get announcement by ID',
+    description: 'Retrieves a specific announcement by its ID, including its target relations.',
+  })
   async findOne(@Param('id') id: string) {
     return await this.announcementService.findOneOrFail({
       where: { id },
@@ -56,11 +75,21 @@ export class AnnouncementController {
   }
 
   @Get(':id/acknowledgements')
+  @ApiOperation({
+    summary: 'Get announcement acknowledgement details',
+    description:
+      'Retrieves detailed information about all acknowledgements for a specific announcement.',
+  })
   async getAcknowledgementDetails(@Param('id') id: string) {
     return await this.announcementService.getAcknowledgementDetails(id);
   }
 
   @Patch(':id')
+  @ApiOperation({
+    summary: 'Update an announcement',
+    description:
+      'Updates an existing announcement with the provided details. The update is associated with the authenticated user.',
+  })
   async update(
     @Param('id') id: string,
     @Body() updateAnnouncementDto: UpdateAnnouncementDto,
@@ -70,6 +99,10 @@ export class AnnouncementController {
   }
 
   @Post('acknowledge')
+  @ApiOperation({
+    summary: 'Acknowledge an announcement',
+    description: 'Marks an announcement as acknowledged by the authenticated user.',
+  })
   async acknowledge(
     @Body() acknowledgeDto: AcknowledgeAnnouncementDto,
     @Req() req: AuthenticatedRequest,
@@ -78,6 +111,11 @@ export class AnnouncementController {
   }
 
   @Delete('bulk')
+  @ApiOperation({
+    summary: 'Delete multiple announcements',
+    description:
+      'Deletes multiple announcements in bulk. The deletion is associated with the authenticated user.',
+  })
   async delete(
     @Body() deleteAnnouncementDto: DeleteAnnouncementDto,
     @Req() req: AuthenticatedRequest,

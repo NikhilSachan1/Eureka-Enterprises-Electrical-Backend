@@ -21,7 +21,7 @@ import {
 import { DetectSource } from './decorators';
 import { AttendanceType } from './constants/attendance.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
-import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
 import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';
 import { RequestWithTimezone } from './attendance.types';
@@ -32,6 +32,10 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('action')
+  @ApiOperation({
+    summary: 'Mark attendance',
+    description: 'Marks attendance for an employee with clock-in/clock-out action.',
+  })
   async handleAttendanceAction(
     @Request() req: RequestWithTimezone,
     @Body() attendanceActionDto: AttendanceActionDto,
@@ -46,6 +50,10 @@ export class AttendanceController {
   }
 
   @Post(':attendanceId/regularize')
+  @ApiOperation({
+    summary: 'Regularize attendance',
+    description: 'Regularizes an existing attendance record with corrected time entries.',
+  })
   async regularizeAttendance(
     @Request() req: RequestWithTimezone,
     @Param('attendanceId') attendanceId: string,
@@ -61,6 +69,10 @@ export class AttendanceController {
   }
 
   @Post('force')
+  @ApiOperation({
+    summary: 'Force attendance',
+    description: 'Forces attendance entries for multiple employees in bulk.',
+  })
   async handleBulkForceAttendance(
     @Request() req: RequestWithTimezone,
     @Body() forceAttendanceDto: ForceAttendanceDto,
@@ -76,6 +88,10 @@ export class AttendanceController {
 
   @Get()
   @UseInterceptors(AttendanceUserInterceptor)
+  @ApiOperation({
+    summary: 'Get attendance records',
+    description: 'Retrieves a list of attendance records based on query filters.',
+  })
   @ApiResponse({ status: 200, type: AttendanceListResponseDto })
   async getAttendanceRecords(
     @Query() attendanceQueryDto: AttendanceQueryDto,
@@ -85,16 +101,29 @@ export class AttendanceController {
 
   @Get('history')
   @UseInterceptors(AttendanceHistoryUserInterceptor)
+  @ApiOperation({
+    summary: 'Get attendance history',
+    description: 'Retrieves historical attendance records for an employee.',
+  })
   async getAttendanceHistory(@Query() attendanceHistoryDto: AttendanceHistoryDto) {
     return this.attendanceService.getAttendanceHistory(attendanceHistoryDto);
   }
 
   @Get('current-status')
+  @ApiOperation({
+    summary: 'Get current attendance status',
+    description:
+      'Retrieves the current attendance status (clocked-in/clocked-out) for the authenticated employee.',
+  })
   async getEmployeeCurrentAttendanceStatus(@Request() req: RequestWithTimezone) {
     return this.attendanceService.getEmployeeCurrentAttendanceStatus(req.user.id, req.timezone);
   }
 
   @Post('approval')
+  @ApiOperation({
+    summary: 'Approve attendance',
+    description: 'Approves or rejects attendance records in bulk.',
+  })
   async attendanceApproval(
     @Request() { user: { id: approvalBy } }: { user: { id: string } },
     @Body() attendanceApprovalDto: AttendanceBulkApprovalDto,

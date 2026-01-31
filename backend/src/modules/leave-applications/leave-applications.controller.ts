@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Request, UseInterceptors, Get, Query } from '@nestjs/common';
 import { LeaveApplicationsService } from './leave-applications.service';
-import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import {
   CreateLeaveApplicationDto,
   ForceLeaveApplicationDto,
@@ -22,6 +22,10 @@ export class LeaveApplicationsController {
   constructor(private readonly leaveApplicationsService: LeaveApplicationsService) {}
 
   @Post('apply')
+  @ApiOperation({
+    summary: 'Apply for leave',
+    description: 'Creates a new leave application for the authenticated employee.',
+  })
   applyLeave(
     @Request() req: RequestWithTimezone,
     @Body() createLeaveApplicationDto: CreateLeaveApplicationDto,
@@ -38,6 +42,10 @@ export class LeaveApplicationsController {
   }
 
   @Post('force')
+  @ApiOperation({
+    summary: 'Force leave application',
+    description: 'Creates a forced leave application for an employee (typically by HR/admin).',
+  })
   async forceLeaveApplication(
     @Request() req: RequestWithTimezone,
     @Body() forceLeaveApplicationDto: ForceLeaveApplicationDto,
@@ -54,6 +62,11 @@ export class LeaveApplicationsController {
 
   @Get()
   @UseInterceptors(LeaveUserInterceptor)
+  @ApiOperation({
+    summary: 'Get leave applications',
+    description:
+      'Retrieves a list of leave applications. Returns grouped or flat list based on query parameters.',
+  })
   @ApiResponse({
     status: 200,
     description:
@@ -72,6 +85,10 @@ export class LeaveApplicationsController {
   }
 
   @Post('approval')
+  @ApiOperation({
+    summary: 'Approve leave applications',
+    description: 'Approves or rejects leave applications in bulk.',
+  })
   async leaveApproval(
     @Request() req: RequestWithTimezone,
     @Body() leaveBulkApprovalDto: LeaveBulkApprovalDto,

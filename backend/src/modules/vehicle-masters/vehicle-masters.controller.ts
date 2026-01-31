@@ -16,7 +16,7 @@ import {
   FIELD_NAMES,
   FILE_UPLOAD_FOLDER_NAMES,
 } from '../common/file-upload/constants/files.constants';
-import { ApiBearerAuth, ApiBody, ApiTags, ApiConsumes } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiTags, ApiConsumes, ApiOperation } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { VehicleActionDto } from './dto/vehicle-action.dto';
@@ -30,6 +30,11 @@ export class VehicleMastersController {
   @Post()
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.VEHICLE_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Create a new vehicle',
+    description:
+      'Creates a new vehicle record with optional file uploads. Supports multipart/form-data for file attachments.',
+  })
   @ApiBody({
     type: CreateVehicleDto,
     required: true,
@@ -52,6 +57,11 @@ export class VehicleMastersController {
   @Post('action')
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.VEHICLE_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Perform vehicle action',
+    description:
+      'Executes a specific action on a vehicle (e.g., transfer, status change) with optional file uploads.',
+  })
   @ApiBody({
     type: VehicleActionDto,
     required: true,
@@ -70,11 +80,20 @@ export class VehicleMastersController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all vehicles',
+    description:
+      'Retrieves a list of vehicles based on query parameters. Supports filtering, pagination, and sorting.',
+  })
   async findAll(@Query() query: VehicleQueryDto) {
     return await this.vehicleMastersService.findAll(query);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get vehicle details',
+    description: 'Retrieves detailed information about a specific vehicle by its ID.',
+  })
   async findOne(@Param('id') id: string) {
     return await this.vehicleMastersService.findById(id);
   }
@@ -82,6 +101,11 @@ export class VehicleMastersController {
   @Patch(':id')
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.VEHICLE_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Update vehicle information',
+    description:
+      'Updates an existing vehicle record with new information and optional file uploads.',
+  })
   @ApiBody({
     type: UpdateVehicleDto,
     required: true,
@@ -101,6 +125,10 @@ export class VehicleMastersController {
   }
 
   @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete vehicles',
+    description: 'Deletes multiple vehicles at once based on the provided list of vehicle IDs.',
+  })
   bulkDeleteVehicles(
     @Request() { user: { id: deletedBy, role: userRole } }: { user: { id: string; role: string } },
     @Body() bulkDeleteDto: BulkDeleteVehicleDto,
@@ -113,6 +141,10 @@ export class VehicleMastersController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a vehicle',
+    description: 'Permanently deletes a specific vehicle by its ID.',
+  })
   delete(
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
     @Param('id') id: string,

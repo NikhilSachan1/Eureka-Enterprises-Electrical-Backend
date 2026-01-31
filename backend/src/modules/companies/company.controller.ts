@@ -12,7 +12,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CreateCompanyDto, UpdateCompanyDto, GetCompanyDto } from './dto';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
@@ -31,6 +31,10 @@ export class CompanyController {
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.COMPANY_LOGO, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateCompanyDto })
+  @ApiOperation({
+    summary: 'Create a company',
+    description: 'Creates a new company record in the system. Supports logo file upload.',
+  })
   async create(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() createCompanyDto: CreateCompanyDto,
@@ -42,11 +46,20 @@ export class CompanyController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Get all companies',
+    description: 'Retrieves a list of companies with optional filtering and pagination.',
+  })
   async findAll(@Query() query: GetCompanyDto) {
     return await this.companyService.findAll(query);
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get a company by ID',
+    description:
+      'Retrieves a specific company by its unique identifier. Optionally includes child companies.',
+  })
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('includeChildren') includeChildren?: boolean,
@@ -55,6 +68,11 @@ export class CompanyController {
   }
 
   @Get(':id/hierarchy')
+  @ApiOperation({
+    summary: 'Get company hierarchy',
+    description:
+      'Retrieves the complete organizational hierarchy for a specific company, including parent and child relationships.',
+  })
   async getHierarchy(@Param('id', ParseUUIDPipe) id: string) {
     return await this.companyService.getHierarchy(id);
   }
@@ -63,6 +81,11 @@ export class CompanyController {
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.COMPANY_LOGO, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UpdateCompanyDto })
+  @ApiOperation({
+    summary: 'Update a company',
+    description:
+      'Updates an existing company record with new information. Supports logo file upload.',
+  })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
@@ -75,6 +98,10 @@ export class CompanyController {
   }
 
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a company',
+    description: 'Soft deletes a company by its unique identifier.',
+  })
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
@@ -83,6 +110,10 @@ export class CompanyController {
   }
 
   @Post(':id/restore')
+  @ApiOperation({
+    summary: 'Restore a deleted company',
+    description: 'Restores a previously soft-deleted company back to active status.',
+  })
   async restore(@Param('id', ParseUUIDPipe) id: string) {
     return await this.companyService.restore(id);
   }

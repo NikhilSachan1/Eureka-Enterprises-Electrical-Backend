@@ -1,6 +1,6 @@
 import { Body, Controller, Post, UseInterceptors, Request } from '@nestjs/common';
 import { VehicleFilesService } from './vehicle-files.service';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   FIELD_NAMES,
@@ -18,6 +18,11 @@ export class VehicleFilesController {
   @Post()
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.VEHICLE_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload vehicle files',
+    description:
+      'Uploads and associates files with a vehicle. Supports multiple file uploads up to 10 files.',
+  })
   @ApiBody({
     type: UpdateVehicleFileDto,
     required: true,
