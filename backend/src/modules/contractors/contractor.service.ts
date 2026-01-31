@@ -357,13 +357,14 @@ export class ContractorService {
       throw new NotFoundException(CONTRACTOR_ERRORS.NOT_FOUND);
     }
 
+    // Restore the soft-deleted record
     await this.contractorRepository.restore({ id });
-    await this.contractorRepository.update({ id }, { deletedBy: null });
 
-    const restoredContractor = await this.findById(id);
+    // Clear deletedBy and set isActive to true
+    await this.contractorRepository.update({ id }, { deletedBy: null, isActive: true });
+
     return {
       message: CONTRACTOR_RESPONSES.RESTORED,
-      data: restoredContractor,
     };
   }
 

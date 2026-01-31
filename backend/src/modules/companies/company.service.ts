@@ -528,13 +528,14 @@ export class CompanyService {
       throw new NotFoundException(COMPANY_ERRORS.NOT_FOUND);
     }
 
+    // Restore the soft-deleted record
     await this.companyRepository.restore({ id });
-    await this.companyRepository.update({ id }, { deletedBy: null });
 
-    const restoredCompany = await this.findById(id);
+    // Clear deletedBy and set isActive to true
+    await this.companyRepository.update({ id }, { deletedBy: null, isActive: true });
+
     return {
       message: COMPANY_RESPONSES.RESTORED,
-      data: restoredCompany,
     };
   }
 
