@@ -38,6 +38,10 @@ export class SiteEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   baseDistanceKm: number;
 
+  // Expected vehicle daily KM (typically baseDistanceKm * 2 for round trip)
+  @Column({ type: 'integer', nullable: true })
+  expectedVehicleDailyKm: number;
+
   // Status
   @Column({ type: 'varchar', length: 20, default: SiteStatus.UPCOMING })
   status: SiteStatus;

@@ -70,6 +70,9 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   completionCertificate: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   other: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   dsrFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
+  vehicleLogEndOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
+  vehicleLogOther: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -95,6 +98,9 @@ export const FIELD_NAMES = {
   SITE_DOC_COMPLETION_CERTIFICATE: 'completionCertificate',
   SITE_DOC_OTHER: 'other',
   DSR_FILES: 'dsrFiles',
+  VEHICLE_LOG_START_ODOMETER: 'vehicleLogStartOdometer',
+  VEHICLE_LOG_END_ODOMETER: 'vehicleLogEndOdometer',
+  VEHICLE_LOG_OTHER: 'vehicleLogOther',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -117,6 +123,10 @@ export const DATABASE_FIELD_NAMES = {
   aadharDoc: 'aadharDoc',
   panDoc: 'panDoc',
   dlDoc: 'dlDoc',
+  // Vehicle log files
+  vehicleLogStartOdometer: 'startOdometerFiles',
+  vehicleLogEndOdometer: 'endOdometerFiles',
+  vehicleLogOther: 'otherFiles',
 };
 
 export const FILE_ERRORS = {
@@ -138,4 +148,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   COMPANY_LOGOS: 'company-logos',
   SITE_DOCUMENT_FILES: 'site-document-files',
   DSR_FILES: 'dsr-files',
+  VEHICLE_LOG_FILES: 'vehicle-log-files',
 };

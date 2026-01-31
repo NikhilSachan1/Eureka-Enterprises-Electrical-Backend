@@ -57,6 +57,7 @@ import { SiteModule } from 'src/modules/sites/site.module';
 import { SiteAllocationModule } from 'src/modules/site-allocations/site-allocation.module';
 import { SiteDocumentModule } from 'src/modules/site-documents/site-document.module';
 import { DsrModule } from 'src/modules/daily-status-reports/dsr.module';
+import { VehicleLogsModule } from 'src/modules/vehicle-logs/vehicle-logs.module';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { DsrModule } from 'src/modules/daily-status-reports/dsr.module';
     SiteAllocationModule,
     SiteDocumentModule,
     DsrModule,
+    VehicleLogsModule,
   ],
   controllers: [AppController],
   providers: [
