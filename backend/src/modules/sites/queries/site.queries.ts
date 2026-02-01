@@ -8,6 +8,21 @@ import {
 } from '../../analytics/constants/analytics.constants';
 
 /**
+ * Get overall site statistics (status-wise counts)
+ */
+export const getOverallSiteStatsQuery = `
+  SELECT
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL) as "totalSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'upcoming') as "upcomingSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'ongoing') as "ongoingSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'hold') as "holdSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'completed') as "completedSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = true) as "activeSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = false) as "inactiveSites"
+  FROM sites
+`;
+
+/**
  * Get health scores for multiple sites in a single query
  * Returns siteId, healthScore, and healthGrade for each site
  */
