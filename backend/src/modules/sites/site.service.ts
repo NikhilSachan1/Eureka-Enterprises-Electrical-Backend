@@ -259,15 +259,75 @@ export class SiteService {
     return site;
   }
 
-  async findById(id: string, includeRelations = true): Promise<SiteEntity> {
+  async findById(id: string, includeRelations = true) {
     const relations = includeRelations
-      ? ['company', 'siteContractors', 'siteContractors.contractor']
+      ? [
+          'company',
+          'siteContractors',
+          'siteContractors.contractor',
+          'createdByUser',
+          'updatedByUser',
+        ]
       : [];
 
-    return await this.findOneOrFail({
+    const site = await this.findOneOrFail({
       where: { id },
       relations,
     });
+
+    // Transform response with limited relation fields
+    const { company, siteContractors, createdByUser, updatedByUser, ...siteData } = site;
+
+    return {
+      ...siteData,
+      // Company with limited fields
+      ...(company && {
+        company: {
+          id: company.id,
+          name: company.name,
+          fullAddress: company.fullAddress,
+          logo: company.logo,
+        },
+      }),
+      // Site contractors with limited contractor fields
+      ...(siteContractors && {
+        siteContractors: siteContractors.map((sc) => ({
+          id: sc.id,
+          siteId: sc.siteId,
+          contractorId: sc.contractorId,
+          ...(sc.contractor && {
+            contractor: {
+              id: sc.contractor.id,
+              name: sc.contractor.name,
+              fullAddress: sc.contractor.fullAddress,
+              logo: sc.contractor.logo,
+            },
+          }),
+        })),
+      }),
+      // Created by user with limited fields
+      ...(createdByUser && {
+        createdByUser: {
+          id: createdByUser.id,
+          employeeId: createdByUser.employeeId,
+          firstName: createdByUser.firstName,
+          lastName: createdByUser.lastName,
+          email: createdByUser.email,
+          profilePicture: createdByUser.profilePicture,
+        },
+      }),
+      // Updated by user with limited fields
+      ...(updatedByUser && {
+        updatedByUser: {
+          id: updatedByUser.id,
+          employeeId: updatedByUser.employeeId,
+          firstName: updatedByUser.firstName,
+          lastName: updatedByUser.lastName,
+          email: updatedByUser.email,
+          profilePicture: updatedByUser.profilePicture,
+        },
+      }),
+    };
   }
 
   async update(id: string, updateDto: UpdateSiteDto, updatedBy: string) {
@@ -448,7 +508,7 @@ export class SiteService {
     };
   }
 
-  async restore(id: string): Promise<{ message: string; data: SiteEntity }> {
+  async restore(id: string) {
     const site = await this.siteRepository.findOne({
       where: { id },
       withDeleted: true,
