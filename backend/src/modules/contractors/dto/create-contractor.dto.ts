@@ -9,6 +9,7 @@ import {
   Matches,
   IsBoolean,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { CONTRACTOR_ERRORS, CONTRACTOR_VALIDATION } from '../constants/contractor.constants';
 
 export class CreateContractorDto {
@@ -188,7 +189,8 @@ export class CreateContractorDto {
     description: 'Is contractor active',
     default: true,
   })
-  @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
   isActive?: boolean;
 }
