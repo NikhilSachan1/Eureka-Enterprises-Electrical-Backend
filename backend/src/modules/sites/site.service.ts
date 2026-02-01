@@ -30,7 +30,8 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
-import { getSiteHealthScoresQuery } from './queries/site.queries';
+import { getSiteHealthScoresQuery, getOverallSiteStatsQuery } from './queries/site.queries';
+import { OverallSiteStats } from './site.types';
 
 @Injectable()
 export class SiteService {
@@ -242,7 +243,32 @@ export class SiteService {
       };
     });
 
-    return this.utilityService.listResponse(transformedRecords, totalRecords);
+    // Get overall site stats
+    const overallStats = await this.getOverallSiteStats();
+
+    return {
+      records: transformedRecords,
+      totalRecords,
+      stats: overallStats,
+    };
+  }
+
+  /**
+   * Get overall site statistics (aggregate counts by status)
+   */
+  private async getOverallSiteStats(): Promise<OverallSiteStats> {
+    const result = await this.dataSource.query(getOverallSiteStatsQuery);
+    const row = result[0] || {};
+
+    return {
+      totalSites: parseInt(row.totalSites) || 0,
+      upcomingSites: parseInt(row.upcomingSites) || 0,
+      ongoingSites: parseInt(row.ongoingSites) || 0,
+      holdSites: parseInt(row.holdSites) || 0,
+      completedSites: parseInt(row.completedSites) || 0,
+      activeSites: parseInt(row.activeSites) || 0,
+      inactiveSites: parseInt(row.inactiveSites) || 0,
+    };
   }
 
   async findOne(options: FindOneOptions<SiteEntity>) {
