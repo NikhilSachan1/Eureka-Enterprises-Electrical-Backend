@@ -30,6 +30,7 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
+import { getSiteHealthScoresQuery } from './queries/site.queries';
 
 @Injectable()
 export class SiteService {
@@ -183,7 +184,30 @@ export class SiteService {
 
     const totalRecords = await this.siteRepository.count({ where });
 
-    return this.utilityService.listResponse(records, totalRecords);
+    // Fetch health scores for all sites in a single query
+    const siteIds = records.map((site) => site.id);
+    let healthScoreMap: Map<string, { healthScore: number; healthGrade: string }> = new Map();
+
+    if (siteIds.length > 0) {
+      const healthQuery = getSiteHealthScoresQuery(siteIds);
+      const healthResults = await this.dataSource.query(healthQuery.query, healthQuery.params);
+
+      healthScoreMap = new Map(
+        healthResults.map((r: any) => [
+          r.siteId,
+          { healthScore: r.healthScore, healthGrade: r.healthGrade },
+        ]),
+      );
+    }
+
+    // Add health score to each site record
+    const recordsWithHealth = records.map((site) => ({
+      ...site,
+      healthScore: healthScoreMap.get(site.id)?.healthScore ?? null,
+      healthGrade: healthScoreMap.get(site.id)?.healthGrade ?? null,
+    }));
+
+    return this.utilityService.listResponse(recordsWithHealth, totalRecords);
   }
 
   async findOne(options: FindOneOptions<SiteEntity>) {
