@@ -10,9 +10,15 @@ import {
   Request,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { SiteService } from './site.service';
-import { CreateSiteDto, UpdateSiteDto, GetSiteDto, UpdateSiteStatusDto } from './dto';
+import {
+  CreateSiteDto,
+  UpdateSiteDto,
+  GetSiteDto,
+  UpdateSiteStatusDto,
+  BulkDeleteSiteDto,
+} from './dto';
 
 @ApiTags('Sites')
 @ApiBearerAuth('JWT-auth')
@@ -95,6 +101,19 @@ export class SiteController {
     @Body() updateStatusDto: UpdateSiteStatusDto,
   ) {
     return await this.siteService.updateStatus(id, updateStatusDto, updatedBy);
+  }
+
+  @Delete()
+  @ApiOperation({
+    summary: 'Bulk delete sites',
+    description: 'Soft deletes multiple sites in bulk based on the provided site IDs.',
+  })
+  @ApiBody({ type: BulkDeleteSiteDto })
+  async bulkDelete(
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Body() bulkDeleteDto: BulkDeleteSiteDto,
+  ) {
+    return await this.siteService.bulkDelete(bulkDeleteDto.siteIds, deletedBy);
   }
 
   @Delete(':id')
