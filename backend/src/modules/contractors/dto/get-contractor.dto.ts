@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
@@ -13,20 +13,26 @@ export class GetContractorDto extends BaseGetDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by city',
-    example: 'Mumbai',
+    description: 'Filter by city (supports multiple values)',
+    example: ['Mumbai', 'Pune'],
+    type: [String],
   })
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  city?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  city?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by state',
-    example: 'Maharashtra',
+    description: 'Filter by state (supports multiple values)',
+    example: ['Maharashtra', 'Gujarat'],
+    type: [String],
   })
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  state?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  state?: string[];
 
   @ApiPropertyOptional({
     description: 'Filter by active status',
