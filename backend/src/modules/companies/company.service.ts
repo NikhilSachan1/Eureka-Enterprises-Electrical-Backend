@@ -319,6 +319,7 @@ export class CompanyService {
       createdByUser: company.createdByUser
         ? {
             id: company.createdByUser.id,
+            employeeId: company.createdByUser.employeeId,
             firstName: company.createdByUser.firstName,
             lastName: company.createdByUser.lastName,
             email: company.createdByUser.email,
@@ -329,6 +330,7 @@ export class CompanyService {
       updatedByUser: company.updatedByUser
         ? {
             id: company.updatedByUser.id,
+            employeeId: company.updatedByUser.employeeId,
             firstName: company.updatedByUser.firstName,
             lastName: company.updatedByUser.lastName,
             email: company.updatedByUser.email,

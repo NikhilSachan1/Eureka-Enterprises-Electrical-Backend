@@ -180,6 +180,7 @@ export class ContractorService {
       createdByUser: contractor.createdByUser
         ? {
             id: contractor.createdByUser.id,
+            employeeId: contractor.createdByUser.employeeId,
             firstName: contractor.createdByUser.firstName,
             lastName: contractor.createdByUser.lastName,
             email: contractor.createdByUser.email,
@@ -190,6 +191,7 @@ export class ContractorService {
       updatedByUser: contractor.updatedByUser
         ? {
             id: contractor.updatedByUser.id,
+            employeeId: contractor.updatedByUser.employeeId,
             firstName: contractor.updatedByUser.firstName,
             lastName: contractor.updatedByUser.lastName,
             email: contractor.updatedByUser.email,
