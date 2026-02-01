@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsBoolean, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsBoolean, IsEnum, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import { SiteStatus } from '../constants/site.constants';
@@ -14,47 +14,63 @@ export class GetSiteDto extends BaseGetDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by company ID',
+    description: 'Filter by company ID (supports multiple values)',
+    type: [String],
   })
-  @IsUUID()
+  @IsArray()
+  @IsUUID('4', { each: true })
   @IsOptional()
-  companyId?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  companyId?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by contractor ID',
+    description: 'Filter by contractor ID (supports multiple values)',
+    type: [String],
   })
-  @IsUUID()
+  @IsArray()
+  @IsUUID('4', { each: true })
   @IsOptional()
-  contractorId?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  contractorId?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by manager name',
+    description: 'Filter by manager name (search)',
   })
   @IsString()
   @IsOptional()
   managerName?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by status',
+    description: 'Filter by status (supports multiple values)',
     enum: SiteStatus,
+    isArray: true,
+    type: [String],
   })
-  @IsEnum(SiteStatus)
+  @IsArray()
+  @IsEnum(SiteStatus, { each: true })
   @IsOptional()
-  status?: SiteStatus;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  status?: SiteStatus[];
 
   @ApiPropertyOptional({
-    description: 'Filter by city',
+    description: 'Filter by city (supports multiple values)',
+    type: [String],
   })
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  city?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  city?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by state',
+    description: 'Filter by state (supports multiple values)',
+    type: [String],
   })
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  state?: string;
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  state?: string[];
 
   @ApiPropertyOptional({
     description: 'Filter by active status',

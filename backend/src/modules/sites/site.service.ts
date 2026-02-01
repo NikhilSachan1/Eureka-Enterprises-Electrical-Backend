@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions, Not, DataSource } from 'typeorm';
+import { IsNull, ILike, FindOneOptions, Not, DataSource, In } from 'typeorm';
 import { SiteRepository } from './site.repository';
 import { SiteEntity } from './entities/site.entity';
 import { CreateSiteDto, UpdateSiteDto, GetSiteDto, UpdateSiteStatusDto } from './dto';
@@ -139,24 +139,28 @@ export class SiteService {
       where.name = ILike(`%${search}%`);
     }
 
-    if (companyId) {
-      where.companyId = companyId;
+    // Multi-select filter for companyId
+    if (companyId && companyId.length > 0) {
+      where.companyId = In(companyId);
     }
 
     if (managerName) {
       where.managerName = ILike(`%${managerName}%`);
     }
 
-    if (status) {
-      where.status = status;
+    // Multi-select filter for status
+    if (status && status.length > 0) {
+      where.status = In(status);
     }
 
-    if (city) {
-      where.city = ILike(`%${city}%`);
+    // Multi-select filter for city
+    if (city && city.length > 0) {
+      where.city = In(city);
     }
 
-    if (state) {
-      where.state = ILike(`%${state}%`);
+    // Multi-select filter for state
+    if (state && state.length > 0) {
+      where.state = In(state);
     }
 
     if (isActive !== undefined) {
@@ -176,9 +180,10 @@ export class SiteService {
     });
 
     // Filter by contractor if specified (needs post-query filter due to junction table)
-    if (contractorId) {
+    // Supports multi-select: site must have at least one of the specified contractors
+    if (contractorId && contractorId.length > 0) {
       records = records.filter((site) =>
-        site.siteContractors?.some((sc) => sc.contractorId === contractorId),
+        site.siteContractors?.some((sc) => contractorId.includes(sc.contractorId)),
       );
     }
 
@@ -200,14 +205,44 @@ export class SiteService {
       );
     }
 
-    // Add health score to each site record
-    const recordsWithHealth = records.map((site) => ({
-      ...site,
-      healthScore: healthScoreMap.get(site.id)?.healthScore ?? null,
-      healthGrade: healthScoreMap.get(site.id)?.healthGrade ?? null,
-    }));
+    // Transform records: add health score and limit relation fields
+    const transformedRecords = records.map((site) => {
+      const { company, siteContractors, ...siteData } = site;
 
-    return this.utilityService.listResponse(recordsWithHealth, totalRecords);
+      return {
+        ...siteData,
+        // Health score
+        healthScore: healthScoreMap.get(site.id)?.healthScore ?? null,
+        healthGrade: healthScoreMap.get(site.id)?.healthGrade ?? null,
+        // Company with limited fields
+        ...(company && {
+          company: {
+            id: company.id,
+            name: company.name,
+            fullAddress: company.fullAddress,
+            logo: company.logo,
+          },
+        }),
+        // Site contractors with limited contractor fields
+        ...(siteContractors && {
+          siteContractors: siteContractors.map((sc) => ({
+            id: sc.id,
+            siteId: sc.siteId,
+            contractorId: sc.contractorId,
+            ...(sc.contractor && {
+              contractor: {
+                id: sc.contractor.id,
+                name: sc.contractor.name,
+                fullAddress: sc.contractor.fullAddress,
+                logo: sc.contractor.logo,
+              },
+            }),
+          })),
+        }),
+      };
+    });
+
+    return this.utilityService.listResponse(transformedRecords, totalRecords);
   }
 
   async findOne(options: FindOneOptions<SiteEntity>) {
