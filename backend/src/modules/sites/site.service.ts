@@ -357,6 +357,62 @@ export class SiteService {
     );
   }
 
+  async bulkDelete(siteIds: string[], deletedBy: string) {
+    const results: { id: string; success: boolean; message: string }[] = [];
+
+    for (const siteId of siteIds) {
+      try {
+        // Check if site exists
+        const site = await this.siteRepository.findOne({
+          where: { id: siteId, deletedAt: IsNull() },
+        });
+
+        if (!site) {
+          results.push({
+            id: siteId,
+            success: false,
+            message: SITE_ERRORS.NOT_FOUND,
+          });
+          continue;
+        }
+
+        // Prevent deletion of active/ongoing sites
+        if (site.status === SiteStatus.ONGOING) {
+          results.push({
+            id: siteId,
+            success: false,
+            message: SITE_ERRORS.CANNOT_DELETE_ACTIVE_SITE,
+          });
+          continue;
+        }
+
+        // Perform soft delete
+        await this.siteRepository.update({ id: siteId }, { deletedBy });
+        await this.siteRepository.softDelete({ id: siteId });
+
+        results.push({
+          id: siteId,
+          success: true,
+          message: SITE_RESPONSES.DELETED,
+        });
+      } catch (error) {
+        results.push({
+          id: siteId,
+          success: false,
+          message: error.message || 'Failed to delete site',
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.filter((r) => !r.success).length;
+
+    return {
+      message: `Bulk delete completed. Success: ${successCount}, Failed: ${failureCount}`,
+      results,
+    };
+  }
+
   async restore(id: string): Promise<{ message: string; data: SiteEntity }> {
     const site = await this.siteRepository.findOne({
       where: { id },
