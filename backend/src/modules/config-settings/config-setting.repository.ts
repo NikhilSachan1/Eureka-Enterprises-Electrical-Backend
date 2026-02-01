@@ -38,9 +38,8 @@ export class ConfigSettingRepository {
     totalRecords: number;
   }> {
     try {
-      const [configSettings, total] = await this.repository.findAndCount({
-        where: options,
-      });
+      // Pass options directly - it contains where, order, skip, take, etc.
+      const [configSettings, total] = await this.repository.findAndCount(options);
       return this.utilityService.listResponse(configSettings, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
