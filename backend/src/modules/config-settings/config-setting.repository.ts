@@ -38,8 +38,12 @@ export class ConfigSettingRepository {
     totalRecords: number;
   }> {
     try {
-      // Pass options directly - it contains where, order, skip, take, etc.
-      const [configSettings, total] = await this.repository.findAndCount(options);
+      // Support both patterns:
+      // 1. DTO pattern (from controller): { configId, isActive, ... }
+      // 2. FindManyOptions pattern (from services): { where: { configId, isActive, ... } }
+      const findOptions = options.where ? options : { where: options };
+
+      const [configSettings, total] = await this.repository.findAndCount(findOptions);
       return this.utilityService.listResponse(configSettings, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
