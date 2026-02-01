@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions, Not, DataSource } from 'typeorm';
+import { IsNull, ILike, FindOneOptions, Not, DataSource, In } from 'typeorm';
 import { ContractorRepository } from './contractor.repository';
 import { ContractorEntity } from './entities/contractor.entity';
 import { CreateContractorDto, UpdateContractorDto, GetContractorDto } from './dto';
@@ -54,6 +54,16 @@ export class ContractorService {
       }
     }
 
+    // Check for duplicate email (only if provided)
+    if (createDto.email) {
+      const existingByEmail = await this.findOne({
+        where: { email: ILike(createDto.email), deletedAt: IsNull() },
+      });
+      if (existingByEmail) {
+        throw new ConflictException(CONTRACTOR_ERRORS.EMAIL_ALREADY_EXISTS);
+      }
+    }
+
     const fullAddress = this.buildFullAddress(createDto);
 
     await this.contractorRepository.create({
@@ -90,12 +100,14 @@ export class ContractorService {
       where.name = ILike(`%${search}%`);
     }
 
-    if (city) {
-      where.city = ILike(`%${city}%`);
+    // Multi-select filter for city
+    if (city && city.length > 0) {
+      where.city = In(city);
     }
 
-    if (state) {
-      where.state = ILike(`%${state}%`);
+    // Multi-select filter for state
+    if (state && state.length > 0) {
+      where.state = In(state);
     }
 
     if (isActive !== undefined) {
@@ -221,6 +233,16 @@ export class ContractorService {
       });
       if (gstConflict) {
         throw new ConflictException(CONTRACTOR_ERRORS.GST_ALREADY_EXISTS);
+      }
+    }
+
+    // Check for duplicate email (excluding current)
+    if (updateDto.email && updateDto.email !== existingContractor.email) {
+      const emailConflict = await this.findOne({
+        where: { email: ILike(updateDto.email), deletedAt: IsNull(), id: Not(id) },
+      });
+      if (emailConflict) {
+        throw new ConflictException(CONTRACTOR_ERRORS.EMAIL_ALREADY_EXISTS);
       }
     }
 
