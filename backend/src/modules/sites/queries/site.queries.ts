@@ -8,6 +8,41 @@ import {
 } from '../../analytics/constants/analytics.constants';
 
 /**
+ * Get allocated employees for multiple sites in a single query
+ * Returns siteId, employee count, and employee details
+ */
+export const getAllocatedEmployeesBySitesQuery = (siteIds: string[]) => {
+  if (!siteIds.length) {
+    return { query: '', params: [] };
+  }
+
+  const placeholders = siteIds.map((_, i) => `$${i + 1}`).join(', ');
+
+  return {
+    query: `
+      SELECT 
+        sa."siteId",
+        sa."userId",
+        sa."role",
+        sa."allocationType",
+        u."firstName",
+        u."lastName",
+        u."email",
+        u."profilePicture",
+        u."employeeId"
+      FROM site_allocations sa
+      INNER JOIN users u ON sa."userId" = u.id
+      WHERE sa."siteId" IN (${placeholders})
+        AND sa."isCurrentlyAllocated" = true
+        AND sa."deletedAt" IS NULL
+        AND u."deletedAt" IS NULL
+      ORDER BY sa."siteId", u."firstName"
+    `,
+    params: siteIds,
+  };
+};
+
+/**
  * Get overall site statistics (status-wise counts)
  */
 export const getOverallSiteStatsQuery = `
