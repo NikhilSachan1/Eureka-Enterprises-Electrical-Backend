@@ -30,8 +30,12 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
-import { getSiteHealthScoresQuery, getOverallSiteStatsQuery } from './queries/site.queries';
-import { OverallSiteStats } from './site.types';
+import {
+  getSiteHealthScoresQuery,
+  getOverallSiteStatsQuery,
+  getAllocatedEmployeesBySitesQuery,
+} from './queries/site.queries';
+import { OverallSiteStats, AllocatedEmployee, SiteAllocationInfo } from './site.types';
 
 @Injectable()
 export class SiteService {
@@ -190,31 +194,73 @@ export class SiteService {
 
     const totalRecords = await this.siteRepository.count({ where });
 
-    // Fetch health scores for all sites in a single query
+    // Fetch health scores and allocated employees for all sites in parallel
     const siteIds = records.map((site) => site.id);
     let healthScoreMap: Map<string, { healthScore: number; healthGrade: string }> = new Map();
+    const allocationMap: Map<string, SiteAllocationInfo> = new Map();
 
     if (siteIds.length > 0) {
       const healthQuery = getSiteHealthScoresQuery(siteIds);
-      const healthResults = await this.dataSource.query(healthQuery.query, healthQuery.params);
+      const allocationQuery = getAllocatedEmployeesBySitesQuery(siteIds);
 
+      const [healthResults, allocationResults] = await Promise.all([
+        this.dataSource.query(healthQuery.query, healthQuery.params),
+        this.dataSource.query(allocationQuery.query, allocationQuery.params),
+      ]);
+
+      // Build health score map
       healthScoreMap = new Map(
         healthResults.map((r: any) => [
           r.siteId,
           { healthScore: r.healthScore, healthGrade: r.healthGrade },
         ]),
       );
+
+      // Build allocation map (group by siteId)
+      const allocationBySite = new Map<string, AllocatedEmployee[]>();
+      for (const row of allocationResults) {
+        const siteId = row.siteId;
+        if (!allocationBySite.has(siteId)) {
+          allocationBySite.set(siteId, []);
+        }
+        allocationBySite.get(siteId)!.push({
+          id: row.userId,
+          employeeId: row.employeeId,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          email: row.email,
+          profilePicture: row.profilePicture,
+          role: row.role,
+          allocationType: row.allocationType,
+        });
+      }
+
+      // Create allocation info map with count
+      for (const siteId of siteIds) {
+        const employees = allocationBySite.get(siteId) || [];
+        allocationMap.set(siteId, {
+          allocatedEmployeeCount: employees.length,
+          allocatedEmployees: employees,
+        });
+      }
     }
 
-    // Transform records: add health score and limit relation fields
+    // Transform records: add health score, allocations, and limit relation fields
     const transformedRecords = records.map((site) => {
       const { company, siteContractors, ...siteData } = site;
+      const allocation = allocationMap.get(site.id) || {
+        allocatedEmployeeCount: 0,
+        allocatedEmployees: [],
+      };
 
       return {
         ...siteData,
         // Health score
         healthScore: healthScoreMap.get(site.id)?.healthScore ?? null,
         healthGrade: healthScoreMap.get(site.id)?.healthGrade ?? null,
+        // Allocated employees
+        allocatedEmployeeCount: allocation.allocatedEmployeeCount,
+        allocatedEmployees: allocation.allocatedEmployees,
         // Company with limited fields
         ...(company && {
           company: {
