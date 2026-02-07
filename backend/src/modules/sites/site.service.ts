@@ -575,7 +575,10 @@ export class SiteService {
     const failureCount = results.filter((r) => !r.success).length;
 
     return {
-      message: `Bulk delete completed. Success: ${successCount}, Failed: ${failureCount}`,
+      message: `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
+      totalRequested: siteIds.length,
+      successCount,
+      failureCount,
       results,
     };
   }
