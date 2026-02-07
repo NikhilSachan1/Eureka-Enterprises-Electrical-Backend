@@ -47,3 +47,8 @@ export const SITE_ALLOCATION_SORT_FIELD_MAPPING: Record<string, string> = {
   createdAt: 'sa."createdAt"',
   updatedAt: 'sa."updatedAt"',
 };
+
+export enum AllocationAction {
+  ALLOCATE = 'allocate',
+  DEALLOCATE = 'deallocate',
+}
