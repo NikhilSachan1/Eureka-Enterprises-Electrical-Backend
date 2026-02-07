@@ -12,6 +12,8 @@ import {
   UpdateSiteAllocationDto,
   DeallocateSiteDto,
   GetSiteAllocationDto,
+  ManageSiteAllocationDto,
+  AllocationAction,
 } from './dto';
 import {
   SITE_ALLOCATION_ERRORS,
@@ -322,6 +324,54 @@ export class SiteAllocationService {
           validRoles.map((r) => r.value).join(', '),
         ),
       );
+    }
+  }
+
+  /**
+   * Unified API for site allocation management
+   * Handles both allocation and deallocation based on action
+   */
+  async manage(manageDto: ManageSiteAllocationDto, userId: string) {
+    switch (manageDto.action) {
+      case AllocationAction.ALLOCATE: {
+        // Validate required fields for allocation
+        if (!manageDto.siteId || !manageDto.userId || !manageDto.allocatedAt) {
+          throw new BadRequestException(
+            'siteId, userId, and allocatedAt are required for allocation',
+          );
+        }
+
+        const createDto: CreateSiteAllocationDto = {
+          siteId: manageDto.siteId,
+          userId: manageDto.userId,
+          allocationType: manageDto.allocationType,
+          role: manageDto.role,
+          dailyAllowance: manageDto.dailyAllowance,
+          allocatedAt: manageDto.allocatedAt,
+          remarks: manageDto.remarks,
+        };
+
+        return await this.create(createDto, userId);
+      }
+
+      case AllocationAction.DEALLOCATE: {
+        // Validate required fields for deallocation
+        if (!manageDto.allocationId || !manageDto.deallocatedAt) {
+          throw new BadRequestException(
+            'allocationId and deallocatedAt are required for deallocation',
+          );
+        }
+
+        const deallocateDto: DeallocateSiteDto = {
+          deallocatedAt: manageDto.deallocatedAt,
+          remarks: manageDto.remarks,
+        };
+
+        return await this.deallocate(manageDto.allocationId, deallocateDto, userId);
+      }
+
+      default:
+        throw new BadRequestException(`Invalid action: ${manageDto.action}`);
     }
   }
 }

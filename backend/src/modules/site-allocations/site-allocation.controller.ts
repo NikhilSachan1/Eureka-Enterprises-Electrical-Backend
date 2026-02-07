@@ -16,6 +16,7 @@ import {
   UpdateSiteAllocationDto,
   DeallocateSiteDto,
   GetSiteAllocationDto,
+  ManageSiteAllocationDto,
 } from './dto';
 
 @ApiTags('Site Allocations')
@@ -35,6 +36,19 @@ export class SiteAllocationController {
     @Request() { user: { id: userId } }: { user: { id: string } },
   ) {
     return this.siteAllocationService.create(createDto, userId);
+  }
+
+  @Post('manage')
+  @ApiOperation({
+    summary: 'Manage site allocation (allocate/deallocate)',
+    description:
+      'Unified API for site allocation management. Use action: "allocate" to assign a user to a site, or action: "deallocate" to end an allocation.',
+  })
+  async manage(
+    @Body() manageDto: ManageSiteAllocationDto,
+    @Request() { user: { id: userId } }: { user: { id: string } },
+  ) {
+    return this.siteAllocationService.manage(manageDto, userId);
   }
 
   @Get()
