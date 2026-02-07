@@ -11,32 +11,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { SiteAllocationService } from './site-allocation.service';
-import {
-  CreateSiteAllocationDto,
-  UpdateSiteAllocationDto,
-  DeallocateSiteDto,
-  GetSiteAllocationDto,
-  ManageSiteAllocationDto,
-} from './dto';
+import { UpdateSiteAllocationDto, GetSiteAllocationDto, ManageSiteAllocationDto } from './dto';
 
 @ApiTags('Site Allocations')
 @ApiBearerAuth('JWT-auth')
 @Controller('site-allocations')
 export class SiteAllocationController {
   constructor(private readonly siteAllocationService: SiteAllocationService) {}
-
-  @Post()
-  @ApiOperation({
-    summary: 'Create a new site allocation',
-    description:
-      'Creates a new allocation of a user to a site with start date and optional end date.',
-  })
-  async create(
-    @Body() createDto: CreateSiteAllocationDto,
-    @Request() { user: { id: userId } }: { user: { id: string } },
-  ) {
-    return this.siteAllocationService.create(createDto, userId);
-  }
 
   @Post('manage')
   @ApiOperation({
@@ -116,19 +97,5 @@ export class SiteAllocationController {
     @Request() { user: { id: userId } }: { user: { id: string } },
   ) {
     return this.siteAllocationService.update(id, updateDto, userId);
-  }
-
-  @Patch(':id/deallocate')
-  @ApiOperation({
-    summary: 'Deallocate a site',
-    description:
-      'Deallocates a user from a site by setting an end date. This effectively ends the allocation.',
-  })
-  async deallocate(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() deallocateDto: DeallocateSiteDto,
-    @Request() { user: { id: userId } }: { user: { id: string } },
-  ) {
-    return this.siteAllocationService.deallocate(id, deallocateDto, userId);
   }
 }
