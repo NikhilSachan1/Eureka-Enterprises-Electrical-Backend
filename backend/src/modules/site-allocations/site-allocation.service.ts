@@ -13,13 +13,13 @@ import {
   DeallocateSiteDto,
   GetSiteAllocationDto,
   ManageSiteAllocationDto,
-  AllocationAction,
 } from './dto';
 import {
   SITE_ALLOCATION_ERRORS,
   SITE_ALLOCATION_RESPONSES,
   SiteAllocationEntityFields,
   SITE_ALLOCATION_DEFAULTS,
+  AllocationAction,
 } from './constants/site-allocation.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import {
