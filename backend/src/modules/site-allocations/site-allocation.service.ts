@@ -335,39 +335,95 @@ export class SiteAllocationService {
     switch (manageDto.action) {
       case AllocationAction.ALLOCATE: {
         // Validate required fields for allocation
-        if (!manageDto.siteId || !manageDto.userId || !manageDto.allocatedAt) {
+        if (!manageDto.siteId || !manageDto.userIds?.length || !manageDto.allocatedAt) {
           throw new BadRequestException(
-            'siteId, userId, and allocatedAt are required for allocation',
+            'siteId, userIds (array), and allocatedAt are required for allocation',
           );
         }
 
-        const createDto: CreateSiteAllocationDto = {
-          siteId: manageDto.siteId,
-          userId: manageDto.userId,
-          allocationType: manageDto.allocationType,
-          role: manageDto.role,
-          dailyAllowance: manageDto.dailyAllowance,
-          allocatedAt: manageDto.allocatedAt,
-          remarks: manageDto.remarks,
-        };
+        const results: { userId: string; success: boolean; message: string }[] = [];
 
-        return await this.create(createDto, userId);
+        for (const targetUserId of manageDto.userIds) {
+          try {
+            const createDto: CreateSiteAllocationDto = {
+              siteId: manageDto.siteId,
+              userId: targetUserId,
+              allocationType: manageDto.allocationType,
+              role: manageDto.role,
+              dailyAllowance: manageDto.dailyAllowance,
+              allocatedAt: manageDto.allocatedAt,
+              remarks: manageDto.remarks,
+            };
+
+            await this.create(createDto, userId);
+            results.push({
+              userId: targetUserId,
+              success: true,
+              message: SITE_ALLOCATION_RESPONSES.CREATED,
+            });
+          } catch (error) {
+            results.push({
+              userId: targetUserId,
+              success: false,
+              message: error.message || 'Failed to allocate',
+            });
+          }
+        }
+
+        const successCount = results.filter((r) => r.success).length;
+        const failureCount = results.filter((r) => !r.success).length;
+
+        return {
+          message: `Allocation completed: ${successCount} succeeded, ${failureCount} failed`,
+          totalRequested: manageDto.userIds.length,
+          successCount,
+          failureCount,
+          results,
+        };
       }
 
       case AllocationAction.DEALLOCATE: {
         // Validate required fields for deallocation
-        if (!manageDto.allocationId || !manageDto.deallocatedAt) {
+        if (!manageDto.allocationIds?.length || !manageDto.deallocatedAt) {
           throw new BadRequestException(
-            'allocationId and deallocatedAt are required for deallocation',
+            'allocationIds (array) and deallocatedAt are required for deallocation',
           );
         }
 
-        const deallocateDto: DeallocateSiteDto = {
-          deallocatedAt: manageDto.deallocatedAt,
-          remarks: manageDto.remarks,
-        };
+        const results: { allocationId: string; success: boolean; message: string }[] = [];
 
-        return await this.deallocate(manageDto.allocationId, deallocateDto, userId);
+        for (const allocationId of manageDto.allocationIds) {
+          try {
+            const deallocateDto: DeallocateSiteDto = {
+              deallocatedAt: manageDto.deallocatedAt,
+              remarks: manageDto.remarks,
+            };
+
+            await this.deallocate(allocationId, deallocateDto, userId);
+            results.push({
+              allocationId,
+              success: true,
+              message: SITE_ALLOCATION_RESPONSES.DEALLOCATED,
+            });
+          } catch (error) {
+            results.push({
+              allocationId,
+              success: false,
+              message: error.message || 'Failed to deallocate',
+            });
+          }
+        }
+
+        const successCount = results.filter((r) => r.success).length;
+        const failureCount = results.filter((r) => !r.success).length;
+
+        return {
+          message: `Deallocation completed: ${successCount} succeeded, ${failureCount} failed`,
+          totalRequested: manageDto.allocationIds.length,
+          successCount,
+          failureCount,
+          results,
+        };
       }
 
       default:
