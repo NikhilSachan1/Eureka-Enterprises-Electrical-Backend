@@ -85,16 +85,22 @@ export class DsrController {
   }
 
   @Patch(':id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.DSR_FILES, maxCount: 5 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: UpdateDsrDto })
   @ApiOperation({
     summary: 'Update a DSR entry',
-    description: 'Updates an existing daily status report with new information.',
+    description:
+      'Updates an existing daily status report with new information. Supports adding new files (up to 5 files).',
   })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() updateDto: UpdateDsrDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.DSR_FILES)
+    uploadedFiles: { fileKeys: string[] } = { fileKeys: [] },
   ) {
-    return await this.dsrService.update(id, updateDto, updatedBy);
+    return await this.dsrService.update(id, updateDto, updatedBy, uploadedFiles.fileKeys);
   }
 
   @Delete(':id')

@@ -253,7 +253,7 @@ export class DsrService {
     });
   }
 
-  async update(id: string, updateDto: UpdateDsrDto, updatedBy: string) {
+  async update(id: string, updateDto: UpdateDsrDto, updatedBy: string, fileKeys: string[] = []) {
     const existingDsr = await this.findOneOrFail({ where: { id } });
 
     // Check edit cutoff from config
@@ -276,6 +276,8 @@ export class DsrService {
 
     // Track changes for edit history
     const { changeReason, ...updateFields } = updateDto;
+    // Remove dsrFiles from updateFields as it's handled separately via fileKeys
+    delete (updateFields as any).dsrFiles;
     const previousValues: Record<string, any> = {};
     const newValues: Record<string, any> = {};
 
@@ -300,6 +302,19 @@ export class DsrService {
 
       // Update the DSR
       await this.dsrRepository.update({ id }, { ...updateFields, updatedBy });
+    }
+
+    // Add new files if uploaded
+    if (fileKeys.length > 0) {
+      for (const fileKey of fileKeys) {
+        await this.dsrRepository.createFile({
+          dsrId: id,
+          fileKey,
+          fileName: fileKey.split('/').pop() || 'file',
+          fileType: this.getFileTypeFromKey(fileKey),
+          createdBy: updatedBy,
+        });
+      }
     }
 
     return this.utilityService.getSuccessMessage(
