@@ -6,6 +6,8 @@ import {
   IsNumber,
   IsDateString,
   IsEnum,
+  IsArray,
+  ArrayMinSize,
   Min,
   Max,
   MaxLength,
@@ -15,8 +17,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   SITE_ALLOCATION_VALIDATION,
   SITE_ALLOCATION_DEFAULTS,
+  AllocationAction,
 } from '../constants/site-allocation.constants';
-import { AllocationAction } from '../constants/site-allocation.constants';
 
 export class ManageSiteAllocationDto {
   @ApiProperty({
@@ -29,28 +31,38 @@ export class ManageSiteAllocationDto {
   action: AllocationAction;
 
   // Required for ALLOCATE action
-  @ApiPropertyOptional({ description: 'Site ID to allocate user to (required for allocate)' })
+  @ApiPropertyOptional({ description: 'Site ID to allocate users to (required for allocate)' })
   @ValidateIf((o) => o.action === AllocationAction.ALLOCATE)
   @IsNotEmpty()
   @IsUUID()
   siteId?: string;
 
-  // Required for ALLOCATE action
-  @ApiPropertyOptional({ description: 'User ID to allocate (required for allocate)' })
+  // Required for ALLOCATE action - supports multiple userIds
+  @ApiPropertyOptional({
+    description: 'User IDs to allocate (required for allocate, supports multiple)',
+    example: ['uuid1', 'uuid2'],
+    type: [String],
+  })
   @ValidateIf((o) => o.action === AllocationAction.ALLOCATE)
-  @IsNotEmpty()
-  @IsUUID()
-  userId?: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  userIds?: string[];
 
-  // Required for DEALLOCATE action
-  @ApiPropertyOptional({ description: 'Allocation ID to deallocate (required for deallocate)' })
+  // Required for DEALLOCATE action - supports multiple allocationIds
+  @ApiPropertyOptional({
+    description: 'Allocation IDs to deallocate (required for deallocate, supports multiple)',
+    example: ['uuid1', 'uuid2'],
+    type: [String],
+  })
   @ValidateIf((o) => o.action === AllocationAction.DEALLOCATE)
-  @IsNotEmpty()
-  @IsUUID()
-  allocationId?: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  allocationIds?: string[];
 
   @ApiPropertyOptional({
-    description: 'Type of allocation',
+    description: 'Type of allocation (applied to all users)',
     default: SITE_ALLOCATION_DEFAULTS.ALLOCATION_TYPE,
   })
   @IsOptional()
@@ -58,14 +70,17 @@ export class ManageSiteAllocationDto {
   @MaxLength(50)
   allocationType?: string;
 
-  @ApiPropertyOptional({ description: 'Role at the site', default: SITE_ALLOCATION_DEFAULTS.ROLE })
+  @ApiPropertyOptional({
+    description: 'Role at the site (applied to all users)',
+    default: SITE_ALLOCATION_DEFAULTS.ROLE,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   role?: string;
 
   @ApiPropertyOptional({
-    description: 'Daily allowance amount',
+    description: 'Daily allowance amount (applied to all users)',
     default: SITE_ALLOCATION_DEFAULTS.DAILY_ALLOWANCE,
   })
   @IsOptional()
