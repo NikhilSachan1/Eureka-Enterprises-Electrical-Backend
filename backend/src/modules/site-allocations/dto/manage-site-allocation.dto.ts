@@ -5,64 +5,41 @@ import {
   IsUUID,
   IsNumber,
   IsDateString,
-  IsEnum,
   IsArray,
-  ArrayMinSize,
+  ValidateNested,
   Min,
   Max,
   MaxLength,
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   SITE_ALLOCATION_VALIDATION,
   SITE_ALLOCATION_DEFAULTS,
-  AllocationAction,
 } from '../constants/site-allocation.constants';
 
-export class ManageSiteAllocationDto {
-  @ApiProperty({
-    description: 'Action to perform',
-    enum: AllocationAction,
-    example: AllocationAction.ALLOCATE,
-  })
-  @IsNotEmpty()
-  @IsEnum(AllocationAction)
-  action: AllocationAction;
-
-  // Required for ALLOCATE action
-  @ApiPropertyOptional({ description: 'Site ID to allocate users to (required for allocate)' })
-  @ValidateIf((o) => o.action === AllocationAction.ALLOCATE)
+/**
+ * Individual allocation item - each user can have different parameters
+ */
+export class AllocationItemDto {
+  @ApiProperty({ description: 'Site ID to allocate user to' })
   @IsNotEmpty()
   @IsUUID()
-  siteId?: string;
+  siteId: string;
 
-  // Required for ALLOCATE action - supports multiple userIds
-  @ApiPropertyOptional({
-    description: 'User IDs to allocate (required for allocate, supports multiple)',
-    example: ['uuid1', 'uuid2'],
-    type: [String],
-  })
-  @ValidateIf((o) => o.action === AllocationAction.ALLOCATE)
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
-  userIds?: string[];
+  @ApiProperty({ description: 'User ID to allocate' })
+  @IsNotEmpty()
+  @IsUUID()
+  userId: string;
 
-  // Required for DEALLOCATE action - supports multiple allocationIds
-  @ApiPropertyOptional({
-    description: 'Allocation IDs to deallocate (required for deallocate, supports multiple)',
-    example: ['uuid1', 'uuid2'],
-    type: [String],
-  })
-  @ValidateIf((o) => o.action === AllocationAction.DEALLOCATE)
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
-  allocationIds?: string[];
+  @ApiProperty({ description: 'Date when allocation starts', example: '2024-01-15' })
+  @IsNotEmpty()
+  @IsDateString()
+  allocatedAt: string;
 
   @ApiPropertyOptional({
-    description: 'Type of allocation (applied to all users)',
+    description: 'Type of allocation',
     default: SITE_ALLOCATION_DEFAULTS.ALLOCATION_TYPE,
   })
   @IsOptional()
@@ -71,7 +48,7 @@ export class ManageSiteAllocationDto {
   allocationType?: string;
 
   @ApiPropertyOptional({
-    description: 'Role at the site (applied to all users)',
+    description: 'Role at the site',
     default: SITE_ALLOCATION_DEFAULTS.ROLE,
   })
   @IsOptional()
@@ -80,7 +57,7 @@ export class ManageSiteAllocationDto {
   role?: string;
 
   @ApiPropertyOptional({
-    description: 'Daily allowance amount (applied to all users)',
+    description: 'Daily allowance amount',
     default: SITE_ALLOCATION_DEFAULTS.DAILY_ALLOWANCE,
   })
   @IsOptional()
@@ -89,29 +66,86 @@ export class ManageSiteAllocationDto {
   @Max(SITE_ALLOCATION_VALIDATION.DAILY_ALLOWANCE_MAX)
   dailyAllowance?: number;
 
-  // Required for ALLOCATE - allocation start date
-  @ApiPropertyOptional({
-    description: 'Date when allocation started (required for allocate)',
-    example: '2024-01-15',
-  })
-  @ValidateIf((o) => o.action === AllocationAction.ALLOCATE)
-  @IsNotEmpty()
-  @IsDateString()
-  allocatedAt?: string;
+  @ApiPropertyOptional({ description: 'Additional remarks' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remarks?: string;
+}
 
-  // Required for DEALLOCATE - deallocation date
-  @ApiPropertyOptional({
-    description: 'Date when deallocation occurred (required for deallocate)',
-    example: '2024-01-20',
-  })
-  @ValidateIf((o) => o.action === AllocationAction.DEALLOCATE)
+/**
+ * Individual deallocation item - each allocation can have different parameters
+ */
+export class DeallocationItemDto {
+  @ApiProperty({ description: 'Allocation ID to deallocate' })
+  @IsNotEmpty()
+  @IsUUID()
+  allocationId: string;
+
+  @ApiProperty({ description: 'Date when deallocation occurred', example: '2024-01-20' })
   @IsNotEmpty()
   @IsDateString()
-  deallocatedAt?: string;
+  deallocatedAt: string;
 
   @ApiPropertyOptional({ description: 'Additional remarks' })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   remarks?: string;
+}
+
+/**
+ * Main DTO for managing site allocations
+ * Supports both allocations and deallocations in a single request
+ * Each item can have different parameters
+ */
+export class ManageSiteAllocationDto {
+  @ApiPropertyOptional({
+    description: 'Array of allocations to create (each can have different parameters)',
+    type: [AllocationItemDto],
+    example: [
+      {
+        siteId: 'site-uuid',
+        userId: 'user-uuid-1',
+        allocatedAt: '2024-01-15',
+        role: 'Engineer',
+        allocationType: 'full_time',
+      },
+      {
+        siteId: 'site-uuid',
+        userId: 'user-uuid-2',
+        allocatedAt: '2024-01-16',
+        role: 'Supervisor',
+        dailyAllowance: 500,
+      },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AllocationItemDto)
+  @ValidateIf((o) => !o.deallocations?.length) // At least one of allocations or deallocations required
+  allocations?: AllocationItemDto[];
+
+  @ApiPropertyOptional({
+    description: 'Array of deallocations to perform (each can have different parameters)',
+    type: [DeallocationItemDto],
+    example: [
+      {
+        allocationId: 'allocation-uuid-1',
+        deallocatedAt: '2024-01-20',
+      },
+      {
+        allocationId: 'allocation-uuid-2',
+        deallocatedAt: '2024-01-21',
+        remarks: 'Project completed',
+      },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DeallocationItemDto)
+  @ValidateIf((o) => !o.allocations?.length) // At least one of allocations or deallocations required
+  deallocations?: DeallocationItemDto[];
 }
