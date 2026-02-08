@@ -87,4 +87,12 @@ export class UpdateDsrDto {
   @IsString()
   @IsOptional()
   changeReason?: string;
+
+  // File upload field for Swagger documentation
+  @ApiPropertyOptional({
+    description: 'DSR files to add (up to 5 files)',
+    type: 'array',
+    items: { type: 'string', format: 'binary' },
+  })
+  dsrFiles?: Express.Multer.File[];
 }
