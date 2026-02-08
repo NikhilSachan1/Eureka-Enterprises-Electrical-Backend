@@ -1,10 +1,21 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsArray, IsNumber, Min, MaxLength, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class UpdateDsrDto {
   @ApiPropertyOptional({
     description: 'Work types performed (array of work type values from config)',
     example: ['Testing', 'Installation'],
+  })
+  @Transform(({ value }) => {
+    // Handle multipart/form-data: convert comma-separated string to array
+    if (typeof value === 'string') {
+      return value
+        .split(',')
+        .map((v) => v.trim())
+        .filter((v) => v);
+    }
+    return value;
   })
   @IsArray()
   @IsString({ each: true })
@@ -51,6 +62,16 @@ export class UpdateDsrDto {
   @ApiPropertyOptional({
     description: 'Equipment used (array of asset version IDs)',
     example: ['uuid1', 'uuid2'],
+  })
+  @Transform(({ value }) => {
+    // Handle multipart/form-data: convert comma-separated string to array
+    if (typeof value === 'string') {
+      return value
+        .split(',')
+        .map((v) => v.trim())
+        .filter((v) => v);
+    }
+    return value;
   })
   @IsArray()
   @IsUUID('all', { each: true })
