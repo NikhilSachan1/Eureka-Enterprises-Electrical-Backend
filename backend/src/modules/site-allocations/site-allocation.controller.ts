@@ -21,9 +21,9 @@ export class SiteAllocationController {
 
   @Post('manage')
   @ApiOperation({
-    summary: 'Manage site allocation (bulk allocate/deallocate)',
+    summary: 'Manage site allocations (bulk allocate & deallocate)',
     description:
-      'Unified API for site allocation management. Use action: "allocate" with siteId, userIds[], and allocatedAt to assign multiple users to a site. Use action: "deallocate" with allocationIds[] and deallocatedAt to end multiple allocations. Returns detailed results with success/failure counts.',
+      'Unified API for site allocation management. Supports both allocations and deallocations in a single request. Each allocation/deallocation can have different parameters (dates, roles, allowances). Pass "allocations" array for new allocations and "deallocations" array for ending allocations. Returns detailed results with success/failure counts for each operation.',
   })
   async manage(
     @Body() manageDto: ManageSiteAllocationDto,

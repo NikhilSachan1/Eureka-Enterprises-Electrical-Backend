@@ -19,7 +19,6 @@ import {
   SITE_ALLOCATION_RESPONSES,
   SiteAllocationEntityFields,
   SITE_ALLOCATION_DEFAULTS,
-  AllocationAction,
 } from './constants/site-allocation.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import {
@@ -332,102 +331,99 @@ export class SiteAllocationService {
    * Handles both allocation and deallocation based on action
    */
   async manage(manageDto: ManageSiteAllocationDto, userId: string) {
-    switch (manageDto.action) {
-      case AllocationAction.ALLOCATE: {
-        // Validate required fields for allocation
-        if (!manageDto.siteId || !manageDto.userIds?.length || !manageDto.allocatedAt) {
-          throw new BadRequestException(
-            'siteId, userIds (array), and allocatedAt are required for allocation',
-          );
-        }
+    const { allocations = [], deallocations = [] } = manageDto;
 
-        const results: { userId: string; success: boolean; message: string }[] = [];
-
-        for (const targetUserId of manageDto.userIds) {
-          try {
-            const createDto: CreateSiteAllocationDto = {
-              siteId: manageDto.siteId,
-              userId: targetUserId,
-              allocationType: manageDto.allocationType,
-              role: manageDto.role,
-              dailyAllowance: manageDto.dailyAllowance,
-              allocatedAt: manageDto.allocatedAt,
-              remarks: manageDto.remarks,
-            };
-
-            await this.create(createDto, userId);
-            results.push({
-              userId: targetUserId,
-              success: true,
-              message: SITE_ALLOCATION_RESPONSES.CREATED,
-            });
-          } catch (error) {
-            results.push({
-              userId: targetUserId,
-              success: false,
-              message: error.message || 'Failed to allocate',
-            });
-          }
-        }
-
-        const successCount = results.filter((r) => r.success).length;
-        const failureCount = results.filter((r) => !r.success).length;
-
-        return {
-          message: `Allocation completed: ${successCount} succeeded, ${failureCount} failed`,
-          totalRequested: manageDto.userIds.length,
-          successCount,
-          failureCount,
-          results,
-        };
-      }
-
-      case AllocationAction.DEALLOCATE: {
-        // Validate required fields for deallocation
-        if (!manageDto.allocationIds?.length || !manageDto.deallocatedAt) {
-          throw new BadRequestException(
-            'allocationIds (array) and deallocatedAt are required for deallocation',
-          );
-        }
-
-        const results: { allocationId: string; success: boolean; message: string }[] = [];
-
-        for (const allocationId of manageDto.allocationIds) {
-          try {
-            const deallocateDto: DeallocateSiteDto = {
-              deallocatedAt: manageDto.deallocatedAt,
-              remarks: manageDto.remarks,
-            };
-
-            await this.deallocate(allocationId, deallocateDto, userId);
-            results.push({
-              allocationId,
-              success: true,
-              message: SITE_ALLOCATION_RESPONSES.DEALLOCATED,
-            });
-          } catch (error) {
-            results.push({
-              allocationId,
-              success: false,
-              message: error.message || 'Failed to deallocate',
-            });
-          }
-        }
-
-        const successCount = results.filter((r) => r.success).length;
-        const failureCount = results.filter((r) => !r.success).length;
-
-        return {
-          message: `Deallocation completed: ${successCount} succeeded, ${failureCount} failed`,
-          totalRequested: manageDto.allocationIds.length,
-          successCount,
-          failureCount,
-          results,
-        };
-      }
-
-      default:
-        throw new BadRequestException(`Invalid action: ${manageDto.action}`);
+    // Validate that at least one operation is requested
+    if (!allocations.length && !deallocations.length) {
+      throw new BadRequestException('At least one allocation or deallocation is required');
     }
+
+    // Process allocations
+    const allocationResults: {
+      userId: string;
+      siteId: string;
+      success: boolean;
+      message: string;
+    }[] = [];
+
+    for (const allocation of allocations) {
+      try {
+        const createDto: CreateSiteAllocationDto = {
+          siteId: allocation.siteId,
+          userId: allocation.userId,
+          allocationType: allocation.allocationType,
+          role: allocation.role,
+          dailyAllowance: allocation.dailyAllowance,
+          allocatedAt: allocation.allocatedAt,
+          remarks: allocation.remarks,
+        };
+
+        await this.create(createDto, userId);
+        allocationResults.push({
+          userId: allocation.userId,
+          siteId: allocation.siteId,
+          success: true,
+          message: SITE_ALLOCATION_RESPONSES.CREATED,
+        });
+      } catch (error) {
+        allocationResults.push({
+          userId: allocation.userId,
+          siteId: allocation.siteId,
+          success: false,
+          message: error.message || 'Failed to allocate',
+        });
+      }
+    }
+
+    // Process deallocations
+    const deallocationResults: {
+      allocationId: string;
+      success: boolean;
+      message: string;
+    }[] = [];
+
+    for (const deallocation of deallocations) {
+      try {
+        const deallocateDto: DeallocateSiteDto = {
+          deallocatedAt: deallocation.deallocatedAt,
+          remarks: deallocation.remarks,
+        };
+
+        await this.deallocate(deallocation.allocationId, deallocateDto, userId);
+        deallocationResults.push({
+          allocationId: deallocation.allocationId,
+          success: true,
+          message: SITE_ALLOCATION_RESPONSES.DEALLOCATED,
+        });
+      } catch (error) {
+        deallocationResults.push({
+          allocationId: deallocation.allocationId,
+          success: false,
+          message: error.message || 'Failed to deallocate',
+        });
+      }
+    }
+
+    // Calculate summary counts
+    const allocationSuccess = allocationResults.filter((r) => r.success).length;
+    const allocationFailure = allocationResults.filter((r) => !r.success).length;
+    const deallocationSuccess = deallocationResults.filter((r) => r.success).length;
+    const deallocationFailure = deallocationResults.filter((r) => !r.success).length;
+
+    return {
+      message: `Operations completed - Allocations: ${allocationSuccess}/${allocations.length} succeeded, Deallocations: ${deallocationSuccess}/${deallocations.length} succeeded`,
+      allocations: {
+        totalRequested: allocations.length,
+        successCount: allocationSuccess,
+        failureCount: allocationFailure,
+        results: allocationResults,
+      },
+      deallocations: {
+        totalRequested: deallocations.length,
+        successCount: deallocationSuccess,
+        failureCount: deallocationFailure,
+        results: deallocationResults,
+      },
+    };
   }
 }
