@@ -811,6 +811,7 @@ export class LeaveApplicationsService {
     prev: LeaveApplicationResponseDto,
     curr: LeaveApplicationResponseDto,
   ): boolean {
+    // Must have same status, category, and type
     if (
       prev.approvalStatus !== curr.approvalStatus ||
       prev.leaveCategory !== curr.leaveCategory ||
@@ -819,13 +820,13 @@ export class LeaveApplicationsService {
       return false;
     }
 
-    const prevDate = new Date(prev.fromDate);
-    const currDate = new Date(curr.fromDate);
+    // Group by same submission (createdAt within 1 minute)
+    // If applied together in one submission, they have same/very close createdAt
+    const prevCreatedAt = new Date(prev.createdAt).getTime();
+    const currCreatedAt = new Date(curr.createdAt).getTime();
+    const createdAtDiff = Math.abs(currCreatedAt - prevCreatedAt);
 
-    const diffTime = currDate.getTime() - prevDate.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    return diffDays === 1;
+    return createdAtDiff < 60000; // 60 seconds tolerance for same submission
   }
 
   private finalizeGroup(records: LeaveApplicationResponseDto[]): LeaveGroupDto {
