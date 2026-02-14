@@ -179,7 +179,7 @@ export class DsrService {
       where.reportDate = LessThanOrEqual(new Date(reportDateTo));
     }
 
-    const relations: string[] = [];
+    const relations: string[] = ['createdByUser'];
     if (includeSite) relations.push('site');
     if (includeUser) relations.push('user');
     if (includeFiles) relations.push('files');
@@ -206,6 +206,15 @@ export class DsrService {
               lastName: record.user.lastName,
               email: record.user.email,
               employeeId: record.user.employeeId,
+            }
+          : null,
+        createdByUser: record.createdByUser
+          ? {
+              id: record.createdByUser.id,
+              firstName: record.createdByUser.firstName,
+              lastName: record.createdByUser.lastName,
+              email: record.createdByUser.email,
+              employeeId: record.createdByUser.employeeId,
             }
           : null,
         files: record.files
