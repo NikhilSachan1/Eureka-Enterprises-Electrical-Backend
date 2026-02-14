@@ -9,6 +9,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     date,
     userIds,
     approvalStatuses,
+    paymentModes,
     search,
     sortField,
     page,
@@ -70,6 +71,13 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
   if (approvalStatuses && approvalStatuses.length > 0) {
     whereConditions.push(`fe."approvalStatus" = ANY($${paramIndex})`);
     params.push(approvalStatuses);
+    paramIndex++;
+  }
+
+  // Payment modes filter
+  if (paymentModes && paymentModes.length > 0) {
+    whereConditions.push(`fe."paymentMode" = ANY($${paramIndex})`);
+    params.push(paymentModes);
     paramIndex++;
   }
 
@@ -166,8 +174,17 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
 };
 
 export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, approvalStatuses, search, vehicleId, cardId } =
-    filters;
+  const {
+    startDate,
+    endDate,
+    date,
+    userIds,
+    approvalStatuses,
+    paymentModes,
+    search,
+    vehicleId,
+    cardId,
+  } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -222,6 +239,13 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
   if (approvalStatuses && approvalStatuses.length > 0) {
     whereConditions.push(`fe."approvalStatus" = ANY($${paramIndex})`);
     params.push(approvalStatuses);
+    paramIndex++;
+  }
+
+  // Payment modes filter
+  if (paymentModes && paymentModes.length > 0) {
+    whereConditions.push(`fe."paymentMode" = ANY($${paramIndex})`);
+    params.push(paymentModes);
     paramIndex++;
   }
 
@@ -304,8 +328,17 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
 };
 
 export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, approvalStatuses, search, vehicleId, cardId } =
-    filters;
+  const {
+    startDate,
+    endDate,
+    date,
+    userIds,
+    approvalStatuses,
+    paymentModes,
+    search,
+    vehicleId,
+    cardId,
+  } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -357,6 +390,13 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
   if (approvalStatuses && approvalStatuses.length > 0) {
     whereConditions.push(`fe."approvalStatus" = ANY($${paramIndex})`);
     params.push(approvalStatuses);
+    paramIndex++;
+  }
+
+  // Payment modes filter
+  if (paymentModes && paymentModes.length > 0) {
+    whereConditions.push(`fe."paymentMode" = ANY($${paramIndex})`);
+    params.push(paymentModes);
     paramIndex++;
   }
 

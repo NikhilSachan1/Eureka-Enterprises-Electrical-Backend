@@ -2,7 +2,11 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsOptional, IsDateString, IsEnum, IsArray, IsString, IsUUID } from 'class-validator';
 import { BaseGetDto } from '../../../utils/base-dto/base-get-dto';
-import { ApprovalStatus, FuelExpenseSortableFields } from '../constants/fuel-expense.constants';
+import {
+  ApprovalStatus,
+  FuelExpenseSortableFields,
+  PaymentMode,
+} from '../constants/fuel-expense.constants';
 
 export class FuelExpenseQueryDto extends BaseGetDto {
   @ApiProperty({
@@ -90,4 +94,17 @@ export class FuelExpenseQueryDto extends BaseGetDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiProperty({
+    description: 'Filter by payment mode (supports multiple values)',
+    enum: PaymentMode,
+    isArray: true,
+    required: false,
+    example: ['CARD', 'CASH'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(PaymentMode, { each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  paymentModes?: PaymentMode[];
 }
