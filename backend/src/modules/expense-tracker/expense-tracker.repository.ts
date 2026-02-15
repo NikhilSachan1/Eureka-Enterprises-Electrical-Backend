@@ -59,7 +59,11 @@ export class ExpenseTrackerRepository {
       const repository = entityManager
         ? entityManager.getRepository(ExpenseTrackerEntity)
         : this.repository;
-      return await repository.update(identifierConditions, updateData);
+      // Manually set updatedAt since repository.update() skips @BeforeUpdate hook
+      return await repository.update(identifierConditions, {
+        ...updateData,
+        updatedAt: new Date(),
+      });
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

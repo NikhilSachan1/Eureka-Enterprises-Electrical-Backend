@@ -60,7 +60,11 @@ export class FuelExpenseRepository {
       const repository = entityManager
         ? entityManager.getRepository(FuelExpenseEntity)
         : this.repository;
-      return await repository.update(identifierConditions, updateData);
+      // Manually set updatedAt since repository.update() skips @BeforeUpdate hook
+      return await repository.update(identifierConditions, {
+        ...updateData,
+        updatedAt: new Date(),
+      });
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
