@@ -6,10 +6,10 @@ import {
 } from '@nestjs/common';
 import { RoleRepository } from './role.repository';
 import { RoleEntity } from './entities/role.entity';
-import { EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import { ROLE_ERRORS, ROLE_FIELD_NAMES } from './constants/role.constants';
-import { CreateRoleDto, DeleteRoleDto } from './dto';
-import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
+import { CreateRoleDto, DeleteRoleDto, GetAllRoleDto } from './dto';
+import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { PermissionService } from '../permissions/permission.service';
 
@@ -53,14 +53,37 @@ export class RoleService {
     }
   }
 
-  async findAll(options: FindOptionsWhere<RoleEntity>): Promise<{
+  async findAll(options: GetAllRoleDto): Promise<{
     records: (RoleEntity & { permissionCount: number })[];
     totalRecords: number;
     totalPermissions: number;
   }> {
     try {
-      const rolesResult = await this.roleRepository.findAll(options);
-      const totalPermissionsResult = await this.permissionService.findAll({ where: {} });
+      const { name, search, page, pageSize, sortField, sortOrder } = options;
+
+      // Build where conditions (pass raw values for query builder)
+      const where: FindOptionsWhere<RoleEntity> & { search?: string } = { deletedAt: null };
+
+      // Filter by name
+      if (name) {
+        where.name = name;
+      }
+
+      // Search by label (pass raw value, repository will handle ILike)
+      if (search) {
+        where.search = search;
+      }
+
+      // Build find options with pagination and sorting
+      const findOptions: FindManyOptions<RoleEntity> = {
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        order: { [sortField]: sortOrder === SortOrder.ASC ? SortOrder.ASC : SortOrder.DESC },
+      };
+
+      const rolesResult = await this.roleRepository.findAll(findOptions);
+      const totalPermissionsResult = await this.permissionService.findAll({});
 
       return {
         ...rolesResult,
