@@ -241,6 +241,7 @@ export class UserPermissionService {
   async findAllUsersWithPermissionStats(options: GetUserPermissionStatsDto): Promise<{
     records: Array<{
       id: string;
+      employeeId: string;
       firstName: string;
       lastName: string;
       email: string;
@@ -266,6 +267,7 @@ export class UserPermissionService {
 
       const transformedUsers = users.map((user: any) => ({
         id: user.id,
+        employeeId: user.employeeId,
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
