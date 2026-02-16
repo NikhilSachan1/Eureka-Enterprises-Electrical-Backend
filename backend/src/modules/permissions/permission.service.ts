@@ -25,7 +25,7 @@ export class PermissionService {
   async create(
     createDto: CreatePermissionDto & { createdBy: string },
     entityManager?: EntityManager,
-  ): Promise<PermissionEntity> {
+  ) {
     await this.validateModuleExists(createDto.module);
     const existingPermission = await this.permissionRepository.findOne({
       where: { name: createDto.name, deletedAt: null },
@@ -35,7 +35,12 @@ export class PermissionService {
       throw new BadRequestException(PERMISSION_ERRORS.ALREADY_EXISTS(createDto.name));
     }
 
-    return await this.permissionRepository.create(createDto, entityManager);
+    await this.permissionRepository.create(createDto, entityManager);
+
+    return this.utilityService.getSuccessMessage(
+      PERMISSION_FIELD_NAMES.PERMISSION,
+      DataSuccessOperationType.CREATE,
+    );
   }
 
   private async validateModuleExists(module: string): Promise<void> {
