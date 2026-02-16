@@ -39,8 +39,33 @@ export function getUserPermissionsQuery({
 }
 
 export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsDto) {
-  const { sortField, sortOrder } = options;
+  const { sortField, sortOrder, roleId, search, userId } = options;
   const orderByClause = buildOrderByClause(sortField, sortOrder);
+
+  // Build dynamic WHERE clause for user filters
+  const userFilters: string[] = ['u."deletedAt" IS NULL'];
+
+  if (userId) {
+    userFilters.push(`u.id = '${userId}'`);
+  }
+
+  // Build HAVING clause for role filter (since we're grouping by user)
+  let havingClause = '';
+  if (roleId) {
+    havingClause = `HAVING bool_or(ur."roleId" = '${roleId}')`;
+  }
+
+  // Build search condition (search by first name, last name, or email)
+  if (search) {
+    const searchTerm = search.replace(/'/g, "''"); // Escape single quotes
+    userFilters.push(`(
+      u."firstName" ILIKE '%${searchTerm}%' OR 
+      u."lastName" ILIKE '%${searchTerm}%' OR 
+      u.email ILIKE '%${searchTerm}%'
+    )`);
+  }
+
+  const whereClause = userFilters.join(' AND ');
 
   const usersQuery = `
     WITH user_permission_stats AS (
@@ -60,8 +85,9 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
       LEFT JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
       LEFT JOIN role_permissions rp ON r.id = rp."roleId" AND rp."isActive" = true AND rp."deletedAt" IS NULL
       LEFT JOIN user_permission_overrides up ON u.id = up."userId" AND up."isGranted" = true AND up."deletedAt" IS NULL
-      WHERE u."deletedAt" IS NULL
+      WHERE ${whereClause}
       GROUP BY u.id, u."firstName", u."lastName", u.email, u.status, u."createdAt", u."updatedAt"
+      ${havingClause}
     ),
     total_permissions AS (
       SELECT COUNT(*) as total_count
@@ -78,11 +104,35 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     LIMIT $1 OFFSET $2;
   `;
 
-  const countQuery = `
-      SELECT COUNT(*) as total_users
+  // Count query also needs the same filters
+  const countFilters: string[] = ['u."deletedAt" IS NULL'];
+  if (userId) {
+    countFilters.push(`u.id = '${userId}'`);
+  }
+  if (search) {
+    const searchTerm = search.replace(/'/g, "''");
+    countFilters.push(`(
+      u."firstName" ILIKE '%${searchTerm}%' OR 
+      u."lastName" ILIKE '%${searchTerm}%' OR 
+      u.email ILIKE '%${searchTerm}%'
+    )`);
+  }
+
+  // For role filter in count, we need a subquery
+  let countQuery = `
+    SELECT COUNT(*) as total_users
+    FROM users u
+    WHERE ${countFilters.join(' AND ')}
+  `;
+
+  if (roleId) {
+    countQuery = `
+      SELECT COUNT(DISTINCT u.id) as total_users
       FROM users u
-      WHERE u."deletedAt" IS NULL
+      INNER JOIN user_roles ur ON u.id = ur."userId" AND ur."deletedAt" IS NULL
+      WHERE ${countFilters.join(' AND ')} AND ur."roleId" = '${roleId}'
     `;
+  }
 
   return {
     usersQuery,

@@ -41,7 +41,9 @@ export class PermissionRepository {
     try {
       const [permissions, totalRecords] = await this.repository.findAndCount({
         where: { deletedAt: null, ...options.where },
-        order: { name: SortOrder.ASC },
+        order: options.order || { name: SortOrder.ASC },
+        skip: options.skip,
+        take: options.take,
       });
       return this.utilityService.listResponse(permissions, totalRecords);
     } catch (error) {

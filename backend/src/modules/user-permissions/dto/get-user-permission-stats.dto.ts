@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsString, IsOptional, IsUUID } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import { UserPermissionStatsSortFields } from '../constants/user-permission.constants';
@@ -11,7 +11,23 @@ export class GetUserPermissionStatsDto extends BaseGetDto {
   })
   @IsOptional()
   @IsUUID()
-  userId: string;
+  userId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by role ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsOptional()
+  @IsUUID()
+  roleId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Search by first name, last name, or email',
+    example: 'john',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @ApiProperty({
     description: 'Column to be sorted by',

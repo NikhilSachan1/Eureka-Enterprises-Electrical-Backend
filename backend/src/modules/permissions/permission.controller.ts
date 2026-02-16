@@ -1,9 +1,12 @@
 import { Controller, Post, Get, Body, Query, Param, Patch, Request, Delete } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PermissionService } from './permission.service';
-import { CreatePermissionDto, DeletePermissionDto, UpdatePermissionDto } from './dto';
-import { PermissionEntity } from './entities/permission.entity';
-import { FindManyOptions } from 'typeorm';
+import {
+  CreatePermissionDto,
+  DeletePermissionDto,
+  UpdatePermissionDto,
+  GetPermissionDto,
+} from './dto';
 
 @ApiTags('Permissions')
 @ApiBearerAuth('JWT-auth')
@@ -31,9 +34,9 @@ export class PermissionController {
   @ApiOperation({
     summary: 'Get all permissions',
     description:
-      'Retrieves a list of all available permissions in the system with optional filtering and pagination options.',
+      'Retrieves a list of all available permissions in the system with optional filtering by module and search by label.',
   })
-  async findAll(@Query() query: FindManyOptions<PermissionEntity>) {
+  async findAll(@Query() query: GetPermissionDto) {
     return await this.permissionService.findAll(query);
   }
 
