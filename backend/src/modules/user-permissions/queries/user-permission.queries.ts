@@ -43,7 +43,8 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
   const orderByClause = buildOrderByClause(sortField, sortOrder);
 
   // Build dynamic WHERE clause for user filters
-  const userFilters: string[] = ['u."deletedAt" IS NULL'];
+  // Exclude SYSTEM users from the results
+  const userFilters: string[] = ['u."deletedAt" IS NULL', `u.status != 'SYSTEM'`];
 
   if (userId) {
     userFilters.push(`u.id = '${userId}'`);
@@ -71,6 +72,7 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     WITH user_permission_stats AS (
       SELECT 
         u.id,
+        u."employeeId",
         u."firstName",
         u."lastName", 
         u.email,
@@ -86,7 +88,7 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
       LEFT JOIN role_permissions rp ON r.id = rp."roleId" AND rp."isActive" = true AND rp."deletedAt" IS NULL
       LEFT JOIN user_permission_overrides up ON u.id = up."userId" AND up."isGranted" = true AND up."deletedAt" IS NULL
       WHERE ${whereClause}
-      GROUP BY u.id, u."firstName", u."lastName", u.email, u.status, u."createdAt", u."updatedAt"
+      GROUP BY u.id, u."employeeId", u."firstName", u."lastName", u.email, u.status, u."createdAt", u."updatedAt"
       ${havingClause}
     ),
     total_permissions AS (
@@ -104,8 +106,8 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     LIMIT $1 OFFSET $2;
   `;
 
-  // Count query also needs the same filters
-  const countFilters: string[] = ['u."deletedAt" IS NULL'];
+  // Count query also needs the same filters (exclude SYSTEM users)
+  const countFilters: string[] = ['u."deletedAt" IS NULL', `u.status != 'SYSTEM'`];
   if (userId) {
     countFilters.push(`u.id = '${userId}'`);
   }
