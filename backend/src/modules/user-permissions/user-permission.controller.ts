@@ -12,6 +12,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserPermissionService } from './user-permission.service';
 import {
   BulkDeleteUserPermissionsDto,
+  BulkDeleteByUsersDto,
   BulkCreateUserPermissionsDto,
   GetUserPermissionStatsDto,
   GetUserPermissionDto,
@@ -52,10 +53,27 @@ export class UserPermissionController {
     return await this.userPermissionService.findAllUsersWithPermissionStats(options);
   }
 
+  @Delete('bulk-by-users')
+  @ApiOperation({
+    summary: 'Bulk delete all permission overrides for multiple users',
+    description:
+      'Deletes ALL permission overrides for the specified users. This is useful for resetting user permissions or cleaning up when users are removed.',
+  })
+  async bulkDeleteByUsers(
+    @Body() bulkDeleteByUsersDto: BulkDeleteByUsersDto,
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+  ) {
+    return await this.userPermissionService.bulkDeleteByUsers(
+      bulkDeleteByUsersDto.userIds,
+      deletedBy,
+    );
+  }
+
   @Delete('bulk')
   @ApiOperation({
     summary: 'Bulk delete user permissions',
-    description: 'Deletes multiple user permissions at once based on provided permission IDs.',
+    description:
+      'Deletes multiple user permissions at once based on provided permission IDs for a single user.',
   })
   async bulkDelete(
     @Body() bulkDeleteDto: BulkDeleteUserPermissionsDto,

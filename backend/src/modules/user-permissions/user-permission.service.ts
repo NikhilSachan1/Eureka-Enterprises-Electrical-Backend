@@ -304,4 +304,32 @@ export class UserPermissionService {
       throw error;
     }
   }
+
+  async bulkDeleteByUsers(
+    userIds: string[],
+    deletedBy: string,
+  ): Promise<{
+    message: string;
+    totalDeleted: number;
+    deletedCounts: Record<string, number>;
+  }> {
+    try {
+      const deletedCounts: Record<string, number> = {};
+      let totalDeleted = 0;
+
+      for (const userId of userIds) {
+        const result = await this.deleteAllForUser(userId, deletedBy);
+        deletedCounts[userId] = result.deletedCount;
+        totalDeleted += result.deletedCount;
+      }
+
+      return {
+        message: USER_PERMISSION_SUCCESS_MESSAGES.BULK_DELETE_SUCCESS,
+        totalDeleted,
+        deletedCounts,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
 }

@@ -11,6 +11,7 @@ export const USER_PERMISSION_ERRORS = {
 export const USER_PERMISSION_SUCCESS_MESSAGES = {
   DELETED: 'User permission override deleted successfully',
   UPDATED: 'User permission overrides updated successfully',
+  BULK_DELETE_SUCCESS: 'User permission overrides deleted successfully',
 } as const;
 
 export enum PermissionSource {
