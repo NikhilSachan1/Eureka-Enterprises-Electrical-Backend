@@ -63,4 +63,29 @@ export class UserRoleRepository {
       throw new InternalServerErrorException(error);
     }
   }
+
+  async softDeleteByUserId(userId: string, deletedBy: string, entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(UserRoleEntity)
+        : this.repository;
+      return await repository.update(
+        { userId, deletedAt: null },
+        { deletedAt: new Date(), deletedBy },
+      );
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async createBulk(userRoles: Partial<UserRoleEntity>[], entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(UserRoleEntity)
+        : this.repository;
+      return await repository.save(userRoles);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }
