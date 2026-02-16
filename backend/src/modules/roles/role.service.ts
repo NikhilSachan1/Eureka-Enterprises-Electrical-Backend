@@ -21,13 +21,18 @@ export class RoleService {
     private permissionService: PermissionService,
   ) {}
 
-  async create(createRoleDto: CreateRoleDto): Promise<RoleEntity> {
+  async create(createRoleDto: CreateRoleDto) {
     try {
       const existingRole = await this.roleRepository.findOne({
         where: { name: createRoleDto.name },
       });
       if (existingRole) throw new ConflictException(ROLE_ERRORS.ALREADY_EXISTS);
-      return await this.roleRepository.create(createRoleDto);
+      await this.roleRepository.create(createRoleDto);
+
+      return this.utilityService.getSuccessMessage(
+        ROLE_FIELD_NAMES.ROLE,
+        DataSuccessOperationType.CREATE,
+      );
     } catch (error) {
       throw error;
     }
