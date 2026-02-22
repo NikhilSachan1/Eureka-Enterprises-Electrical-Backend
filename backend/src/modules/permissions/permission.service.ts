@@ -27,12 +27,31 @@ export class PermissionService {
     entityManager?: EntityManager,
   ) {
     await this.validateModuleExists(createDto.module);
+
+    // Check for active permission with same name
     const existingPermission = await this.permissionRepository.findOne({
       where: { name: createDto.name, deletedAt: null },
     });
 
     if (existingPermission) {
       throw new BadRequestException(PERMISSION_ERRORS.ALREADY_EXISTS(createDto.name));
+    }
+
+    // Handle legacy soft-deleted records - rename them to allow new record creation
+    const softDeletedPermission = await this.permissionRepository.findOne({
+      where: { name: createDto.name },
+    });
+
+    if (softDeletedPermission && softDeletedPermission.deletedAt) {
+      await this.permissionRepository.update(
+        { id: softDeletedPermission.id },
+        {
+          name: `${
+            softDeletedPermission.name
+          }__deleted_${softDeletedPermission.deletedAt.getTime()}`,
+        },
+        entityManager,
+      );
     }
 
     await this.permissionRepository.create(createDto, entityManager);
@@ -131,8 +150,10 @@ export class PermissionService {
       if (!permission.isDeletable) {
         throw new BadRequestException(PERMISSION_ERRORS.NOT_DELETABLE);
       }
+      const deletedAt = new Date();
       await this.permissionRepository.update(identifierConditions, {
-        deletedAt: new Date(),
+        name: `${permission.name}__deleted_${deletedAt.getTime()}`,
+        deletedAt,
         deletedBy,
       });
     } catch (error) {
