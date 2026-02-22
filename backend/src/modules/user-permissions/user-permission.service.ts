@@ -38,6 +38,8 @@ export class UserPermissionService {
     await this.validatePermissionExists(permissionId);
 
     const whereClause = { userId, permissionId };
+
+    // Check for active record
     const existing = await this.userPermissionRepository.findOne({
       where: { ...whereClause, deletedAt: null },
     });
@@ -53,6 +55,27 @@ export class UserPermissionService {
       });
 
       return this.userPermissionRepository.findOne({ where: whereClause });
+    }
+
+    // Check for soft-deleted record and restore it instead of creating new
+    const softDeleted = await this.userPermissionRepository.findOne({
+      where: whereClause,
+    });
+
+    if (softDeleted && softDeleted.deletedAt) {
+      // Restore the soft-deleted record with new values
+      await this.userPermissionRepository.update(
+        { id: softDeleted.id },
+        {
+          isGranted,
+          deletedAt: null,
+          deletedBy: null,
+          updatedAt: new Date(),
+        },
+        entityManager,
+      );
+
+      return this.userPermissionRepository.findOne({ where: { id: softDeleted.id } });
     }
 
     return this.userPermissionRepository.create({ userId, permissionId, isGranted }, entityManager);
