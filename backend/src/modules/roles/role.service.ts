@@ -88,11 +88,11 @@ export class RoleService {
       };
 
       const rolesResult = await this.roleRepository.findAll(findOptions);
-      const totalPermissionsResult = await this.permissionService.findAll({});
+      const totalPermissions = await this.permissionService.count();
 
       return {
         ...rolesResult,
-        totalPermissions: totalPermissionsResult.totalRecords,
+        totalPermissions,
       };
     } catch (error) {
       throw error;

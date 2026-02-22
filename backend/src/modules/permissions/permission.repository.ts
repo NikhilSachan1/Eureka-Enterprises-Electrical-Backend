@@ -81,4 +81,14 @@ export class PermissionRepository {
       throw new InternalServerErrorException(error);
     }
   }
+
+  async count(where?: FindOptionsWhere<PermissionEntity>): Promise<number> {
+    try {
+      return await this.repository.count({
+        where: { deletedAt: null, ...where },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }
