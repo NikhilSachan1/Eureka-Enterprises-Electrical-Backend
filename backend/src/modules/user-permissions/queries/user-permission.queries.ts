@@ -39,7 +39,7 @@ export function getUserPermissionsQuery({
 }
 
 export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsDto) {
-  const { sortField, sortOrder, role, search, userIds } = options;
+  const { sortField, sortOrder, roles, search, userIds } = options;
   const orderByClause = buildOrderByClause(sortField, sortOrder);
 
   // Build dynamic WHERE clause for user filters
@@ -52,11 +52,11 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     userFilters.push(`u.id IN (${userIdList})`);
   }
 
-  // Build HAVING clause for role filter (by role name/code instead of UUID)
+  // Build HAVING clause for role filter (supports multiple role names/codes)
   let havingClause = '';
-  if (role) {
-    const roleName = role.replace(/'/g, "''"); // Escape single quotes
-    havingClause = `HAVING bool_or(r.name = '${roleName}')`;
+  if (roles && roles.length > 0) {
+    const roleNames = roles.map((r) => `'${r.replace(/'/g, "''")}'`).join(', ');
+    havingClause = `HAVING bool_or(r.name IN (${roleNames}))`;
   }
 
   // Build search condition (search by first name, last name, or email)
@@ -131,14 +131,14 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     WHERE ${countFilters.join(' AND ')}
   `;
 
-  if (role) {
-    const roleName = role.replace(/'/g, "''");
+  if (roles && roles.length > 0) {
+    const roleNames = roles.map((r) => `'${r.replace(/'/g, "''")}'`).join(', ');
     countQuery = `
       SELECT COUNT(DISTINCT u.id) as total_users
       FROM users u
       INNER JOIN user_roles ur ON u.id = ur."userId" AND ur."deletedAt" IS NULL
       INNER JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
-      WHERE ${countFilters.join(' AND ')} AND r.name = '${roleName}'
+      WHERE ${countFilters.join(' AND ')} AND r.name IN (${roleNames})
     `;
   }
 
