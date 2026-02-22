@@ -582,12 +582,14 @@ export class FuelExpenseService {
             email: record.email,
             employeeId: record.employeeId,
           },
-          vehicle: {
-            id: record.vehicleId,
-            registrationNumber: record.registrationNumber,
-            vehicleType: record.vehicleType,
-            vehicleModel: record.vehicleModel,
-          },
+          vehicle: record.vehicleId
+            ? {
+                id: record.vehicleId,
+                registrationNumber: record.registrationNumber,
+                vehicleType: record.vehicleType,
+                vehicleModel: record.vehicleModel,
+              }
+            : null,
           card: record.cardId
             ? {
                 id: record.cardId,
