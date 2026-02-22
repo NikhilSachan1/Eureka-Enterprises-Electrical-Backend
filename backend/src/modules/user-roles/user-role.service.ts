@@ -93,8 +93,9 @@ export class UserRoleService {
 
     // Use transaction to ensure atomicity
     return await this.dataSource.transaction(async (entityManager) => {
-      // Soft delete all existing roles for the user
-      await this.userRoleRepository.softDeleteByUserId(userId, assignedBy, entityManager);
+      // Hard delete all existing roles for the user (including soft-deleted)
+      // This avoids unique constraint violations when re-assigning the same roles
+      await this.userRoleRepository.hardDeleteByUserId(userId, entityManager);
 
       // Create new role assignments
       const userRoles: Partial<UserRoleEntity>[] = roleIds.map((roleId) => ({

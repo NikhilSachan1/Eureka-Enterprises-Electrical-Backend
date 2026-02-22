@@ -69,10 +69,35 @@ export class UserRoleRepository {
       const repository = entityManager
         ? entityManager.getRepository(UserRoleEntity)
         : this.repository;
-      return await repository.update(
-        { userId, deletedAt: null },
-        { deletedAt: new Date(), deletedBy },
-      );
+
+      // Use query builder for proper NULL handling
+      const result = await repository
+        .createQueryBuilder()
+        .update(UserRoleEntity)
+        .set({ deletedAt: new Date(), deletedBy })
+        .where('"userId" = :userId', { userId })
+        .andWhere('"deletedAt" IS NULL')
+        .execute();
+
+      return { affected: result.affected || 0 };
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async hardDeleteByUserId(userId: string, entityManager?: EntityManager) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(UserRoleEntity)
+        : this.repository;
+
+      // Hard delete all user roles (including soft-deleted) to avoid unique constraint issues
+      return await repository
+        .createQueryBuilder()
+        .delete()
+        .from(UserRoleEntity)
+        .where('"userId" = :userId', { userId })
+        .execute();
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
