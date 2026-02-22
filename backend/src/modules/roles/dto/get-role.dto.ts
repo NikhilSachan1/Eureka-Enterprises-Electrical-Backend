@@ -1,5 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, IsArray } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
 export class GetRoleDto {
@@ -9,10 +10,16 @@ export class GetRoleDto {
 }
 
 export class GetAllRoleDto extends BaseGetDto {
-  @ApiProperty({ description: 'Role name', example: 'ADMIN', required: false })
-  @IsString()
+  @ApiPropertyOptional({
+    description: 'Filter by role names (supports multiple values)',
+    example: ['ADMIN', 'DRIVER'],
+    type: [String],
+  })
   @IsOptional()
-  name?: string;
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  names?: string[];
 
   @ApiPropertyOptional({
     description: 'Search by label',
