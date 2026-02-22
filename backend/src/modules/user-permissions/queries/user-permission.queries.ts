@@ -39,21 +39,24 @@ export function getUserPermissionsQuery({
 }
 
 export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsDto) {
-  const { sortField, sortOrder, roleId, search, userId } = options;
+  const { sortField, sortOrder, role, search, userIds } = options;
   const orderByClause = buildOrderByClause(sortField, sortOrder);
 
   // Build dynamic WHERE clause for user filters
   // Exclude SYSTEM users from the results
   const userFilters: string[] = ['u."deletedAt" IS NULL', `u.status != 'SYSTEM'`];
 
-  if (userId) {
-    userFilters.push(`u.id = '${userId}'`);
+  // Multi-select user IDs filter
+  if (userIds && userIds.length > 0) {
+    const userIdList = userIds.map((id) => `'${id}'`).join(', ');
+    userFilters.push(`u.id IN (${userIdList})`);
   }
 
-  // Build HAVING clause for role filter (since we're grouping by user)
+  // Build HAVING clause for role filter (by role name/code instead of UUID)
   let havingClause = '';
-  if (roleId) {
-    havingClause = `HAVING bool_or(ur."roleId" = '${roleId}')`;
+  if (role) {
+    const roleName = role.replace(/'/g, "''"); // Escape single quotes
+    havingClause = `HAVING bool_or(r.name = '${roleName}')`;
   }
 
   // Build search condition (search by first name, last name, or email)
@@ -108,8 +111,9 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
 
   // Count query also needs the same filters (exclude SYSTEM users)
   const countFilters: string[] = ['u."deletedAt" IS NULL', `u.status != 'SYSTEM'`];
-  if (userId) {
-    countFilters.push(`u.id = '${userId}'`);
+  if (userIds && userIds.length > 0) {
+    const userIdList = userIds.map((id) => `'${id}'`).join(', ');
+    countFilters.push(`u.id IN (${userIdList})`);
   }
   if (search) {
     const searchTerm = search.replace(/'/g, "''");
@@ -127,12 +131,14 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     WHERE ${countFilters.join(' AND ')}
   `;
 
-  if (roleId) {
+  if (role) {
+    const roleName = role.replace(/'/g, "''");
     countQuery = `
       SELECT COUNT(DISTINCT u.id) as total_users
       FROM users u
       INNER JOIN user_roles ur ON u.id = ur."userId" AND ur."deletedAt" IS NULL
-      WHERE ${countFilters.join(' AND ')} AND ur."roleId" = '${roleId}'
+      INNER JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
+      WHERE ${countFilters.join(' AND ')} AND r.name = '${roleName}'
     `;
   }
 
