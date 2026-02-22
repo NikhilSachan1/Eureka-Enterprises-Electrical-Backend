@@ -268,9 +268,11 @@ export class UserPermissionService {
       lastName: string;
       email: string;
       status: string;
+      role: string;
       rolePermissionsCount: number;
-      userPermissionsCount: number;
-      totalPermissions: number;
+      userPermissionsGrantedCount: number;
+      userPermissionsRevokedCount: number;
+      effectivePermissionsCount: number;
       createdAt: Date;
       updatedAt: Date;
     }>;
@@ -296,8 +298,9 @@ export class UserPermissionService {
         status: user.status,
         role: user.role_names,
         rolePermissionsCount: parseInt(user.role_permissions_count) || 0,
-        userPermissionsCount: parseInt(user.user_permissions_count) || 0,
-        totalPermissions: parseInt(user.total_permissions) || 0,
+        userPermissionsGrantedCount: parseInt(user.user_permissions_granted_count) || 0,
+        userPermissionsRevokedCount: parseInt(user.user_permissions_revoked_count) || 0,
+        effectivePermissionsCount: parseInt(user.effective_permissions_count) || 0,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       }));
