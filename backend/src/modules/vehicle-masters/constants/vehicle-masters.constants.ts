@@ -7,6 +7,8 @@ export const VEHICLE_MASTERS_ERRORS = {
   INVALID_ACTION: 'Invalid action',
   INVALID_DATE_RANGE: 'End date must be after start date',
   ASSIGNED_USER_NOT_FOUND: 'Assigned user not found',
+  EMPLOYEE_CANNOT_SPECIFY_USER_ID: 'Employees cannot specify user ID',
+  NO_VEHICLE_ASSIGNED: 'No vehicle assigned to this user',
 };
 
 export const VEHICLE_MASTERS_SUCCESS_MESSAGES = {

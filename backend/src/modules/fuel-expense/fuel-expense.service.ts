@@ -17,7 +17,6 @@ import {
   FuelExpenseListResponseDto,
   BulkDeleteFuelExpenseDto,
 } from './dto';
-import { Roles } from '../roles/constants/role.constants';
 import {
   FUEL_EXPENSE_ERRORS,
   FUEL_EXPENSE_SUCCESS_MESSAGES,
@@ -585,9 +584,12 @@ export class FuelExpenseService {
           vehicle: record.vehicleId
             ? {
                 id: record.vehicleId,
-                registrationNumber: record.registrationNumber,
-                vehicleType: record.vehicleType,
-                vehicleModel: record.vehicleModel,
+                registrationNo: record.registrationNumber,
+                brand: record.vehicleBrand,
+                model: record.vehicleModel,
+                fuelType: record.vehicleFuelType,
+                mileage: record.vehicleMileage,
+                status: record.vehicleStatus,
               }
             : null,
           card: record.cardId
@@ -670,7 +672,15 @@ export class FuelExpenseService {
           { id: originalFuelExpenseId }, // The original fuel expense itself
           { originalFuelExpenseId }, // All subsequent versions
         ],
-        relations: ['user', 'approvalByUser', 'vehicle', 'card', 'createdByUser', 'updatedByUser'],
+        relations: [
+          'user',
+          'approvalByUser',
+          'vehicle',
+          'vehicle.vehicleVersions',
+          'card',
+          'createdByUser',
+          'updatedByUser',
+        ],
         order: { versionNumber: SortOrder.ASC },
       });
 
@@ -753,10 +763,18 @@ export class FuelExpenseService {
               }
             : null,
           vehicle: record.vehicle
-            ? {
-                id: record.vehicle.id,
-                registrationNo: record.vehicle.registrationNo,
-              }
+            ? (() => {
+                const activeVersion = record.vehicle.vehicleVersions?.find((v) => v.isActive);
+                return {
+                  id: record.vehicle.id,
+                  registrationNo: record.vehicle.registrationNo,
+                  brand: activeVersion?.brand || null,
+                  model: activeVersion?.model || null,
+                  fuelType: activeVersion?.fuelType || null,
+                  mileage: activeVersion?.mileage || null,
+                  status: activeVersion?.status || null,
+                };
+              })()
             : null,
           card: record.card
             ? {
@@ -774,9 +792,29 @@ export class FuelExpenseService {
 
   async delete(fuelExpenseId: string, deletedBy: string) {
     try {
-      await this.findOneOrFail({
-        where: { id: fuelExpenseId, isActive: true },
+      const fuelExpense = await this.findOneOrFail({
+        where: { id: fuelExpenseId },
       });
+
+      // Check if already deleted
+      if (!fuelExpense.isActive || fuelExpense.deletedAt) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_ALREADY_DELETED);
+      }
+
+      // Check ownership - only creator can delete their own entry
+      if (fuelExpense.createdBy !== deletedBy) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_OTHERS);
+      }
+
+      // Check approval status - only pending entries can be deleted
+      if (fuelExpense.approvalStatus !== ApprovalStatus.PENDING) {
+        throw new BadRequestException(
+          FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
+            '{status}',
+            fuelExpense.approvalStatus,
+          ),
+        );
+      }
 
       await this.fuelExpenseRepository.update(
         { id: fuelExpenseId },
@@ -792,19 +830,15 @@ export class FuelExpenseService {
   }
 
   async bulkDeleteFuelExpenses(bulkDeleteDto: BulkDeleteFuelExpenseDto) {
-    const { fuelExpenseIds, deletedBy, userRole } = bulkDeleteDto;
+    const { fuelExpenseIds, deletedBy } = bulkDeleteDto;
     const result = [];
     const errors = [];
-
-    // Check if user is admin or HR (can delete anyone's fuel expense)
-    const isAdminOrHR = userRole === Roles.ADMIN || userRole === Roles.HR;
 
     for (const fuelExpenseId of fuelExpenseIds) {
       try {
         const deletedFuelExpense = await this.validateAndDeleteFuelExpense(
           fuelExpenseId,
           deletedBy,
-          isAdminOrHR,
         );
         result.push(deletedFuelExpense);
       } catch (error) {
@@ -827,11 +861,7 @@ export class FuelExpenseService {
     };
   }
 
-  private async validateAndDeleteFuelExpense(
-    fuelExpenseId: string,
-    deletedBy: string,
-    isAdminOrHR: boolean,
-  ) {
+  private async validateAndDeleteFuelExpense(fuelExpenseId: string, deletedBy: string) {
     // Find the fuel expense
     const fuelExpense = await this.fuelExpenseRepository.findOne({
       where: { id: fuelExpenseId },
@@ -843,26 +873,23 @@ export class FuelExpenseService {
     }
 
     // Check if fuel expense is already deleted
-    if (!fuelExpense.isActive) {
+    if (!fuelExpense.isActive || fuelExpense.deletedAt) {
       throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_ALREADY_DELETED);
     }
 
-    // If not admin/HR, apply additional validations
-    if (!isAdminOrHR) {
-      // Check if user owns the fuel expense
-      if (fuelExpense.userId !== deletedBy) {
-        throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_OTHERS);
-      }
+    // Check ownership - only creator can delete their own entry
+    if (fuelExpense.createdBy !== deletedBy) {
+      throw new BadRequestException(FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_OTHERS);
+    }
 
-      // Check if fuel expense is pending (only pending can be deleted by non-admin)
-      if (fuelExpense.approvalStatus !== ApprovalStatus.PENDING) {
-        throw new BadRequestException(
-          FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
-            '{status}',
-            fuelExpense.approvalStatus,
-          ),
-        );
-      }
+    // Check approval status - only pending entries can be deleted
+    if (fuelExpense.approvalStatus !== ApprovalStatus.PENDING) {
+      throw new BadRequestException(
+        FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
+          '{status}',
+          fuelExpense.approvalStatus,
+        ),
+      );
     }
 
     // Perform soft delete

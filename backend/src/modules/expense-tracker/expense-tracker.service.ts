@@ -11,7 +11,6 @@ import {
   ForceExpenseDto,
   BulkDeleteExpenseDto,
 } from './dto';
-import { Roles } from '../roles/constants/role.constants';
 import {
   CONFIGURATION_MODULES,
   CONFIGURATION_KEYS,
@@ -1104,7 +1103,28 @@ export class ExpenseTrackerService {
 
   async deleteExpense(id: string, deletedBy: string) {
     try {
-      await this.findOneOrFail({ where: { id } });
+      const expense = await this.findOneOrFail({ where: { id } });
+
+      // Check if already deleted
+      if (!expense.isActive || expense.deletedAt) {
+        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_ALREADY_DELETED);
+      }
+
+      // Check ownership - only creator can delete their own entry
+      if (expense.createdBy !== deletedBy) {
+        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_OTHERS);
+      }
+
+      // Check approval status - only pending entries can be deleted
+      if (expense.approvalStatus !== ApprovalStatus.PENDING) {
+        throw new BadRequestException(
+          EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
+            '{status}',
+            expense.approvalStatus,
+          ),
+        );
+      }
+
       await this.expenseTrackerRepository.update(
         { id },
         { isActive: false, updatedBy: deletedBy, deletedBy, deletedAt: new Date() },
@@ -1119,20 +1139,13 @@ export class ExpenseTrackerService {
   }
 
   async bulkDeleteExpenses(bulkDeleteDto: BulkDeleteExpenseDto) {
-    const { expenseIds, deletedBy, userRole } = bulkDeleteDto;
+    const { expenseIds, deletedBy } = bulkDeleteDto;
     const result = [];
     const errors = [];
 
-    // Check if user is admin or HR (can delete anyone's expense)
-    const isAdminOrHR = userRole === Roles.ADMIN || userRole === Roles.HR;
-
     for (const expenseId of expenseIds) {
       try {
-        const deletedExpense = await this.validateAndDeleteExpense(
-          expenseId,
-          deletedBy,
-          isAdminOrHR,
-        );
+        const deletedExpense = await this.validateAndDeleteExpense(expenseId, deletedBy);
         result.push(deletedExpense);
       } catch (error) {
         errors.push({
@@ -1154,11 +1167,7 @@ export class ExpenseTrackerService {
     };
   }
 
-  private async validateAndDeleteExpense(
-    expenseId: string,
-    deletedBy: string,
-    isAdminOrHR: boolean,
-  ) {
+  private async validateAndDeleteExpense(expenseId: string, deletedBy: string) {
     // Find the expense
     const expense = await this.expenseTrackerRepository.findOne({
       where: { id: expenseId },
@@ -1170,26 +1179,23 @@ export class ExpenseTrackerService {
     }
 
     // Check if expense is already deleted
-    if (!expense.isActive) {
+    if (!expense.isActive || expense.deletedAt) {
       throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_ALREADY_DELETED);
     }
 
-    // If not admin/HR, apply additional validations
-    if (!isAdminOrHR) {
-      // Check if user owns the expense
-      if (expense.userId !== deletedBy) {
-        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_OTHERS);
-      }
+    // Check ownership - only creator can delete their own entry
+    if (expense.createdBy !== deletedBy) {
+      throw new BadRequestException(EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_OTHERS);
+    }
 
-      // Check if expense is pending (only pending expenses can be deleted by non-admin)
-      if (expense.approvalStatus !== ApprovalStatus.PENDING) {
-        throw new BadRequestException(
-          EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
-            '{status}',
-            expense.approvalStatus,
-          ),
-        );
-      }
+    // Check approval status - only pending entries can be deleted
+    if (expense.approvalStatus !== ApprovalStatus.PENDING) {
+      throw new BadRequestException(
+        EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_DELETE_NON_PENDING.replace(
+          '{status}',
+          expense.approvalStatus,
+        ),
+      );
     }
 
     // Perform soft delete

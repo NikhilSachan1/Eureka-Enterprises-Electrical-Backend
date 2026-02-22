@@ -125,8 +125,11 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       ${getUserSelectFields('u')},
       ${getUserSelectFields('ab', 'approvalBy')},
       v."registrationNo" as "registrationNumber",
-      vv."brand" as "vehicleType",
+      vv."brand" as "vehicleBrand",
       vv."model" as "vehicleModel",
+      vv."fuelType" as "vehicleFuelType",
+      vv."mileage" as "vehicleMileage",
+      vv."status" as "vehicleStatus",
       c."cardNumber",
       c."cardType",
       LAG(fe."odometerKm") OVER (

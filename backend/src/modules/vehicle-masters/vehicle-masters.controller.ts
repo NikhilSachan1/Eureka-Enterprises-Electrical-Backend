@@ -16,10 +16,18 @@ import {
   FIELD_NAMES,
   FILE_UPLOAD_FOLDER_NAMES,
 } from '../common/file-upload/constants/files.constants';
-import { ApiBearerAuth, ApiBody, ApiTags, ApiConsumes, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiTags,
+  ApiConsumes,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { VehicleActionDto } from './dto/vehicle-action.dto';
+import { VehicleUserInterceptor } from './interceptors/vehicle-user.interceptor';
 
 @ApiTags('Vehicle Management')
 @ApiBearerAuth('JWT-auth')
@@ -87,6 +95,22 @@ export class VehicleMastersController {
   })
   async findAll(@Query() query: VehicleQueryDto) {
     return await this.vehicleMastersService.findAll(query);
+  }
+
+  @Get('assigned')
+  @UseInterceptors(VehicleUserInterceptor)
+  @ApiOperation({
+    summary: 'Get assigned vehicle',
+    description:
+      'Retrieves the vehicle assigned to a user along with the associated card details. For DRIVER/EMPLOYEE roles, returns their own assigned vehicle. For other roles, userId can be specified.',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    description: 'User ID (optional for ADMIN/HR, ignored for DRIVER/EMPLOYEE)',
+  })
+  async getAssignedVehicle(@Query('userId') userId: string) {
+    return await this.vehicleMastersService.getAssignedVehicle(userId);
   }
 
   @Get(':id')
