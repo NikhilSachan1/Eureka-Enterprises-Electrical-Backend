@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  BadRequestException,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { RolePermissionRepository } from './role-permission.repository';
 import { EntityManager, FindOptionsWhere } from 'typeorm';
 import { RolePermissionEntity } from './entities/role-permission.entity';
@@ -56,29 +51,37 @@ export class RolePermissionService {
     return this.rolePermissionRepository.create({ roleId, permissionId, isActive });
   }
 
-  async bulkCreate({
-    roleId,
-    rolePermissions,
-  }: BulkCreateRolePermissionsDto): Promise<RolePermissionEntity[]> {
-    const results: RolePermissionEntity[] = [];
+  async bulkCreate({ roleId, rolePermissions }: BulkCreateRolePermissionsDto) {
+    const results: { id: string; success: boolean; message: string }[] = [];
     await this.validateRoleExists(roleId);
 
     for (const { permissionId, isActive } of rolePermissions) {
       try {
-        const result = await this.create({
-          roleId,
-          permissionId,
-          isActive,
+        await this.create({ roleId, permissionId, isActive });
+        results.push({
+          id: permissionId,
+          success: true,
+          message: 'Role permission created successfully',
         });
-        results.push(result);
       } catch (error) {
-        if (!(error instanceof BadRequestException)) {
-          throw error;
-        }
+        results.push({
+          id: permissionId,
+          success: false,
+          message: error.message || 'Failed to create role permission',
+        });
       }
     }
 
-    return results;
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.filter((r) => !r.success).length;
+
+    return {
+      message: `Bulk create completed: ${successCount} succeeded, ${failureCount} failed`,
+      totalRequested: rolePermissions.length,
+      successCount,
+      failureCount,
+      results,
+    };
   }
 
   async findAll(options: FindOptionsWhere<RolePermissionEntity>): Promise<{

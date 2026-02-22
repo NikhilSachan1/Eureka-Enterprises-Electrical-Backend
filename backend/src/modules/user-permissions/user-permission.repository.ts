@@ -46,6 +46,38 @@ export class UserPermissionRepository {
     }
   }
 
+  async findOneWithDeleted(
+    options: FindOneOptions<UserPermissionEntity>,
+  ): Promise<UserPermissionEntity | null> {
+    try {
+      return await this.repository.findOne({
+        ...options,
+        withDeleted: true,
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async hardDelete(
+    where: FindOptionsWhere<UserPermissionEntity>,
+    entityManager?: EntityManager,
+  ): Promise<void> {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(UserPermissionEntity)
+        : this.repository;
+      await repository
+        .createQueryBuilder()
+        .delete()
+        .from(UserPermissionEntity)
+        .where(where)
+        .execute();
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
   async update(
     identifierConditions: FindOptionsWhere<UserPermissionEntity>,
     updateData: Partial<UserPermissionEntity>,
