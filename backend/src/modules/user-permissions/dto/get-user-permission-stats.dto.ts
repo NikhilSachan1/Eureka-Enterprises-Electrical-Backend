@@ -1,25 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsString, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsString, IsOptional, IsUUID, IsArray } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import { UserPermissionStatsSortFields } from '../constants/user-permission.constants';
 
 export class GetUserPermissionStatsDto extends BaseGetDto {
-  @ApiProperty({
-    description: 'User ID',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-    required: false,
+  @ApiPropertyOptional({
+    description: 'User IDs (supports multiple values)',
+    example: ['123e4567-e89b-12d3-a456-426614174000'],
+    type: [String],
   })
   @IsOptional()
-  @IsUUID()
-  userId?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  userIds?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by role ID',
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'Filter by role name/code (e.g., ADMIN, DRIVER)',
+    example: 'ADMIN',
   })
   @IsOptional()
-  @IsUUID()
-  roleId?: string;
+  @IsString()
+  role?: string;
 
   @ApiPropertyOptional({
     description: 'Search by first name, last name, or email',
