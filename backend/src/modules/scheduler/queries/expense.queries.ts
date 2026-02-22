@@ -63,7 +63,7 @@ export const getPendingFuelExpensesQuery = () => {
       LEFT JOIN vehicle_masters vm ON vm.id = fe."vehicleId" AND vm."deletedAt" IS NULL
       WHERE fe."deletedAt" IS NULL
         AND fe."isActive" = true
-        AND UPPER(fe."approvalStatus") = 'PENDING'
+        AND fe."approvalStatus" = 'pending'
       ORDER BY fe."createdAt" ASC
     `,
     params: [],
@@ -96,7 +96,7 @@ export const getPendingExpenseSummaryQuery = (urgentThresholdDays: number) => {
         FROM fuel_expenses
         WHERE "deletedAt" IS NULL
           AND "isActive" = true
-          AND UPPER("approvalStatus") = 'PENDING'
+          AND "approvalStatus" = 'pending'
       )
       SELECT
         (SELECT count FROM regular_pending)::int as "regularCount",

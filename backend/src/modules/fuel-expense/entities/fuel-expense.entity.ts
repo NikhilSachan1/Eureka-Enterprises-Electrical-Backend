@@ -57,7 +57,7 @@ export class FuelExpenseEntity extends BaseEntity {
   @Column({ type: 'varchar', nullable: false })
   entrySourceType: string;
 
-  @Column({ type: 'text', nullable: false, default: 'PENDING' })
+  @Column({ type: 'text', nullable: false, default: 'pending' })
   approvalStatus: string;
 
   @Column({ type: 'uuid', nullable: true })
