@@ -84,12 +84,13 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
         u."updatedAt",
         STRING_AGG(DISTINCT r.label, ', ') as role_names,
         COUNT(DISTINCT rp."permissionId") FILTER (WHERE rp."isActive" = true AND rp."deletedAt" IS NULL) as role_permissions_count,
-        COUNT(DISTINCT up."permissionId") FILTER (WHERE up."isGranted" = true AND up."deletedAt" IS NULL) as user_permissions_count
+        COUNT(DISTINCT up."permissionId") FILTER (WHERE up."isGranted" = true AND up."deletedAt" IS NULL) as user_permissions_granted_count,
+        COUNT(DISTINCT up."permissionId") FILTER (WHERE up."isGranted" = false AND up."deletedAt" IS NULL) as user_permissions_revoked_count
       FROM users u
       LEFT JOIN user_roles ur ON u.id = ur."userId" AND ur."deletedAt" IS NULL
       LEFT JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
       LEFT JOIN role_permissions rp ON r.id = rp."roleId" AND rp."isActive" = true AND rp."deletedAt" IS NULL
-      LEFT JOIN user_permission_overrides up ON u.id = up."userId" AND up."isGranted" = true AND up."deletedAt" IS NULL
+      LEFT JOIN user_permission_overrides up ON u.id = up."userId" AND up."deletedAt" IS NULL
       WHERE ${whereClause}
       GROUP BY u.id, u."employeeId", u."firstName", u."lastName", u.email, u.status, u."createdAt", u."updatedAt"
       ${havingClause}
@@ -101,7 +102,7 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     )
     SELECT 
       ups.*,
-      (ups.role_permissions_count + ups.user_permissions_count) as total_permissions,
+      GREATEST(0, ups.role_permissions_count + ups.user_permissions_granted_count - ups.user_permissions_revoked_count) as effective_permissions_count,
       tp.total_count as system_total_permissions
     FROM user_permission_stats ups
     CROSS JOIN total_permissions tp
@@ -149,8 +150,8 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
 }
 
 function buildOrderByClause(sortField?: string, sortOrder?: string): string {
-  if (sortField === 'total_permissions') {
-    return `ORDER BY (ups.role_permissions_count + ups.user_permissions_count) ${sortOrder}`;
+  if (sortField === 'effective_permissions_count') {
+    return `ORDER BY GREATEST(0, ups.role_permissions_count + ups.user_permissions_granted_count - ups.user_permissions_revoked_count) ${sortOrder}`;
   }
 
   return `ORDER BY ups."${sortField}" ${sortOrder}`;

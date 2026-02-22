@@ -27,6 +27,7 @@ export enum UserPermissionStatsSortFields {
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',
   ROLE_PERMISSIONS_COUNT = 'role_permissions_count',
-  USER_PERMISSIONS_COUNT = 'user_permissions_count',
-  TOTAL_PERMISSIONS = 'total_permissions',
+  USER_PERMISSIONS_GRANTED_COUNT = 'user_permissions_granted_count',
+  USER_PERMISSIONS_REVOKED_COUNT = 'user_permissions_revoked_count',
+  EFFECTIVE_PERMISSIONS_COUNT = 'effective_permissions_count',
 }
