@@ -61,9 +61,9 @@ export class RoleRepository {
         .where('role.deletedAt IS NULL')
         .groupBy('role.id');
 
-      // Filter by name
-      if (where?.name) {
-        queryBuilder.andWhere('role.name ILIKE :name', { name: `%${where.name}%` });
+      // Filter by names (multiple)
+      if ((where as any)?.names && (where as any).names.length > 0) {
+        queryBuilder.andWhere('role.name IN (:...names)', { names: (where as any).names });
       }
 
       // Search by label (using 'search' field passed from service)

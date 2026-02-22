@@ -64,14 +64,16 @@ export class RoleService {
     totalPermissions: number;
   }> {
     try {
-      const { name, search, page, pageSize, sortField, sortOrder } = options;
+      const { names, search, page, pageSize, sortField, sortOrder } = options;
 
       // Build where conditions (pass raw values for query builder)
-      const where: FindOptionsWhere<RoleEntity> & { search?: string } = { deletedAt: null };
+      const where: FindOptionsWhere<RoleEntity> & { search?: string; names?: string[] } = {
+        deletedAt: null,
+      };
 
-      // Filter by name
-      if (name) {
-        where.name = name;
+      // Filter by names (multiple)
+      if (names && names.length > 0) {
+        where.names = names;
       }
 
       // Search by label (pass raw value, repository will handle ILike)
