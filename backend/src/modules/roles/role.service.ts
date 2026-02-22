@@ -23,10 +23,23 @@ export class RoleService {
 
   async create(createRoleDto: CreateRoleDto) {
     try {
+      // Check for active role with same name
       const existingRole = await this.roleRepository.findOne({
-        where: { name: createRoleDto.name },
+        where: { name: createRoleDto.name, deletedAt: null },
       });
       if (existingRole) throw new ConflictException(ROLE_ERRORS.ALREADY_EXISTS);
+
+      // Handle legacy soft-deleted records - rename them to allow new record creation
+      const softDeletedRole = await this.roleRepository.findOne({
+        where: { name: createRoleDto.name },
+      });
+      if (softDeletedRole && softDeletedRole.deletedAt) {
+        await this.roleRepository.update(
+          { id: softDeletedRole.id },
+          { name: `${softDeletedRole.name}__deleted_${softDeletedRole.deletedAt.getTime()}` },
+        );
+      }
+
       await this.roleRepository.create(createRoleDto);
 
       return this.utilityService.getSuccessMessage(
@@ -129,7 +142,11 @@ export class RoleService {
       if (!role.isDeletable) {
         throw new BadRequestException(ROLE_ERRORS.NOT_DELETABLE);
       }
-      await this.roleRepository.update(identifierConditions, { deletedAt: new Date() });
+      const deletedAt = new Date();
+      await this.roleRepository.update(identifierConditions, {
+        name: `${role.name}__deleted_${deletedAt.getTime()}`,
+        deletedAt,
+      });
     } catch (error) {
       throw error;
     }
