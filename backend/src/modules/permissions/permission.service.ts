@@ -177,4 +177,8 @@ export class PermissionService {
       throw error;
     }
   }
+
+  async count(): Promise<number> {
+    return await this.permissionRepository.count();
+  }
 }
