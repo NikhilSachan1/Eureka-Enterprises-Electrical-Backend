@@ -79,4 +79,28 @@ export class UserPermissionRepository {
       throw new InternalServerErrorException(error);
     }
   }
+
+  async softDeleteByUserId(
+    userId: string,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<{ affected: number }> {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(UserPermissionEntity)
+        : this.repository;
+
+      const result = await repository
+        .createQueryBuilder()
+        .update(UserPermissionEntity)
+        .set({ deletedBy, deletedAt: new Date() })
+        .where('"userId" = :userId', { userId })
+        .andWhere('"deletedAt" IS NULL')
+        .execute();
+
+      return { affected: result.affected || 0 };
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }

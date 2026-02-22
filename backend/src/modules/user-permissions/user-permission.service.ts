@@ -1,6 +1,6 @@
 import { ConflictException, forwardRef, Inject, Injectable } from '@nestjs/common';
 import { UserPermissionRepository } from './user-permission.repository';
-import { EntityManager, IsNull } from 'typeorm';
+import { EntityManager } from 'typeorm';
 import { UserPermissionEntity } from './entities/user-permission.entity';
 import { BulkCreateUserPermissionsDto, CreateUserPermissionDto } from './dto/user-permission.dto';
 import { PermissionSource } from './constants/user-permission.constants';
@@ -296,9 +296,9 @@ export class UserPermissionService {
     entityManager?: EntityManager,
   ): Promise<{ deletedCount: number }> {
     try {
-      const result = await this.userPermissionRepository.update(
-        { userId, deletedAt: IsNull() },
-        { deletedBy, deletedAt: new Date() },
+      const result = await this.userPermissionRepository.softDeleteByUserId(
+        userId,
+        deletedBy,
         entityManager,
       );
       return { deletedCount: result.affected || 0 };
