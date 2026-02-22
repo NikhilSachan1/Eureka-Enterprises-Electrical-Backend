@@ -57,25 +57,14 @@ export class UserPermissionService {
       return this.userPermissionRepository.findOne({ where: whereClause });
     }
 
-    // Check for soft-deleted record and restore it instead of creating new
-    const softDeleted = await this.userPermissionRepository.findOne({
+    // Check for soft-deleted record and hard delete it before creating new
+    const softDeleted = await this.userPermissionRepository.findOneWithDeleted({
       where: whereClause,
     });
 
     if (softDeleted && softDeleted.deletedAt) {
-      // Restore the soft-deleted record with new values
-      await this.userPermissionRepository.update(
-        { id: softDeleted.id },
-        {
-          isGranted,
-          deletedAt: null,
-          deletedBy: null,
-          updatedAt: new Date(),
-        },
-        entityManager,
-      );
-
-      return this.userPermissionRepository.findOne({ where: { id: softDeleted.id } });
+      // Hard delete the soft-deleted record to allow new record creation
+      await this.userPermissionRepository.hardDelete({ id: softDeleted.id }, entityManager);
     }
 
     return this.userPermissionRepository.create({ userId, permissionId, isGranted }, entityManager);
@@ -84,27 +73,37 @@ export class UserPermissionService {
   async bulkCreate(
     { userId, userPermissions }: BulkCreateUserPermissionsDto,
     entityManager?: EntityManager,
-  ): Promise<UserPermissionEntity[]> {
-    const results: UserPermissionEntity[] = [];
+  ) {
+    const results: { id: string; success: boolean; message: string }[] = [];
     await this.validateUserExists(userId);
 
     for (const { permissionId, isGranted } of userPermissions) {
       try {
-        const result = await this.create(
-          {
-            userId,
-            permissionId,
-            isGranted,
-          },
-          entityManager,
-        );
-        results.push(result);
+        await this.create({ userId, permissionId, isGranted }, entityManager);
+        results.push({
+          id: permissionId,
+          success: true,
+          message: 'User permission created successfully',
+        });
       } catch (error) {
-        throw error;
+        results.push({
+          id: permissionId,
+          success: false,
+          message: error.message || 'Failed to create user permission',
+        });
       }
     }
 
-    return results;
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.filter((r) => !r.success).length;
+
+    return {
+      message: `Bulk create completed: ${successCount} succeeded, ${failureCount} failed`,
+      totalRequested: userPermissions.length,
+      successCount,
+      failureCount,
+      results,
+    };
   }
 
   private async validateUserExists(userId: string): Promise<void> {
