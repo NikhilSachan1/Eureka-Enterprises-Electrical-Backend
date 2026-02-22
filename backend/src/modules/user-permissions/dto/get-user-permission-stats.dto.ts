@@ -17,12 +17,15 @@ export class GetUserPermissionStatsDto extends BaseGetDto {
   userIds?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by role name/code (e.g., ADMIN, DRIVER)',
-    example: 'ADMIN',
+    description: 'Filter by role names/codes (supports multiple values)',
+    example: ['ADMIN', 'DRIVER'],
+    type: [String],
   })
   @IsOptional()
-  @IsString()
-  role?: string;
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  roles?: string[];
 
   @ApiPropertyOptional({
     description: 'Search by first name, last name, or email',
