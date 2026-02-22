@@ -833,4 +833,56 @@ export class VehicleMastersService {
       previousStatus: activeVersion?.status,
     };
   }
+
+  async getAssignedVehicle(userId: string) {
+    try {
+      // Find the active vehicle version assigned to the user
+      const vehicleVersion = await this.vehicleVersionsService.findOne({
+        where: { assignedTo: userId, isActive: true },
+        relations: ['vehicleMaster', 'vehicleMaster.card'],
+      });
+
+      if (!vehicleVersion) {
+        throw new NotFoundException(VEHICLE_MASTERS_ERRORS.NO_VEHICLE_ASSIGNED);
+      }
+
+      const vehicle = vehicleVersion.vehicleMaster;
+
+      return {
+        vehicle: {
+          id: vehicle.id,
+          registrationNo: vehicle.registrationNo,
+          brand: vehicleVersion.brand,
+          model: vehicleVersion.model,
+          fuelType: vehicleVersion.fuelType,
+          mileage: vehicleVersion.mileage,
+          status: vehicleVersion.status,
+          purchaseDate: vehicleVersion.purchaseDate,
+          dealerName: vehicleVersion.dealerName,
+          insuranceStartDate: vehicleVersion.insuranceStartDate,
+          insuranceEndDate: vehicleVersion.insuranceEndDate,
+          pucStartDate: vehicleVersion.pucStartDate,
+          pucEndDate: vehicleVersion.pucEndDate,
+          fitnessStartDate: vehicleVersion.fitnessStartDate,
+          fitnessEndDate: vehicleVersion.fitnessEndDate,
+          lastServiceKm: vehicleVersion.lastServiceKm,
+          lastServiceDate: vehicleVersion.lastServiceDate,
+          remarks: vehicleVersion.remarks,
+        },
+        card: vehicle.card
+          ? {
+              id: vehicle.card.id,
+              cardNumber: vehicle.card.cardNumber,
+              cardType: vehicle.card.cardType,
+              cardName: vehicle.card.cardName,
+              holderName: vehicle.card.holderName,
+              expiryDate: vehicle.card.expiryDate,
+              expiryStatus: vehicle.card.expiryStatus,
+            }
+          : null,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
 }
