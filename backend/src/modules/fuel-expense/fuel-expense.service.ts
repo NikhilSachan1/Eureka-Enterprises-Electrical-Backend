@@ -731,6 +731,7 @@ export class FuelExpenseService {
                 firstName: record.createdByUser.firstName,
                 lastName: record.createdByUser.lastName,
                 email: record.createdByUser.email,
+                employeeId: record.createdByUser.employeeId,
               }
             : null,
           updatedByUser: record.updatedByUser
@@ -739,6 +740,7 @@ export class FuelExpenseService {
                 firstName: record.updatedByUser.firstName,
                 lastName: record.updatedByUser.lastName,
                 email: record.updatedByUser.email,
+                employeeId: record.updatedByUser.employeeId,
               }
             : null,
           approvalByUser: record.approvalByUser
