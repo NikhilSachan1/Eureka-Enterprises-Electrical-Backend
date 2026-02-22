@@ -670,7 +670,7 @@ export class FuelExpenseService {
           { id: originalFuelExpenseId }, // The original fuel expense itself
           { originalFuelExpenseId }, // All subsequent versions
         ],
-        relations: ['user', 'approvalByUser', 'vehicle', 'card'],
+        relations: ['user', 'approvalByUser', 'vehicle', 'card', 'createdByUser', 'updatedByUser'],
         order: { versionNumber: SortOrder.ASC },
       });
 
@@ -717,8 +717,6 @@ export class FuelExpenseService {
           parentFuelExpenseId: record.parentFuelExpenseId,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
-          createdBy: record.createdBy,
-          updatedBy: record.updatedBy,
           fileKeys: filesByFuelExpenseId[record.id] || [],
           user: {
             id: record.user?.id,
@@ -727,6 +725,22 @@ export class FuelExpenseService {
             email: record.user?.email,
             employeeId: record.user?.employeeId,
           },
+          createdByUser: record.createdByUser
+            ? {
+                id: record.createdByUser.id,
+                firstName: record.createdByUser.firstName,
+                lastName: record.createdByUser.lastName,
+                email: record.createdByUser.email,
+              }
+            : null,
+          updatedByUser: record.updatedByUser
+            ? {
+                id: record.updatedByUser.id,
+                firstName: record.updatedByUser.firstName,
+                lastName: record.updatedByUser.lastName,
+                email: record.updatedByUser.email,
+              }
+            : null,
           approvalByUser: record.approvalByUser
             ? {
                 id: record.approvalByUser.id,
