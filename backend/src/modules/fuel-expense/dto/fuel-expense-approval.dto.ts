@@ -24,7 +24,7 @@ export class FuelExpenseApprovalDto {
 
   @ApiProperty({
     description: 'The approval status of the fuel expense',
-    example: 'APPROVED',
+    example: 'approved',
     enum: ApprovalStatus,
   })
   @IsString()
