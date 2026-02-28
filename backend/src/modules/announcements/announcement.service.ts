@@ -262,16 +262,35 @@ export class AnnouncementService {
 
   async deleteBulk({ ids }: DeleteAnnouncementDto, userId: string) {
     try {
-      const results = { success: [], failed: [] };
+      const results: { id: string; success: boolean; message: string }[] = [];
+
       for (const id of ids) {
         try {
           await this.delete({ id }, userId);
-          results.success.push(id);
+          results.push({
+            id,
+            success: true,
+            message: 'Announcement deleted successfully',
+          });
         } catch (error) {
-          results.failed.push({ id, error: error.message });
+          results.push({
+            id,
+            success: false,
+            message: error.message || 'Failed to delete announcement',
+          });
         }
       }
-      return results;
+
+      const successCount = results.filter((r) => r.success).length;
+      const failureCount = results.filter((r) => !r.success).length;
+
+      return {
+        message: `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
+        totalRequested: ids.length,
+        successCount,
+        failureCount,
+        results,
+      };
     } catch (error) {
       throw error;
     }
