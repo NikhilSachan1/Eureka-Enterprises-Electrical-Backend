@@ -15,13 +15,17 @@ export class VehicleUserInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // For EMPLOYEE or DRIVER roles, use their own user ID
+    // For EMPLOYEE or DRIVER roles, use their own user ID (cannot specify another user)
     if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
       if (request.query.userId) {
         throw new BadRequestException(VEHICLE_MASTERS_ERRORS.EMPLOYEE_CANNOT_SPECIFY_USER_ID);
       }
-
       request.query.userId = user.id;
+    } else {
+      // For other roles (ADMIN, HR, etc.), use provided userId or default to their own
+      if (!request.query.userId) {
+        request.query.userId = user.id;
+      }
     }
 
     return next.handle();

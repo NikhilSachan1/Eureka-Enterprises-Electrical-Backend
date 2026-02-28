@@ -104,10 +104,7 @@ export class VehicleServicesController {
       'Retrieves detailed information about a specific vehicle service record by its ID, including associated files.',
   })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return await this.vehicleServicesService.findOneOrFail({
-      where: { id },
-      relations: ['serviceFiles'],
-    });
+    return await this.vehicleServicesService.getServiceById(id);
   }
 
   @Patch(':id')
