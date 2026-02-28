@@ -218,6 +218,54 @@ export class VehicleServicesService {
     return service;
   }
 
+  async getServiceById(id: string) {
+    const service = await this.findOneOrFail({
+      where: { id },
+      relations: ['serviceFiles', 'createdByUser', 'updatedByUser'],
+    });
+
+    return {
+      id: service.id,
+      vehicleMasterId: service.vehicleMasterId,
+      serviceDate: service.serviceDate,
+      odometerReading: service.odometerReading,
+      serviceType: service.serviceType,
+      serviceDetails: service.serviceDetails,
+      serviceCenterName: service.serviceCenterName,
+      serviceCost: service.serviceCost,
+      serviceStatus: service.serviceStatus,
+      resetsServiceInterval: service.resetsServiceInterval,
+      remarks: service.remarks,
+      createdAt: service.createdAt,
+      updatedAt: service.updatedAt,
+      createdByUser: service.createdByUser
+        ? {
+            id: service.createdByUser.id,
+            firstName: service.createdByUser.firstName,
+            lastName: service.createdByUser.lastName,
+            email: service.createdByUser.email,
+            employeeId: service.createdByUser.employeeId,
+          }
+        : null,
+      updatedByUser: service.updatedByUser
+        ? {
+            id: service.updatedByUser.id,
+            firstName: service.updatedByUser.firstName,
+            lastName: service.updatedByUser.lastName,
+            email: service.updatedByUser.email,
+            employeeId: service.updatedByUser.employeeId,
+          }
+        : null,
+      serviceFiles:
+        service.serviceFiles?.map((file) => ({
+          id: file.id,
+          fileType: file.fileType,
+          fileKey: file.fileKey,
+          label: file.label,
+        })) || [],
+    };
+  }
+
   async update(
     identifierConditions: FindOptionsWhere<VehicleServiceEntity>,
     updateDto: UpdateVehicleServiceDto & { updatedBy: string },
