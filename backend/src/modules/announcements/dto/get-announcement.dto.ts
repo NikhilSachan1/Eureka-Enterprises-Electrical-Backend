@@ -17,12 +17,20 @@ export class GetAllAnnouncementsDto extends BaseGetDto {
   status?: AnnouncementStatus;
 
   @ApiPropertyOptional({
-    description: 'Search by title',
+    description: 'Search by title (alias for search)',
     example: 'Important',
   })
   @IsOptional()
   @IsString()
   title?: string;
+
+  @ApiPropertyOptional({
+    description: 'Search by title',
+    example: 'Important',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @ApiPropertyOptional({
     description: 'Filter to show only unacknowledged announcements (for user view)',
