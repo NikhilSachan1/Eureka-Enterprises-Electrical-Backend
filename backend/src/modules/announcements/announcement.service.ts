@@ -96,6 +96,88 @@ export class AnnouncementService {
     }
   }
 
+  async getAnnouncementById(id: string) {
+    try {
+      const announcement = await this.announcementRepository.findOne({
+        where: { id },
+        relations: ['targets', 'createdByUser', 'updatedByUser'],
+      });
+
+      if (!announcement) {
+        throw new NotFoundException(ANNOUNCEMENT_ERRORS.NOT_FOUND);
+      }
+
+      // Fetch user details for USER type targets
+      const userTargets = announcement.targets?.filter(
+        (t) => t.targetType === AnnouncementTargetType.USER,
+      );
+
+      let userDetailsMap: Record<string, any> = {};
+      if (userTargets?.length > 0) {
+        const userIds = userTargets.map((t) => t.targetId);
+        const query = `
+          SELECT id, "firstName", "lastName", "employeeId"
+          FROM users
+          WHERE id = ANY($1) AND "deletedAt" IS NULL
+        `;
+        const users = await this.announcementRepository.executeRawQuery(query, [userIds]);
+        userDetailsMap = users.reduce((acc: Record<string, any>, user: any) => {
+          acc[user.id] = user;
+          return acc;
+        }, {});
+      }
+
+      return {
+        id: announcement.id,
+        title: announcement.title,
+        message: announcement.message,
+        status: announcement.status,
+        startAt: announcement.startAt,
+        expiryAt: announcement.expiryAt,
+        publishedAt: announcement.publishedAt,
+        expiredAt: announcement.expiredAt,
+        createdAt: announcement.createdAt,
+        updatedAt: announcement.updatedAt,
+        createdByUser: announcement.createdByUser
+          ? {
+              id: announcement.createdByUser.id,
+              firstName: announcement.createdByUser.firstName,
+              lastName: announcement.createdByUser.lastName,
+              email: announcement.createdByUser.email,
+              employeeId: announcement.createdByUser.employeeId,
+            }
+          : null,
+        updatedByUser: announcement.updatedByUser
+          ? {
+              id: announcement.updatedByUser.id,
+              firstName: announcement.updatedByUser.firstName,
+              lastName: announcement.updatedByUser.lastName,
+              email: announcement.updatedByUser.email,
+              employeeId: announcement.updatedByUser.employeeId,
+            }
+          : null,
+        targets:
+          announcement.targets?.map((target) => {
+            const userDetail = userDetailsMap[target.targetId];
+            return {
+              targetId: target.targetId,
+              targetType: target.targetType,
+              employeeName:
+                target.targetType === AnnouncementTargetType.USER && userDetail
+                  ? `${userDetail.firstName} ${userDetail.lastName}`
+                  : null,
+              employeeId:
+                target.targetType === AnnouncementTargetType.USER && userDetail
+                  ? userDetail.employeeId
+                  : null,
+            };
+          }) || [],
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async findAll(options: GetAllAnnouncementsDto) {
     try {
       const isUserView = !!options.userId;

@@ -68,10 +68,7 @@ export class AnnouncementController {
     description: 'Retrieves a specific announcement by its ID, including its target relations.',
   })
   async findOne(@Param('id') id: string) {
-    return await this.announcementService.findOneOrFail({
-      where: { id },
-      relations: ['targets'],
-    });
+    return await this.announcementService.getAnnouncementById(id);
   }
 
   @Get(':id/acknowledgements')
