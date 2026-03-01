@@ -12,6 +12,7 @@ export const buildAnnouncementListQuery = (
   const {
     status,
     title,
+    search,
     page,
     pageSize,
     sortField,
@@ -64,10 +65,11 @@ export const buildAnnouncementListQuery = (
     }
   }
 
-  // Title search
-  if (title) {
+  // Title search (supports both 'title' and 'search' keys)
+  const searchTerm = search || title;
+  if (searchTerm) {
     whereConditions.push(`a."title" ILIKE $${paramIndex}`);
-    params.push(`%${title}%`);
+    params.push(`%${searchTerm}%`);
     paramIndex++;
   }
 
