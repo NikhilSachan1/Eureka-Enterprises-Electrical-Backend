@@ -108,19 +108,29 @@ export class VehicleServicesController {
   }
 
   @Patch(':id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SERVICE_FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Update vehicle service record',
-    description: 'Updates an existing vehicle service record with new information.',
+    description:
+      'Updates an existing vehicle service record with new information and optional file uploads.',
+  })
+  @ApiBody({
+    type: UpdateVehicleServiceDto,
+    required: true,
   })
   async update(
     @Request() req: RequestWithTimezone,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDto: UpdateVehicleServiceDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.VEHICLE_SERVICE_FILES)
+    { serviceFiles }: { serviceFiles: string[] } = { serviceFiles: [] },
   ) {
     return await this.vehicleServicesService.update(
       { id },
       { ...updateDto, updatedBy: req.user.id },
       req.timezone,
+      serviceFiles,
     );
   }
 

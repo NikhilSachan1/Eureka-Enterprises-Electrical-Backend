@@ -270,6 +270,7 @@ export class VehicleServicesService {
     identifierConditions: FindOptionsWhere<VehicleServiceEntity>,
     updateDto: UpdateVehicleServiceDto & { updatedBy: string },
     timezone?: string,
+    serviceFiles?: string[],
   ): Promise<{ message: string }> {
     const service = await this.findOneOrFail({ where: identifierConditions });
 
@@ -292,6 +293,19 @@ export class VehicleServicesService {
         },
         entityManager,
       );
+
+      // Save new file records if provided
+      if (serviceFiles && serviceFiles.length > 0) {
+        await this.vehicleServiceFilesService.create(
+          {
+            vehicleServiceId: service.id,
+            fileKeys: serviceFiles,
+            fileType: VehicleServiceFileType.INVOICE,
+            createdBy: updateDto.updatedBy,
+          },
+          entityManager,
+        );
+      }
 
       const newStatus = updateDto.serviceStatus || service.serviceStatus;
       if (
