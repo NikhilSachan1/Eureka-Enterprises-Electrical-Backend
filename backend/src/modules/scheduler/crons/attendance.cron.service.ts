@@ -243,12 +243,12 @@ export class AttendanceCronService {
       isActive: true,
     };
 
-    // Priority 1: Holiday
+    // Priority 1: Holiday (no approval needed)
     if (isHoliday) {
       return {
         ...baseRecord,
         status: AttendanceStatus.HOLIDAY,
-        approvalStatus: null,
+        approvalStatus: ApprovalStatus.NOT_APPLICABLE,
         notes: SYSTEM_NOTES.HOLIDAY,
       };
     }
@@ -269,11 +269,11 @@ export class AttendanceCronService {
       };
     }
 
-    // Default: Not checked in yet (no notes, no approval status)
+    // Default: Not checked in yet (no action taken, approval not applicable yet)
     return {
       ...baseRecord,
       status: AttendanceStatus.NOT_CHECKED_IN_YET,
-      approvalStatus: null,
+      approvalStatus: ApprovalStatus.NOT_APPLICABLE,
       notes: null,
     };
   }

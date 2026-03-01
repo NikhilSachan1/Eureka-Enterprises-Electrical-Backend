@@ -27,6 +27,7 @@ export enum ApprovalStatus {
   APPROVED = 'approved',
   REJECTED = 'rejected',
   PENDING = 'pending',
+  NOT_APPLICABLE = 'not_applicable',
 }
 
 export enum ShiftStatus {
