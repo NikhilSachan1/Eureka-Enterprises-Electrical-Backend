@@ -38,11 +38,60 @@ export class VehicleLogsController {
     ]),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: CreateVehicleLogDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        vehicleId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'Vehicle ID (optional for drivers)',
+        },
+        logDate: {
+          type: 'string',
+          format: 'date',
+          example: '2024-01-15',
+          description: 'Log date (YYYY-MM-DD)',
+        },
+        startOdometerReading: {
+          type: 'integer',
+          example: 45000,
+          description: 'Start odometer reading (km)',
+        },
+        startTime: { type: 'string', example: '08:30', description: 'Start time (HH:MM)' },
+        startLocation: { type: 'string', example: 'Office', description: 'Start location' },
+        endOdometerReading: {
+          type: 'integer',
+          example: 45050,
+          description: 'End odometer reading (km) - provide to complete log',
+        },
+        endTime: { type: 'string', example: '18:30', description: 'End time (HH:MM)' },
+        endLocation: { type: 'string', example: 'Site', description: 'End location' },
+        purpose: { type: 'string', example: 'Site visit', description: 'Purpose of the trip' },
+        driverRemarks: { type: 'string', description: 'Driver remarks' },
+        vehicleLogStartOdometer: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Start odometer photo proof (max 2)',
+        },
+        vehicleLogEndOdometer: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'End odometer photo proof (max 2)',
+        },
+        vehicleLogOther: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Other supporting files (max 5)',
+        },
+      },
+      required: ['logDate', 'startOdometerReading'],
+    },
+  })
   @ApiOperation({
     summary: 'Create a vehicle log',
     description:
-      'Create with start odometer (STARTED status). Optionally include end odometer to complete in one call.',
+      'Create with start odometer (STARTED status). Optionally include end odometer to complete in one call. Supports file uploads for odometer proofs.',
   })
   async create(
     @Request() req: RequestWithTimezone,
@@ -88,10 +137,50 @@ export class VehicleLogsController {
     ]),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: UpdateVehicleLogDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        startOdometerReading: {
+          type: 'integer',
+          example: 45000,
+          description: 'Start odometer reading (km)',
+        },
+        startTime: { type: 'string', example: '08:30', description: 'Start time (HH:MM)' },
+        startLocation: { type: 'string', example: 'Office', description: 'Start location' },
+        endOdometerReading: {
+          type: 'integer',
+          example: 45050,
+          description: 'End odometer reading (km) - provide to complete log',
+        },
+        endTime: { type: 'string', example: '18:30', description: 'End time (HH:MM)' },
+        endLocation: { type: 'string', example: 'Site', description: 'End location' },
+        purpose: { type: 'string', example: 'Site visit', description: 'Purpose of the trip' },
+        driverRemarks: { type: 'string', description: 'Driver remarks' },
+        managerRemarks: { type: 'string', description: 'Manager remarks' },
+        odometerResetFlag: { type: 'boolean', description: 'Odometer reset flag (HR/Admin only)' },
+        vehicleLogStartOdometer: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Start odometer photo proof (max 2)',
+        },
+        vehicleLogEndOdometer: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'End odometer photo proof (max 2)',
+        },
+        vehicleLogOther: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Other supporting files (max 5)',
+        },
+      },
+    },
+  })
   @ApiOperation({
     summary: 'Update a vehicle log',
-    description: 'Update start/end entries. Add endOdometerReading to complete a STARTED log.',
+    description:
+      'Update start/end entries. Add endOdometerReading to complete a STARTED log. Supports file uploads.',
   })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
