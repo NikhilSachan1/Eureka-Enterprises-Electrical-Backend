@@ -294,8 +294,16 @@ export class VehicleServicesService {
         entityManager,
       );
 
-      // Save new file records if provided
+      // Replace files: delete old ones and save new ones if provided
       if (serviceFiles && serviceFiles.length > 0) {
+        // Delete existing files for this service
+        await this.vehicleServiceFilesService.deleteByVehicleServiceId(
+          service.id,
+          updateDto.updatedBy,
+          entityManager,
+        );
+
+        // Create new file records
         await this.vehicleServiceFilesService.create(
           {
             vehicleServiceId: service.id,
