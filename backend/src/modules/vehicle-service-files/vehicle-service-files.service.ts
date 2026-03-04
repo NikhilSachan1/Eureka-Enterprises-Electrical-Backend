@@ -46,4 +46,12 @@ export class VehicleServiceFilesService {
   ): Promise<VehicleServiceFileEntity[]> {
     return await this.vehicleServiceFilesRepository.findAll(options, entityManager);
   }
+
+  async deleteByVehicleServiceId(
+    vehicleServiceId: string,
+    deletedBy: string,
+    entityManager?: EntityManager,
+  ): Promise<void> {
+    await this.vehicleServiceFilesRepository.delete({ vehicleServiceId }, deletedBy, entityManager);
+  }
 }
