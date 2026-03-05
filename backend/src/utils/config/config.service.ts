@@ -80,6 +80,15 @@ export class ConfigService {
       database: Environments.DATABASE_NAME,
       logging: true,
       migrationsRun,
+      // Connection pool settings for remote database stability
+      extra: {
+        max: 20, // Maximum connections in pool
+        min: 5, // Minimum connections to keep
+        idleTimeoutMillis: 30000, // Close idle connections after 30s
+        connectionTimeoutMillis: 10000, // Timeout for new connections (10s)
+        keepAlive: true, // Keep connections alive
+        keepAliveInitialDelayMillis: 10000, // Start keepalive after 10s
+      },
       entities: [
         UserEntity,
         RoleEntity,
