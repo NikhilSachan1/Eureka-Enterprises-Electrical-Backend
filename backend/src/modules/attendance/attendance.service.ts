@@ -1541,11 +1541,19 @@ export class AttendanceService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getEmployeeCurrentAttendanceStatus(userId: string, _timezone?: string) {
+  async getEmployeeCurrentAttendanceStatus(userId: string, timezone?: string) {
     try {
+      // Get today's date in the user's timezone (YYYY-MM-DD format)
+      const today = new Date();
+      const todayDateString = today.toLocaleDateString('en-CA', {
+        timeZone: timezone || 'UTC',
+      });
+      const todayDate = new Date(todayDateString);
+
       const attendance = await this.attendanceRepository.findOne({
         where: {
           userId,
+          attendanceDate: todayDate,
           isActive: true,
         },
         relations: ['user'],
@@ -1559,8 +1567,27 @@ export class AttendanceService {
           },
         },
       });
+      ``;
+      // No attendance record for today
+      if (!attendance) {
+        return {
+          id: null,
+          attendanceDate: todayDateString,
+          checkInTime: null,
+          checkOutTime: null,
+          status: null,
+          approvalStatus: null,
+          workDuration: 0,
+          location: null,
+          clientName: null,
+          user: null,
+          message: 'No attendance record found for today',
+        };
+      }
+
       return {
         id: attendance.id,
+        attendanceDate: attendance.attendanceDate,
         checkInTime: attendance.checkInTime,
         checkOutTime: attendance.checkOutTime,
         status: attendance.status,
