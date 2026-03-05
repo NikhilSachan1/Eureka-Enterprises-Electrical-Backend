@@ -1567,7 +1567,13 @@ export class AttendanceService {
           },
         },
       });
-      ``;
+
+      // Fetch site, company, contractors, and vehicle data in parallel
+      const [siteData, vehicleData] = await Promise.all([
+        this.getUserCurrentSiteWithDetails(userId),
+        this.getUserAssignedVehicle(userId),
+      ]);
+
       // No attendance record for today
       if (!attendance) {
         return {
@@ -1578,9 +1584,11 @@ export class AttendanceService {
           status: null,
           approvalStatus: null,
           workDuration: 0,
-          location: null,
-          clientName: null,
           user: null,
+          site: siteData?.site || null,
+          company: siteData?.company || null,
+          contractors: siteData?.contractors || [],
+          vehicle: vehicleData,
           message: 'No attendance record found for today',
         };
       }
@@ -1593,8 +1601,6 @@ export class AttendanceService {
         status: attendance.status,
         approvalStatus: attendance.approvalStatus,
         workDuration: this.calculateWorkDuration(attendance.checkInTime, attendance.checkOutTime),
-        location: 'Indore', //TODO: (SITE) get location dynamically
-        clientName: 'Adani Plant', //TODO: (SITE) get client name dynamically
         user: {
           id: attendance.user.id,
           firstName: attendance.user.firstName,
@@ -1602,10 +1608,104 @@ export class AttendanceService {
           email: attendance.user.email,
           employeeId: attendance.user.employeeId,
         },
+        site: siteData?.site || null,
+        company: siteData?.company || null,
+        contractors: siteData?.contractors || [],
+        vehicle: vehicleData,
       };
     } catch (error) {
       throw error;
     }
+  }
+
+  private async getUserCurrentSiteWithDetails(userId: string): Promise<{
+    site: { id: string; name: string; fullAddress: string } | null;
+    company: { id: string; name: string; fullAddress: string } | null;
+    contractors: Array<{ id: string; name: string }>;
+  } | null> {
+    // Get user's current site allocation with site and company details
+    const siteQuery = `
+      SELECT 
+        s.id as "siteId",
+        s.name as "siteName",
+        s."fullAddress" as "siteFullAddress",
+        c.id as "companyId",
+        c.name as "companyName",
+        c."fullAddress" as "companyFullAddress"
+      FROM site_allocations sa
+      INNER JOIN sites s ON s.id = sa."siteId" AND s."deletedAt" IS NULL
+      LEFT JOIN companies c ON c.id = s."companyId" AND c."deletedAt" IS NULL
+      WHERE sa."userId" = $1 
+        AND sa."isCurrentlyAllocated" = true 
+        AND sa."deletedAt" IS NULL
+      LIMIT 1
+    `;
+
+    const siteResult = await this.dataSource.query(siteQuery, [userId]);
+
+    if (!siteResult || siteResult.length === 0) {
+      return null;
+    }
+
+    const siteRow = siteResult[0];
+
+    // Get contractors for this site
+    const contractorsQuery = `
+      SELECT 
+        con.id,
+        con.name
+      FROM site_contractors sc
+      INNER JOIN contractors con ON con.id = sc."contractorId" AND con."deletedAt" IS NULL
+      WHERE sc."siteId" = $1
+    `;
+
+    const contractors = await this.dataSource.query(contractorsQuery, [siteRow.siteId]);
+
+    return {
+      site: {
+        id: siteRow.siteId,
+        name: siteRow.siteName,
+        fullAddress: siteRow.siteFullAddress,
+      },
+      company: siteRow.companyId
+        ? {
+            id: siteRow.companyId,
+            name: siteRow.companyName,
+            fullAddress: siteRow.companyFullAddress,
+          }
+        : null,
+      contractors: contractors.map((c: { id: string; name: string }) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    };
+  }
+
+  private async getUserAssignedVehicle(
+    userId: string,
+  ): Promise<{ id: string; registrationNo: string } | null> {
+    const vehicleQuery = `
+      SELECT 
+        vm.id,
+        vm."registrationNo"
+      FROM vehicle_versions vv
+      INNER JOIN vehicle_masters vm ON vm.id = vv."vehicleMasterId" AND vm."deletedAt" IS NULL
+      WHERE vv."assignedTo" = $1 
+        AND vv."isActive" = true 
+        AND vv."deletedAt" IS NULL
+      LIMIT 1
+    `;
+
+    const vehicleResult = await this.dataSource.query(vehicleQuery, [userId]);
+
+    if (!vehicleResult || vehicleResult.length === 0) {
+      return null;
+    }
+
+    return {
+      id: vehicleResult[0].id,
+      registrationNo: vehicleResult[0].registrationNo,
+    };
   }
 
   async handleBulkAttendanceApproval({ approvals, approvalBy }: AttendanceBulkApprovalDto) {
