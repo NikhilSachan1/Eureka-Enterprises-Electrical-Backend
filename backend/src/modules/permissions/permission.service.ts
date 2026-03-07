@@ -86,7 +86,7 @@ export class PermissionService {
     records: PermissionEntity[];
     totalRecords: number;
   }> {
-    const { module, search, page, pageSize, sortField, sortOrder } = options;
+    const { module, search, page, sortField, sortOrder } = options;
 
     // Build where conditions
     const where: FindOptionsWhere<PermissionEntity> = { deletedAt: null };
@@ -104,8 +104,8 @@ export class PermissionService {
     // Build find options with pagination and sorting
     const findOptions: FindManyOptions<PermissionEntity> = {
       where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      skip: (page - 1) * 1000,
+      take: 1000,
       order: { [sortField]: sortOrder === SortOrder.ASC ? SortOrder.ASC : SortOrder.DESC },
     };
 
