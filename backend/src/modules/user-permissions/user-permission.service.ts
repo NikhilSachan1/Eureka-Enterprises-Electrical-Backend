@@ -268,7 +268,7 @@ export class UserPermissionService {
       lastName: string;
       email: string;
       status: string;
-      role: string;
+      roles: Array<{ name: string; label: string }>;
       rolePermissionsCount: number;
       userPermissionsGrantedCount: number;
       userPermissionsRevokedCount: number;
@@ -289,21 +289,31 @@ export class UserPermissionService {
         this.userPermissionRepository.executeRawQuery(countQuery),
       ]);
 
-      const transformedUsers = users.map((user: any) => ({
-        id: user.id,
-        employeeId: user.employeeId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        status: user.status,
-        role: user.role_names,
-        rolePermissionsCount: parseInt(user.role_permissions_count) || 0,
-        userPermissionsGrantedCount: parseInt(user.user_permissions_granted_count) || 0,
-        userPermissionsRevokedCount: parseInt(user.user_permissions_revoked_count) || 0,
-        effectivePermissionsCount: parseInt(user.effective_permissions_count) || 0,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      }));
+      const transformedUsers = users.map((user: any) => {
+        const roleNames = user.role_names || [];
+        const roleLabels = user.role_labels || [];
+
+        const roles = roleNames.map((name: string, index: number) => ({
+          name,
+          label: roleLabels[index] || name,
+        }));
+
+        return {
+          id: user.id,
+          employeeId: user.employeeId,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          status: user.status,
+          roles,
+          rolePermissionsCount: parseInt(user.role_permissions_count) || 0,
+          userPermissionsGrantedCount: parseInt(user.user_permissions_granted_count) || 0,
+          userPermissionsRevokedCount: parseInt(user.user_permissions_revoked_count) || 0,
+          effectivePermissionsCount: parseInt(user.effective_permissions_count) || 0,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        };
+      });
 
       return {
         records: transformedUsers,
