@@ -24,6 +24,8 @@ import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { ApiBearerAuth, ApiTags, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
 import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';
+import { AttendanceCurrentStatusInterceptor } from './interceptors/attendance-current-status.interceptor';
+import { CurrentStatusQueryDto } from './dto/current-status-query.dto';
 import { RequestWithTimezone } from './attendance.types';
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
@@ -110,13 +112,17 @@ export class AttendanceController {
   }
 
   @Get('current-status')
+  @UseInterceptors(AttendanceCurrentStatusInterceptor)
   @ApiOperation({
     summary: 'Get current attendance status',
     description:
-      'Retrieves the current attendance status (clocked-in/clocked-out) for the authenticated employee.',
+      'Retrieves the current attendance status (clocked-in/clocked-out) for the authenticated employee or a specified user (HR/ADMIN/SUPER_ADMIN only).',
   })
-  async getEmployeeCurrentAttendanceStatus(@Request() req: RequestWithTimezone) {
-    return this.attendanceService.getEmployeeCurrentAttendanceStatus(req.user.id, req.timezone);
+  async getEmployeeCurrentAttendanceStatus(
+    @Query() query: CurrentStatusQueryDto,
+    @Request() req: RequestWithTimezone,
+  ) {
+    return this.attendanceService.getEmployeeCurrentAttendanceStatus(query.userId, req.timezone);
   }
 
   @Post('approval')
