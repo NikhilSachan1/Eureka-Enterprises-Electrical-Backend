@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsNotEmpty,
   IsOptional,
@@ -7,10 +7,12 @@ import {
   IsArray,
   IsUUID,
   IsEnum,
+  ValidateNested,
 } from 'class-validator';
 import { AttendanceStatus, AttendanceType } from '../constants/attendance.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { AssignmentSnapshotDto } from './attendance-action.dto';
 
 export class ForceAttendanceDto {
   @ApiProperty({ description: 'User IDs', type: [String], required: true })
@@ -80,4 +82,14 @@ export class ForceAttendanceDto {
   attendanceType?: AttendanceType;
 
   timezone?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Assignment snapshot containing site, company, contractors, vehicle, and assigned engineer details',
+    type: AssignmentSnapshotDto,
+  })
+  @ValidateNested()
+  @Type(() => AssignmentSnapshotDto)
+  @IsOptional()
+  assignmentSnapshot?: AssignmentSnapshotDto;
 }

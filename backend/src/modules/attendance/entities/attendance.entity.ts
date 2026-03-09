@@ -49,6 +49,16 @@ export class AttendanceEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  // Stores site, vehicle, contractors, and assigned engineer at the time of attendance
+  @Column({ type: 'jsonb', nullable: true })
+  assignmentSnapshot: {
+    site?: { id: string; name: string; fullAddress?: string };
+    company?: { id: string; name: string; fullAddress?: string };
+    contractors?: Array<{ id: string; name: string }>;
+    vehicle?: { id: string; registrationNo: string };
+    assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
+  };
+
   @Index('IDX_attendance_isActive')
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
