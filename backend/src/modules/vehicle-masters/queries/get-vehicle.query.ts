@@ -341,10 +341,13 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         )
         ELSE NULL
       END as "assignedToUser",
-      -- Get current odometer reading from fuel_expenses or vehicle_services
+      -- Get current odometer reading from fuel_expenses, vehicle_services, or vehicle_logs (take the maximum)
       COALESCE(
-        (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
-        (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
+        GREATEST(
+          (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleId" = vm."id" AND "deletedAt" IS NULL AND "isActive" = true),
+          (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm."id" AND "deletedAt" IS NULL),
+          (SELECT GREATEST(MAX("startOdometerReading"), MAX("endOdometerReading")) FROM vehicle_logs WHERE "vehicleId" = vm."id" AND "deletedAt" IS NULL)
+        ),
         0
       ) as "currentOdometerKm",
       -- Get files for active version
