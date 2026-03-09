@@ -103,7 +103,8 @@ export class AttendanceService {
   }
 
   async handleAttendanceAction(userId: string, attendanceActionDto: AttendanceActionDto) {
-    const { action, entrySourceType, attendanceType, notes, timezone } = attendanceActionDto;
+    const { action, entrySourceType, attendanceType, notes, timezone, assignmentSnapshot } =
+      attendanceActionDto;
     const todayDate = this.dateTimeService.getStartOfToday(timezone);
     const currentTimeUTC = new Date();
     const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
@@ -133,6 +134,7 @@ export class AttendanceService {
             configSettingId,
             shiftConfigs,
             entityManager,
+            assignmentSnapshot,
           );
         case AttendanceAction.CHECK_OUT:
           return await this.handleCheckOut(
@@ -160,6 +162,13 @@ export class AttendanceService {
     configSettingId: string,
     shiftConfigs: any,
     entityManager: any,
+    assignmentSnapshot?: {
+      site?: { id: string; name: string; fullAddress?: string };
+      company?: { id: string; name: string; fullAddress?: string };
+      contractors?: Array<{ id: string; name: string }>;
+      vehicle?: { id: string; registrationNo: string };
+      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
+    },
   ) {
     await this.validateShiftTiming(shiftConfigs, currentTime);
 
@@ -222,7 +231,7 @@ export class AttendanceService {
       }
     }
 
-    await this.attendanceRepository.create(
+    await this.create(
       {
         userId,
         attendanceDate: todayDate,
@@ -235,6 +244,7 @@ export class AttendanceService {
         shiftConfigId: configSettingId,
         isActive: true,
         createdBy: userId,
+        assignmentSnapshot: assignmentSnapshot || undefined,
       },
       entityManager,
     );
@@ -415,6 +425,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -446,6 +457,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -491,6 +503,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -519,6 +532,7 @@ export class AttendanceService {
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               regularizedBy: userId,
               isActive: true,
               createdBy: userId,
@@ -550,6 +564,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -578,6 +593,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -625,6 +641,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -686,6 +703,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -714,6 +732,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -754,6 +773,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -781,6 +801,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
+              assignmentSnapshot: existingAttendance.assignmentSnapshot,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -960,6 +981,7 @@ export class AttendanceService {
         entrySourceType,
         attendanceType,
         status,
+        assignmentSnapshot,
       } = forceAttendanceDto;
 
       // Use timezone-aware date comparison
@@ -1014,6 +1036,7 @@ export class AttendanceService {
             attendanceType,
             timezone,
             entityManager,
+            assignmentSnapshot,
           );
         } else if (isPreviousDay) {
           return await this.handlePreviousDayForceAttendance(
@@ -1030,6 +1053,7 @@ export class AttendanceService {
             attendanceType,
             timezone,
             entityManager,
+            assignmentSnapshot,
           );
         }
       });
@@ -1054,6 +1078,13 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
+    assignmentSnapshot?: {
+      site?: { id: string; name: string; fullAddress?: string };
+      company?: { id: string; name: string; fullAddress?: string };
+      contractors?: Array<{ id: string; name: string }>;
+      vehicle?: { id: string; registrationNo: string };
+      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
+    },
   ) {
     const shiftStatus = await this.getShiftStatus(shiftConfigs, currentTime);
 
@@ -1077,6 +1108,7 @@ export class AttendanceService {
           attendanceType,
           timezone,
           entityManager,
+          assignmentSnapshot,
         );
 
       case ShiftStatus.AFTER_SHIFT:
@@ -1096,6 +1128,7 @@ export class AttendanceService {
           attendanceType,
           timezone,
           entityManager,
+          assignmentSnapshot,
         );
 
       default:
@@ -1134,6 +1167,13 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
+    assignmentSnapshot?: {
+      site?: { id: string; name: string; fullAddress?: string };
+      company?: { id: string; name: string; fullAddress?: string };
+      contractors?: Array<{ id: string; name: string }>;
+      vehicle?: { id: string; registrationNo: string };
+      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
+    },
   ) {
     if (!checkInTime) {
       throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_CHECK_IN_TIME_REQUIRED);
@@ -1158,6 +1198,7 @@ export class AttendanceService {
         shiftConfigId: configSettingId,
         isActive: true,
         createdBy,
+        assignmentSnapshot: assignmentSnapshot || undefined,
       },
       entityManager,
     );
@@ -1184,6 +1225,13 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
+    assignmentSnapshot?: {
+      site?: { id: string; name: string; fullAddress?: string };
+      company?: { id: string; name: string; fullAddress?: string };
+      contractors?: Array<{ id: string; name: string }>;
+      vehicle?: { id: string; registrationNo: string };
+      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
+    },
   ) {
     // After shift - both check-in and check-out are required
     if (!checkInTime || !checkOutTime) {
@@ -1224,6 +1272,7 @@ export class AttendanceService {
         approvalBy: createdBy,
         approvalAt: currentTime,
         approvalComment: reason || DEFAULT_APPROVAL_COMMENT.FORCED,
+        assignmentSnapshot: assignmentSnapshot || undefined,
       },
       entityManager,
     );
@@ -1263,6 +1312,13 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
+    assignmentSnapshot?: {
+      site?: { id: string; name: string; fullAddress?: string };
+      company?: { id: string; name: string; fullAddress?: string };
+      contractors?: Array<{ id: string; name: string }>;
+      vehicle?: { id: string; registrationNo: string };
+      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
+    },
   ) {
     if (!checkInTime || !checkOutTime) {
       throw new BadRequestException(
@@ -1284,7 +1340,7 @@ export class AttendanceService {
 
     const currentTime = new Date();
 
-    await this.attendanceRepository.create(
+    await this.create(
       {
         userId,
         attendanceDate: targetDate,
@@ -1301,6 +1357,7 @@ export class AttendanceService {
         approvalBy: createdBy,
         approvalAt: currentTime,
         approvalComment: reason || DEFAULT_APPROVAL_COMMENT.FORCED,
+        assignmentSnapshot: assignmentSnapshot || undefined,
       },
       entityManager,
     );
@@ -1568,14 +1625,13 @@ export class AttendanceService {
         },
       });
 
-      // Fetch site, company, contractors, and vehicle data in parallel
-      const [siteData, vehicleData] = await Promise.all([
-        this.getUserCurrentSiteWithDetails(userId),
-        this.getUserAssignedVehicle(userId),
-      ]);
-
-      // No attendance record for today
+      // No attendance record for today - fetch current assignments
       if (!attendance) {
+        const [siteData, vehicleData] = await Promise.all([
+          this.getUserCurrentSiteWithDetails(userId),
+          this.getUserAssignedVehicle(userId),
+        ]);
+
         return {
           id: null,
           attendanceDate: todayDateString,
@@ -1589,8 +1645,30 @@ export class AttendanceService {
           company: siteData?.company || null,
           contractors: siteData?.contractors || [],
           vehicle: vehicleData,
+          assignedEngineer: siteData?.assignedEngineer || null,
           message: 'No attendance record found for today',
         };
+      }
+
+      // Use stored snapshot if available, otherwise fetch current assignments
+      const snapshot = attendance.assignmentSnapshot;
+      let site = snapshot?.site || null;
+      let company = snapshot?.company || null;
+      let contractors = snapshot?.contractors || [];
+      let vehicle = snapshot?.vehicle || null;
+      let assignedEngineer = snapshot?.assignedEngineer || null;
+
+      // Fallback: if no snapshot stored, fetch current data
+      if (!snapshot) {
+        const [siteData, vehicleData] = await Promise.all([
+          this.getUserCurrentSiteWithDetails(userId),
+          this.getUserAssignedVehicle(userId),
+        ]);
+        site = siteData?.site || null;
+        company = siteData?.company || null;
+        contractors = siteData?.contractors || [];
+        vehicle = vehicleData;
+        assignedEngineer = siteData?.assignedEngineer || null;
       }
 
       return {
@@ -1608,10 +1686,11 @@ export class AttendanceService {
           email: attendance.user.email,
           employeeId: attendance.user.employeeId,
         },
-        site: siteData?.site || null,
-        company: siteData?.company || null,
-        contractors: siteData?.contractors || [],
-        vehicle: vehicleData,
+        site,
+        company,
+        contractors,
+        vehicle,
+        assignedEngineer,
       };
     } catch (error) {
       throw error;
@@ -1622,6 +1701,12 @@ export class AttendanceService {
     site: { id: string; name: string; fullAddress: string } | null;
     company: { id: string; name: string; fullAddress: string } | null;
     contractors: Array<{ id: string; name: string }>;
+    assignedEngineer: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      employeeId: string;
+    } | null;
   } | null> {
     // Get user's current site allocation with site and company details
     const siteQuery = `
@@ -1661,6 +1746,25 @@ export class AttendanceService {
 
     const contractors = await this.dataSource.query(contractorsQuery, [siteRow.siteId]);
 
+    // Get assigned engineer for this site (user with role 'Engineer' allocated to the same site)
+    const engineerQuery = `
+      SELECT 
+        u.id,
+        u."firstName",
+        u."lastName",
+        u."employeeId"
+      FROM site_allocations sa
+      INNER JOIN users u ON u.id = sa."userId" AND u."deletedAt" IS NULL
+      WHERE sa."siteId" = $1 
+        AND sa."isCurrentlyAllocated" = true 
+        AND sa."deletedAt" IS NULL
+        AND sa.role = 'Engineer'
+      LIMIT 1
+    `;
+
+    const engineerResult = await this.dataSource.query(engineerQuery, [siteRow.siteId]);
+    const engineer = engineerResult && engineerResult.length > 0 ? engineerResult[0] : null;
+
     return {
       site: {
         id: siteRow.siteId,
@@ -1678,6 +1782,14 @@ export class AttendanceService {
         id: c.id,
         name: c.name,
       })),
+      assignedEngineer: engineer
+        ? {
+            id: engineer.id,
+            firstName: engineer.firstName,
+            lastName: engineer.lastName,
+            employeeId: engineer.employeeId,
+          }
+        : null,
     };
   }
 
