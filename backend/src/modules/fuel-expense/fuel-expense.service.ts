@@ -505,9 +505,20 @@ export class FuelExpenseService {
         select: ['id', 'fileKey', 'fuelExpenseId'],
       });
 
-      // Calculate vehicle average if a specific vehicle is filtered
+      // Calculate vehicle average only if vehicleId is filtered AND no other data filters are applied
+      // When other filters are applied (date, approval status, etc.), the average would be incorrect
       let vehicleAverage = null;
-      if (filters.vehicleId) {
+      const hasDataFilters =
+        filters.startDate ||
+        filters.endDate ||
+        filters.date ||
+        (filters.userIds && filters.userIds.length > 0) ||
+        (filters.approvalStatuses && filters.approvalStatuses.length > 0) ||
+        filters.search ||
+        (filters.paymentModes && filters.paymentModes.length > 0) ||
+        filters.cardId;
+
+      if (filters.vehicleId && !hasDataFilters) {
         try {
           const avgData = await this.calculateVehicleAverage(filters.vehicleId);
           vehicleAverage = {
@@ -527,9 +538,10 @@ export class FuelExpenseService {
 
       // Transform records to include all necessary information
       const transformedRecords = records.map((record: any) => {
-        // Calculate fuel efficiency if we have previous odometer reading
+        // Calculate fuel efficiency only if no data filters are applied
+        // When filters are applied, LAG() operates on filtered data which gives incorrect results
         let fuelEfficiency = null;
-        if (record.previousOdometerKm && Number(record.previousOdometerKm) > 0) {
+        if (!hasDataFilters && record.previousOdometerKm && Number(record.previousOdometerKm) > 0) {
           const distanceTraveled = Number(record.odometerKm) - Number(record.previousOdometerKm);
           const fuelLiters = Number(record.fuelLiters);
 
