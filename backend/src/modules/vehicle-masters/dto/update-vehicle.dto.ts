@@ -8,6 +8,8 @@ import {
   IsEnum,
   IsUUID,
   ValidateIf,
+  IsInt,
+  Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { VehicleFuelType, VehicleStatus } from '../constants/vehicle-masters.constants';
@@ -112,6 +114,25 @@ export class UpdateVehicleDto {
   @IsString()
   @MaxLength(1000)
   remarks?: string;
+
+  // Service tracking
+  @ApiPropertyOptional({
+    description: 'Last service odometer reading in km',
+    example: 15000,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : undefined))
+  lastServiceKm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Last service date',
+    example: '2024-01-15',
+  })
+  @IsOptional()
+  @IsDateString()
+  lastServiceDate?: string;
 
   @ApiPropertyOptional({
     description: 'Additional data',
