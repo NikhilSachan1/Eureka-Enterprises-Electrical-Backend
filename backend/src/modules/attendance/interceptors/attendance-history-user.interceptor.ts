@@ -15,18 +15,26 @@ export class AttendanceHistoryUserInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (user.role === Roles.ADMIN || user.role === Roles.MANAGER || user.role === Roles.HR) {
+    const isPrivilegedRole =
+      user.role === Roles.SUPER_ADMIN ||
+      user.role === Roles.ADMIN ||
+      user.role === Roles.MANAGER ||
+      user.role === Roles.HR;
+
+    if (isPrivilegedRole) {
       if (!request.query.userId) {
         throw new BadRequestException(ATTENDANCE_ERRORS.USER_ID_REQUIRED);
       }
-    }
-
-    if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
+    } else if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
       if (request.query.userId) {
         throw new BadRequestException(ATTENDANCE_ERRORS.EMPLOYEE_CANNOT_SPECIFY_USER_IDS);
       }
-
       request.query.userId = user.id;
+    } else {
+      // Fallback for any unknown roles - require userId
+      if (!request.query.userId) {
+        throw new BadRequestException(ATTENDANCE_ERRORS.USER_ID_REQUIRED);
+      }
     }
 
     return next.handle();

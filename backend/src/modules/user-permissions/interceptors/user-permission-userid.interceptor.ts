@@ -15,17 +15,23 @@ export class UserPermissionUserIdInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
+    const isPrivilegedRole =
+      user.role === Roles.SUPER_ADMIN ||
+      user.role === Roles.ADMIN ||
+      user.role === Roles.HR ||
+      user.role === Roles.MANAGER;
+
     if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
       if (request.query.userId || request.query.permissionId || request.query.isActive) {
         throw new BadRequestException(USER_PERMISSION_ERRORS.CANNOT_SPECIFY_FIELDS);
       }
       request.query.userId = user.id;
-    } else if (
-      user.role === Roles.SUPER_ADMIN ||
-      user.role === Roles.ADMIN ||
-      user.role === Roles.HR ||
-      user.role === Roles.MANAGER
-    ) {
+    } else if (isPrivilegedRole) {
+      if (!request.query.userId) {
+        request.query.userId = user.id;
+      }
+    } else {
+      // Fallback for any other roles - use their own userId
       if (!request.query.userId) {
         request.query.userId = user.id;
       }
