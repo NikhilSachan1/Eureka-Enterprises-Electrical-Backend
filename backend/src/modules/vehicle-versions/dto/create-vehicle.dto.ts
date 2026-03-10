@@ -8,6 +8,8 @@ import {
   IsDateString,
   IsEnum,
   ValidateIf,
+  IsInt,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -138,6 +140,25 @@ export class CreateVehicleVersionDto {
   @IsOptional()
   @IsObject()
   additionalData?: Record<string, any>;
+
+  // Service tracking
+  @ApiPropertyOptional({
+    description: 'Last service odometer reading in km (default: 0)',
+    example: 15000,
+    default: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  lastServiceKm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Last service date',
+    example: '2024-01-15',
+  })
+  @IsOptional()
+  @IsDateString()
+  lastServiceDate?: string;
 
   @ApiPropertyOptional({
     description: 'Files to be uploaded.',

@@ -8,6 +8,8 @@ import {
   IsEnum,
   IsUUID,
   ValidateIf,
+  IsInt,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
@@ -119,6 +121,26 @@ export class CreateVehicleDto {
   @IsString()
   @MaxLength(1000)
   remarks?: string;
+
+  // Service tracking
+  @ApiPropertyOptional({
+    description: 'Last service odometer reading in km (default: 0)',
+    example: 15000,
+    default: 0,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Transform(({ value }) => (value !== undefined ? parseInt(value, 10) : 0))
+  lastServiceKm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Last service date',
+    example: '2024-01-15',
+  })
+  @IsOptional()
+  @IsDateString()
+  lastServiceDate?: string;
 
   @ApiPropertyOptional({
     description: 'Additional data',

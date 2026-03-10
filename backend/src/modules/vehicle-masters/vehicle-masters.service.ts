@@ -252,6 +252,8 @@ export class VehicleMastersService {
             assignedTo: createVehicleDto.assignedTo,
             remarks: createVehicleDto.remarks,
             additionalData: createVehicleDto.additionalData,
+            lastServiceKm: createVehicleDto.lastServiceKm ?? 0,
+            lastServiceDate: createVehicleDto.lastServiceDate,
             createdBy,
           },
           entityManager,
@@ -568,6 +570,13 @@ export class VehicleMastersService {
             remarks:
               updateData.remarks !== undefined ? updateData.remarks : currentVersion?.remarks,
             additionalData: updateData.additionalData || currentVersion?.additionalData,
+            lastServiceKm:
+              updateData.lastServiceKm !== undefined
+                ? updateData.lastServiceKm
+                : currentVersion?.lastServiceKm ?? 0,
+            lastServiceDate:
+              toDateString(updateData.lastServiceDate) ||
+              toDateString(currentVersion?.lastServiceDate),
             createdBy: updateData.updatedBy,
           },
           entityManager,
