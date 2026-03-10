@@ -218,23 +218,27 @@ export class DsrService {
             }
           : null,
         files: record.files
-          ? record.files.map((file) => ({
-              id: file.id,
-              fileKey: file.fileKey,
-              fileName: file.fileName,
-              fileType: file.fileType,
-            }))
-          : null,
+          ? record.files
+              .filter((file) => !file.deletedAt)
+              .map((file) => ({
+                id: file.id,
+                fileKey: file.fileKey,
+                fileName: file.fileName,
+                fileType: file.fileType,
+              }))
+          : [],
         editHistory: record.editHistory
-          ? record.editHistory.map((history) => ({
-              id: history.id,
-              editedBy: history.editedBy,
-              editedAt: history.editedAt,
-              previousValues: history.previousValues,
-              newValues: history.newValues,
-              changeReason: history.changeReason,
-            }))
-          : null,
+          ? record.editHistory
+              .filter((history) => !history.deletedAt)
+              .map((history) => ({
+                id: history.id,
+                editedBy: history.editedBy,
+                editedAt: history.editedAt,
+                previousValues: history.previousValues,
+                newValues: history.newValues,
+                changeReason: history.changeReason,
+              }))
+          : [],
       })),
       totalRecords,
     );
