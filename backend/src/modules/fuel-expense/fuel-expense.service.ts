@@ -1415,10 +1415,10 @@ export class FuelExpenseService {
     excludeFuelExpenseId?: string,
   ) {
     try {
-      // Get the latest fuel expense for this vehicle
+      // Get the latest fuel expense for this vehicle (including PENDING and APPROVED, not REJECTED)
       const whereCondition: any = {
         vehicleId,
-        approvalStatus: ApprovalStatus.APPROVED,
+        approvalStatus: In([ApprovalStatus.APPROVED, ApprovalStatus.PENDING]),
         isActive: true,
       };
 
