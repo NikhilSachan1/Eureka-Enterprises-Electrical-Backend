@@ -184,7 +184,7 @@ export const getDocumentTypeLabel = (type: string): string => {
  *
  * Service due is calculated based on KM (odometer reading):
  * - lastServiceKm: Stored in vehicle_versions
- * - currentOdometerKm: MAX from fuel_expenses or vehicle_services
+ * - currentOdometerKm: MAX from fuel_expenses, vehicle_services, or vehicle_logs
  * - serviceIntervalKm: From config (default: 10000 km)
  * - warningKm: From config (default: 1000 km)
  *
@@ -217,11 +217,12 @@ export const getVehiclesWithServiceDueQuery = (serviceIntervalKm: number, warnin
           u."lastName" as "assignedLastName",
           u."email" as "assignedUserEmail",
           
-          -- Get current odometer reading (MAX from fuel_expenses or vehicle_services)
+          -- Get current odometer reading (MAX from fuel_expenses, vehicle_services, or vehicle_logs)
           COALESCE(
             GREATEST(
-              (SELECT MAX("odometerReading") FROM fuel_expenses WHERE "vehicleMasterId" = vm.id AND "deletedAt" IS NULL),
-              (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm.id AND "deletedAt" IS NULL)
+              (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleId" = vm.id AND "deletedAt" IS NULL AND "isActive" = true),
+              (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm.id AND "deletedAt" IS NULL),
+              (SELECT GREATEST(MAX("startOdometerReading"), MAX("endOdometerReading")) FROM vehicle_logs WHERE "vehicleId" = vm.id AND "deletedAt" IS NULL)
             ),
             0
           )::int as "currentOdometerKm"

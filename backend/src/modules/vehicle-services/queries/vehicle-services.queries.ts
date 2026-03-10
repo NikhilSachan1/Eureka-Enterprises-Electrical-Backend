@@ -309,9 +309,13 @@ export const buildLatestOdometerQuery = (vehicleMasterId: string) => {
         FROM vehicle_services vs
         WHERE vs."vehicleMasterId" = $1 AND vs."deletedAt" IS NULL
         UNION ALL
-        SELECT fe."odometerReading" as odometer
+        SELECT fe."odometerKm" as odometer
         FROM fuel_expenses fe
-        WHERE fe."vehicleId" = $1 AND fe."deletedAt" IS NULL
+        WHERE fe."vehicleId" = $1 AND fe."deletedAt" IS NULL AND fe."isActive" = true
+        UNION ALL
+        SELECT GREATEST(vl."startOdometerReading", COALESCE(vl."endOdometerReading", 0)) as odometer
+        FROM vehicle_logs vl
+        WHERE vl."vehicleId" = $1 AND vl."deletedAt" IS NULL
       ) combined
     `,
     params: [vehicleMasterId],
@@ -338,9 +342,13 @@ export const buildVehiclesServiceStatusQuery = () => {
           FROM vehicle_services vs
           WHERE vs."vehicleMasterId" = vm."id" AND vs."deletedAt" IS NULL
           UNION ALL
-          SELECT fe."odometerReading" as odometer
+          SELECT fe."odometerKm" as odometer
           FROM fuel_expenses fe
-          WHERE fe."vehicleId" = vm."id" AND fe."deletedAt" IS NULL
+          WHERE fe."vehicleId" = vm."id" AND fe."deletedAt" IS NULL AND fe."isActive" = true
+          UNION ALL
+          SELECT GREATEST(vl."startOdometerReading", COALESCE(vl."endOdometerReading", 0)) as odometer
+          FROM vehicle_logs vl
+          WHERE vl."vehicleId" = vm."id" AND vl."deletedAt" IS NULL
         ) combined
       ) latest_odometer ON true
       WHERE vm."deletedAt" IS NULL AND vv."deletedAt" IS NULL
