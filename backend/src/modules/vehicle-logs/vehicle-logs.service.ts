@@ -334,12 +334,37 @@ export class VehicleLogsService {
     return log;
   }
 
-  async findById(id: string, includeRelations = true): Promise<VehicleLogEntity> {
-    const relations = includeRelations ? ['vehicle', 'driver', 'site', 'files'] : [];
-    return await this.findOneOrFail({
+  async findById(id: string, includeRelations = true) {
+    const relations = includeRelations
+      ? ['vehicle', 'driver', 'site', 'files', 'createdByUser', 'updatedByUser']
+      : [];
+    const record = await this.findOneOrFail({
       where: { id, deletedAt: IsNull() },
       relations,
     });
+
+    // Transform response to include user details
+    return {
+      ...record,
+      createdByUser: record.createdByUser
+        ? {
+            id: record.createdByUser.id,
+            firstName: record.createdByUser.firstName,
+            lastName: record.createdByUser.lastName,
+            email: record.createdByUser.email,
+            employeeId: record.createdByUser.employeeId,
+          }
+        : null,
+      updatedByUser: record.updatedByUser
+        ? {
+            id: record.updatedByUser.id,
+            firstName: record.updatedByUser.firstName,
+            lastName: record.updatedByUser.lastName,
+            email: record.updatedByUser.email,
+            employeeId: record.updatedByUser.employeeId,
+          }
+        : null,
+    };
   }
 
   // ============ HELPER METHODS ============
