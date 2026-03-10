@@ -127,6 +127,8 @@ export const DATABASE_FIELD_NAMES = {
   vehicleLogStartOdometer: 'startOdometerFiles',
   vehicleLogEndOdometer: 'endOdometerFiles',
   vehicleLogOther: 'otherFiles',
+  // DSR files
+  dsrFiles: 'fileKeys',
 };
 
 export const FILE_ERRORS = {
