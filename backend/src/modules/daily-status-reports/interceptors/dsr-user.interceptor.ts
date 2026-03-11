@@ -14,9 +14,10 @@ export class DsrUserInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // HR and ADMIN can filter by any userId
+    // SUPER_ADMIN, HR and ADMIN can filter by any userId
     // Other roles can only see their own DSRs
-    if (user.role !== Roles.HR && user.role !== Roles.ADMIN) {
+    const allowedRoles = [Roles.SUPER_ADMIN, Roles.HR, Roles.ADMIN, Roles.MANAGER];
+    if (!allowedRoles.includes(user.role)) {
       if (request.query.userId && request.query.userId !== user.id) {
         throw new BadRequestException('You can only view your own Daily Status Reports');
       }
