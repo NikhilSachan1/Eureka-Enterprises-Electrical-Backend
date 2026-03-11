@@ -258,12 +258,69 @@ export class DsrService {
     return dsr;
   }
 
-  async findById(id: string, includeRelations = true): Promise<DailyStatusReportEntity> {
-    const relations = includeRelations ? ['site', 'user', 'files', 'editHistory'] : [];
-    return await this.findOneOrFail({
+  async findById(id: string, includeRelations = true) {
+    const relations = includeRelations
+      ? ['site', 'user', 'files', 'editHistory', 'createdByUser', 'updatedByUser']
+      : [];
+    const record = await this.findOneOrFail({
       where: { id },
       relations,
     });
+
+    // Transform response to include all necessary information
+    return {
+      ...record,
+      site: record.site ? { id: record.site.id, name: record.site.name } : null,
+      user: record.user
+        ? {
+            id: record.user.id,
+            firstName: record.user.firstName,
+            lastName: record.user.lastName,
+            email: record.user.email,
+            employeeId: record.user.employeeId,
+          }
+        : null,
+      createdByUser: record.createdByUser
+        ? {
+            id: record.createdByUser.id,
+            firstName: record.createdByUser.firstName,
+            lastName: record.createdByUser.lastName,
+            email: record.createdByUser.email,
+            employeeId: record.createdByUser.employeeId,
+          }
+        : null,
+      updatedByUser: record.updatedByUser
+        ? {
+            id: record.updatedByUser.id,
+            firstName: record.updatedByUser.firstName,
+            lastName: record.updatedByUser.lastName,
+            email: record.updatedByUser.email,
+            employeeId: record.updatedByUser.employeeId,
+          }
+        : null,
+      files: record.files
+        ? record.files
+            .filter((file) => !file.deletedAt)
+            .map((file) => ({
+              id: file.id,
+              fileKey: file.fileKey,
+              fileName: file.fileName,
+              fileType: file.fileType,
+            }))
+        : [],
+      editHistory: record.editHistory
+        ? record.editHistory
+            .filter((history) => !history.deletedAt)
+            .map((history) => ({
+              id: history.id,
+              editedBy: history.editedBy,
+              editedAt: history.editedAt,
+              previousValues: history.previousValues,
+              newValues: history.newValues,
+              changeReason: history.changeReason,
+            }))
+        : [],
+    };
   }
 
   async update(id: string, updateDto: UpdateDsrDto, updatedBy: string, fileKeys: string[] = []) {
@@ -346,7 +403,7 @@ export class DsrService {
     );
   }
 
-  async restore(id: string): Promise<{ message: string; data: DailyStatusReportEntity }> {
+  async restore(id: string) {
     const dsr = await this.dsrRepository.findOne({
       where: { id },
       withDeleted: true,
