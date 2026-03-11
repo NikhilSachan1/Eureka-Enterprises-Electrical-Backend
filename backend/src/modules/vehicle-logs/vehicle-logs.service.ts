@@ -306,7 +306,7 @@ export class VehicleLogsService {
     if (anomalyDetected !== undefined) where.anomalyDetected = anomalyDetected;
 
     const relations: string[] = [];
-    if (includeVehicle) relations.push('vehicle');
+    if (includeVehicle) relations.push('vehicle', 'vehicle.vehicleVersions');
     if (includeDriver) relations.push('driver');
     if (includeSite) relations.push('site');
     if (includeFiles) relations.push('files');
@@ -319,7 +319,28 @@ export class VehicleLogsService {
       take: pageSize,
     });
 
-    return this.utilityService.listResponse(records, totalRecords);
+    // Transform records to include vehicle details from active version
+    const transformedRecords = records.map((record: any) => {
+      if (record.vehicle && record.vehicle.vehicleVersions) {
+        const activeVersion = record.vehicle.vehicleVersions.find((v: any) => v.isActive);
+        if (activeVersion) {
+          record.vehicle = {
+            id: record.vehicle.id,
+            registrationNo: record.vehicle.registrationNo,
+            cardId: record.vehicle.cardId,
+            brand: activeVersion.brand,
+            model: activeVersion.model,
+            mileage: activeVersion.mileage,
+            fuelType: activeVersion.fuelType,
+            status: activeVersion.status,
+            assignedTo: activeVersion.assignedTo,
+          };
+        }
+      }
+      return record;
+    });
+
+    return this.utilityService.listResponse(transformedRecords, totalRecords);
   }
 
   async findOne(options: FindOneOptions<VehicleLogEntity>) {
@@ -336,16 +357,42 @@ export class VehicleLogsService {
 
   async findById(id: string, includeRelations = true) {
     const relations = includeRelations
-      ? ['vehicle', 'driver', 'site', 'files', 'createdByUser', 'updatedByUser']
+      ? [
+          'vehicle',
+          'vehicle.vehicleVersions',
+          'driver',
+          'site',
+          'files',
+          'createdByUser',
+          'updatedByUser',
+        ]
       : [];
     const record = await this.findOneOrFail({
       where: { id, deletedAt: IsNull() },
       relations,
     });
 
-    // Transform response to include user details
+    // Transform vehicle to include details from active version
+    let vehicleData = null;
+    if (record.vehicle) {
+      const activeVersion = record.vehicle.vehicleVersions?.find((v: any) => v.isActive);
+      vehicleData = {
+        id: record.vehicle.id,
+        registrationNo: record.vehicle.registrationNo,
+        cardId: record.vehicle.cardId,
+        brand: activeVersion?.brand || null,
+        model: activeVersion?.model || null,
+        mileage: activeVersion?.mileage || null,
+        fuelType: activeVersion?.fuelType || null,
+        status: activeVersion?.status || null,
+        assignedTo: activeVersion?.assignedTo || null,
+      };
+    }
+
+    // Transform response to include user and vehicle details
     return {
       ...record,
+      vehicle: vehicleData,
       createdByUser: record.createdByUser
         ? {
             id: record.createdByUser.id,
