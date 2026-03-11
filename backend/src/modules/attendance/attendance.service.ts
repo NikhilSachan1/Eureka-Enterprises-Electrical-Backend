@@ -1625,11 +1625,12 @@ export class AttendanceService {
         },
       });
 
-      // No attendance record for today - fetch current assignments
+      // No attendance record for today - fetch current assignments and user info
       if (!attendance) {
-        const [siteData, vehicleData] = await Promise.all([
+        const [siteData, vehicleData, userData] = await Promise.all([
           this.getUserCurrentSiteWithDetails(userId),
           this.getUserAssignedVehicle(userId),
+          this.getUserBasicInfo(userId),
         ]);
 
         return {
@@ -1640,7 +1641,7 @@ export class AttendanceService {
           status: null,
           approvalStatus: null,
           workDuration: 0,
-          user: null,
+          user: userData,
           site: siteData?.site || null,
           company: siteData?.company || null,
           contractors: siteData?.contractors || [],
@@ -1817,6 +1818,40 @@ export class AttendanceService {
     return {
       id: vehicleResult[0].id,
       registrationNo: vehicleResult[0].registrationNo,
+    };
+  }
+
+  private async getUserBasicInfo(userId: string): Promise<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeId: string;
+  } | null> {
+    const userQuery = `
+      SELECT 
+        id,
+        "firstName",
+        "lastName",
+        email,
+        "employeeId"
+      FROM users
+      WHERE id = $1 AND "deletedAt" IS NULL
+      LIMIT 1
+    `;
+
+    const userResult = await this.dataSource.query(userQuery, [userId]);
+
+    if (!userResult || userResult.length === 0) {
+      return null;
+    }
+
+    return {
+      id: userResult[0].id,
+      firstName: userResult[0].firstName,
+      lastName: userResult[0].lastName,
+      email: userResult[0].email,
+      employeeId: userResult[0].employeeId,
     };
   }
 
