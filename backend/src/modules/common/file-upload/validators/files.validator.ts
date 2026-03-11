@@ -20,20 +20,22 @@ export const validateFileUploads = (uploadedFiles: IFileUpload[], folderName: st
   for (const uploadedFile of uploadedFiles) {
     const { fieldname, mimetype, size, buffer, originalname } = uploadedFile;
     const allowedFormats = FIELD_FORMATS[fieldname];
+    const fieldDisplayName = FIELD_NAME_REFORMED[fieldname] || fieldname;
 
     if (!ALLOWED_FILE_TYPES.includes(mimetype)) {
       throw new BadRequestException(
-        `${FILE_UPLOAD_ERRORS.INVALID_FILE_FORMAT} for ${FIELD_NAME_REFORMED[fieldname]}`,
+        `${FILE_UPLOAD_ERRORS.INVALID_FILE_FORMAT} for ${fieldDisplayName}`,
       );
     }
 
     if (
+      !allowedFormats ||
       !allowedFormats.some((format) =>
-        ALLOWED_MIME_TYPES[format].some((type) => mimetype.startsWith(type)),
+        ALLOWED_MIME_TYPES[format]?.some((type) => mimetype.startsWith(type)),
       )
     ) {
       throw new BadRequestException(
-        `${FILE_UPLOAD_ERRORS.INVALID_FILE_FORMAT} for ${FIELD_NAME_REFORMED[fieldname]}`,
+        `${FILE_UPLOAD_ERRORS.INVALID_FILE_FORMAT} for ${fieldDisplayName}`,
       );
     }
 
