@@ -62,6 +62,9 @@ export class VehicleVersionsService {
         fitnessEndDate: createVehicleDto.fitnessEndDate
           ? new Date(createVehicleDto.fitnessEndDate)
           : undefined,
+        lastServiceDate: createVehicleDto.lastServiceDate
+          ? new Date(createVehicleDto.lastServiceDate)
+          : undefined,
       };
 
       return await this.vehicleVersionsRepository.create(entityData, entityManager);
