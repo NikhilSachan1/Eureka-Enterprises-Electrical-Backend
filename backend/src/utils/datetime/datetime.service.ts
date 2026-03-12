@@ -143,12 +143,16 @@ export class DateTimeService {
   }
 
   /**
-   * Convert a Date object to YYYY-MM-DD string
+   * Convert a Date object or date string to YYYY-MM-DD string
    *
-   * @param date - Date object
+   * @param date - Date object or date string
    * @returns Date string in YYYY-MM-DD format
    */
-  toDateString(date: Date): string {
+  toDateString(date: Date | string): string {
+    if (typeof date === 'string') {
+      // Already a string, extract YYYY-MM-DD part
+      return date.split('T')[0];
+    }
     return date.toISOString().split('T')[0];
   }
 
