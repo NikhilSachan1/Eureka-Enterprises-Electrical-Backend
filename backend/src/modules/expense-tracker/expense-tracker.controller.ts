@@ -30,6 +30,7 @@ import { DetectSource } from './decorators';
 import {
   CreateCreditExpenseDto,
   CreateDebitExpenseDto,
+  CreditBonusExpenseDto,
   ForceExpenseDto,
   EditExpenseDto,
   ExpenseQueryDto,
@@ -97,6 +98,34 @@ export class ExpenseTrackerController {
   ) {
     return this.expenseTrackerService.forceExpense({
       ...forceExpenseDto,
+      createdBy: req.user.id,
+      sourceType,
+      fileKeys,
+      timezone: req.timezone,
+    });
+  }
+
+  @Post('credit-bonus')
+  @ApiOperation({
+    summary: 'Create credit bonus expense entry',
+    description:
+      'Creates a debit expense entry for performance bonus credited to employee. Creates with PENDING status.',
+  })
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    type: CreditBonusExpenseDto,
+    required: true,
+  })
+  async creditBonusExpense(
+    @Request() req: RequestWithTimezone,
+    @Body() creditBonusDto: CreditBonusExpenseDto,
+    @DetectSource() sourceType: EntrySourceType,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.EXPENSE_FILES)
+    { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
+  ) {
+    return this.expenseTrackerService.creditBonusExpense({
+      ...creditBonusDto,
       createdBy: req.user.id,
       sourceType,
       fileKeys,

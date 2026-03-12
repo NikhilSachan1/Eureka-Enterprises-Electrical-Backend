@@ -1,16 +1,21 @@
 import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
+import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 
 @Entity('expenses')
 @Index('idx_expenses_userId', ['userId'])
 @Index('idx_expenses_approvalBy', ['approvalBy'])
 @Index('idx_expenses_approvalStatus', ['approvalStatus'])
-@Index('idx_expenses_originalExpenseId', ['originalExpenseId']) // New index
+@Index('idx_expenses_originalExpenseId', ['originalExpenseId'])
 @Index('idx_expenses_isActive', ['isActive'])
+@Index('idx_expenses_siteId', ['siteId'])
 export class ExpenseTrackerEntity extends BaseEntity {
   @Column({ type: 'uuid', nullable: false })
   userId: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  siteId: string;
 
   @Column({ type: 'varchar', nullable: false })
   category: string;
@@ -71,6 +76,10 @@ export class ExpenseTrackerEntity extends BaseEntity {
   @ManyToOne(() => UserEntity, (user) => user.id, { nullable: false })
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
+
+  @ManyToOne(() => SiteEntity, { nullable: true })
+  @JoinColumn({ name: 'siteId' })
+  site: SiteEntity;
 
   @ManyToOne(() => UserEntity, (user) => user.id, { nullable: true })
   @JoinColumn({ name: 'approvalBy' })

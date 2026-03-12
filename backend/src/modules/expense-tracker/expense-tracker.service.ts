@@ -3,6 +3,7 @@ import { ExpenseTrackerRepository } from './expense-tracker.repository';
 import {
   CreateCreditExpenseDto,
   CreateDebitExpenseDto,
+  CreditBonusExpenseDto,
   EditExpenseDto,
   ExpenseBulkApprovalDto,
   ExpenseApprovalDto,
@@ -266,6 +267,71 @@ export class ExpenseTrackerService {
           );
         }
         return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_FORCE_CREATED };
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async creditBonusExpense(
+    creditBonusDto: CreditBonusExpenseDto & {
+      createdBy: string;
+      sourceType: EntrySourceType;
+      fileKeys: string[];
+      timezone?: string;
+    },
+  ) {
+    try {
+      const {
+        amount,
+        expenseDate,
+        createdBy,
+        sourceType,
+        fileKeys,
+        timezone,
+        siteId,
+        description,
+        category,
+        paymentMode,
+      } = creditBonusDto;
+
+      // Validate category and payment mode
+      await this.validateExpenseCategory(category);
+      await this.validatePaymentMode(paymentMode);
+
+      // Use timezone-aware date comparison
+      const expenseDateStr = this.dateTimeService.toDateString(new Date(expenseDate));
+      if (this.dateTimeService.isFutureDate(expenseDateStr, timezone)) {
+        throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
+      }
+
+      return await this.dataSource.transaction(async (entityManager) => {
+        const expense = await this.expenseTrackerRepository.create({
+          ...creditBonusDto,
+          category,
+          description,
+          paymentMode,
+          siteId,
+          isActive: true,
+          amount: Number(amount),
+          approvalStatus: ApprovalStatus.PENDING,
+          transactionType: TransactionType.DEBIT,
+          expenseEntryType: ExpenseEntryType.CREDIT_BONUS,
+          entrySourceType: sourceType,
+          createdBy,
+        });
+
+        if (fileKeys && fileKeys.length > 0) {
+          await this.expenseFilesService.create(
+            {
+              expenseId: expense.id,
+              fileKeys,
+              createdBy,
+            },
+            entityManager,
+          );
+        }
+        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.CREDIT_BONUS_CREATED, data: expense };
       });
     } catch (error) {
       throw error;
