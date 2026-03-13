@@ -11,6 +11,13 @@ import {
 } from 'class-validator';
 
 export class CreateSiteDocumentDto {
+  @ApiPropertyOptional({
+    description: 'Document file to upload',
+    type: 'string',
+    format: 'binary',
+  })
+  siteDocumentFiles?: any;
+
   @ApiProperty({ description: 'Site ID' })
   @IsUUID()
   @IsNotEmpty()
