@@ -33,7 +33,7 @@ export class SiteDocumentController {
   constructor(private readonly siteDocumentService: SiteDocumentService) {}
 
   @Post()
-  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SITE_DOCUMENT_FILES, maxCount: 1 }]))
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SITE_DOCUMENT_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateSiteDocumentDto })
   @ApiOperation({
