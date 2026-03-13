@@ -75,6 +75,16 @@ export class DsrController {
     return await this.dsrService.getEditHistory(id);
   }
 
+  @Get(':id/versions')
+  @ApiOperation({
+    summary: 'Get DSR version history',
+    description:
+      'Retrieves all versions of a daily status report, including current and previous versions with their full data.',
+  })
+  async getVersionHistory(@Param('id', ParseUUIDPipe) id: string) {
+    return await this.dsrService.getVersionHistory(id);
+  }
+
   @Get(':id/files')
   @ApiOperation({
     summary: 'Get DSR files',
