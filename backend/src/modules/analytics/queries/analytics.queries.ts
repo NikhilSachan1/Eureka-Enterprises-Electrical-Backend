@@ -157,6 +157,15 @@ export const getDashboardAlertsQuery = (companyId?: string) => {
 
 /**
  * Get profitability data for a single site
+ * Includes: Site Documents + Employee Expenses + Fuel Expenses (APPROVED only)
+ *
+ * Date Range Logic:
+ * - If startDate/endDate provided: use those dates
+ * - If not provided: use site's startDate to endDate (or current date if no endDate)
+ *
+ * Expense Linking:
+ * - Employee expenses: linked via siteId OR via allocation during expense date
+ * - Fuel expenses: linked via employee allocation during fill date
  */
 export const getSiteProfitabilityQuery = (
   siteId: string,
@@ -164,23 +173,170 @@ export const getSiteProfitabilityQuery = (
   endDate?: string | null,
 ) => {
   const params: any[] = [siteId];
-  const dateConditions: string[] = [];
 
-  // Apply date filter on document date
-  if (startDate) {
+  // Date filter logic:
+  // - If custom dates provided, use them
+  // - Otherwise, use site's date range (startDate to endDate or current date)
+  let dateFilterDoc = '';
+  let dateFilterExp = '';
+  let dateFilterFuel = '';
+  let useSiteDates = false;
+
+  if (startDate && endDate) {
+    params.push(startDate, endDate);
+    dateFilterDoc = `AND sd."documentDate" >= $${
+      params.length - 1
+    }::date AND sd."documentDate" <= $${params.length}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${
+      params.length - 1
+    }::date AND e."expenseDate"::date <= $${params.length}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${
+      params.length - 1
+    }::date AND fe."fillDate"::date <= $${params.length}::date`;
+  } else if (startDate) {
     params.push(startDate);
-    dateConditions.push(`sd."documentDate" >= $${params.length}::date`);
-  }
-
-  if (endDate) {
+    dateFilterDoc = `AND sd."documentDate" >= $${params.length}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${params.length}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${params.length}::date`;
+  } else if (endDate) {
     params.push(endDate);
-    dateConditions.push(`sd."documentDate" <= $${params.length}::date`);
+    dateFilterDoc = `AND sd."documentDate" <= $${params.length}::date`;
+    dateFilterExp = `AND e."expenseDate"::date <= $${params.length}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date <= $${params.length}::date`;
+  } else {
+    // No date filter provided - use site's date range
+    useSiteDates = true;
   }
 
-  const dateFilter = dateConditions.length > 0 ? `AND ${dateConditions.join(' AND ')}` : '';
+  // Build the query with site date range fallback
+  const siteDateFilterDoc = useSiteDates
+    ? `AND sd."documentDate" >= site_info."startDate" AND sd."documentDate" <= COALESCE(site_info."endDate", CURRENT_DATE)`
+    : dateFilterDoc;
+  const siteDateFilterExp = useSiteDates
+    ? `AND e."expenseDate"::date >= site_info."startDate" AND e."expenseDate"::date <= COALESCE(site_info."endDate", CURRENT_DATE)`
+    : dateFilterExp;
+  const siteDateFilterFuel = useSiteDates
+    ? `AND fe."fillDate"::date >= site_info."startDate" AND fe."fillDate"::date <= COALESCE(site_info."endDate", CURRENT_DATE)`
+    : dateFilterFuel;
 
   return {
     query: `
+      WITH site_info AS (
+        SELECT id, name, status, "startDate", "endDate", "companyId"
+        FROM sites
+        WHERE id = $1 AND "deletedAt" IS NULL
+      ),
+      -- Get all employees currently or previously allocated to this site
+      site_employees AS (
+        SELECT DISTINCT sa."userId"
+        FROM site_allocations sa
+        WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
+      ),
+      -- Get all vehicles used at this site (from vehicle_logs)
+      site_vehicles AS (
+        SELECT DISTINCT vl."vehicleId", MIN(vl."logDate") as "firstUsedAt", MAX(vl."logDate") as "lastUsedAt"
+        FROM vehicle_logs vl
+        WHERE vl."siteId" = $1 AND vl."deletedAt" IS NULL
+        GROUP BY vl."vehicleId"
+      ),
+      site_doc_totals AS (
+        SELECT
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'PO' THEN sd."totalAmount" ELSE 0 END), 0) as "totalPOValue",
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalInvoiced",
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "collectedAmount",
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
+          COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "contractorExpenses",
+          COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "paidContractorExpenses",
+          COUNT(sd.id) as "totalDocuments"
+        FROM site_documents sd, site_info
+        WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
+      ),
+      -- Employee expenses: directly linked via siteId OR via allocation during expense date
+      employee_expenses AS (
+        SELECT COALESCE(SUM(e.amount), 0) as total
+        FROM expenses e, site_info
+        WHERE e."deletedAt" IS NULL
+          AND e."approvalStatus" = 'approved'
+          AND e."transactionType" = 'debit'
+          AND e."isActive" = true
+          AND (
+            -- Directly linked to site
+            e."siteId" = $1
+            OR (
+              -- Linked via allocation: employee was allocated to site during expense date
+              e."userId" IN (SELECT "userId" FROM site_employees)
+              AND EXISTS (
+                SELECT 1 FROM site_allocations sa
+                WHERE sa."userId" = e."userId"
+                  AND sa."siteId" = $1
+                  AND sa."deletedAt" IS NULL
+                  AND e."expenseDate"::date >= sa."allocatedAt"
+                  AND (sa."deallocatedAt" IS NULL OR e."expenseDate"::date <= sa."deallocatedAt")
+              )
+            )
+          )
+          ${siteDateFilterExp}
+      ),
+      -- Fuel expenses: linked via vehicle usage at site (vehicle_logs)
+      -- Only includes fuel expenses for vehicles that were used at this site
+      fuel_expenses AS (
+        SELECT COALESCE(SUM(fe."fuelAmount"), 0) as total
+        FROM fuel_expenses fe
+        INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
+        CROSS JOIN site_info
+        WHERE fe."deletedAt" IS NULL
+          AND fe."approvalStatus" = 'approved'
+          AND fe."transactionType" = 'debit'
+          AND fe."isActive" = true
+          -- Fuel fill date should be within the vehicle's usage period at this site
+          AND fe."fillDate"::date >= sv."firstUsedAt"
+          AND fe."fillDate"::date <= sv."lastUsedAt"
+          ${siteDateFilterFuel}
+      ),
+      -- Payroll/Salary costs: pro-rated based on allocation days in each payroll month
+      -- Only includes PAID or APPROVED payroll entries
+      payroll_costs AS (
+        SELECT COALESCE(SUM(
+          -- Pro-rate salary based on days allocated during that payroll month
+          p."netPayable" * (
+            -- Calculate days allocated in this payroll month
+            LEAST(
+              -- End of allocation or end of month
+              COALESCE(sa."deallocatedAt", (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
+              -- End of payroll month
+              (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
+              -- End of site date range filter (if provided)
+              COALESCE(site_info."endDate", CURRENT_DATE)
+            )
+            -
+            GREATEST(
+              -- Start of allocation or start of month
+              sa."allocatedAt",
+              -- Start of payroll month
+              make_date(p.year, p.month, 1),
+              -- Start of site date range filter (if provided)
+              site_info."startDate"
+            )
+            + 1
+          )::numeric
+          /
+          -- Total days in the payroll month
+          EXTRACT(DAY FROM (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day'))::numeric
+        ), 0) as total
+        FROM payroll p
+        INNER JOIN site_allocations sa ON sa."userId" = p."userId"
+        CROSS JOIN site_info
+        WHERE p."deletedAt" IS NULL
+          AND sa."siteId" = $1
+          AND sa."deletedAt" IS NULL
+          AND p.status IN ('PAID', 'APPROVED')
+          -- Payroll month overlaps with allocation period
+          AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
+          AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
+          -- Payroll month overlaps with site date range
+          AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE)
+          AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"
+      )
       SELECT
         s.id as "siteId",
         s.name as "siteName",
@@ -190,46 +346,30 @@ export const getSiteProfitabilityQuery = (
         s."endDate",
         (COALESCE(s."endDate"::date, CURRENT_DATE) - s."startDate"::date) + 1 as "durationDays",
         
-        -- Revenue calculations (filtered by date range)
-        COALESCE(SUM(CASE 
-          WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'PO' 
-          THEN sd."totalAmount" ELSE 0 
-        END), 0) as "totalPOValue",
+        -- Revenue from site documents
+        sdt."totalPOValue",
+        sdt."totalInvoiced",
+        sdt."collectedAmount",
+        sdt."totalRevenue",
         
-        COALESCE(SUM(CASE 
-          WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' 
-          THEN sd."totalAmount" ELSE 0 
-        END), 0) as "totalInvoiced",
+        -- Expenses breakdown
+        sdt."contractorExpenses",
+        sdt."paidContractorExpenses",
+        ee.total as "employeeExpenses",
+        fue.total as "fuelExpenses",
+        pc.total as "payrollCosts",
+        (sdt."contractorExpenses" + ee.total + fue.total + pc.total) as "totalExpenses",
         
-        COALESCE(SUM(CASE 
-          WHEN sd.direction = 'RECEIVABLE' AND sd."paymentStatus" = 'PAID' 
-          THEN sd."totalAmount" ELSE 0 
-        END), 0) as "collectedAmount",
-        
-        COALESCE(SUM(CASE 
-          WHEN sd.direction = 'RECEIVABLE' 
-          THEN sd."totalAmount" ELSE 0 
-        END), 0) as "totalRevenue",
-        
-        -- Expense calculations
-        COALESCE(SUM(CASE 
-          WHEN sd.direction = 'PAYABLE' 
-          THEN sd."totalAmount" ELSE 0 
-        END), 0) as "totalExpenses",
-        
-        COALESCE(SUM(CASE 
-          WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PAID' 
-          THEN sd."totalAmount" ELSE 0 
-        END), 0) as "paidExpenses",
-        
-        -- Document counts
-        COUNT(sd.id) as "totalDocuments"
+        -- Document count
+        sdt."totalDocuments"
         
       FROM sites s
       LEFT JOIN companies c ON s."companyId" = c.id
-      LEFT JOIN site_documents sd ON sd."siteId" = s.id AND sd."deletedAt" IS NULL ${dateFilter}
+      CROSS JOIN site_doc_totals sdt
+      CROSS JOIN employee_expenses ee
+      CROSS JOIN fuel_expenses fue
+      CROSS JOIN payroll_costs pc
       WHERE s.id = $1 AND s."deletedAt" IS NULL
-      GROUP BY s.id, s.name, c.name, s.status, s."startDate", s."endDate"
     `,
     params,
   };
@@ -310,6 +450,15 @@ export const getSiteDocumentSummaryQuery = (siteId: string) => {
 
 /**
  * Get profitability summary for all sites (for comparison)
+ * Includes: Site Documents + Employee Expenses + Fuel Expenses (APPROVED only)
+ *
+ * Date Range Logic:
+ * - If startDate/endDate provided: use those dates
+ * - If not provided: use each site's startDate to endDate (or current date if no endDate)
+ *
+ * Expense Linking:
+ * - Employee expenses: linked via siteId OR via allocation during expense date
+ * - Fuel expenses: linked via employee allocation during fill date
  */
 export const getAllSitesProfitabilityQuery = (
   status?: string,
@@ -323,7 +472,10 @@ export const getAllSitesProfitabilityQuery = (
 ) => {
   const params: any[] = [];
   const conditions: string[] = ['s."deletedAt" IS NULL'];
-  const docDateConditions: string[] = [];
+  let dateFilterDoc = '';
+  let dateFilterExp = '';
+  let dateFilterFuel = '';
+  let useSiteDates = false;
 
   if (status) {
     params.push(status);
@@ -335,22 +487,45 @@ export const getAllSitesProfitabilityQuery = (
     conditions.push(`s."companyId" = $${params.length}`);
   }
 
-  // Date filters for documents
-  if (startDate) {
+  // Date filters
+  if (startDate && endDate) {
+    params.push(startDate, endDate);
+    dateFilterDoc = `AND sd."documentDate" >= $${
+      params.length - 1
+    }::date AND sd."documentDate" <= $${params.length}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${
+      params.length - 1
+    }::date AND e."expenseDate"::date <= $${params.length}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${
+      params.length - 1
+    }::date AND fe."fillDate"::date <= $${params.length}::date`;
+  } else if (startDate) {
     params.push(startDate);
-    docDateConditions.push(`sd."documentDate" >= $${params.length}::date`);
-  }
-
-  if (endDate) {
+    dateFilterDoc = `AND sd."documentDate" >= $${params.length}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${params.length}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${params.length}::date`;
+  } else if (endDate) {
     params.push(endDate);
-    docDateConditions.push(`sd."documentDate" <= $${params.length}::date`);
+    dateFilterDoc = `AND sd."documentDate" <= $${params.length}::date`;
+    dateFilterExp = `AND e."expenseDate"::date <= $${params.length}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date <= $${params.length}::date`;
+  } else {
+    // No date filter provided - use site's date range for each site
+    useSiteDates = true;
   }
 
-  const docDateFilter =
-    docDateConditions.length > 0 ? `AND ${docDateConditions.join(' AND ')}` : '';
+  // When using site dates, apply date filter using site's own date range
+  const siteDateFilterDoc = useSiteDates
+    ? `AND sd."documentDate" >= s."startDate" AND sd."documentDate" <= COALESCE(s."endDate", CURRENT_DATE)`
+    : dateFilterDoc;
+  const siteDateFilterExp = useSiteDates
+    ? `AND e."expenseDate"::date >= s."startDate" AND e."expenseDate"::date <= COALESCE(s."endDate", CURRENT_DATE)`
+    : dateFilterExp;
+  const siteDateFilterFuel = useSiteDates
+    ? `AND fe."fillDate"::date >= s."startDate" AND fe."fillDate"::date <= COALESCE(s."endDate", CURRENT_DATE)`
+    : dateFilterFuel;
 
   // Validate sort field to prevent SQL injection
-  // Note: These reference CTE columns (site_financials), not the original tables
   const validSortFields: Record<string, string> = {
     name: '"siteName"',
     createdAt: '"createdAt"',
@@ -374,12 +549,106 @@ export const getAllSitesProfitabilityQuery = (
           c.name as "companyName",
           s.status,
           s."createdAt",
+          s."startDate",
+          s."endDate",
           (COALESCE(s."endDate"::date, CURRENT_DATE) - s."startDate"::date) + 1 as "durationDays",
+          
+          -- Revenue from site documents
           COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
-          COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalExpenses"
+          
+          -- Contractor expenses from site documents
+          COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "contractorExpenses",
+          
+          -- Employee expenses: directly linked via siteId OR via allocation during expense date
+          COALESCE((
+            SELECT SUM(e.amount)
+            FROM expenses e
+            WHERE e."deletedAt" IS NULL
+              AND e."approvalStatus" = 'approved'
+              AND e."transactionType" = 'debit'
+              AND e."isActive" = true
+              AND (
+                -- Directly linked to site
+                e."siteId" = s.id
+                OR (
+                  -- Linked via allocation: employee was allocated to site during expense date
+                  EXISTS (
+                    SELECT 1 FROM site_allocations sa
+                    WHERE sa."userId" = e."userId"
+                      AND sa."siteId" = s.id
+                      AND sa."deletedAt" IS NULL
+                      AND e."expenseDate"::date >= sa."allocatedAt"
+                      AND (sa."deallocatedAt" IS NULL OR e."expenseDate"::date <= sa."deallocatedAt")
+                  )
+                )
+              )
+              ${siteDateFilterExp}
+          ), 0) as "employeeExpenses",
+          
+          -- Fuel expenses: linked via vehicle usage at site (vehicle_logs)
+          COALESCE((
+            SELECT SUM(fe."fuelAmount")
+            FROM fuel_expenses fe
+            WHERE fe."deletedAt" IS NULL
+              AND fe."approvalStatus" = 'approved'
+              AND fe."transactionType" = 'debit'
+              AND fe."isActive" = true
+              AND EXISTS (
+                -- Vehicle was used at this site during a period that includes the fuel fill date
+                SELECT 1 FROM vehicle_logs vl
+                WHERE vl."vehicleId" = fe."vehicleId"
+                  AND vl."siteId" = s.id
+                  AND vl."deletedAt" IS NULL
+                  AND fe."fillDate"::date >= (
+                    SELECT MIN(vl2."logDate") FROM vehicle_logs vl2 
+                    WHERE vl2."vehicleId" = fe."vehicleId" AND vl2."siteId" = s.id AND vl2."deletedAt" IS NULL
+                  )
+                  AND fe."fillDate"::date <= (
+                    SELECT MAX(vl3."logDate") FROM vehicle_logs vl3 
+                    WHERE vl3."vehicleId" = fe."vehicleId" AND vl3."siteId" = s.id AND vl3."deletedAt" IS NULL
+                  )
+              )
+              ${siteDateFilterFuel}
+          ), 0) as "fuelExpenses",
+          
+          -- Payroll/Salary costs: pro-rated based on allocation days in each payroll month
+          COALESCE((
+            SELECT SUM(
+              p."netPayable" * (
+                -- Days allocated in this payroll month
+                LEAST(
+                  COALESCE(sa."deallocatedAt", (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
+                  (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
+                  COALESCE(s."endDate", CURRENT_DATE)
+                )
+                -
+                GREATEST(
+                  sa."allocatedAt",
+                  make_date(p.year, p.month, 1),
+                  s."startDate"
+                )
+                + 1
+              )::numeric
+              /
+              EXTRACT(DAY FROM (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day'))::numeric
+            )
+            FROM payroll p
+            INNER JOIN site_allocations sa ON sa."userId" = p."userId"
+            WHERE p."deletedAt" IS NULL
+              AND sa."siteId" = s.id
+              AND sa."deletedAt" IS NULL
+              AND p.status IN ('PAID', 'APPROVED')
+              -- Payroll month overlaps with allocation period
+              AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
+              AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
+              -- Payroll month overlaps with site date range
+              AND make_date(p.year, p.month, 1) <= COALESCE(s."endDate", CURRENT_DATE)
+              AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= s."startDate"
+          ), 0) as "payrollCosts"
+          
         FROM sites s
         LEFT JOIN companies c ON s."companyId" = c.id
-        LEFT JOIN site_documents sd ON sd."siteId" = s.id AND sd."deletedAt" IS NULL ${docDateFilter}
+        LEFT JOIN site_documents sd ON sd."siteId" = s.id AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
         WHERE ${conditions.join(' AND ')}
         GROUP BY s.id, s.name, c.name, s.status, s."createdAt", s."startDate", s."endDate"
       )
@@ -388,13 +657,19 @@ export const getAllSitesProfitabilityQuery = (
         "siteName",
         "companyName",
         status,
+        "startDate",
+        "endDate",
         "durationDays",
         "totalRevenue",
-        "totalExpenses",
-        "totalRevenue" - "totalExpenses" as profit,
+        "contractorExpenses",
+        "employeeExpenses",
+        "fuelExpenses",
+        "payrollCosts",
+        ("contractorExpenses" + "employeeExpenses" + "fuelExpenses" + "payrollCosts") as "totalExpenses",
+        "totalRevenue" - ("contractorExpenses" + "employeeExpenses" + "fuelExpenses" + "payrollCosts") as profit,
         CASE 
           WHEN "totalRevenue" > 0 
-          THEN ROUND((("totalRevenue" - "totalExpenses") / "totalRevenue" * 100)::numeric, 2)
+          THEN ROUND((("totalRevenue" - ("contractorExpenses" + "employeeExpenses" + "fuelExpenses" + "payrollCosts")) / "totalRevenue" * 100)::numeric, 2)
           ELSE 0 
         END as "profitMarginPercent"
       FROM site_financials
