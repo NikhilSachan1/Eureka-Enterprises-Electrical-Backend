@@ -126,4 +126,19 @@ export class VehicleLogsRepository {
       throw new InternalServerErrorException(error);
     }
   }
+
+  async softDeleteFilesByType(
+    vehicleLogId: string,
+    fileType: string,
+    entityManager?: EntityManager,
+  ) {
+    try {
+      const repository = entityManager
+        ? entityManager.getRepository(VehicleLogFileEntity)
+        : this.fileRepository;
+      return await repository.softDelete({ vehicleLogId, fileType });
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }

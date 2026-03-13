@@ -255,8 +255,8 @@ export class VehicleLogsService {
 
     await this.vehicleLogsRepository.update({ id }, updatePayload);
 
-    // Create file records
-    await this.createFileRecords(id, userId, fileData);
+    // Create file records (with isUpdate=true to replace existing files)
+    await this.createFileRecords(id, userId, fileData, true);
 
     const message = isCompleting ? VEHICLE_LOG_RESPONSES.COMPLETED : VEHICLE_LOG_RESPONSES.UPDATED;
     return { message };
@@ -639,10 +639,18 @@ export class VehicleLogsService {
     vehicleLogId: string,
     userId: string,
     fileData: { startOdometerFiles?: string[]; endOdometerFiles?: string[]; otherFiles?: string[] },
+    isUpdate = false,
   ) {
     const files: Partial<VehicleLogFileEntity>[] = [];
 
     if (fileData.startOdometerFiles?.length) {
+      // Soft delete existing files of this type if updating
+      if (isUpdate) {
+        await this.vehicleLogsRepository.softDeleteFilesByType(
+          vehicleLogId,
+          VehicleLogFileType.START_ODOMETER,
+        );
+      }
       files.push(
         ...fileData.startOdometerFiles.map((fileKey) => ({
           vehicleLogId,
@@ -654,6 +662,13 @@ export class VehicleLogsService {
     }
 
     if (fileData.endOdometerFiles?.length) {
+      // Soft delete existing files of this type if updating
+      if (isUpdate) {
+        await this.vehicleLogsRepository.softDeleteFilesByType(
+          vehicleLogId,
+          VehicleLogFileType.END_ODOMETER,
+        );
+      }
       files.push(
         ...fileData.endOdometerFiles.map((fileKey) => ({
           vehicleLogId,
@@ -665,6 +680,13 @@ export class VehicleLogsService {
     }
 
     if (fileData.otherFiles?.length) {
+      // Soft delete existing files of this type if updating
+      if (isUpdate) {
+        await this.vehicleLogsRepository.softDeleteFilesByType(
+          vehicleLogId,
+          VehicleLogFileType.OTHER,
+        );
+      }
       files.push(
         ...fileData.otherFiles.map((fileKey) => ({
           vehicleLogId,
