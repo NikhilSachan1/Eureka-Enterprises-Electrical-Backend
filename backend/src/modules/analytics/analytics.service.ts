@@ -147,11 +147,14 @@ export class AnalyticsService {
 
     const main = mainResult[0];
 
-    // Get expense breakdowns in parallel
-    const [categoryResult, contractorResult, documentResult] = await Promise.all([
+    // Get expense breakdowns and monthly trend in parallel
+    const [categoryResult, contractorResult, documentResult, trendResult] = await Promise.all([
       this.executeQuery(queries.getSiteExpensesByCategoryQuery(siteId)),
       this.executeQuery(queries.getSiteExpensesByContractorQuery(siteId)),
       this.executeQuery(queries.getSiteDocumentSummaryQuery(siteId)),
+      this.executeQuery(
+        queries.getSiteMonthlyTrendQuery(siteId, dateRange.startDate, dateRange.endDate),
+      ),
     ]);
 
     // Parse financial values
@@ -212,6 +215,52 @@ export class AnalyticsService {
       }
     }
 
+    // Build expense breakdown for pie chart
+    const expenseBreakdown: { category: string; amount: number; percentage: number }[] = [];
+    if (totalExpenses > 0) {
+      if (contractorExpenses > 0) {
+        expenseBreakdown.push({
+          category: 'Contractor',
+          amount: contractorExpenses,
+          percentage: Math.round((contractorExpenses / totalExpenses) * 100 * 100) / 100,
+        });
+      }
+      if (employeeExpenses > 0) {
+        expenseBreakdown.push({
+          category: 'Employee',
+          amount: employeeExpenses,
+          percentage: Math.round((employeeExpenses / totalExpenses) * 100 * 100) / 100,
+        });
+      }
+      if (fuelExpenses > 0) {
+        expenseBreakdown.push({
+          category: 'Fuel',
+          amount: fuelExpenses,
+          percentage: Math.round((fuelExpenses / totalExpenses) * 100 * 100) / 100,
+        });
+      }
+      if (payrollCosts > 0) {
+        expenseBreakdown.push({
+          category: 'Payroll',
+          amount: payrollCosts,
+          percentage: Math.round((payrollCosts / totalExpenses) * 100 * 100) / 100,
+        });
+      }
+    }
+
+    // Process monthly trend data
+    const monthlyTrend = trendResult.map((row: any) => ({
+      month: row.month,
+      monthLabel: row.monthLabel,
+      revenue: parseFloat(row.revenue) || 0,
+      contractorExpenses: parseFloat(row.contractorExpenses) || 0,
+      employeeExpenses: parseFloat(row.employeeExpenses) || 0,
+      fuelExpenses: parseFloat(row.fuelExpenses) || 0,
+      payrollCosts: parseFloat(row.payrollCosts) || 0,
+      totalExpenses: parseFloat(row.totalExpenses) || 0,
+      profit: parseFloat(row.profit) || 0,
+    }));
+
     return {
       site: {
         id: main.siteId,
@@ -236,6 +285,7 @@ export class AnalyticsService {
         employeeExpenses,
         fuelExpenses,
         payrollCosts,
+        breakdown: expenseBreakdown,
         byCategory: expensesByCategory,
         byContractor: expensesByContractor,
       },
@@ -251,6 +301,7 @@ export class AnalyticsService {
         byType,
         byStatus,
       },
+      monthlyTrend,
     };
   }
 

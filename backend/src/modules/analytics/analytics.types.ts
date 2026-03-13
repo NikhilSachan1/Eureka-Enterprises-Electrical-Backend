@@ -55,6 +55,7 @@ export interface SiteProfitabilityResponse {
   expenses: ExpenseBreakdown;
   profitability: ProfitabilityMetrics;
   documentSummary: DocumentSummary;
+  monthlyTrend: MonthlyTrendItem[];
 }
 
 export interface SiteBasicInfo {
@@ -82,8 +83,27 @@ export interface ExpenseBreakdown {
   employeeExpenses: number;
   fuelExpenses: number;
   payrollCosts: number;
+  breakdown: ExpenseBreakdownItem[];
   byCategory: CategoryAmount[];
   byContractor: ContractorExpense[];
+}
+
+export interface ExpenseBreakdownItem {
+  category: string;
+  amount: number;
+  percentage: number;
+}
+
+export interface MonthlyTrendItem {
+  month: string;
+  monthLabel: string;
+  revenue: number;
+  contractorExpenses: number;
+  employeeExpenses: number;
+  fuelExpenses: number;
+  payrollCosts: number;
+  totalExpenses: number;
+  profit: number;
 }
 
 export interface CategoryAmount {

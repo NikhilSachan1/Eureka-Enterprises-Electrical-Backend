@@ -449,6 +449,162 @@ export const getSiteDocumentSummaryQuery = (siteId: string) => {
 };
 
 /**
+ * Get monthly trend data for site profitability (Revenue vs Expenses vs Profit)
+ * Returns monthly breakdown within the site's date range
+ */
+export const getSiteMonthlyTrendQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const params: any[] = [siteId];
+
+  if (startDate && endDate) {
+    params.push(startDate, endDate);
+  }
+
+  return {
+    query: `
+      WITH site_info AS (
+        SELECT id, "startDate", "endDate"
+        FROM sites
+        WHERE id = $1 AND "deletedAt" IS NULL
+      ),
+      -- Generate months within site date range
+      months AS (
+        SELECT 
+          DATE_TRUNC('month', generate_series(
+            GREATEST(site_info."startDate", COALESCE($2::date, site_info."startDate")),
+            LEAST(COALESCE(site_info."endDate", CURRENT_DATE), COALESCE($3::date, COALESCE(site_info."endDate", CURRENT_DATE))),
+            '1 month'::interval
+          ))::date as month_start
+        FROM site_info
+      ),
+      -- Site employees for linking
+      site_employees AS (
+        SELECT DISTINCT sa."userId", sa."allocatedAt", sa."deallocatedAt"
+        FROM site_allocations sa
+        WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
+      ),
+      -- Site vehicles for linking fuel expenses
+      site_vehicles AS (
+        SELECT DISTINCT vl."vehicleId", MIN(vl."logDate") as "firstUsedAt", MAX(vl."logDate") as "lastUsedAt"
+        FROM vehicle_logs vl
+        WHERE vl."siteId" = $1 AND vl."deletedAt" IS NULL
+        GROUP BY vl."vehicleId"
+      ),
+      -- Monthly revenue from site documents
+      monthly_revenue AS (
+        SELECT 
+          DATE_TRUNC('month', sd."documentDate")::date as month_start,
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as revenue
+        FROM site_documents sd
+        WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL
+        GROUP BY DATE_TRUNC('month', sd."documentDate")
+      ),
+      -- Monthly contractor expenses from site documents
+      monthly_contractor AS (
+        SELECT 
+          DATE_TRUNC('month', sd."documentDate")::date as month_start,
+          COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as contractor_expenses
+        FROM site_documents sd
+        WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL
+        GROUP BY DATE_TRUNC('month', sd."documentDate")
+      ),
+      -- Monthly employee expenses
+      monthly_employee AS (
+        SELECT 
+          DATE_TRUNC('month', e."expenseDate")::date as month_start,
+          COALESCE(SUM(e.amount), 0) as employee_expenses
+        FROM expenses e
+        WHERE e."deletedAt" IS NULL
+          AND e."approvalStatus" = 'approved'
+          AND e."transactionType" = 'debit'
+          AND e."isActive" = true
+          AND (
+            e."siteId" = $1
+            OR (
+              e."userId" IN (SELECT "userId" FROM site_employees)
+              AND EXISTS (
+                SELECT 1 FROM site_allocations sa
+                WHERE sa."userId" = e."userId"
+                  AND sa."siteId" = $1
+                  AND sa."deletedAt" IS NULL
+                  AND e."expenseDate"::date >= sa."allocatedAt"
+                  AND (sa."deallocatedAt" IS NULL OR e."expenseDate"::date <= sa."deallocatedAt")
+              )
+            )
+          )
+        GROUP BY DATE_TRUNC('month', e."expenseDate")
+      ),
+      -- Monthly fuel expenses
+      monthly_fuel AS (
+        SELECT 
+          DATE_TRUNC('month', fe."fillDate")::date as month_start,
+          COALESCE(SUM(fe."fuelAmount"), 0) as fuel_expenses
+        FROM fuel_expenses fe
+        INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
+        WHERE fe."deletedAt" IS NULL
+          AND fe."approvalStatus" = 'approved'
+          AND fe."transactionType" = 'debit'
+          AND fe."isActive" = true
+          AND fe."fillDate"::date >= sv."firstUsedAt"
+          AND fe."fillDate"::date <= sv."lastUsedAt"
+        GROUP BY DATE_TRUNC('month', fe."fillDate")
+      ),
+      -- Monthly payroll costs
+      monthly_payroll AS (
+        SELECT 
+          make_date(p.year, p.month, 1) as month_start,
+          COALESCE(SUM(
+            p."netPayable" * (
+              LEAST(
+                COALESCE(sa."deallocatedAt", (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
+                (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date
+              )
+              -
+              GREATEST(
+                sa."allocatedAt",
+                make_date(p.year, p.month, 1)
+              )
+              + 1
+            )::numeric
+            /
+            EXTRACT(DAY FROM (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day'))::numeric
+          ), 0) as payroll_costs
+        FROM payroll p
+        INNER JOIN site_allocations sa ON sa."userId" = p."userId"
+        WHERE p."deletedAt" IS NULL
+          AND sa."siteId" = $1
+          AND sa."deletedAt" IS NULL
+          AND p.status IN ('PAID', 'APPROVED')
+          AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
+          AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
+        GROUP BY make_date(p.year, p.month, 1)
+      )
+      SELECT 
+        TO_CHAR(m.month_start, 'YYYY-MM') as month,
+        TO_CHAR(m.month_start, 'Mon YYYY') as "monthLabel",
+        COALESCE(mr.revenue, 0) as revenue,
+        COALESCE(mc.contractor_expenses, 0) as "contractorExpenses",
+        COALESCE(me.employee_expenses, 0) as "employeeExpenses",
+        COALESCE(mf.fuel_expenses, 0) as "fuelExpenses",
+        COALESCE(mp.payroll_costs, 0) as "payrollCosts",
+        (COALESCE(mc.contractor_expenses, 0) + COALESCE(me.employee_expenses, 0) + COALESCE(mf.fuel_expenses, 0) + COALESCE(mp.payroll_costs, 0)) as "totalExpenses",
+        (COALESCE(mr.revenue, 0) - (COALESCE(mc.contractor_expenses, 0) + COALESCE(me.employee_expenses, 0) + COALESCE(mf.fuel_expenses, 0) + COALESCE(mp.payroll_costs, 0))) as profit
+      FROM months m
+      LEFT JOIN monthly_revenue mr ON mr.month_start = m.month_start
+      LEFT JOIN monthly_contractor mc ON mc.month_start = m.month_start
+      LEFT JOIN monthly_employee me ON me.month_start = m.month_start
+      LEFT JOIN monthly_fuel mf ON mf.month_start = m.month_start
+      LEFT JOIN monthly_payroll mp ON mp.month_start = m.month_start
+      ORDER BY m.month_start
+    `,
+    params,
+  };
+};
+
+/**
  * Get profitability summary for all sites (for comparison)
  * Includes: Site Documents + Employee Expenses + Fuel Expenses (APPROVED only)
  *
