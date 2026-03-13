@@ -374,8 +374,12 @@ export class DsrService {
       await this.dsrRepository.update({ id }, { ...updateFields, updatedBy });
     }
 
-    // Add new files if uploaded
+    // Handle file updates - soft delete existing files and add new ones
     if (fileKeys.length > 0) {
+      // Soft delete existing files for this DSR
+      await this.dsrRepository.softDeleteFile({ dsrId: id });
+
+      // Add new files
       for (const fileKey of fileKeys) {
         await this.dsrRepository.createFile({
           dsrId: id,
