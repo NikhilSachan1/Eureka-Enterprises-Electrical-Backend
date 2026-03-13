@@ -159,8 +159,14 @@ export class AnalyticsService {
     const totalInvoiced = parseFloat(main.totalInvoiced) || 0;
     const totalPOValue = parseFloat(main.totalPOValue) || 0;
     const collectedAmount = parseFloat(main.collectedAmount) || 0;
-    const totalExpenses = parseFloat(main.totalExpenses) || 0;
     const durationDays = parseInt(main.durationDays) || 1;
+
+    // Parse expense breakdown
+    const contractorExpenses = parseFloat(main.contractorExpenses) || 0;
+    const employeeExpenses = parseFloat(main.employeeExpenses) || 0;
+    const fuelExpenses = parseFloat(main.fuelExpenses) || 0;
+    const payrollCosts = parseFloat(main.payrollCosts) || 0;
+    const totalExpenses = contractorExpenses + employeeExpenses + fuelExpenses + payrollCosts;
 
     // Calculate derived metrics
     const grossProfit = totalRevenue - totalExpenses;
@@ -169,8 +175,8 @@ export class AnalyticsService {
     const collectionRate =
       totalRevenue > 0 ? Math.round((collectedAmount / totalRevenue) * 100 * 100) / 100 : 0;
 
-    // Process expense categories
-    const totalExpenseAmount = categoryResult.reduce(
+    // Process expense categories from site documents
+    const totalCategoryExpenseAmount = categoryResult.reduce(
       (sum: number, cat: any) => sum + (parseFloat(cat.amount) || 0),
       0,
     );
@@ -179,8 +185,9 @@ export class AnalyticsService {
       category: cat.category,
       amount: parseFloat(cat.amount) || 0,
       percentage:
-        totalExpenseAmount > 0
-          ? Math.round(((parseFloat(cat.amount) || 0) / totalExpenseAmount) * 100 * 100) / 100
+        totalCategoryExpenseAmount > 0
+          ? Math.round(((parseFloat(cat.amount) || 0) / totalCategoryExpenseAmount) * 100 * 100) /
+            100
           : 0,
     }));
 
@@ -225,6 +232,10 @@ export class AnalyticsService {
       },
       expenses: {
         total: totalExpenses,
+        contractorExpenses,
+        employeeExpenses,
+        fuelExpenses,
+        payrollCosts,
         byCategory: expensesByCategory,
         byContractor: expensesByContractor,
       },
@@ -274,28 +285,47 @@ export class AnalyticsService {
       this.executeQuery(queries.getAllSitesProfitabilityCountQuery(dto.status, dto.companyId)),
     ]);
 
-    // Map results
+    // Map results with expense breakdown
     const sites = sitesResult.map((row: any) => ({
       siteId: row.siteId,
       siteName: row.siteName,
       companyName: row.companyName,
       status: row.status,
+      startDate: row.startDate,
+      endDate: row.endDate,
       totalRevenue: parseFloat(row.totalRevenue) || 0,
+      contractorExpenses: parseFloat(row.contractorExpenses) || 0,
+      employeeExpenses: parseFloat(row.employeeExpenses) || 0,
+      fuelExpenses: parseFloat(row.fuelExpenses) || 0,
+      payrollCosts: parseFloat(row.payrollCosts) || 0,
       totalExpenses: parseFloat(row.totalExpenses) || 0,
       profit: parseFloat(row.profit) || 0,
       profitMarginPercent: parseFloat(row.profitMarginPercent) || 0,
       durationDays: parseInt(row.durationDays) || 0,
     }));
 
-    // Calculate totals
+    // Calculate totals with expense breakdown
     const totals = sites.reduce(
       (acc, site) => ({
         totalRevenue: acc.totalRevenue + site.totalRevenue,
+        contractorExpenses: acc.contractorExpenses + site.contractorExpenses,
+        employeeExpenses: acc.employeeExpenses + site.employeeExpenses,
+        fuelExpenses: acc.fuelExpenses + site.fuelExpenses,
+        payrollCosts: acc.payrollCosts + site.payrollCosts,
         totalExpenses: acc.totalExpenses + site.totalExpenses,
         totalProfit: acc.totalProfit + site.profit,
         siteCount: acc.siteCount + 1,
       }),
-      { totalRevenue: 0, totalExpenses: 0, totalProfit: 0, siteCount: 0 },
+      {
+        totalRevenue: 0,
+        contractorExpenses: 0,
+        employeeExpenses: 0,
+        fuelExpenses: 0,
+        payrollCosts: 0,
+        totalExpenses: 0,
+        totalProfit: 0,
+        siteCount: 0,
+      },
     );
 
     const avgProfitMargin =
@@ -1031,11 +1061,14 @@ export class AnalyticsService {
     endDate?: string,
     timezone?: string,
   ) {
-    if (period === AnalyticsPeriod.CUSTOM) {
-      if (!startDate || !endDate) {
-        throw new BadRequestException(ANALYTICS_ERRORS.CUSTOM_DATES_REQUIRED);
-      }
+    // If custom dates are provided (with or without period=CUSTOM), use them
+    if (startDate && endDate) {
       return { startDate, endDate };
+    }
+
+    // If period is CUSTOM but dates are missing, throw error
+    if (period === AnalyticsPeriod.CUSTOM) {
+      throw new BadRequestException(ANALYTICS_ERRORS.CUSTOM_DATES_REQUIRED);
     }
 
     // Use DateTimeService for timezone-aware "today"

@@ -78,6 +78,10 @@ export interface RevenueBreakdown {
 
 export interface ExpenseBreakdown {
   total: number;
+  contractorExpenses: number;
+  employeeExpenses: number;
+  fuelExpenses: number;
+  payrollCosts: number;
   byCategory: CategoryAmount[];
   byContractor: ContractorExpense[];
 }
