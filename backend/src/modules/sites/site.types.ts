@@ -5,6 +5,7 @@
 // Allocated employee info for site list
 export interface AllocatedEmployee {
   id: string;
+  allocationId: string;
   employeeId: string;
   firstName: string;
   lastName: string;
@@ -12,6 +13,7 @@ export interface AllocatedEmployee {
   profilePicture: string | null;
   role: string;
   allocationType: string;
+  allocatedAt: string;
 }
 
 // Site allocation info including count and employees

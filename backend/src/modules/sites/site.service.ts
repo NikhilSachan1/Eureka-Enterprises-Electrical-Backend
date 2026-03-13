@@ -225,6 +225,7 @@ export class SiteService {
         }
         allocationBySite.get(siteId)!.push({
           id: row.userId,
+          allocationId: row.allocationId,
           employeeId: row.employeeId,
           firstName: row.firstName,
           lastName: row.lastName,
@@ -232,6 +233,7 @@ export class SiteService {
           profilePicture: row.profilePicture,
           role: row.role,
           allocationType: row.allocationType,
+          allocatedAt: row.allocatedAt,
         });
       }
 

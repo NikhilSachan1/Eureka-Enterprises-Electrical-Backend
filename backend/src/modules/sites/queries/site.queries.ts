@@ -21,10 +21,12 @@ export const getAllocatedEmployeesBySitesQuery = (siteIds: string[]) => {
   return {
     query: `
       SELECT 
+        sa."id" AS "allocationId",
         sa."siteId",
         sa."userId",
         sa."role",
         sa."allocationType",
+        sa."allocatedAt",
         u."firstName",
         u."lastName",
         u."email",
