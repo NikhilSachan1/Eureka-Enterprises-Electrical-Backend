@@ -68,12 +68,13 @@ export class DsrService {
       throw new BadRequestException(DSR_ERRORS.SITE_NOT_ALLOCATED);
     }
 
-    // Check if DSR already exists for this site, user, and date
+    // Check if active DSR already exists for this site, user, and date
     const existingDsr = await this.dsrRepository.findOne({
       where: {
         siteId: createDto.siteId,
         userId,
         reportDate: new Date(createDto.reportDate),
+        isActive: true,
         deletedAt: IsNull(),
       },
     });
@@ -120,6 +121,12 @@ export class DsrService {
       approvedBy: SYSTEM_USER_ID,
       approvedAt: new Date(),
       createdBy: userId,
+      // Versioning fields
+      isActive: true,
+      versionNumber: 1,
+      originalDsrId: null,
+      parentDsrId: null,
+      editReason: null,
     };
 
     const dsr = await this.dsrRepository.create(dsrData);
@@ -163,6 +170,7 @@ export class DsrService {
 
     const where: any = {
       deletedAt: IsNull(),
+      isActive: true,
     };
 
     if (siteId) where.siteId = siteId;
@@ -320,11 +328,22 @@ export class DsrService {
               changeReason: history.changeReason,
             }))
         : [],
+      // Versioning info
+      versionInfo: {
+        versionNumber: record.versionNumber || 1,
+        isActive: record.isActive ?? true,
+        originalDsrId: record.originalDsrId,
+        parentDsrId: record.parentDsrId,
+        editReason: record.editReason,
+      },
     };
   }
 
   async update(id: string, updateDto: UpdateDsrDto, updatedBy: string, fileKeys: string[] = []) {
-    const existingDsr = await this.findOneOrFail({ where: { id } });
+    const existingDsr = await this.findOneOrFail({
+      where: { id, isActive: true },
+      relations: ['files'],
+    });
 
     // Check edit cutoff from config
     await this.checkEditCutoff(existingDsr);
@@ -344,48 +363,69 @@ export class DsrService {
       await this.validateEquipment(updateDto.equipmentUsed, existingDsr.userId);
     }
 
-    // Track changes for edit history
+    // Remove fields that shouldn't be directly updated
     const { changeReason, ...updateFields } = updateDto;
-    // Remove dsrFiles from updateFields as it's handled separately via fileKeys
     delete (updateFields as any).dsrFiles;
-    const previousValues: Record<string, any> = {};
-    const newValues: Record<string, any> = {};
 
-    for (const [key, value] of Object.entries(updateFields)) {
-      if (value !== undefined && (existingDsr as any)[key] !== value) {
-        previousValues[key] = (existingDsr as any)[key];
-        newValues[key] = value;
-      }
-    }
+    // Mark old DSR as inactive (versioning approach like expense tracker)
+    await this.dsrRepository.update({ id }, { isActive: false, updatedBy });
 
-    // Only proceed if there are actual changes
-    if (Object.keys(newValues).length > 0) {
-      // Create edit history record
-      await this.dsrRepository.createEditHistory({
-        dsrId: id,
-        editedBy: updatedBy,
-        editedAt: new Date(),
-        previousValues,
-        newValues,
-        changeReason: changeReason || null,
-      });
+    // Prepare data for new version
+    const originalDsrId = existingDsr.originalDsrId || existingDsr.id;
+    const parentDsrId = existingDsr.id;
+    const versionNumber = (existingDsr.versionNumber || 1) + 1;
 
-      // Update the DSR
-      await this.dsrRepository.update({ id }, { ...updateFields, updatedBy });
-    }
+    // Create new DSR version with updated data (only copy relevant fields)
+    const newDsr = await this.dsrRepository.create({
+      // Core fields from existing DSR
+      siteId: existingDsr.siteId,
+      userId: existingDsr.userId,
+      reportDate: existingDsr.reportDate,
+      workTypes: existingDsr.workTypes,
+      workDescription: existingDsr.workDescription,
+      hoursWorked: existingDsr.hoursWorked,
+      challenges: existingDsr.challenges,
+      reportingEngineerName: existingDsr.reportingEngineerName,
+      reportingEngineerContact: existingDsr.reportingEngineerContact,
+      weatherCondition: existingDsr.weatherCondition,
+      manpowerCount: existingDsr.manpowerCount,
+      equipmentUsed: existingDsr.equipmentUsed,
+      status: existingDsr.status,
+      approvedBy: existingDsr.approvedBy,
+      approvedAt: existingDsr.approvedAt,
+      remarks: existingDsr.remarks,
+      // Override with updated fields
+      ...updateFields,
+      // Versioning fields
+      isActive: true,
+      originalDsrId,
+      parentDsrId,
+      versionNumber,
+      editReason: changeReason || null,
+      createdBy: existingDsr.createdBy,
+      updatedBy,
+    });
 
-    // Handle file updates - soft delete existing files and add new ones
+    // Handle files - create new file records for the new DSR version
     if (fileKeys.length > 0) {
-      // Soft delete existing files for this DSR
-      await this.dsrRepository.softDeleteFile({ dsrId: id });
-
-      // Add new files
+      // Add new files to the new DSR version
       for (const fileKey of fileKeys) {
         await this.dsrRepository.createFile({
-          dsrId: id,
+          dsrId: newDsr.id,
           fileKey,
           fileName: fileKey.split('/').pop() || 'file',
           fileType: this.getFileTypeFromKey(fileKey),
+          createdBy: updatedBy,
+        });
+      }
+    } else if (existingDsr.files?.length) {
+      // Copy existing files to new version if no new files provided
+      for (const file of existingDsr.files.filter((f) => !f.deletedAt)) {
+        await this.dsrRepository.createFile({
+          dsrId: newDsr.id,
+          fileKey: file.fileKey,
+          fileName: file.fileName,
+          fileType: file.fileType,
           createdBy: updatedBy,
         });
       }
@@ -398,7 +438,7 @@ export class DsrService {
   }
 
   async remove(id: string, deletedBy: string) {
-    await this.findOneOrFail({ where: { id } });
+    await this.findOneOrFail({ where: { id, isActive: true } });
     await this.dsrRepository.update({ id }, { deletedBy });
     await this.dsrRepository.softDelete({ id });
     return this.utilityService.getSuccessMessage(
@@ -446,6 +486,61 @@ export class DsrService {
       relations: ['editedByUser'],
       order: { editedAt: 'DESC' },
     });
+  }
+
+  // Get version history for a DSR (all versions including current and previous)
+  async getVersionHistory(dsrId: string) {
+    const currentDsr = await this.findOneOrFail({ where: { id: dsrId } });
+
+    // Get the original DSR ID (first version)
+    const originalId = currentDsr.originalDsrId || currentDsr.id;
+
+    // Find all versions (both active and inactive) that share the same original ID
+    const versions = await this.dsrRepository.findAll({
+      where: [{ id: originalId }, { originalDsrId: originalId }],
+      relations: ['files', 'createdByUser', 'updatedByUser'],
+      order: { versionNumber: 'DESC' },
+    });
+
+    return versions.map((version) => ({
+      id: version.id,
+      versionNumber: version.versionNumber,
+      isActive: version.isActive,
+      editReason: version.editReason,
+      createdAt: version.createdAt,
+      updatedAt: version.updatedAt,
+      createdBy: version.createdByUser
+        ? {
+            id: version.createdByUser.id,
+            firstName: version.createdByUser.firstName,
+            lastName: version.createdByUser.lastName,
+          }
+        : null,
+      updatedBy: version.updatedByUser
+        ? {
+            id: version.updatedByUser.id,
+            firstName: version.updatedByUser.firstName,
+            lastName: version.updatedByUser.lastName,
+          }
+        : null,
+      // Include key fields for comparison
+      workTypes: version.workTypes,
+      workDescription: version.workDescription,
+      challenges: version.challenges,
+      weatherCondition: version.weatherCondition,
+      manpowerCount: version.manpowerCount,
+      hoursWorked: version.hoursWorked,
+      remarks: version.remarks,
+      files:
+        version.files
+          ?.filter((f) => !f.deletedAt)
+          .map((f) => ({
+            id: f.id,
+            fileKey: f.fileKey,
+            fileName: f.fileName,
+            fileType: f.fileType,
+          })) || [],
+    }));
   }
 
   // Get files for a DSR
