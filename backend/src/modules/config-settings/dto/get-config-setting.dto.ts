@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsOptional, IsUUID, IsString, IsBoolean } from 'class-validator';
 
 export class GetConfigSettingDto {
@@ -19,5 +20,10 @@ export class GetConfigSettingDto {
   })
   @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
   isActive?: boolean;
 }

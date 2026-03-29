@@ -51,6 +51,32 @@ export class ConfigurationService {
     }
   }
 
+  async findOneById(id: string): Promise<ConfigurationEntity> {
+    try {
+      const configuration = await this.configurationRepository.findOne({
+        where: { id },
+        relations: ['configSettings'],
+      });
+      if (!configuration) {
+        throw new NotFoundException(CONFIGURATION_ERRORS.NOT_FOUND);
+      }
+      return configuration;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async findAllWithActiveConfigSettings(options: GetConfigurationDto): Promise<{
+    records: ConfigurationEntity[];
+    totalRecords: number;
+  }> {
+    try {
+      return await this.configurationRepository.findAllWithActiveConfigSettings(options);
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async findOneOrFail(options: FindOneOptions<ConfigurationEntity>): Promise<ConfigurationEntity> {
     try {
       const configuration = await this.configurationRepository.findOne(options);

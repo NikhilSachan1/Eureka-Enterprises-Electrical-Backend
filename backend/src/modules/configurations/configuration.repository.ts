@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class ConfigurationRepository {
@@ -39,17 +40,18 @@ export class ConfigurationRepository {
     totalRecords: number;
   }> {
     try {
-      const { page, pageSize, search, ...rest } = options as any;
+      const { page, pageSize, sortField, sortOrder, search, ...rest } = options as any;
       const where: FindOptionsWhere<ConfigurationEntity> = { deletedAt: null };
       if (search) {
         where.key = ILike(`%${search}%`);
         where.label = ILike(`%${search}%`);
       }
-      if (rest.where) {
-        Object.assign(where, rest.where);
+      if (sortField && sortOrder) {
+        where[sortField] = sortOrder === SortOrder.ASC ? SortOrder.ASC : SortOrder.DESC;
       }
+      //pass rest to where as well
+      Object.assign(where, rest);
       const [configurations, total] = await this.repository.findAndCount({
-        ...rest,
         skip: page ? (page - 1) * pageSize : undefined,
         take: pageSize ? pageSize : undefined,
         where,
@@ -81,6 +83,73 @@ export class ConfigurationRepository {
   async findOne(options: FindOneOptions<ConfigurationEntity>): Promise<ConfigurationEntity> {
     try {
       return await this.repository.findOne(options);
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
+  async findAllWithActiveConfigSettings(options: GetConfigurationDto): Promise<{
+    records: ConfigurationEntity[];
+    totalRecords: number;
+  }> {
+    try {
+      const {
+        page,
+        pageSize,
+        sortField = 'createdAt',
+        sortOrder = SortOrder.DESC,
+        search,
+        module,
+        key,
+      } = options;
+
+      // Base query for configurations
+      const query = this.repository.createQueryBuilder('config');
+
+      // Base where conditions - only non-deleted configurations
+      query.where('config.deletedAt IS NULL');
+
+      // Module filter (exact match)
+      if (module) {
+        query.andWhere('config.module = :module', { module });
+      }
+
+      // Key filter (exact match)
+      if (key) {
+        query.andWhere('config.key = :key', { key });
+      }
+
+      // Search in key OR label (case-insensitive)
+      if (search?.trim()) {
+        query.andWhere('(config.key ILIKE :search OR config.label ILIKE :search)', {
+          search: `%${search.trim()}%`,
+        });
+      }
+
+      // Join configSettings but only active ones
+      query.leftJoinAndSelect('config.configSettings', 'cs', 'cs.isActive = :isActive', {
+        isActive: true,
+      });
+
+      // Count total (before pagination)
+      const totalQuery = query.clone();
+      const total = await totalQuery.getCount();
+
+      // Sorting - validate sortField
+      const allowedSortFields = ['createdAt', 'updatedAt', 'module', 'key', 'label'];
+      const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'createdAt';
+      const order = sortOrder === SortOrder.ASC ? 'ASC' : 'DESC';
+      query.orderBy(`config.${safeSortField}`, order as 'ASC' | 'DESC');
+
+      // Pagination - only if both page and pageSize provided
+      if (page && pageSize && page > 0 && pageSize > 0) {
+        query.skip((page - 1) * pageSize).take(pageSize);
+      }
+
+      // Execute query and get results
+      const configurations = await query.getMany();
+
+      return this.utilityService.listResponse(configurations, total);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
