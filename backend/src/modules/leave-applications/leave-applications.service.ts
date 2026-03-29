@@ -1095,7 +1095,9 @@ export class LeaveApplicationsService {
       const isTodayOrPast = this.dateTimeService.isTodayOrPast(fromDateStr, timezone);
       const isFuture = this.dateTimeService.isFutureDate(fromDateStr, timezone);
 
-      if (isTodayOrPast && !attendanceStatus) {
+      // Attendance status is only required for approve/reject when leave date is today or past.
+      // Cancellation does not need attendance status.
+      if (isTodayOrPast && !attendanceStatus && approvalStatus !== ApprovalStatus.CANCELLED) {
         throw new BadRequestException(
           LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ATTENDANCE_STATUS_REQUIRED,
         );
