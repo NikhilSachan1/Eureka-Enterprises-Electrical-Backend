@@ -1,10 +1,21 @@
-import { Controller, Post, Get, Body, Query, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Query,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ConfigurationService } from './configuration.service';
 import {
   CreateConfigurationDto,
   GetConfigurationDto,
   CreateConfigurationWithSettingsDto,
+  UpdateConfigurationDto,
 } from './dto/configuration.dto';
 @ApiTags('Configurations')
 @ApiBearerAuth('JWT-auth')
@@ -58,6 +69,19 @@ export class ConfigurationController {
   })
   async findAll(@Query() getConfigurationDto: GetConfigurationDto) {
     return await this.configurationService.findAll(getConfigurationDto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a configuration',
+    description:
+      'Updates configuration metadata (module, key, label, valueType, etc.). Key must remain unique.',
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateConfigurationDto: UpdateConfigurationDto,
+  ) {
+    return await this.configurationService.update(id, updateConfigurationDto);
   }
 
   @Delete(':id')

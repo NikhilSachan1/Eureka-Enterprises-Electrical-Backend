@@ -1,7 +1,7 @@
-import { Controller, Post, Get, Body, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Query, Param, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ConfigSettingService } from './config-setting.service';
-import { CreateConfigSettingDto, GetConfigSettingDto } from './dto';
+import { CreateConfigSettingDto, GetConfigSettingDto, UpdateConfigSettingDto } from './dto';
 
 @ApiTags('Config Settings')
 @ApiBearerAuth('JWT-auth')
@@ -26,5 +26,18 @@ export class ConfigSettingController {
   })
   async findAll(@Query() getConfigSettingDto: GetConfigSettingDto) {
     return await this.configSettingService.findAll(getConfigSettingDto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a config setting',
+    description:
+      'Updates an existing config setting by its ID. Value is validated against the parent configuration valueType.',
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateConfigSettingDto: UpdateConfigSettingDto,
+  ) {
+    return await this.configSettingService.update(id, updateConfigSettingDto);
   }
 }
