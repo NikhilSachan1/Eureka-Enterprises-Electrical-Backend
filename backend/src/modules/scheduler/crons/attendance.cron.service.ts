@@ -699,6 +699,7 @@ export class AttendanceCronService {
                 attendance.userId,
                 new Date(attendance.attendanceDate),
                 attendance.status,
+                attendance.assignmentSnapshot,
               );
             } catch (foodExpenseError) {
               this.logger.warn(
@@ -752,7 +753,15 @@ export class AttendanceCronService {
   private async getPendingAttendancesForPeriod(
     startDate: string,
     endDate: string,
-  ): Promise<Array<{ id: string; userId: string; status: string; attendanceDate: Date }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      userId: string;
+      status: string;
+      attendanceDate: Date;
+      assignmentSnapshot?: any;
+    }>
+  > {
     const { query, params } = getPendingAttendancesForPeriodQuery(startDate, endDate);
     return await this.dataSource.query(query, params);
   }
