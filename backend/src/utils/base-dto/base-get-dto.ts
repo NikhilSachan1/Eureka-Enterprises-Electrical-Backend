@@ -24,7 +24,7 @@ export class BaseGetDto {
   @Transform(({ value }) => parseInt(value))
   @IsNumber()
   @Min(1)
-  @Max(100)
+  @Max(1000)
   @IsOptional()
   pageSize?: number = DefaultPaginationValues.PAGE_SIZE;
 
