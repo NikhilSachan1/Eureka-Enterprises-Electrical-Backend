@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsBoolean, IsOptional, IsEnum } from 'class-validator';
 import { ConfigurationValueType } from '../constants/configuration.constant';
+import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
 export class CreateConfigurationDto {
   @ApiProperty({ description: 'Module name', example: 'leave' })
@@ -39,7 +40,7 @@ export class CreateConfigurationDto {
   description?: string;
 }
 
-export class GetConfigurationDto {
+export class GetConfigurationDto extends BaseGetDto {
   @ApiProperty({ description: 'Module name', example: 'leave', required: false })
   @IsOptional()
   @IsString()
@@ -49,4 +50,9 @@ export class GetConfigurationDto {
   @IsOptional()
   @IsString()
   key?: string;
+
+  @ApiProperty({ description: 'Search by key or label', example: 'leave', required: false })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
