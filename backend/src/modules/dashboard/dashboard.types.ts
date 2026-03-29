@@ -432,3 +432,61 @@ export interface DashboardResponse {
   employees?: EmployeesData;
   team?: TeamData;
 }
+
+// ==================== Mobile Dashboard ====================
+
+export interface MobileLeaveBalance {
+  leaveCategory: string;
+  totalAllocated: number;
+  consumed: number;
+  carriedForward: number;
+  adjusted: number;
+  balance: number;
+}
+
+export interface MobileFestivalBanner {
+  date: string;
+  name: string;
+  type?: string;
+  daysUntil: number;
+}
+
+export interface MobileHoliday {
+  date: string;
+  name: string;
+  type?: string;
+}
+
+export interface MobileAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  publishedAt: string;
+}
+
+export interface MobileBirthdayUser {
+  userId: string;
+  name: string;
+  employeeId: string;
+  profilePicture?: string;
+  date: string;
+}
+
+export interface MobileAnniversaryUser {
+  userId: string;
+  name: string;
+  employeeId: string;
+  profilePicture?: string;
+  date: string;
+  yearsCompleted: number;
+}
+
+export interface MobileDashboardResponse {
+  leaveBalances: MobileLeaveBalance[];
+  festivalBanner: MobileFestivalBanner | null;
+  holidays: MobileHoliday[];
+  announcements: MobileAnnouncement[];
+  todayBirthdays: MobileBirthdayUser[];
+  todayAnniversaries: MobileAnniversaryUser[];
+  emergencyContacts: any;
+}

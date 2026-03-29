@@ -10,6 +10,25 @@ import { DashboardSection, DashboardPeriod } from './constants/dashboard.constan
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @Get('mobile')
+  @ApiOperation({
+    summary: 'Get mobile dashboard data',
+    description: `
+      Returns a lightweight dashboard for mobile apps with:
+      1. Leave balances (current financial year)
+      2. Festival banner (next upcoming holiday)
+      3. Festivals and holidays list
+      4. Announcements (latest 4)
+      5. Today's birthdays
+      6. Today's work anniversaries
+      7. Emergency contacts
+    `,
+  })
+  async getMobileDashboard(@Request() req: any) {
+    const userId = req?.user?.id;
+    return await this.dashboardService.getMobileDashboard(userId);
+  }
+
   @Get()
   @ApiOperation({
     summary: 'Get dashboard data',

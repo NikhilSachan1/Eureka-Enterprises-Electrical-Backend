@@ -98,6 +98,12 @@ export const CONFIGURATION_KEYS = {
   // VEHICLE LOGS - under vehicle module
   VEHICLE_LOG_ANOMALY_THRESHOLD: 'vehicle_log_anomaly_threshold',
   VEHICLE_LOG_BACKFILL_DAYS_ALLOWED: 'vehicle_log_backfill_days_allowed',
+
+  //Helpdesk
+  HELPDESK_CONTACTS: 'helpdesk_contacts',
+
+  //Dashboard
+  DASHBOARD_EMERGENCY_CONTACTS: 'dashboard_emergency_contacts',
 };
 
 export const CONFIGURATION_MODULES = {
@@ -117,6 +123,8 @@ export const CONFIGURATION_MODULES = {
   CARD: 'card',
   FNF: 'fnf',
   SITE: 'site',
+  HELPDESK: 'helpdesk',
+  DASHBOARD: 'dashboard',
 };
 
 export enum LeaveCycleType {
