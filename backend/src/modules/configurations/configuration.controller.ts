@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Param } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ConfigurationService } from './configuration.service';
 import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
@@ -16,6 +16,25 @@ export class ConfigurationController {
   })
   async create(@Body() createConfigurationDto: CreateConfigurationDto) {
     return await this.configurationService.create(createConfigurationDto);
+  }
+
+  @Get('details')
+  @ApiOperation({
+    summary: 'Get configurations with active config settings only',
+    description:
+      'List configurations with filtering (module, key/label search, pagination, sorting). Only includes configSettings where isActive = true.',
+  })
+  async findAllWithActiveConfigSettings(@Query() getConfigurationDto: GetConfigurationDto) {
+    return await this.configurationService.findAllWithActiveConfigSettings(getConfigurationDto);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get a configuration by ID',
+    description: 'Retrieves a system configuration by its unique identifier.',
+  })
+  async findOne(@Param('id') id: string) {
+    return await this.configurationService.findOne({ where: { id } });
   }
 
   @Get()
