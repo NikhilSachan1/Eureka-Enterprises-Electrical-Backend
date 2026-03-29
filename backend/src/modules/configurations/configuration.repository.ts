@@ -6,6 +6,7 @@ import {
   FindManyOptions,
   FindOneOptions,
   FindOptionsWhere,
+  ILike,
   Repository,
 } from 'typeorm';
 import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
@@ -38,8 +39,20 @@ export class ConfigurationRepository {
     totalRecords: number;
   }> {
     try {
+      const { page, pageSize, search, ...rest } = options as any;
+      const where: FindOptionsWhere<ConfigurationEntity> = { deletedAt: null };
+      if (search) {
+        where.key = ILike(`%${search}%`);
+        where.label = ILike(`%${search}%`);
+      }
+      if (rest.where) {
+        Object.assign(where, rest.where);
+      }
       const [configurations, total] = await this.repository.findAndCount({
-        ...options,
+        ...rest,
+        skip: page ? (page - 1) * pageSize : undefined,
+        take: pageSize ? pageSize : undefined,
+        where,
         relations: ['configSettings'],
         select: {
           id: true,
