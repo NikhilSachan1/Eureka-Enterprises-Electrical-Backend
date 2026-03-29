@@ -121,7 +121,7 @@ export const getUsersWithoutAttendanceQuery = (status: string, date: Date) => {
 export const getPendingAttendancesForPeriodQuery = (startDate: string, endDate: string) => {
   return {
     query: `
-      SELECT id, "userId", "status", "attendanceDate"
+      SELECT id, "userId", "status", "attendanceDate", "assignmentSnapshot"
       FROM attendances
       WHERE "approvalStatus" = $1
         AND "attendanceDate" >= $2::date
