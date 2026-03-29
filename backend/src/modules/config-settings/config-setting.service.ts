@@ -113,7 +113,7 @@ export class ConfigSettingService {
     existingId?: string,
   ): Promise<ConfigSettingEntity> {
     const queryRunner = entityManager || this.configSettingRepository['repository'].manager;
-    const configuration = await this.validateAndGetConfiguration(data.configId);
+    const configuration = await this.validateAndGetConfiguration(data.configId, entityManager);
     const isCurrentFinancialYear =
       data.contextKey === this.utilityService.getCurrentFinancialYear();
 
