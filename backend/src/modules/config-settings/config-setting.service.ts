@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { ConfigSettingRepository } from './config-setting.repository';
 import { EntityManager, FindManyOptions, FindOneOptions } from 'typeorm';
 import { ConfigSettingEntity } from './entities/config-setting.entity';
@@ -13,6 +19,7 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 export class ConfigSettingService {
   constructor(
     private readonly configSettingRepository: ConfigSettingRepository,
+    @Inject(forwardRef(() => ConfigurationService))
     private readonly configurationService: ConfigurationService,
     private readonly utilityService: UtilityService,
   ) {}
@@ -21,7 +28,7 @@ export class ConfigSettingService {
     createDto: CreateConfigSettingDto,
     entityManager?: EntityManager,
   ): Promise<ConfigSettingEntity> {
-    const configuration = await this.validateAndGetConfiguration(createDto.configId);
+    const configuration = await this.validateAndGetConfiguration(createDto.configId, entityManager);
     ValueTypeValidator.validate(createDto.value, configuration.valueType, configuration.key);
     return await this.performUpsert(createDto, entityManager);
   }
@@ -69,11 +76,12 @@ export class ConfigSettingService {
     return configSetting;
   }
 
-  private async validateAndGetConfiguration(configId: string) {
+  private async validateAndGetConfiguration(configId: string, entityManager?: EntityManager) {
     try {
-      return await this.configurationService.findOneOrFail({
-        where: { id: configId },
-      });
+      return await this.configurationService.findOneOrFail(
+        { where: { id: configId } },
+        entityManager,
+      );
     } catch (error) {
       throw error;
     }
@@ -150,5 +158,14 @@ export class ConfigSettingService {
         );
       }
     });
+  }
+
+  async delete(configId: string): Promise<boolean> {
+    try {
+      await this.configSettingRepository.update({ configId: configId }, { deletedAt: new Date() });
+      return true;
+    } catch (error) {
+      throw error;
+    }
   }
 }

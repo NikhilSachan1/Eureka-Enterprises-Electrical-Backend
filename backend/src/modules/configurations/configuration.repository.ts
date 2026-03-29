@@ -80,9 +80,15 @@ export class ConfigurationRepository {
     }
   }
 
-  async findOne(options: FindOneOptions<ConfigurationEntity>): Promise<ConfigurationEntity> {
+  async findOne(
+    options: FindOneOptions<ConfigurationEntity>,
+    entityManager?: EntityManager,
+  ): Promise<ConfigurationEntity> {
     try {
-      return await this.repository.findOne(options);
+      const repository = entityManager
+        ? entityManager.getRepository(ConfigurationEntity)
+        : this.repository;
+      return await repository.findOne(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }

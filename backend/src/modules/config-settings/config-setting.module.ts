@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigSettingService } from './config-setting.service';
 import { ConfigSettingController } from './config-setting.controller';
@@ -10,7 +10,11 @@ import { SharedModule } from '../../modules/shared/shared.module';
 import { IsLeaveConfigValidConstraint } from './decorators/config-value.decorator';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ConfigSettingEntity]), ConfigurationsModule, SharedModule],
+  imports: [
+    TypeOrmModule.forFeature([ConfigSettingEntity]),
+    forwardRef(() => ConfigurationsModule),
+    SharedModule,
+  ],
   providers: [
     ConfigSettingService,
     ConfigSettingRepository,

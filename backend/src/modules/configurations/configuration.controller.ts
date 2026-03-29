@@ -1,8 +1,11 @@
-import { Controller, Post, Get, Body, Query, Param } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Param, Delete } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ConfigurationService } from './configuration.service';
-import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
-
+import {
+  CreateConfigurationDto,
+  GetConfigurationDto,
+  CreateConfigurationWithSettingsDto,
+} from './dto/configuration.dto';
 @ApiTags('Configurations')
 @ApiBearerAuth('JWT-auth')
 @Controller('configurations')
@@ -16,6 +19,16 @@ export class ConfigurationController {
   })
   async create(@Body() createConfigurationDto: CreateConfigurationDto) {
     return await this.configurationService.create(createConfigurationDto);
+  }
+
+  @Post('with-settings')
+  @ApiOperation({
+    summary: 'Create configuration with config settings',
+    description:
+      'Creates a new configuration and optionally creates config settings for it in a single transaction.',
+  })
+  async createWithSettings(@Body() dto: CreateConfigurationWithSettingsDto) {
+    return await this.configurationService.createWithSettings(dto);
   }
 
   @Get('details')
@@ -34,7 +47,7 @@ export class ConfigurationController {
     description: 'Retrieves a system configuration by its unique identifier.',
   })
   async findOne(@Param('id') id: string) {
-    return await this.configurationService.findOne({ where: { id } });
+    return await this.configurationService.findOneById(id);
   }
 
   @Get()
@@ -45,5 +58,14 @@ export class ConfigurationController {
   })
   async findAll(@Query() getConfigurationDto: GetConfigurationDto) {
     return await this.configurationService.findAll(getConfigurationDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a configuration by ID',
+    description: 'Deletes a system configuration by its unique identifier.',
+  })
+  async delete(@Param('id') id: string) {
+    return await this.configurationService.delete(id);
   }
 }
