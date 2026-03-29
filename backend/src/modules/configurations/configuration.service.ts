@@ -134,8 +134,15 @@ export class ConfigurationService {
           }
         }
 
-        // Return the complete configuration with settings
-        return await this.findOneById(createdConfiguration.id);
+        // Read result within the same transaction so it can see uncommitted data
+        const result = await manager.getRepository(ConfigurationEntity).findOne({
+          where: { id: createdConfiguration.id },
+          relations: ['configSettings'],
+        });
+        if (!result) {
+          throw new NotFoundException(CONFIGURATION_ERRORS.NOT_FOUND);
+        }
+        return result;
       } catch (error) {
         throw error;
       }
