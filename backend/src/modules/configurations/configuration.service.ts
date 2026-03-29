@@ -12,6 +12,7 @@ import {
   CreateConfigurationDto,
   GetConfigurationDto,
   CreateConfigurationWithSettingsDto,
+  UpdateConfigurationDto,
 } from './dto/configuration.dto';
 import { CONFIGURATION_ERRORS } from './constants/configuration.constant';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
@@ -139,6 +140,26 @@ export class ConfigurationService {
         throw error;
       }
     });
+  }
+
+  /** Update a configuration by id. Key must stay unique if changed. */
+  async update(id: string, dto: UpdateConfigurationDto): Promise<ConfigurationEntity> {
+    const existing = await this.findOneOrFail({ where: { id } });
+
+    // If key is being changed, check uniqueness
+    if (dto.key !== undefined && dto.key !== existing.key) {
+      const duplicate = await this.configurationRepository.findOne({
+        where: { key: dto.key },
+      });
+      if (duplicate) {
+        throw new BadRequestException(
+          CONFIGURATION_ERRORS.CONFIGURATION_KEY_ALREADY_EXISTS.replace('{{key}}', dto.key),
+        );
+      }
+    }
+
+    await this.configurationRepository.update({ id }, dto);
+    return await this.findOneById(id);
   }
 
   async findAllWithActiveConfigSettings(options: GetConfigurationDto): Promise<{

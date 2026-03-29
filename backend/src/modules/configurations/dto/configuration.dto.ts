@@ -136,6 +136,47 @@ export class CreateConfigurationWithSettingsDto {
   configSettings?: CreateConfigSettingForConfigDto[];
 }
 
+/** Update configuration — all fields optional */
+export class UpdateConfigurationDto {
+  @ApiPropertyOptional({ description: 'Module name', example: 'leave' })
+  @IsOptional()
+  @IsString()
+  module?: string;
+
+  @ApiPropertyOptional({ description: 'Configuration key', example: 'leave_types' })
+  @IsOptional()
+  @IsString()
+  key?: string;
+
+  @ApiPropertyOptional({ description: 'Human readable label', example: 'Leave Types' })
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @ApiPropertyOptional({
+    description: 'Value type',
+    example: 'json',
+    enum: ConfigurationValueType,
+  })
+  @IsOptional()
+  @IsString()
+  @IsEnum(ConfigurationValueType)
+  valueType?: string;
+
+  @ApiPropertyOptional({ description: 'Is editable via admin panel', example: true })
+  @IsOptional()
+  @IsBoolean()
+  isEditable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Configuration description',
+    example: 'Available leave types for employees',
+  })
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
 export class GetConfigurationDto extends BaseGetDto {
   @ApiProperty({ description: 'Module name', example: 'leave', required: false })
   @IsOptional()
