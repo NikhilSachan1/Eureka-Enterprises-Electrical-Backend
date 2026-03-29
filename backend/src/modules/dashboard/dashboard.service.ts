@@ -30,8 +30,16 @@ import {
   EmployeeCelebration,
   AnniversaryEmployee,
   Holiday,
+  MobileDashboardResponse,
+  MobileLeaveBalance,
+  MobileFestivalBanner,
+  MobileHoliday,
+  MobileAnnouncement,
+  MobileBirthdayUser,
+  MobileAnniversaryUser,
 } from './dashboard.types';
 import * as queries from './queries/dashboard.queries';
+import * as mobileQueries from './queries/mobile-dashboard.queries';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { Roles } from '../roles/constants/role.constants';
@@ -156,6 +164,150 @@ export class DashboardService {
 
     return response;
   }
+
+  // ==================== Mobile Dashboard ====================
+
+  async getMobileDashboard(userId: string): Promise<MobileDashboardResponse> {
+    const today = new Date();
+    const todayStr = this.formatDate(today);
+    const financialYear = this.utilityService.getFinancialYear(today);
+
+    // Fetch all 7 sections in parallel
+    const [leaveBalances, holidayResult, announcements, birthdays, anniversaries, emergencyResult] =
+      await Promise.all([
+        this.getMobileLeaveBalances(userId, financialYear),
+        this.getMobileHolidays(financialYear),
+        this.getMobileAnnouncements(userId),
+        this.getMobileBirthdays(todayStr),
+        this.getMobileAnniversaries(todayStr),
+        this.getMobileEmergencyContacts(),
+      ]);
+
+    // Extract festival banner (next upcoming holiday) from the holidays list
+    const festivalBanner = this.getNextUpcomingFestival(holidayResult, today);
+
+    return {
+      leaveBalances,
+      festivalBanner,
+      holidays: holidayResult,
+      announcements,
+      todayBirthdays: birthdays,
+      todayAnniversaries: anniversaries,
+      emergencyContacts: emergencyResult,
+    };
+  }
+
+  private async getMobileLeaveBalances(
+    userId: string,
+    financialYear: string,
+  ): Promise<MobileLeaveBalance[]> {
+    const { query, params } = mobileQueries.getMobileLeaveBalancesQuery(userId, financialYear);
+    const results = await this.dataSource.query(query, params);
+
+    return results.map((row: any) => ({
+      leaveCategory: row.leaveCategory,
+      totalAllocated: Number(row.totalAllocated) || 0,
+      consumed: Number(row.consumed) || 0,
+      carriedForward: Number(row.carriedForward) || 0,
+      adjusted: Number(row.adjusted) || 0,
+      balance: Number(row.balance) || 0,
+    }));
+  }
+
+  private async getMobileHolidays(financialYear: string): Promise<MobileHoliday[]> {
+    const { query, params } = mobileQueries.getAllHolidaysQuery(financialYear);
+    const result = await this.dataSource.query(query, params);
+
+    if (!result[0]?.holidays) return [];
+
+    const holidays = result[0].holidays;
+
+    // holidays can be an array of objects or the value itself containing a holidays key
+    const holidayList: Array<{ date: string; name: string; type?: string }> = Array.isArray(
+      holidays,
+    )
+      ? holidays
+      : holidays?.holidays || [];
+
+    return holidayList
+      .map((h) => ({
+        date: h.date,
+        name: h.name,
+        type: h.type,
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }
+
+  private getNextUpcomingFestival(
+    holidays: MobileHoliday[],
+    today: Date,
+  ): MobileFestivalBanner | null {
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    for (const holiday of holidays) {
+      const holidayDate = new Date(holiday.date);
+      if (holidayDate >= todayStart) {
+        const daysUntil = Math.ceil(
+          (holidayDate.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        return {
+          date: holiday.date,
+          name: holiday.name,
+          type: holiday.type,
+          daysUntil,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private async getMobileAnnouncements(userId: string): Promise<MobileAnnouncement[]> {
+    const { query, params } = mobileQueries.getLatestAnnouncementsQuery(userId, 4);
+    const results = await this.dataSource.query(query, params);
+
+    return results.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      message: row.message,
+      publishedAt: row.publishedAt || row.createdAt,
+    }));
+  }
+
+  private async getMobileBirthdays(todayStr: string): Promise<MobileBirthdayUser[]> {
+    const { query, params } = mobileQueries.getTodayBirthdaysQuery(todayStr);
+    const results = await this.dataSource.query(query, params);
+
+    return results.map((row: any) => ({
+      userId: row.userId,
+      name: row.name,
+      employeeId: row.employeeId,
+      profilePicture: row.profilePicture,
+      date: row.date,
+    }));
+  }
+
+  private async getMobileAnniversaries(todayStr: string): Promise<MobileAnniversaryUser[]> {
+    const { query, params } = mobileQueries.getTodayAnniversariesQuery(todayStr);
+    const results = await this.dataSource.query(query, params);
+
+    return results.map((row: any) => ({
+      userId: row.userId,
+      name: row.name,
+      employeeId: row.employeeId,
+      profilePicture: row.profilePicture,
+      date: row.date,
+      yearsCompleted: Number(row.yearsCompleted) || 0,
+    }));
+  }
+
+  private async getMobileEmergencyContacts(): Promise<any> {
+    const { query, params } = mobileQueries.getEmergencyContactsQuery();
+    const result = await this.dataSource.query(query, params);
+    return result[0]?.contacts || null;
+  }
+
+  // ==================== Web Dashboard Helpers ====================
 
   private determineSections(query: GetDashboardDto): DashboardSection[] {
     // If specific section requested
