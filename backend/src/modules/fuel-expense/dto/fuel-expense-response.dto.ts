@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApprovalStatus } from '../constants/fuel-expense.constants';
 
 export class FuelExpenseStatsDto {
@@ -51,7 +51,31 @@ export class FuelExpenseRecordDto {
   @ApiProperty({ description: 'Fuel expense ID' })
   id: string;
 
-  @ApiProperty({ description: 'User who created the expense' })
+  @ApiPropertyOptional({ description: 'User id of the employee this fuel expense belongs to' })
+  userId?: string;
+
+  @ApiPropertyOptional({
+    description: 'User who submitted the entry (only this user may edit when pending)',
+  })
+  createdBy?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Profile of the user who submitted the entry',
+  })
+  createdByUser?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeId: string;
+  } | null;
+
+  @ApiProperty({
+    description: 'Whether the authenticated user may edit this row (creator and pending only)',
+  })
+  canEdit: boolean;
+
+  @ApiProperty({ description: 'Employee on whose behalf this expense is recorded' })
   user: {
     id: string;
     firstName: string;

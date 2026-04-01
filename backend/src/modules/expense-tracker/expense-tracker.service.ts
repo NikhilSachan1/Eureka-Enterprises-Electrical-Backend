@@ -572,7 +572,10 @@ export class ExpenseTrackerService {
     }
   }
 
-  async getExpenseRecords(expenseQueryDto: ExpenseQueryDto): Promise<ExpenseListResponseDto> {
+  async getExpenseRecords(
+    expenseQueryDto: ExpenseQueryDto,
+    currentUserId?: string,
+  ): Promise<ExpenseListResponseDto> {
     try {
       const { ...filters } = expenseQueryDto;
 
@@ -630,6 +633,21 @@ export class ExpenseTrackerService {
       const transformedRecords = records.map((record: any) => ({
         id: record.id,
         userId: record.userId,
+        createdBy: record.createdBy ?? null,
+        createdByUser: record.createdBy
+          ? {
+              id: record.createdBy,
+              firstName: record.createdByFirstName,
+              lastName: record.createdByLastName,
+              email: record.createdByEmail,
+              employeeId: record.createdByEmployeeId,
+            }
+          : null,
+        canEdit: Boolean(
+          currentUserId &&
+            record.createdBy === currentUserId &&
+            record.approvalStatus === ApprovalStatus.PENDING,
+        ),
         category: record.category,
         description: record.description,
         amount: Number(record.amount),

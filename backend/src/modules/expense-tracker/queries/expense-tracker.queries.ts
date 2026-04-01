@@ -101,12 +101,15 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       e."paymentMode",
       e."entrySourceType",
       e."expenseEntryType",
+      e."createdBy",
       e."createdAt",
       e."updatedAt",
       ${getUserSelectFields('u')},
+      ${getUserSelectFields('cb', 'createdBy')},
       ${getUserSelectFields('ab', 'approvalBy')}
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
+    LEFT JOIN "users" cb ON e."createdBy" = cb."id"
     LEFT JOIN "users" ab ON e."approvalBy" = ab."id"
     ${whereClause}
     ORDER BY ${EXPENSE_SORT_FIELD_MAPPING[sortField] || 'e."createdAt"'} ${sortOrder}

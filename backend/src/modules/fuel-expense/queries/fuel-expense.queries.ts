@@ -120,9 +120,11 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       fe."approvalBy",
       fe."approvalAt",
       fe."approvalReason",
+      fe."createdBy",
       fe."createdAt",
       fe."updatedAt",
       ${getUserSelectFields('u')},
+      ${getUserSelectFields('cb', 'createdBy')},
       ${getUserSelectFields('ab', 'approvalBy')},
       v."registrationNo" as "registrationNumber",
       vv."brand" as "vehicleBrand",
@@ -146,6 +148,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       ) as "secondPreviousOdometerKm"
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
+    LEFT JOIN "users" cb ON fe."createdBy" = cb."id"
     LEFT JOIN "users" ab ON fe."approvalBy" = ab."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
     LEFT JOIN "vehicle_versions" vv ON v."id" = vv."vehicleMasterId" AND vv."isActive" = true

@@ -217,8 +217,11 @@ export class ExpenseTrackerController {
   })
   @UseInterceptors(ExpenseUserInterceptor)
   @ApiResponse({ status: 200, type: ExpenseListResponseDto })
-  async getExpenseRecords(@Query() expenseQueryDto: ExpenseQueryDto) {
-    return this.expenseTrackerService.getExpenseRecords(expenseQueryDto);
+  async getExpenseRecords(
+    @Request() req: RequestWithTimezone,
+    @Query() expenseQueryDto: ExpenseQueryDto,
+  ) {
+    return this.expenseTrackerService.getExpenseRecords(expenseQueryDto, req.user.id);
   }
 
   @Get(':id/history')

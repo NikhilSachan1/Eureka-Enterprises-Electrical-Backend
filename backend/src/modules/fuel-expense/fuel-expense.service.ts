@@ -449,6 +449,7 @@ export class FuelExpenseService {
 
   async getFuelExpenseRecords(
     fuelExpenseQueryDto: FuelExpenseQueryDto,
+    currentUserId?: string,
   ): Promise<FuelExpenseListResponseDto> {
     try {
       const { ...filters } = fuelExpenseQueryDto;
@@ -586,6 +587,21 @@ export class FuelExpenseService {
         return {
           id: record.id,
           userId: record.userId,
+          createdBy: record.createdBy ?? null,
+          createdByUser: record.createdBy
+            ? {
+                id: record.createdBy,
+                firstName: record.createdByFirstName,
+                lastName: record.createdByLastName,
+                email: record.createdByEmail,
+                employeeId: record.createdByEmployeeId,
+              }
+            : null,
+          canEdit: Boolean(
+            currentUserId &&
+              record.createdBy === currentUserId &&
+              record.approvalStatus === ApprovalStatus.PENDING,
+          ),
           user: {
             id: record.userId,
             firstName: record.firstName,

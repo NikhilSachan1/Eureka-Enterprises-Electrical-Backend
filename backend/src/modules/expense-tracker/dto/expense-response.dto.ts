@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApprovalStatus } from '../constants/expense-tracker.constants';
 
 export class ExpenseStatsDto {
@@ -25,6 +25,9 @@ export class ExpenseRecordDto {
   @ApiProperty()
   id: string;
 
+  @ApiPropertyOptional()
+  userId?: string;
+
   @ApiProperty()
   user: {
     id: string;
@@ -34,23 +37,31 @@ export class ExpenseRecordDto {
     employeeId: string;
   };
 
-  @ApiProperty()
-  createdBy: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    employeeId: string;
-  };
+  @ApiPropertyOptional({ description: 'Submitter user id; only this user may edit when pending' })
+  createdBy?: string | null;
 
-  @ApiProperty()
-  approvalBy: {
+  @ApiPropertyOptional()
+  createdByUser?: {
     id: string;
     firstName: string;
     lastName: string;
     email: string;
     employeeId: string;
-  };
+  } | null;
+
+  @ApiProperty({
+    description: 'Whether the authenticated user may edit this row (creator and pending only)',
+  })
+  canEdit: boolean;
+
+  @ApiPropertyOptional()
+  approvalByUser?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    employeeId: string;
+  } | null;
 
   @ApiProperty()
   expenseDate: string;

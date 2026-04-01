@@ -174,8 +174,11 @@ export class FuelExpenseController {
   })
   @UseInterceptors(FuelExpenseUserInterceptor)
   @ApiResponse({ status: 200, type: FuelExpenseListResponseDto })
-  async getFuelExpenseRecords(@Query() fuelExpenseQueryDto: FuelExpenseQueryDto) {
-    return this.fuelExpenseService.getFuelExpenseRecords(fuelExpenseQueryDto);
+  async getFuelExpenseRecords(
+    @Request() req: RequestWithTimezone,
+    @Query() fuelExpenseQueryDto: FuelExpenseQueryDto,
+  ) {
+    return this.fuelExpenseService.getFuelExpenseRecords(fuelExpenseQueryDto, req.user.id);
   }
 
   @Get(':id/history')
