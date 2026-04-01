@@ -71,7 +71,11 @@ export class AssetListResponseDto {
   @ApiProperty({ type: AssetStatsDto, description: 'Asset statistics' })
   stats: AssetStatsDto;
 
-  @ApiProperty({ type: [Object], description: 'List of assets' })
+  @ApiProperty({
+    type: [Object],
+    description:
+      'List of assets; each item includes latestEvent when present — latest row from assets_events by createdAt (use eventType for Handover Initiated / Rejected etc.)',
+  })
   records: any[];
 
   @ApiProperty({ example: 90, description: 'Total number of records matching filters' })
