@@ -213,6 +213,10 @@ export class AttendanceService {
             notes,
             shiftConfigId: configSettingId,
             updatedBy: userId,
+            assignmentSnapshot:
+              assignmentSnapshot !== undefined
+                ? assignmentSnapshot
+                : existingAttendance.assignmentSnapshot,
           },
           entityManager,
         );
