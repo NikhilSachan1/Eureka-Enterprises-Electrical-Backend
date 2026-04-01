@@ -380,7 +380,18 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
           'expiryStatus', c."expiryStatus"
         )
         ELSE NULL
-      END as "associatedCard"
+      END as "associatedCard",
+      CASE WHEN vle."id" IS NOT NULL THEN json_build_object(
+        'id', vle."id",
+        'eventType', vle."eventType",
+        'fromUser', vle."fromUser",
+        'toUser', vle."toUser",
+        'fromUserUser', vle."fromUserDetails",
+        'toUserUser', vle."toUserDetails",
+        'metadata', vle."metadata",
+        'createdAt', vle."createdAt",
+        'createdBy', vle."createdBy"
+      ) ELSE NULL END as "latestEvent"
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
       SELECT *
@@ -393,6 +404,36 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     ) vv ON true
     LEFT JOIN users u ON u."id" = vv."assignedTo" AND u."deletedAt" IS NULL
     LEFT JOIN cards c ON c."id" = vm."cardId" AND c."deletedAt" IS NULL
+    LEFT JOIN LATERAL (
+      SELECT
+        ve."id",
+        ve."eventType",
+        ve."fromUser",
+        ve."toUser",
+        ve."metadata",
+        ve."createdAt",
+        ve."createdBy",
+        CASE WHEN fu."id" IS NOT NULL THEN json_build_object(
+          'id', fu."id",
+          'firstName', fu."firstName",
+          'lastName', fu."lastName",
+          'email', fu."email",
+          'employeeId', fu."employeeId"
+        ) ELSE NULL END AS "fromUserDetails",
+        CASE WHEN tu."id" IS NOT NULL THEN json_build_object(
+          'id', tu."id",
+          'firstName', tu."firstName",
+          'lastName', tu."lastName",
+          'email', tu."email",
+          'employeeId', tu."employeeId"
+        ) ELSE NULL END AS "toUserDetails"
+      FROM "vehicles_events" ve
+      LEFT JOIN "users" fu ON ve."fromUser" = fu."id" AND fu."deletedAt" IS NULL
+      LEFT JOIN "users" tu ON ve."toUser" = tu."id" AND tu."deletedAt" IS NULL
+      WHERE ve."vehicleMasterId" = vm."id" AND ve."deletedAt" IS NULL
+      ORDER BY ve."createdAt" DESC, ve."id" DESC
+      LIMIT 1
+    ) vle ON true
     ${whereClause}
     ORDER BY ${orderByColumn} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}

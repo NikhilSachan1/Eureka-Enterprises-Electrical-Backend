@@ -282,7 +282,18 @@ export const getAssetQuery = (query: AssetQueryDto) => {
             AND af."deletedAt" IS NULL
         ),
         '[]'::json
-      ) as "files"
+      ) as "files",
+      CASE WHEN ale."id" IS NOT NULL THEN json_build_object(
+        'id', ale."id",
+        'eventType', ale."eventType",
+        'fromUser', ale."fromUser",
+        'toUser', ale."toUser",
+        'fromUserUser', ale."fromUserDetails",
+        'toUserUser', ale."toUserDetails",
+        'metadata', ale."metadata",
+        'createdAt', ale."createdAt",
+        'createdBy', ale."createdBy"
+      ) ELSE NULL END as "latestEvent"
     FROM "asset_masters" am
     INNER JOIN LATERAL (
       SELECT *
@@ -294,6 +305,36 @@ export const getAssetQuery = (query: AssetQueryDto) => {
       LIMIT 1
     ) av ON true
     LEFT JOIN "users" u ON av."assignedTo" = u."id"
+    LEFT JOIN LATERAL (
+      SELECT
+        ae."id",
+        ae."eventType",
+        ae."fromUser",
+        ae."toUser",
+        ae."metadata",
+        ae."createdAt",
+        ae."createdBy",
+        CASE WHEN fu."id" IS NOT NULL THEN json_build_object(
+          'id', fu."id",
+          'firstName', fu."firstName",
+          'lastName', fu."lastName",
+          'email', fu."email",
+          'employeeId', fu."employeeId"
+        ) ELSE NULL END AS "fromUserDetails",
+        CASE WHEN tu."id" IS NOT NULL THEN json_build_object(
+          'id', tu."id",
+          'firstName', tu."firstName",
+          'lastName', tu."lastName",
+          'email', tu."email",
+          'employeeId', tu."employeeId"
+        ) ELSE NULL END AS "toUserDetails"
+      FROM "assets_events" ae
+      LEFT JOIN "users" fu ON ae."fromUser" = fu."id" AND fu."deletedAt" IS NULL
+      LEFT JOIN "users" tu ON ae."toUser" = tu."id" AND tu."deletedAt" IS NULL
+      WHERE ae."assetMasterId" = am."id" AND ae."deletedAt" IS NULL
+      ORDER BY ae."createdAt" DESC, ae."id" DESC
+      LIMIT 1
+    ) ale ON true
     ${whereClause}
     ORDER BY ${orderByColumn} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
