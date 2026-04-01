@@ -1451,6 +1451,7 @@ export class AttendanceService {
       attendanceType: record.attendanceType,
       workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
       notes: record.notes,
+      assignmentSnapshot: record.assignmentSnapshot ?? undefined,
     };
   }
 

@@ -101,6 +101,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       a."approvalAt",
       a."approvalComment",
       a."notes",
+      a."assignmentSnapshot" as "assignmentSnapshot",
       a."createdAt",
       a."updatedAt",
       a."createdBy",

@@ -1,9 +1,10 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AttendanceStatus,
   ApprovalStatus,
   AttendanceType,
 } from '../constants/attendance.constants';
+import { AssignmentSnapshotDto } from './attendance-action.dto';
 
 export class AttendanceStatsDto {
   @ApiProperty({ example: { present: 5, absent: 2, leave: 1, halfDay: 0, total: 8 } })
@@ -67,6 +68,12 @@ export class AttendanceRecordDto {
 
   @ApiProperty()
   notes?: string;
+
+  @ApiPropertyOptional({
+    type: AssignmentSnapshotDto,
+    description: 'Site, company, contractors, vehicle, and assigned engineer at time of attendance',
+  })
+  assignmentSnapshot?: AssignmentSnapshotDto;
 }
 
 export class AttendanceListResponseDto {
