@@ -452,7 +452,11 @@ export class PayrollService {
   private validateStatusTransition(currentStatus: string, newStatus: string): void {
     // Define valid transitions
     const validTransitions: Record<PayrollStatus, PayrollStatus[]> = {
-      [PayrollStatus.DRAFT]: [PayrollStatus.GENERATED, PayrollStatus.CANCELLED],
+      [PayrollStatus.DRAFT]: [
+        PayrollStatus.GENERATED,
+        PayrollStatus.APPROVED,
+        PayrollStatus.CANCELLED,
+      ],
       [PayrollStatus.GENERATED]: [PayrollStatus.APPROVED, PayrollStatus.CANCELLED],
       [PayrollStatus.APPROVED]: [PayrollStatus.PAID, PayrollStatus.CANCELLED],
       [PayrollStatus.PAID]: [], // Cannot transition from PAID
