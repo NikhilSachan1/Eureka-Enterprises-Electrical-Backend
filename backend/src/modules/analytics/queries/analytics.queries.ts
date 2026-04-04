@@ -458,10 +458,8 @@ export const getSiteMonthlyTrendQuery = (
   endDate?: string | null,
 ) => {
   const params: any[] = [siteId];
-
-  if (startDate && endDate) {
-    params.push(startDate, endDate);
-  }
+  // Always bind $2/$3 so the months CTE never references missing parameters (e.g. all_time → null,null → site bounds)
+  params.push(startDate ?? null, endDate ?? null);
 
   return {
     query: `
