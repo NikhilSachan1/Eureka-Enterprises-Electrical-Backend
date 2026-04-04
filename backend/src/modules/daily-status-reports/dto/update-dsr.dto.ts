@@ -1,8 +1,61 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsNumber, Min, MaxLength, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsNumber,
+  Min,
+  MaxLength,
+  IsUUID,
+  IsDateString,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateDsrDto {
+  @ApiPropertyOptional({
+    description: 'Alias for workTypes (some clients send workDone[0], workDone[1], …)',
+  })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value
+        .split(',')
+        .map((v) => v.trim())
+        .filter((v) => v);
+    }
+    return value;
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  workDone?: string[];
+
+  @ApiPropertyOptional({ description: 'Alias for remarks' })
+  @IsString()
+  @IsOptional()
+  note?: string;
+
+  @ApiPropertyOptional({ description: 'Alias for reportingEngineerName' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  reportedEngineerName?: string;
+
+  @ApiPropertyOptional({ description: 'Alias for reportingEngineerContact' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(50)
+  reportedEngineerContact?: string;
+
+  @ApiPropertyOptional({ description: 'Alias for reportDate (YYYY-MM-DD)' })
+  @IsDateString()
+  @IsOptional()
+  statusDate?: string;
+
+  @ApiPropertyOptional({ description: 'Report date when updating (same as statusDate)' })
+  @IsDateString()
+  @IsOptional()
+  reportDate?: string;
+
   @ApiPropertyOptional({
     description: 'Work types performed (array of work type values from config)',
     example: ['Testing', 'Installation'],

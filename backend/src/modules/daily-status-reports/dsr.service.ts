@@ -453,9 +453,17 @@ export class DsrService {
     // Check edit cutoff from config
     await this.checkEditCutoff(existingDsr);
 
+    const workTypesResolved = updateDto.workTypes ?? updateDto.workDone;
+    const remarksResolved = updateDto.remarks ?? updateDto.note;
+    const reportingEngineerNameResolved =
+      updateDto.reportingEngineerName ?? updateDto.reportedEngineerName;
+    const reportingEngineerContactResolved =
+      updateDto.reportingEngineerContact ?? updateDto.reportedEngineerContact;
+    const reportDateStr = updateDto.reportDate ?? updateDto.statusDate;
+
     // Validate work types if provided
-    if (updateDto.workTypes?.length) {
-      await this.validateWorkTypes(updateDto.workTypes);
+    if (workTypesResolved?.length) {
+      await this.validateWorkTypes(workTypesResolved);
     }
 
     // Validate weather condition if provided
@@ -468,9 +476,38 @@ export class DsrService {
       await this.validateEquipment(updateDto.equipmentUsed, existingDsr.userId);
     }
 
-    // Remove fields that shouldn't be directly updated
-    const { changeReason, ...updateFields } = updateDto;
-    delete (updateFields as any).dsrFiles;
+    const { changeReason, ...restFromDto } = updateDto;
+    const updateBase = { ...restFromDto };
+    for (const key of [
+      'dsrFiles',
+      'note',
+      'workDone',
+      'reportedEngineerName',
+      'reportedEngineerContact',
+      'statusDate',
+      'reportDate',
+    ] as const) {
+      delete (updateBase as Record<string, unknown>)[key];
+    }
+
+    const updateFields = {
+      ...updateBase,
+      ...(workTypesResolved !== undefined ? { workTypes: workTypesResolved } : {}),
+      ...(remarksResolved !== undefined ? { remarks: remarksResolved } : {}),
+      ...(reportingEngineerNameResolved !== undefined
+        ? { reportingEngineerName: reportingEngineerNameResolved }
+        : {}),
+      ...(reportingEngineerContactResolved !== undefined
+        ? { reportingEngineerContact: reportingEngineerContactResolved }
+        : {}),
+    };
+
+    const reportDateForVersion = new Date(
+      reportDateStr ??
+        (existingDsr.reportDate instanceof Date
+          ? existingDsr.reportDate.toISOString().slice(0, 10)
+          : String(existingDsr.reportDate)),
+    );
 
     // Mark old DSR as inactive (versioning approach like expense tracker)
     await this.dsrRepository.update({ id }, { isActive: false, updatedBy });
@@ -485,7 +522,6 @@ export class DsrService {
       // Core fields from existing DSR
       siteId: existingDsr.siteId,
       userId: existingDsr.userId,
-      reportDate: existingDsr.reportDate,
       dsrEntryType: existingDsr.dsrEntryType ?? DsrEntryType.SELF,
       workTypes: existingDsr.workTypes,
       workDescription: existingDsr.workDescription,
@@ -500,9 +536,8 @@ export class DsrService {
       approvedBy: existingDsr.approvedBy,
       approvedAt: existingDsr.approvedAt,
       remarks: existingDsr.remarks,
-      // Override with updated fields
       ...updateFields,
-      // Versioning fields
+      reportDate: reportDateForVersion,
       isActive: true,
       originalDsrId,
       parentDsrId,
