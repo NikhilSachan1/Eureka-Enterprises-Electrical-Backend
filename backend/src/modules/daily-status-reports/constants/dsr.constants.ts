@@ -1,6 +1,12 @@
 // Default DSR status for auto-approval
 export const DSR_DEFAULT_STATUS = 'APPROVED';
 
+/** How the DSR was created: normal flow vs POST .../force */
+export enum DsrEntryType {
+  SELF = 'SELF',
+  FORCED = 'FORCED',
+}
+
 // Entity field names for responses
 export const DsrEntityFields = {
   DSR: 'Daily Status Report',
