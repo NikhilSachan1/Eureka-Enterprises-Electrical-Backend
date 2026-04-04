@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsString,
   IsNotEmpty,
@@ -9,6 +10,14 @@ import {
   Min,
   MaxLength,
 } from 'class-validator';
+
+/** multipart/form-data sends numbers as strings; also strips thousands separators */
+export function parseMultipartOptionalNumber(value: unknown): number | undefined {
+  if (value === '' || value === null || value === undefined) return undefined;
+  if (typeof value === 'number' && !Number.isNaN(value)) return value;
+  const n = parseFloat(String(value).replace(/,/g, ''));
+  return Number.isNaN(n) ? undefined : n;
+}
 
 export class CreateSiteDocumentDto {
   @ApiPropertyOptional({
@@ -61,21 +70,24 @@ export class CreateSiteDocumentDto {
     description: 'Base amount (optional for non-financial docs)',
     example: 10000.0,
   })
-  @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => parseMultipartOptionalNumber(value))
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   amount?: number;
 
   @ApiPropertyOptional({ description: 'GST amount', example: 1800.0 })
-  @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => parseMultipartOptionalNumber(value))
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   gstAmount?: number;
 
   @ApiPropertyOptional({ description: 'Total amount (auto-calculated if not provided)' })
-  @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => parseMultipartOptionalNumber(value))
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   totalAmount?: number;
 
   @ApiPropertyOptional({ description: 'Document status', example: 'DRAFT' })

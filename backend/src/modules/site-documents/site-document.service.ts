@@ -141,12 +141,15 @@ export class SiteDocumentService {
       documentData.fileUrl = fileKey;
     }
 
-    await this.siteDocumentRepository.create(documentData);
+    const created = await this.siteDocumentRepository.create(documentData);
 
-    return this.utilityService.getSuccessMessage(
-      SiteDocumentEntityFields.SITE_DOCUMENT,
-      DataSuccessOperationType.CREATE,
-    );
+    return {
+      ...this.utilityService.getSuccessMessage(
+        SiteDocumentEntityFields.SITE_DOCUMENT,
+        DataSuccessOperationType.CREATE,
+      ),
+      data: created,
+    };
   }
 
   // Bulk create documents with different types in single API call
