@@ -3,11 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { IsNull, Between, MoreThanOrEqual, LessThanOrEqual, FindOneOptions } from 'typeorm';
 import { DsrRepository } from './dsr.repository';
 import { DailyStatusReportEntity, DsrFileEntity, DsrEditHistoryEntity } from './entities';
-import { CreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
+import { CreateDsrDto, ForceCreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
 import {
   DSR_ERRORS,
   DSR_RESPONSES,
@@ -31,6 +32,7 @@ import {
 } from 'src/utils/master-constants/master-constants';
 import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
+import { Roles } from '../roles/constants/role.constants';
 
 @Injectable()
 export class DsrService {
@@ -140,6 +142,106 @@ export class DsrService {
           fileName: fileKey.split('/').pop() || 'file',
           fileType: this.getFileTypeFromKey(fileKey),
           createdBy: userId,
+        });
+      }
+    }
+
+    return this.utilityService.getSuccessMessage(
+      DsrEntityFields.DSR,
+      DataSuccessOperationType.CREATE,
+    );
+  }
+
+  /**
+   * Create DSR without requiring site allocation to the target user.
+   * Optional userId (defaults to creator); only privileged roles may set another user.
+   * Equipment list is validated for existence only (not assignment to the user).
+   */
+  async forceCreate(
+    createDto: ForceCreateDsrDto,
+    actingUserId: string,
+    actingUserRole: string,
+    fileKeys: string[] = [],
+  ) {
+    const { userId: bodyUserId, ...rest } = createDto;
+    const targetUserId = bodyUserId ?? actingUserId;
+
+    if (targetUserId !== actingUserId) {
+      const allowedRoles = [Roles.SUPER_ADMIN, Roles.HR, Roles.ADMIN, Roles.MANAGER];
+      if (!allowedRoles.includes(actingUserRole as Roles)) {
+        throw new ForbiddenException(DSR_ERRORS.FORCE_TARGET_USER_FORBIDDEN);
+      }
+    }
+
+    const site = await this.siteService.findOneOrFail({
+      where: { id: createDto.siteId, deletedAt: IsNull() },
+    });
+
+    if (![SiteStatus.UPCOMING, SiteStatus.ONGOING].includes(site.status as SiteStatus)) {
+      throw new BadRequestException(DSR_ERRORS.SITE_NOT_ACTIVE);
+    }
+
+    const existingDsr = await this.dsrRepository.findOne({
+      where: {
+        siteId: createDto.siteId,
+        userId: targetUserId,
+        reportDate: new Date(createDto.reportDate),
+        isActive: true,
+        deletedAt: IsNull(),
+      },
+    });
+
+    if (existingDsr) {
+      throw new ConflictException(DSR_ERRORS.ALREADY_EXISTS);
+    }
+
+    if (rest.workTypes?.length) {
+      await this.validateWorkTypes(rest.workTypes);
+    }
+    if (rest.weatherCondition) {
+      await this.validateWeatherCondition(rest.weatherCondition);
+    }
+    if (rest.equipmentUsed?.length) {
+      await this.validateEquipmentExists(rest.equipmentUsed);
+    }
+
+    const hoursWorked = await this.getShiftHours();
+
+    const dsrData: Partial<DailyStatusReportEntity> = {
+      siteId: createDto.siteId,
+      userId: targetUserId,
+      reportDate: new Date(createDto.reportDate),
+      workTypes: rest.workTypes || null,
+      workDescription: rest.workDescription || null,
+      hoursWorked,
+      challenges: rest.challenges || null,
+      reportingEngineerName: rest.reportingEngineerName || null,
+      reportingEngineerContact: rest.reportingEngineerContact || null,
+      weatherCondition: rest.weatherCondition || null,
+      manpowerCount: rest.manpowerCount ?? null,
+      equipmentUsed: rest.equipmentUsed || null,
+      remarks: rest.remarks || null,
+      status: DSR_DEFAULT_STATUS,
+      approvedBy: SYSTEM_USER_ID,
+      approvedAt: new Date(),
+      createdBy: actingUserId,
+      isActive: true,
+      versionNumber: 1,
+      originalDsrId: null,
+      parentDsrId: null,
+      editReason: null,
+    };
+
+    const dsr = await this.dsrRepository.create(dsrData);
+
+    if (fileKeys.length > 0) {
+      for (const fileKey of fileKeys) {
+        await this.dsrRepository.createFile({
+          dsrId: dsr.id,
+          fileKey,
+          fileName: fileKey.split('/').pop() || 'file',
+          fileType: this.getFileTypeFromKey(fileKey),
+          createdBy: actingUserId,
         });
       }
     }
@@ -649,6 +751,23 @@ export class DsrService {
         where: {
           id: assetVersionId,
           assignedTo: userId,
+          deletedAt: IsNull(),
+        },
+      });
+
+      if (!asset) {
+        throw new BadRequestException(
+          DSR_ERRORS.EQUIPMENT_NOT_ALLOCATED.replace('{assetId}', assetVersionId),
+        );
+      }
+    }
+  }
+
+  private async validateEquipmentExists(assetVersionIds: string[]): Promise<void> {
+    for (const assetVersionId of assetVersionIds) {
+      const asset = await this.assetVersionsService.findOne({
+        where: {
+          id: assetVersionId,
           deletedAt: IsNull(),
         },
       });
