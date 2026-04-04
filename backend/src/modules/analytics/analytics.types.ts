@@ -84,8 +84,15 @@ export interface ExpenseBreakdown {
   fuelExpenses: number;
   payrollCosts: number;
   breakdown: ExpenseBreakdownItem[];
+  /** Payable site documents grouped by documentType (same period filters as profitability) */
   byCategory: CategoryAmount[];
+  /** Employee expense claims grouped by expense category (food, travel, etc.) */
+  employeeExpensesByCategory: CategoryAmount[];
   byContractor: ContractorExpense[];
+  /** Pro-rated payroll cost allocated to this site, per employee */
+  payrollByEmployee: PayrollEmployeeAmount[];
+  /** Fuel at site (via vehicle logs), per vehicle — fuel has no category field in DB */
+  fuelExpensesByVehicle: FuelExpenseVehicleAmount[];
 }
 
 export interface ExpenseBreakdownItem {
@@ -110,6 +117,26 @@ export interface CategoryAmount {
   category: string;
   amount: number;
   percentage: number;
+  /** Number of expense rows or documents in the bucket, when available */
+  count?: number;
+}
+
+export interface PayrollEmployeeAmount {
+  userId: string;
+  employeeName: string;
+  amount: number;
+  /** Share of total site payroll cost (profitability payroll line) */
+  percentage: number;
+}
+
+export interface FuelExpenseVehicleAmount {
+  vehicleId: string;
+  /** Typically registration number from vehicle master */
+  vehicleLabel: string;
+  amount: number;
+  /** Share of total site fuel cost (profitability fuel line) */
+  percentage: number;
+  count?: number;
 }
 
 export interface ContractorExpense {
