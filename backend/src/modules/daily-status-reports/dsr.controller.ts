@@ -14,7 +14,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { DsrService } from './dsr.service';
-import { CreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
+import { CreateDsrDto, ForceCreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import {
   FILE_UPLOAD_FOLDER_NAMES,
@@ -44,6 +44,24 @@ export class DsrController {
     uploadedFiles: { fileKeys: string[] } = { fileKeys: [] },
   ) {
     return await this.dsrService.create(createDto, userId, uploadedFiles.fileKeys);
+  }
+
+  @Post('force')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.DSR_FILES, maxCount: 5 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: ForceCreateDsrDto })
+  @ApiOperation({
+    summary: 'Force create a DSR entry',
+    description:
+      'Creates a daily status report without requiring the user to be allocated to the site. Optional userId targets another employee (SUPER_ADMIN, HR, ADMIN, or MANAGER only). Equipment IDs are validated for existence only.',
+  })
+  async forceCreate(
+    @Request() { user: { id: userId, role } }: { user: { id: string; role: string } },
+    @Body() forceDto: ForceCreateDsrDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.DSR_FILES)
+    uploadedFiles: { fileKeys: string[] } = { fileKeys: [] },
+  ) {
+    return await this.dsrService.forceCreate(forceDto, userId, role, uploadedFiles.fileKeys);
   }
 
   @Get()

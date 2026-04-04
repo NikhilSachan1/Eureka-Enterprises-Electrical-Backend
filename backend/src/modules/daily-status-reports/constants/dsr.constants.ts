@@ -20,6 +20,8 @@ export const DSR_ERRORS = {
   WEATHER_CONFIG_NOT_FOUND: 'Weather condition configuration not found',
   SHIFT_CONFIG_NOT_FOUND: 'Shift configuration not found',
   FILE_NOT_FOUND: 'DSR file not found',
+  FORCE_TARGET_USER_FORBIDDEN:
+    'Only SUPER_ADMIN, HR, ADMIN, or MANAGER can create a forced DSR for another user',
 };
 
 // Success messages
