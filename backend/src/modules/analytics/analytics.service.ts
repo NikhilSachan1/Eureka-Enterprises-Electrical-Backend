@@ -147,10 +147,32 @@ export class AnalyticsService {
 
     const main = mainResult[0];
 
-    // Get expense breakdowns and monthly trend in parallel
-    const [categoryResult, contractorResult, documentResult, trendResult] = await Promise.all([
-      this.executeQuery(queries.getSiteExpensesByCategoryQuery(siteId)),
-      this.executeQuery(queries.getSiteExpensesByContractorQuery(siteId)),
+    const [
+      categoryResult,
+      employeeCategoryResult,
+      contractorResult,
+      fuelByVehicleResult,
+      payrollByEmployeeResult,
+      documentResult,
+      trendResult,
+    ] = await Promise.all([
+      this.executeQuery(
+        queries.getSiteExpensesByCategoryQuery(siteId, dateRange.startDate, dateRange.endDate),
+      ),
+      this.executeQuery(
+        queries.getSiteEmployeeExpensesByCategoryQuery(
+          siteId,
+          dateRange.startDate,
+          dateRange.endDate,
+        ),
+      ),
+      this.executeQuery(
+        queries.getSiteExpensesByContractorQuery(siteId, dateRange.startDate, dateRange.endDate),
+      ),
+      this.executeQuery(
+        queries.getSiteFuelExpensesByVehicleQuery(siteId, dateRange.startDate, dateRange.endDate),
+      ),
+      this.executeQuery(queries.getSitePayrollByEmployeeQuery(siteId)),
       this.executeQuery(queries.getSiteDocumentSummaryQuery(siteId)),
       this.executeQuery(
         queries.getSiteMonthlyTrendQuery(siteId, dateRange.startDate, dateRange.endDate),
@@ -192,6 +214,43 @@ export class AnalyticsService {
           ? Math.round(((parseFloat(cat.amount) || 0) / totalCategoryExpenseAmount) * 100 * 100) /
             100
           : 0,
+      count: parseInt(cat.count, 10) || 0,
+    }));
+
+    const totalEmployeeCategoryAmount = employeeCategoryResult.reduce(
+      (sum: number, row: any) => sum + (parseFloat(row.amount) || 0),
+      0,
+    );
+    const employeeExpensesByCategory = employeeCategoryResult.map((row: any) => ({
+      category: row.category,
+      amount: parseFloat(row.amount) || 0,
+      percentage:
+        totalEmployeeCategoryAmount > 0
+          ? Math.round(((parseFloat(row.amount) || 0) / totalEmployeeCategoryAmount) * 100 * 100) /
+            100
+          : 0,
+      count: parseInt(row.count, 10) || 0,
+    }));
+
+    const payrollByEmployee = payrollByEmployeeResult.map((row: any) => ({
+      userId: row.userId,
+      employeeName: row.employeeName || '',
+      amount: parseFloat(row.amount) || 0,
+      percentage:
+        payrollCosts > 0
+          ? Math.round(((parseFloat(row.amount) || 0) / payrollCosts) * 100 * 100) / 100
+          : 0,
+    }));
+
+    const fuelExpensesByVehicle = fuelByVehicleResult.map((row: any) => ({
+      vehicleId: row.vehicleId,
+      vehicleLabel: row.vehicleLabel || 'Unknown',
+      amount: parseFloat(row.amount) || 0,
+      percentage:
+        fuelExpenses > 0
+          ? Math.round(((parseFloat(row.amount) || 0) / fuelExpenses) * 100 * 100) / 100
+          : 0,
+      count: parseInt(row.count, 10) || 0,
     }));
 
     // Process contractor expenses
@@ -287,7 +346,10 @@ export class AnalyticsService {
         payrollCosts,
         breakdown: expenseBreakdown,
         byCategory: expensesByCategory,
+        employeeExpensesByCategory,
         byContractor: expensesByContractor,
+        payrollByEmployee,
+        fuelExpensesByVehicle,
       },
       profitability: {
         grossProfit,
