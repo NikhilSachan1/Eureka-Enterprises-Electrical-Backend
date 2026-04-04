@@ -32,14 +32,15 @@ export class BulkUpdatePayrollStatusDto {
   payrollIds: string[];
 
   @ApiProperty({
-    description: 'Target status (CANCELLED not allowed - use bulk cancel endpoint)',
+    description:
+      'Next status for existing rows. DRAFT→GENERATED or DRAFT→APPROVED here — do not use generate-bulk for that (it creates rows and errors if they already exist). CANCELLED: use bulk-cancel.',
     enum: [
       PayrollStatus.DRAFT,
       PayrollStatus.GENERATED,
       PayrollStatus.APPROVED,
       PayrollStatus.PAID,
     ],
-    example: PayrollStatus.APPROVED,
+    example: PayrollStatus.GENERATED,
   })
   @IsEnum(PayrollStatus)
   targetStatus: PayrollStatus;

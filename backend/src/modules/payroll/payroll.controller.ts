@@ -39,7 +39,8 @@ export class PayrollController {
   @Post('generate')
   @ApiOperation({
     summary: 'Generate payroll',
-    description: 'Generates payroll for a specific month and year for employees.',
+    description:
+      'Creates a new payroll row for one user and period. Fails if a non-cancelled payroll already exists for that user/month. To move existing rows (e.g. DRAFT → GENERATED or APPROVED), use PATCH :id or POST bulk-status-update — do not call generate again.',
   })
   async generatePayroll(@Body() generateDto: GeneratePayrollDto, @Request() req: any) {
     const generatedBy = req?.user?.id;
@@ -49,7 +50,8 @@ export class PayrollController {
   @Post('generate-bulk')
   @ApiOperation({
     summary: 'Generate bulk payroll',
-    description: 'Generates payroll for multiple employees in a specific month and year.',
+    description:
+      'Creates new payroll rows for many users for one month/year (skips rows that already exist). It does not change status on existing DRAFT rows. For DRAFT → GENERATED or DRAFT → APPROVED, use POST bulk-status-update with the existing payroll IDs.',
   })
   async generateBulkPayroll(@Body() generateDto: GenerateBulkPayrollDto, @Request() req: any) {
     const generatedBy = req?.user?.id;
@@ -81,7 +83,8 @@ export class PayrollController {
   @Post('bulk-status-update')
   @ApiOperation({
     summary: 'Bulk update payroll status',
-    description: 'Updates the status of multiple payroll records in bulk.',
+    description:
+      'Updates status on existing payroll rows (e.g. DRAFT → GENERATED → APPROVED → PAID). Use this after monthly cron or manual generate has created DRAFT rows; do not use generate-bulk to re-run the same month.',
   })
   @ApiBody({ type: BulkUpdatePayrollStatusDto })
   async bulkUpdateStatus(@Body() bulkUpdateDto: BulkUpdatePayrollStatusDto, @Request() req: any) {

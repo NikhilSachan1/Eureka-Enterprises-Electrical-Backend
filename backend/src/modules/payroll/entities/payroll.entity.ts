@@ -5,7 +5,11 @@ import { SalaryStructureEntity } from '../../salary-structures/entities/salary-s
 import { PayrollStatus } from '../constants/payroll.constants';
 
 @Entity('payroll')
-@Index('IDX_PAYROLL_USER_MONTH_YEAR', ['userId', 'month', 'year'], { unique: true })
+// Partial unique: DB migration 1817000000000 — only non-CANCELLED rows must be unique per user/month/year
+@Index('IDX_PAYROLL_USER_MONTH_YEAR_ACTIVE', ['userId', 'month', 'year'], {
+  unique: true,
+  where: `"status" <> 'CANCELLED'`,
+})
 export class PayrollEntity extends BaseEntity {
   @Column({ type: 'uuid' })
   userId: string;
