@@ -136,6 +136,7 @@ export class AuthService {
       roles,
       activeRole: defaultActiveRole,
       expiresIn: Environments.JWT_AUTH_TOKEN_EXPIRY,
+      userId: id,
     };
   }
 
