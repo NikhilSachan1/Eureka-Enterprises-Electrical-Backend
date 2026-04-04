@@ -11,6 +11,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
+import { parseMultipartOptionalNumber } from './create-site-document.dto';
 
 // Helper to parse JSON string to object (for multipart/form-data)
 const parseJsonString = (value: any) => {
@@ -41,21 +42,24 @@ export class DocumentMetadataDto {
     description: 'Base amount (optional for non-financial docs)',
     example: 10000.0,
   })
-  @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => parseMultipartOptionalNumber(value))
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   amount?: number;
 
   @ApiPropertyOptional({ description: 'GST amount', example: 1800.0 })
-  @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => parseMultipartOptionalNumber(value))
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   gstAmount?: number;
 
   @ApiPropertyOptional({ description: 'Total amount' })
-  @IsNumber()
-  @Min(0)
+  @Transform(({ value }) => parseMultipartOptionalNumber(value))
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   totalAmount?: number;
 
   @ApiPropertyOptional({ description: 'Document status', example: 'DRAFT' })
