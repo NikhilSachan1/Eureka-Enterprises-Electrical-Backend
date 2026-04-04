@@ -58,6 +58,7 @@ export const checkExistingPayrollQuery = (userId: string, month: number, year: n
         AND month = $2
         AND year = $3
         AND "deletedAt" IS NULL
+        AND status <> 'CANCELLED'
     `,
     params: [userId, month, year],
   };

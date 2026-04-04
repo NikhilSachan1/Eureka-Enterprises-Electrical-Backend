@@ -346,9 +346,16 @@ export class PayrollService {
   }
 
   async findByUserMonthYear(userId: string, month: number, year: number): Promise<PayrollEntity> {
+    // Exclude CANCELLED: after cancel+regenerate there can be multiple rows per user/month/year
     const payroll = await this.payrollRepository.findOne({
-      where: { userId, month, year },
+      where: {
+        userId,
+        month,
+        year,
+        status: Not(PayrollStatus.CANCELLED),
+      },
       relations: ['user', 'salaryStructure', 'approver'],
+      order: { createdAt: 'DESC' },
     });
     if (!payroll) {
       throw new NotFoundException(PAYROLL_ERRORS.NOT_FOUND);
@@ -381,7 +388,13 @@ export class PayrollService {
     year: number,
   ): Promise<PayrollEntity | null> {
     return await this.payrollRepository.findOne({
-      where: { userId, month, year },
+      where: {
+        userId,
+        month,
+        year,
+        status: Not(PayrollStatus.CANCELLED),
+      },
+      order: { createdAt: 'DESC' },
     });
   }
 
