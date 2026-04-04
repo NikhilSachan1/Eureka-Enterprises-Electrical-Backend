@@ -14,6 +14,7 @@ import {
   DSR_RESPONSES,
   DsrEntityFields,
   DSR_DEFAULT_STATUS,
+  DsrEntryType,
 } from './constants/dsr.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import {
@@ -118,6 +119,7 @@ export class DsrService {
       manpowerCount: createDto.manpowerCount || null,
       equipmentUsed: createDto.equipmentUsed || null,
       remarks: createDto.remarks || null,
+      dsrEntryType: DsrEntryType.SELF,
       // Auto-approval
       status: DSR_DEFAULT_STATUS,
       approvedBy: SYSTEM_USER_ID,
@@ -221,6 +223,7 @@ export class DsrService {
       manpowerCount: rest.manpowerCount ?? null,
       equipmentUsed: rest.equipmentUsed || null,
       remarks: rest.remarks || null,
+      dsrEntryType: DsrEntryType.FORCED,
       status: DSR_DEFAULT_STATUS,
       approvedBy: SYSTEM_USER_ID,
       approvedAt: new Date(),
@@ -483,6 +486,7 @@ export class DsrService {
       siteId: existingDsr.siteId,
       userId: existingDsr.userId,
       reportDate: existingDsr.reportDate,
+      dsrEntryType: existingDsr.dsrEntryType ?? DsrEntryType.SELF,
       workTypes: existingDsr.workTypes,
       workDescription: existingDsr.workDescription,
       hoursWorked: existingDsr.hoursWorked,
@@ -608,6 +612,7 @@ export class DsrService {
       id: version.id,
       versionNumber: version.versionNumber,
       isActive: version.isActive,
+      dsrEntryType: version.dsrEntryType ?? DsrEntryType.SELF,
       editReason: version.editReason,
       createdAt: version.createdAt,
       updatedAt: version.updatedAt,

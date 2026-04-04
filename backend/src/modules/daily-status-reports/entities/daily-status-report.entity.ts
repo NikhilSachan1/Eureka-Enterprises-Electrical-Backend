@@ -2,7 +2,7 @@ import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany, Unique } from 
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
-import { DSR_DEFAULT_STATUS } from '../constants/dsr.constants';
+import { DSR_DEFAULT_STATUS, DsrEntryType } from '../constants/dsr.constants';
 
 @Entity('daily_status_reports')
 @Unique('UQ_DSR_SITE_USER_DATE_ACTIVE', ['siteId', 'userId', 'reportDate', 'isActive'])
@@ -67,6 +67,10 @@ export class DailyStatusReportEntity extends BaseEntity {
   // Equipment used (array of assetVersionIds)
   @Column({ type: 'jsonb', nullable: true })
   equipmentUsed: string[];
+
+  // SELF = standard create; FORCED = POST .../daily-status-reports/force
+  @Column({ type: 'varchar', length: 20, default: DsrEntryType.SELF })
+  dsrEntryType: DsrEntryType;
 
   // Status - default APPROVED (auto-approval)
   @Column({ type: 'varchar', length: 20, default: DSR_DEFAULT_STATUS })
