@@ -248,6 +248,10 @@ export class SiteService {
     }
 
     // Transform records: add health score, allocations, and limit relation fields
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const transformedRecords = records.map((site) => {
       const { company, siteContractors, ...siteData } = site;
       const allocation = allocationMap.get(site.id) || {
@@ -255,11 +259,30 @@ export class SiteService {
         allocatedEmployees: [],
       };
 
+      // Timeline metrics
+      const start = new Date(site.startDate);
+      start.setHours(0, 0, 0, 0);
+      const daysElapsed = Math.max(0, Math.round((today.getTime() - start.getTime()) / MS_PER_DAY));
+      const end = site.endDate ? new Date(site.endDate) : null;
+      if (end) end.setHours(0, 0, 0, 0);
+      const daysRemaining = end
+        ? Math.max(0, Math.round((end.getTime() - today.getTime()) / MS_PER_DAY))
+        : null;
+      const totalDays = end
+        ? Math.round((end.getTime() - start.getTime()) / MS_PER_DAY)
+        : daysElapsed;
+      const completionPercent =
+        totalDays > 0 ? Math.min(100, Math.round((daysElapsed / totalDays) * 100)) : 0;
+
       return {
         ...siteData,
         // Health score
         healthScore: healthScoreMap.get(site.id)?.healthScore ?? null,
         healthGrade: healthScoreMap.get(site.id)?.healthGrade ?? null,
+        // Timeline
+        daysElapsed,
+        daysRemaining,
+        completionPercent,
         // Allocated employees
         allocatedEmployeeCount: allocation.allocatedEmployeeCount,
         allocatedEmployees: allocation.allocatedEmployees,
