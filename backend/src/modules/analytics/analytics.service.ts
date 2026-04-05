@@ -182,6 +182,7 @@ export class AnalyticsService {
     // Parse financial values
     const totalRevenue = parseFloat(main.totalRevenue) || 0;
     const totalInvoiced = parseFloat(main.totalInvoiced) || 0;
+    const totalInvoicedCount = parseInt(main.totalInvoicedCount) || 0;
     const totalPOValue = parseFloat(main.totalPOValue) || 0;
     const collectedAmount = parseFloat(main.collectedAmount) || 0;
     const durationDays = parseInt(main.durationDays) || 1;
@@ -333,6 +334,7 @@ export class AnalyticsService {
       revenue: {
         totalPOValue,
         totalInvoiced,
+        totalInvoicedCount,
         pendingToInvoice: totalPOValue - totalInvoiced,
         collectedAmount,
         pendingCollection: totalRevenue - collectedAmount,
