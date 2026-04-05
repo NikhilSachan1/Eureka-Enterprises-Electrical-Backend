@@ -71,6 +71,7 @@ export interface SiteBasicInfo {
 export interface RevenueBreakdown {
   totalPOValue: number;
   totalInvoiced: number;
+  totalInvoicedCount: number;
   pendingToInvoice: number;
   collectedAmount: number;
   pendingCollection: number;

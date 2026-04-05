@@ -259,7 +259,8 @@ export const getSiteProfitabilityQuery = (
           COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "contractorExpenses",
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "paidContractorExpenses",
-          COUNT(sd.id) as "totalDocuments"
+          COUNT(sd.id) as "totalDocuments",
+          COUNT(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' THEN 1 END) as "totalInvoicedCount"
         FROM site_documents sd, site_info
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
       ),
