@@ -255,8 +255,8 @@ export const getSiteProfitabilityQuery = (
         SELECT
           COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'PO' THEN sd."totalAmount" ELSE 0 END), 0) as "totalPOValue",
           COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalInvoiced",
-          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "collectedAmount",
-          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "collectedAmount",
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "contractorExpenses",
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "paidContractorExpenses",
           COUNT(sd.id) as "totalDocuments",
@@ -916,7 +916,7 @@ export const getAllSitesProfitabilityQuery = (
           (COALESCE(s."endDate"::date, CURRENT_DATE) - s."startDate"::date) + 1 as "durationDays",
           
           -- Revenue from site documents
-          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
+          COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' THEN sd."totalAmount" ELSE 0 END), 0) as "totalRevenue",
           
           -- Contractor expenses from site documents
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as "contractorExpenses",
