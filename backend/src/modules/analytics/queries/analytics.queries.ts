@@ -374,7 +374,8 @@ export const getSiteProfitabilityQuery = (
         (sdt."contractorExpenses" + ee.total + fue.total + pc.total) as "totalExpenses",
         
         -- Document count
-        sdt."totalDocuments"
+        sdt."totalDocuments",
+        sdt."totalInvoicedCount"
         
       FROM sites s
       LEFT JOIN companies c ON s."companyId" = c.id
