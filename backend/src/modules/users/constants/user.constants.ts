@@ -69,6 +69,8 @@ export const USERS_RESPONSES = {
 
 export enum UserSortFields {
   CREATED_AT = 'createdAt',
+  FIRST_NAME = 'firstName',
+  LAST_NAME = 'lastName',
 }
 
 export const VALIDATION_PATTERNS = {

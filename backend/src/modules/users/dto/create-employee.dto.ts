@@ -4,7 +4,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  Matches,
   IsDateString,
   IsInt,
   Min,
@@ -13,7 +12,7 @@ import {
   IsArray,
   ArrayMinSize,
 } from 'class-validator';
-import { USERS_ERRORS, VALIDATION_PATTERNS } from '../constants/user.constants';
+import { USERS_ERRORS } from '../constants/user.constants';
 import { Type, Transform } from 'class-transformer';
 
 export class CreateEmployeeDto {
@@ -40,7 +39,6 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Contact number', required: true, example: '+919876543210' })
   @IsString()
   @IsNotEmpty()
-  @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
   contactNumber: string;
 
   @ApiProperty({
@@ -62,7 +60,6 @@ export class CreateEmployeeDto {
   })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.EMPLOYEE_ID, { message: USERS_ERRORS.INVALID_EMPLOYEE_ID })
   employeeId?: string;
 
   // ==================== Personal Information ====================
@@ -76,7 +73,6 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Emergency contact', required: false, example: '+919876543211' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
   emergencyContactNumber?: string;
 
   @ApiProperty({ description: 'Gender', required: false, example: 'MALE' })
@@ -135,7 +131,6 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Pincode (6 digits)', required: false, example: '400001' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.PINCODE, { message: USERS_ERRORS.INVALID_PINCODE })
   pincode?: string;
 
   // ==================== Employment Details ====================
@@ -205,7 +200,6 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'Account number', required: false, example: '123456789012' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.ACCOUNT_NUMBER, { message: USERS_ERRORS.INVALID_ACCOUNT_NUMBER })
   accountNumber?: string;
 
   @ApiProperty({ description: 'Bank name', required: false, example: 'State Bank of India' })
@@ -217,7 +211,6 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'IFSC code', required: false, example: 'SBIN0001234' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.IFSC, { message: USERS_ERRORS.INVALID_IFSC })
   ifscCode?: string;
 
   // ==================== Government IDs ====================
@@ -226,19 +219,16 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'ESIC number (10 digits)', required: false })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 10 digits.' })
   esicNumber?: string;
 
   @ApiProperty({ description: 'Aadhar number (12 digits)', required: false })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.AADHAR, { message: USERS_ERRORS.INVALID_AADHAR })
   aadharNumber?: string;
 
   @ApiProperty({ description: 'PAN number', required: false, example: 'ABCDE1234F' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.PAN, { message: USERS_ERRORS.INVALID_PAN })
   panNumber?: string;
 
   @ApiProperty({ description: 'DL number', required: false, example: 'MH01-2020-1234567' })
@@ -250,12 +240,10 @@ export class CreateEmployeeDto {
   @ApiProperty({ description: 'UAN number (12 digits)', required: false, example: '123456789012' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.UAN, { message: USERS_ERRORS.INVALID_UAN })
   uanNumber?: string;
 
   @ApiProperty({ description: 'Passport number', required: false, example: 'A1234567' })
   @IsString()
   @IsOptional()
-  @Matches(VALIDATION_PATTERNS.PASSPORT, { message: USERS_ERRORS.INVALID_PASSPORT })
   passportNumber?: string;
 }
