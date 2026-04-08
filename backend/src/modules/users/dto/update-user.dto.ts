@@ -9,14 +9,8 @@ import {
   Min,
   Max,
   MaxLength,
-  Matches,
 } from 'class-validator';
-import {
-  USER_DTO_ERRORS,
-  UserStatus,
-  VALIDATION_PATTERNS,
-  USERS_ERRORS,
-} from '../constants/user.constants';
+import { USER_DTO_ERRORS, UserStatus, USERS_ERRORS } from '../constants/user.constants';
 import { Type } from 'class-transformer';
 
 export class UpdateUserDto {
@@ -42,7 +36,6 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Contact number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
   contactNumber?: string;
 
   @ApiProperty({ description: 'User status', required: false, enum: UserStatus })
@@ -74,7 +67,6 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Emergency contact number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.PHONE, { message: USERS_ERRORS.INVALID_PHONE })
   emergencyContactNumber?: string;
 
   @ApiProperty({ description: 'Gender (from config_settings)', required: false })
@@ -128,7 +120,6 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Pincode (6 digits)', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.PINCODE, { message: USERS_ERRORS.INVALID_PINCODE })
   pincode?: string;
 
   // ==================== Employment Details ====================
@@ -186,7 +177,6 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'Bank account number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.ACCOUNT_NUMBER, { message: USERS_ERRORS.INVALID_ACCOUNT_NUMBER })
   accountNumber?: string;
 
   @ApiProperty({ description: 'Bank name', required: false })
@@ -198,7 +188,6 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'IFSC code', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.IFSC, { message: USERS_ERRORS.INVALID_IFSC })
   ifscCode?: string;
 
   // ==================== Government IDs ====================
@@ -206,19 +195,16 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'ESIC number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.ESIC, { message: 'Invalid ESIC number. Must be 10 digits.' })
   esicNumber?: string;
 
   @ApiProperty({ description: 'Aadhar number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.AADHAR, { message: USERS_ERRORS.INVALID_AADHAR })
   aadharNumber?: string;
 
   @ApiProperty({ description: 'PAN number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.PAN, { message: USERS_ERRORS.INVALID_PAN })
   panNumber?: string;
 
   @ApiProperty({ description: 'Driving license number', required: false })
@@ -230,12 +216,10 @@ export class UpdateUserDto {
   @ApiProperty({ description: 'UAN number (12 digits)', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.UAN, { message: USERS_ERRORS.INVALID_UAN })
   uanNumber?: string;
 
   @ApiProperty({ description: 'Passport number', required: false })
   @IsOptional()
   @IsString()
-  @Matches(VALIDATION_PATTERNS.PASSPORT, { message: USERS_ERRORS.INVALID_PASSPORT })
   passportNumber?: string;
 }
