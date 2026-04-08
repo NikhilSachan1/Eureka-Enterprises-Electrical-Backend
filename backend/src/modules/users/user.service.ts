@@ -925,6 +925,19 @@ export class UserService {
         const encryptedToken = this.utilityService.encrypt(token);
         const resetPasswordLink = `${Environments.API_BASE_URL}${AUTH_REDIRECT_ROUTES.TOKEN_VALIDATION}${encryptedToken}`;
 
+        // Send password reset email
+        await this.emailService.sendMail({
+          receiverEmails: [user.email],
+          subject: EMAIL_SUBJECT.FORGET_PASSWORD,
+          template: EMAIL_TEMPLATE.FORGET_PASSWORD,
+          emailData: {
+            firstName: user.firstName,
+            lastName: user.lastName,
+            resetPasswordLink,
+            currentYear: this.utilityService.getCurrentYear(),
+          },
+        });
+
         results.push({
           userId,
           email: user.email,
@@ -934,7 +947,7 @@ export class UserService {
           status: 'success',
         });
 
-        Logger.log(`Generated password reset link for user: ${user.email}`);
+        Logger.log(`Password reset email sent to: ${user.email}`);
       } catch (error) {
         results.push({
           userId,
