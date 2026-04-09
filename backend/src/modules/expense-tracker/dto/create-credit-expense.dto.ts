@@ -28,9 +28,9 @@ export class CreateCreditExpenseDto {
     example: 'Reimbursement for travel',
     required: true,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  description: string;
+  description?: string;
 
   @ApiProperty({
     description: 'Expense Amount',
