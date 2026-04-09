@@ -61,7 +61,7 @@ export class UserRepository {
 
       if (search) {
         queryBuilder.andWhere(
-          `(LOWER(CONCAT(users.firstName, ' ', users.lastName)) LIKE LOWER(:search) OR LOWER(users.email) LIKE LOWER(:search))`,
+          `(LOWER(CONCAT(users.firstName, ' ', users.lastName)) LIKE LOWER(:search) OR LOWER(users.email) LIKE LOWER(:search) OR LOWER(users.employeeId) LIKE LOWER(:search))`,
           { search: `%${search}%` },
         );
       }
