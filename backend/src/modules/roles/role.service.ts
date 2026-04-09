@@ -77,7 +77,9 @@ export class RoleService {
     totalPermissions: number;
   }> {
     try {
-      const { names, search, page, pageSize, sortField, sortOrder } = options;
+      const { names, search, sortField, sortOrder } = options;
+      const page = Number(options.page) || 1;
+      const pageSize = Number(options.pageSize) || 20;
 
       // Build where conditions (pass raw values for query builder)
       const where: FindOptionsWhere<RoleEntity> & { search?: string; names?: string[] } = {
@@ -99,7 +101,9 @@ export class RoleService {
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        order: { [sortField]: sortOrder === SortOrder.ASC ? SortOrder.ASC : SortOrder.DESC },
+        order: {
+          [sortField || 'createdAt']: sortOrder === SortOrder.ASC ? SortOrder.ASC : SortOrder.DESC,
+        },
       };
 
       const rolesResult = await this.roleRepository.findAll(findOptions);

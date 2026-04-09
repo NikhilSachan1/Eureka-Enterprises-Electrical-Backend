@@ -72,13 +72,10 @@ export class UserRepository {
         });
       }
 
-      const numPage = Number(page) || 1;
-      const numPageSize = Number(pageSize) || 10;
-
       const [users, count] = await queryBuilder
         .orderBy(`users.${sortField}`, sortOrder as SortOrder)
-        .skip((numPage - 1) * numPageSize)
-        .take(numPageSize)
+        .skip((page - 1) * pageSize)
+        .take(pageSize)
         .getManyAndCount();
 
       const transformedUsers = users.map((user) => {
