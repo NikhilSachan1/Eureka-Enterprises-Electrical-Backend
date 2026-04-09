@@ -91,8 +91,15 @@ export class UserService {
         await this.validateRolesFromDb(options.role);
       }
 
+      // Ensure pagination values are numbers (query params can arrive as strings)
+      const sanitizedOptions = {
+        ...options,
+        page: Number(options.page) || 1,
+        pageSize: Number(options.pageSize) || 10,
+      };
+
       const [users, metrics] = await Promise.all([
-        this.userRepository.findAll(options),
+        this.userRepository.findAll(sanitizedOptions),
         this.userRepository.getMetrics(),
       ]);
       return {
