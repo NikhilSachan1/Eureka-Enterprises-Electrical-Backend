@@ -91,15 +91,8 @@ export class UserService {
         await this.validateRolesFromDb(options.role);
       }
 
-      // Ensure pagination values are numbers (query params can arrive as strings)
-      const sanitizedOptions = {
-        ...options,
-        page: Number(options.page) || 1,
-        pageSize: Number(options.pageSize) || 10,
-      };
-
       const [users, metrics] = await Promise.all([
-        this.userRepository.findAll(sanitizedOptions),
+        this.userRepository.findAll(options),
         this.userRepository.getMetrics(),
       ]);
       return {
@@ -112,7 +105,7 @@ export class UserService {
   }
 
   private async validateRolesFromDb(roles: string[]): Promise<void> {
-    const validRolesResult = await this.roleService.findAll({});
+    const validRolesResult = await this.roleService.findAll({ page: 1, pageSize: 1000 });
     const validRoleNames = validRolesResult.records.map((role) => role.name.toUpperCase());
 
     const invalidRoles = roles.filter((role) => !validRoleNames.includes(role.toUpperCase()));
