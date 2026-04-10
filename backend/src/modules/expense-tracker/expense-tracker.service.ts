@@ -946,123 +946,58 @@ export class ExpenseTrackerService {
                   approvalStatus,
                 ),
               );
-            case ApprovalStatus.APPROVED:
-              await this.dataSource.transaction(async (entityManager) => {
-                const expense = await this.findOneOrFail({ where: { id: expenseId } });
-                await this.expenseTrackerRepository.update(
-                  { id: expenseId },
-                  {
-                    isActive: false,
-                    updatedBy: approvalBy,
-                  },
-                  entityManager,
+            case ApprovalStatus.APPROVED: {
+              const expense = await this.findOneOrFail({ where: { id: expenseId } });
+              if (approvalBy === expense.createdBy) {
+                throw new BadRequestException(
+                  EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_APPROVED_BY_CREATOR,
                 );
-                if (approvalBy === expense.createdBy) {
-                  throw new BadRequestException(
-                    EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_APPROVED_BY_CREATOR,
-                  );
-                }
-                const originalExpenseId = expense.originalExpenseId || expenseId;
-                const parentExpenseId = expenseId;
-                const versionNumber = expense.versionNumber + 1;
-
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: __, ...expenseData } = expense;
-
-                await this.expenseTrackerRepository.create(
-                  {
-                    ...expenseData,
-                    isActive: true,
-                    updatedBy: approvalBy,
-                    approvalAt: new Date(),
-                    approvalStatus,
-                    approvalBy,
-                    approvalReason,
-                    entrySourceType,
-                    originalExpenseId,
-                    parentExpenseId,
-                    versionNumber,
-                  },
-                  entityManager,
-                );
-              });
+              }
+              await this.expenseTrackerRepository.update(
+                { id: expenseId },
+                {
+                  approvalStatus,
+                  approvalBy,
+                  approvalAt: new Date(),
+                  approvalReason,
+                  entrySourceType,
+                  updatedBy: approvalBy,
+                },
+              );
               break;
-            case ApprovalStatus.REJECTED:
-              await this.dataSource.transaction(async (entityManager) => {
-                const expense = await this.findOneOrFail({ where: { id: expenseId } });
-                await this.expenseTrackerRepository.update(
-                  { id: expenseId },
-                  {
-                    isActive: false,
-                    updatedBy: approvalBy,
-                  },
-                  entityManager,
+            }
+            case ApprovalStatus.REJECTED: {
+              const expense = await this.findOneOrFail({ where: { id: expenseId } });
+              if (approvalBy === expense.createdBy) {
+                throw new BadRequestException(
+                  EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
                 );
-                if (approvalBy === expense.createdBy) {
-                  throw new BadRequestException(
-                    EXPENSE_TRACKER_ERRORS.EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
-                  );
-                }
-                const originalExpenseId = expense.originalExpenseId || expenseId;
-                const parentExpenseId = expenseId;
-                const versionNumber = expense.versionNumber + 1;
-
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: __, ...expenseData } = expense;
-
-                await this.expenseTrackerRepository.create(
-                  {
-                    ...expenseData,
-                    isActive: true,
-                    updatedBy: approvalBy,
-                    approvalAt: new Date(),
-                    approvalStatus,
-                    approvalBy,
-                    approvalReason,
-                    entrySourceType,
-                    originalExpenseId,
-                    parentExpenseId,
-                    versionNumber,
-                  },
-                  entityManager,
-                );
-              });
+              }
+              await this.expenseTrackerRepository.update(
+                { id: expenseId },
+                {
+                  approvalStatus,
+                  approvalBy,
+                  approvalAt: new Date(),
+                  approvalReason,
+                  entrySourceType,
+                  updatedBy: approvalBy,
+                },
+              );
               break;
+            }
             case ApprovalStatus.CANCELLED:
-              await this.dataSource.transaction(async (entityManager) => {
-                const expense = await this.findOneOrFail({ where: { id: expenseId } });
-                await this.expenseTrackerRepository.update(
-                  { id: expenseId },
-                  {
-                    isActive: false,
-                    updatedBy: approvalBy,
-                  },
-                  entityManager,
-                );
-                const originalExpenseId = expense.originalExpenseId || expenseId;
-                const parentExpenseId = expenseId;
-                const versionNumber = expense.versionNumber + 1;
-
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: __, ...expenseData } = expense;
-
-                await this.expenseTrackerRepository.create(
-                  {
-                    ...expenseData,
-                    isActive: true,
-                    updatedBy: approvalBy,
-                    approvalAt: new Date(),
-                    approvalStatus,
-                    approvalBy,
-                    approvalReason,
-                    entrySourceType,
-                    originalExpenseId,
-                    parentExpenseId,
-                    versionNumber,
-                  },
-                  entityManager,
-                );
-              });
+              await this.expenseTrackerRepository.update(
+                { id: expenseId },
+                {
+                  approvalStatus,
+                  approvalBy,
+                  approvalAt: new Date(),
+                  approvalReason,
+                  entrySourceType,
+                  updatedBy: approvalBy,
+                },
+              );
               break;
           }
           break;

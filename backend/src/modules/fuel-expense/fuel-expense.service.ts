@@ -1086,123 +1086,58 @@ export class FuelExpenseService {
                   approvalStatus,
                 ),
               );
-            case ApprovalStatus.APPROVED:
-              await this.dataSource.transaction(async (entityManager) => {
-                const fuelExpense = await this.findOneOrFail({ where: { id: fuelExpenseId } });
-                await this.fuelExpenseRepository.update(
-                  { id: fuelExpenseId },
-                  {
-                    isActive: false,
-                    updatedBy: approvalBy,
-                  },
-                  entityManager,
+            case ApprovalStatus.APPROVED: {
+              const fuelExpense = await this.findOneOrFail({ where: { id: fuelExpenseId } });
+              if (approvalBy === fuelExpense.createdBy) {
+                throw new BadRequestException(
+                  FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_BE_APPROVED_BY_CREATOR,
                 );
-                if (approvalBy === fuelExpense.createdBy) {
-                  throw new BadRequestException(
-                    FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_BE_APPROVED_BY_CREATOR,
-                  );
-                }
-                const originalFuelExpenseId = fuelExpense.originalFuelExpenseId || fuelExpenseId;
-                const parentFuelExpenseId = fuelExpenseId;
-                const versionNumber = fuelExpense.versionNumber + 1;
-
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: __, ...fuelExpenseData } = fuelExpense;
-
-                await this.fuelExpenseRepository.create(
-                  {
-                    ...fuelExpenseData,
-                    isActive: true,
-                    updatedBy: approvalBy,
-                    approvalAt: new Date(),
-                    approvalStatus,
-                    approvalBy,
-                    approvalReason,
-                    entrySourceType,
-                    originalFuelExpenseId,
-                    parentFuelExpenseId,
-                    versionNumber,
-                  },
-                  entityManager,
-                );
-              });
+              }
+              await this.fuelExpenseRepository.update(
+                { id: fuelExpenseId },
+                {
+                  approvalStatus,
+                  approvalBy,
+                  approvalAt: new Date(),
+                  approvalReason,
+                  entrySourceType,
+                  updatedBy: approvalBy,
+                },
+              );
               break;
-            case ApprovalStatus.REJECTED:
-              await this.dataSource.transaction(async (entityManager) => {
-                const fuelExpense = await this.findOneOrFail({ where: { id: fuelExpenseId } });
-                await this.fuelExpenseRepository.update(
-                  { id: fuelExpenseId },
-                  {
-                    isActive: false,
-                    updatedBy: approvalBy,
-                  },
-                  entityManager,
+            }
+            case ApprovalStatus.REJECTED: {
+              const fuelExpense = await this.findOneOrFail({ where: { id: fuelExpenseId } });
+              if (approvalBy === fuelExpense.createdBy) {
+                throw new BadRequestException(
+                  FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
                 );
-                if (approvalBy === fuelExpense.createdBy) {
-                  throw new BadRequestException(
-                    FUEL_EXPENSE_ERRORS.FUEL_EXPENSE_CANNOT_BE_REJECTED_BY_CREATOR,
-                  );
-                }
-                const originalFuelExpenseId = fuelExpense.originalFuelExpenseId || fuelExpenseId;
-                const parentFuelExpenseId = fuelExpenseId;
-                const versionNumber = fuelExpense.versionNumber + 1;
-
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: __, ...fuelExpenseData } = fuelExpense;
-
-                await this.fuelExpenseRepository.create(
-                  {
-                    ...fuelExpenseData,
-                    isActive: true,
-                    updatedBy: approvalBy,
-                    approvalAt: new Date(),
-                    approvalStatus,
-                    approvalBy,
-                    approvalReason,
-                    entrySourceType,
-                    originalFuelExpenseId,
-                    parentFuelExpenseId,
-                    versionNumber,
-                  },
-                  entityManager,
-                );
-              });
+              }
+              await this.fuelExpenseRepository.update(
+                { id: fuelExpenseId },
+                {
+                  approvalStatus,
+                  approvalBy,
+                  approvalAt: new Date(),
+                  approvalReason,
+                  entrySourceType,
+                  updatedBy: approvalBy,
+                },
+              );
               break;
+            }
             case ApprovalStatus.CANCELLED:
-              await this.dataSource.transaction(async (entityManager) => {
-                const fuelExpense = await this.findOneOrFail({ where: { id: fuelExpenseId } });
-                await this.fuelExpenseRepository.update(
-                  { id: fuelExpenseId },
-                  {
-                    isActive: false,
-                    updatedBy: approvalBy,
-                  },
-                  entityManager,
-                );
-                const originalFuelExpenseId = fuelExpense.originalFuelExpenseId || fuelExpenseId;
-                const parentFuelExpenseId = fuelExpenseId;
-                const versionNumber = fuelExpense.versionNumber + 1;
-
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id: __, ...fuelExpenseData } = fuelExpense;
-
-                await this.fuelExpenseRepository.create(
-                  {
-                    ...fuelExpenseData,
-                    isActive: true,
-                    updatedBy: approvalBy,
-                    approvalAt: new Date(),
-                    approvalStatus,
-                    approvalBy,
-                    approvalReason,
-                    entrySourceType,
-                    originalFuelExpenseId,
-                    parentFuelExpenseId,
-                    versionNumber,
-                  },
-                  entityManager,
-                );
-              });
+              await this.fuelExpenseRepository.update(
+                { id: fuelExpenseId },
+                {
+                  approvalStatus,
+                  approvalBy,
+                  approvalAt: new Date(),
+                  approvalReason,
+                  entrySourceType,
+                  updatedBy: approvalBy,
+                },
+              );
               break;
           }
           break;
