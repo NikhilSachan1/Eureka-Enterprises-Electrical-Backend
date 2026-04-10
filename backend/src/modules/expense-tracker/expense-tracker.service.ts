@@ -38,6 +38,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import {
   buildExpenseListQuery,
   buildExpenseBalanceQuery,
+  buildProjectedBalanceQuery,
   buildExpenseSummaryQuery,
 } from './queries/expense-tracker.queries';
 import { ExpenseFilesService } from '../expense-files/expense-files.service';
@@ -583,17 +584,32 @@ export class ExpenseTrackerService {
       const { query, countQuery, params, countParams } = buildExpenseListQuery(filters);
       const { openingBalanceQuery, openingBalanceParams, periodTotalsQuery, periodParams } =
         buildExpenseBalanceQuery(filters);
+      const {
+        openingBalanceQuery: projOpeningQuery,
+        openingBalanceParams: projOpeningParams,
+        periodTotalsQuery: projPeriodQuery,
+        periodParams: projPeriodParams,
+      } = buildProjectedBalanceQuery(filters);
       const { summaryQuery, params: summaryParams } = buildExpenseSummaryQuery(filters);
 
       // Execute all queries in parallel
-      const [records, [{ total }], openingBalanceResult, periodTotalsResult, [summaryResult]] =
-        await Promise.all([
-          this.expenseTrackerRepository.executeRawQuery(query, params),
-          this.expenseTrackerRepository.executeRawQuery(countQuery, countParams),
-          this.expenseTrackerRepository.executeRawQuery(openingBalanceQuery, openingBalanceParams),
-          this.expenseTrackerRepository.executeRawQuery(periodTotalsQuery, periodParams),
-          this.expenseTrackerRepository.executeRawQuery(summaryQuery, summaryParams),
-        ]);
+      const [
+        records,
+        [{ total }],
+        openingBalanceResult,
+        periodTotalsResult,
+        projOpeningResult,
+        projPeriodResult,
+        [summaryResult],
+      ] = await Promise.all([
+        this.expenseTrackerRepository.executeRawQuery(query, params),
+        this.expenseTrackerRepository.executeRawQuery(countQuery, countParams),
+        this.expenseTrackerRepository.executeRawQuery(openingBalanceQuery, openingBalanceParams),
+        this.expenseTrackerRepository.executeRawQuery(periodTotalsQuery, periodParams),
+        this.expenseTrackerRepository.executeRawQuery(projOpeningQuery, projOpeningParams),
+        this.expenseTrackerRepository.executeRawQuery(projPeriodQuery, projPeriodParams),
+        this.expenseTrackerRepository.executeRawQuery(summaryQuery, summaryParams),
+      ]);
 
       // Calculate opening balance
       const openingBalance =
@@ -611,6 +627,17 @@ export class ExpenseTrackerService {
 
       // Calculate closing balance
       const closingBalanceAmount = openingBalanceAmount + periodCredit - periodDebit;
+
+      // Calculate projected balances (approved + pending)
+      const projOpening =
+        projOpeningResult.length > 0 ? projOpeningResult[0] : { totalCredit: 0, totalDebit: 0 };
+      const projOpeningAmount = Number(projOpening.totalCredit) - Number(projOpening.totalDebit);
+
+      const projPeriod =
+        projPeriodResult.length > 0 ? projPeriodResult[0] : { periodCredit: 0, periodDebit: 0 };
+      const projPeriodCredit = Number(projPeriod.periodCredit);
+      const projPeriodDebit = Number(projPeriod.periodDebit);
+      const projClosingAmount = projOpeningAmount + projPeriodCredit - projPeriodDebit;
 
       // Summary data
       const summary = summaryResult || {
@@ -695,6 +722,12 @@ export class ExpenseTrackerService {
             totalDebit: Number(summary.totalDebit),
             periodCredit: periodCredit,
             periodDebit: periodDebit,
+          },
+          projectedBalances: {
+            openingBalance: projOpeningAmount,
+            closingBalance: projClosingAmount,
+            periodCredit: projPeriodCredit,
+            periodDebit: projPeriodDebit,
           },
           approval: {
             pending: Number(summary.pendingCount),

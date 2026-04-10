@@ -12,6 +12,16 @@ export class ExpenseStatsDto {
     periodDebit: number;
   };
 
+  @ApiProperty({
+    example: { openingBalance: 0, closingBalance: 0, periodCredit: 0, periodDebit: 0 },
+  })
+  projectedBalances: {
+    openingBalance: number;
+    closingBalance: number;
+    periodCredit: number;
+    periodDebit: number;
+  };
+
   @ApiProperty({ example: { pending: 3, approved: 4, rejected: 1, total: 8 } })
   approval: {
     pending: number;

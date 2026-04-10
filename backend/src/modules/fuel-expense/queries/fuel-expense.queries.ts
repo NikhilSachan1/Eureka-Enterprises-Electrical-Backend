@@ -333,6 +333,136 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
   };
 };
 
+/**
+ * Projected balance query — same as balance query but includes both 'approved' AND 'pending' fuel expenses.
+ */
+export const buildProjectedFuelBalanceQuery = (filters: FuelExpenseQueryDto) => {
+  const { startDate, endDate, date, userIds, paymentModes, search, vehicleId, cardId } = filters;
+
+  const whereConditions = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  whereConditions.push(`fe."isActive" = $${paramIndex}`);
+  params.push(true);
+  paramIndex++;
+
+  // Include both approved and pending
+  whereConditions.push(`fe."approvalStatus" = ANY($${paramIndex})`);
+  params.push(['approved', 'pending']);
+  paramIndex++;
+
+  if (vehicleId) {
+    whereConditions.push(`fe."vehicleId" = $${paramIndex}`);
+    params.push(vehicleId);
+    paramIndex++;
+  }
+
+  if (cardId) {
+    whereConditions.push(`fe."cardId" = $${paramIndex}`);
+    params.push(cardId);
+    paramIndex++;
+  }
+
+  if (userIds && userIds.length > 0) {
+    whereConditions.push(`fe."userId" = ANY($${paramIndex})`);
+    params.push(userIds);
+    paramIndex++;
+  }
+
+  if (search) {
+    whereConditions.push(`(
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."email") LIKE LOWER($${paramIndex}) OR
+      LOWER(fe."description") LIKE LOWER($${paramIndex}) OR
+      LOWER(fe."transactionId") LIKE LOWER($${paramIndex}) OR
+      LOWER(v."registrationNo") LIKE LOWER($${paramIndex})
+    )`);
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  if (paymentModes && paymentModes.length > 0) {
+    whereConditions.push(`fe."paymentMode" = ANY($${paramIndex})`);
+    params.push(paymentModes);
+    paramIndex++;
+  }
+
+  const baseWhereClause = whereConditions.join(' AND ');
+
+  let openingBalanceQuery = '';
+  let openingBalanceParams = [...params];
+  const openingBalanceParamIndex = paramIndex;
+
+  if (date) {
+    openingBalanceQuery = `
+      SELECT
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
+      FROM "fuel_expenses" fe
+      LEFT JOIN "users" u ON fe."userId" = u."id"
+      LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+      WHERE ${baseWhereClause} AND fe."fillDate" < $${openingBalanceParamIndex}
+    `;
+    openingBalanceParams.push(date);
+  } else if (startDate) {
+    openingBalanceQuery = `
+      SELECT
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
+      FROM "fuel_expenses" fe
+      LEFT JOIN "users" u ON fe."userId" = u."id"
+      LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+      WHERE ${baseWhereClause} AND fe."fillDate" < $${openingBalanceParamIndex}
+    `;
+    openingBalanceParams.push(startDate);
+  } else {
+    openingBalanceQuery = `SELECT 0 as "totalCredit", 0 as "totalDebit"`;
+    openingBalanceParams = [];
+  }
+
+  const periodWhereConditions = [...whereConditions];
+  const periodParams = [...params];
+  let periodParamIndex = paramIndex;
+
+  if (date) {
+    periodWhereConditions.push(`DATE(fe."fillDate") = $${periodParamIndex}`);
+    periodParams.push(date);
+    periodParamIndex++;
+  } else {
+    if (startDate) {
+      periodWhereConditions.push(`fe."fillDate" >= $${periodParamIndex}`);
+      periodParams.push(startDate);
+      periodParamIndex++;
+    }
+    if (endDate) {
+      periodWhereConditions.push(`fe."fillDate" <= $${periodParamIndex}`);
+      periodParams.push(endDate);
+      periodParamIndex++;
+    }
+  }
+
+  const periodWhereClause = periodWhereConditions.join(' AND ');
+
+  const periodTotalsQuery = `
+    SELECT
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodCredit",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodDebit"
+    FROM "fuel_expenses" fe
+    LEFT JOIN "users" u ON fe."userId" = u."id"
+    LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+    WHERE ${periodWhereClause}
+  `;
+
+  return {
+    openingBalanceQuery,
+    openingBalanceParams,
+    periodTotalsQuery,
+    periodParams,
+  };
+};
+
 export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
   const {
     startDate,
