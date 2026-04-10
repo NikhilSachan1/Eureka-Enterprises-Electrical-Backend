@@ -308,7 +308,7 @@ export class AttendanceCronService {
       const today = this.schedulerService.getTodayDateIST();
 
       // Get shift end time from config
-      const shiftEndTime = await this.getShiftEndTime(today);
+      const shiftEndTime = await this.getShiftEndTime();
 
       await this.dataSource.transaction(async (entityManager) => {
         // 1. Auto-checkout users who forgot to checkout
@@ -344,7 +344,7 @@ export class AttendanceCronService {
     };
 
     const today: Date = targetDate ? new Date(targetDate) : this.schedulerService.getTodayDateIST();
-    const shiftEndTime = await this.getShiftEndTime(today);
+    const shiftEndTime = await this.getShiftEndTime();
 
     await this.dataSource.transaction(async (entityManager) => {
       const autoCheckoutResult = await this.autoCheckoutForgottenUsers(
@@ -367,7 +367,7 @@ export class AttendanceCronService {
     return result;
   }
 
-  private async getShiftEndTime(today: Date): Promise<Date> {
+  private async getShiftEndTime(): Promise<Date> {
     try {
       const shiftConfig = await this.configurationService.findOne({
         where: {
@@ -382,13 +382,11 @@ export class AttendanceCronService {
         throw new Error('Shift end time not found in config');
       }
 
-      const endTimeStr = shiftConfig.configSettings[0].value.endTime;
-      const [hours, minutes] = endTimeStr.split(':').map(Number);
+      const configValue = shiftConfig.configSettings[0].value;
+      const endTimeStr = configValue.endTime;
+      const timezone = configValue.timezone || 'Asia/Kolkata';
 
-      const shiftEndTime = new Date(today);
-      shiftEndTime.setUTCHours(hours, minutes, 0, 0);
-
-      return shiftEndTime;
+      return this.utilityService.convertLocalTimeToUTC(endTimeStr, timezone);
     } catch (error) {
       this.logger.error('Error fetching shift config', error);
       throw error;
