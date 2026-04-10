@@ -25,6 +25,17 @@ export class FuelExpenseStatsDto {
   };
 
   @ApiProperty({
+    description: 'Projected balances including both approved and pending expenses',
+    example: { openingBalance: 0, closingBalance: 0, periodCredit: 0, periodDebit: 0 },
+  })
+  projectedBalances: {
+    openingBalance: number;
+    closingBalance: number;
+    periodCredit: number;
+    periodDebit: number;
+  };
+
+  @ApiProperty({
     description: 'Approval status counts',
     example: { pending: 3, approved: 10, rejected: 1, total: 14 },
   })

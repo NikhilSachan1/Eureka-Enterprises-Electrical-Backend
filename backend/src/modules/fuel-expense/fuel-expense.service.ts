@@ -47,6 +47,7 @@ import { DateTimeService } from 'src/utils/datetime';
 import {
   buildFuelExpenseListQuery,
   buildFuelExpenseBalanceQuery,
+  buildProjectedFuelBalanceQuery,
   buildFuelExpenseSummaryQuery,
 } from './queries/fuel-expense.queries';
 import { EmailService } from '../common/email/email.service';
@@ -458,17 +459,32 @@ export class FuelExpenseService {
       const { query, countQuery, params, countParams } = buildFuelExpenseListQuery(filters);
       const { openingBalanceQuery, openingBalanceParams, periodTotalsQuery, periodParams } =
         buildFuelExpenseBalanceQuery(filters);
+      const {
+        openingBalanceQuery: projOpeningQuery,
+        openingBalanceParams: projOpeningParams,
+        periodTotalsQuery: projPeriodQuery,
+        periodParams: projPeriodParams,
+      } = buildProjectedFuelBalanceQuery(filters);
       const { summaryQuery, params: summaryParams } = buildFuelExpenseSummaryQuery(filters);
 
       // Execute all queries in parallel for better performance
-      const [records, [{ total }], openingBalanceResult, periodTotalsResult, [summaryResult]] =
-        await Promise.all([
-          this.fuelExpenseRepository.executeRawQuery(query, params),
-          this.fuelExpenseRepository.executeRawQuery(countQuery, countParams),
-          this.fuelExpenseRepository.executeRawQuery(openingBalanceQuery, openingBalanceParams),
-          this.fuelExpenseRepository.executeRawQuery(periodTotalsQuery, periodParams),
-          this.fuelExpenseRepository.executeRawQuery(summaryQuery, summaryParams),
-        ]);
+      const [
+        records,
+        [{ total }],
+        openingBalanceResult,
+        periodTotalsResult,
+        projOpeningResult,
+        projPeriodResult,
+        [summaryResult],
+      ] = await Promise.all([
+        this.fuelExpenseRepository.executeRawQuery(query, params),
+        this.fuelExpenseRepository.executeRawQuery(countQuery, countParams),
+        this.fuelExpenseRepository.executeRawQuery(openingBalanceQuery, openingBalanceParams),
+        this.fuelExpenseRepository.executeRawQuery(periodTotalsQuery, periodParams),
+        this.fuelExpenseRepository.executeRawQuery(projOpeningQuery, projOpeningParams),
+        this.fuelExpenseRepository.executeRawQuery(projPeriodQuery, projPeriodParams),
+        this.fuelExpenseRepository.executeRawQuery(summaryQuery, summaryParams),
+      ]);
 
       // Calculate opening balance
       const openingBalance =
@@ -486,6 +502,17 @@ export class FuelExpenseService {
 
       // Calculate closing balance
       const closingBalanceAmount = openingBalanceAmount + periodCredit - periodDebit;
+
+      // Calculate projected balances (approved + pending)
+      const projOpening =
+        projOpeningResult.length > 0 ? projOpeningResult[0] : { totalCredit: 0, totalDebit: 0 };
+      const projOpeningAmount = Number(projOpening.totalCredit) - Number(projOpening.totalDebit);
+
+      const projPeriod =
+        projPeriodResult.length > 0 ? projPeriodResult[0] : { periodCredit: 0, periodDebit: 0 };
+      const projPeriodCredit = Number(projPeriod.periodCredit);
+      const projPeriodDebit = Number(projPeriod.periodDebit);
+      const projClosingAmount = projOpeningAmount + projPeriodCredit - projPeriodDebit;
 
       // Summary data
       const summary = summaryResult || {
@@ -672,6 +699,12 @@ export class FuelExpenseService {
             totalCreditCardExpense: Number(summary.totalCreditCardExpense),
             periodCredit: periodCredit,
             periodDebit: periodDebit,
+          },
+          projectedBalances: {
+            openingBalance: projOpeningAmount,
+            closingBalance: projClosingAmount,
+            periodCredit: projPeriodCredit,
+            periodDebit: projPeriodDebit,
           },
           approval: {
             pending: Number(summary.pendingCount),

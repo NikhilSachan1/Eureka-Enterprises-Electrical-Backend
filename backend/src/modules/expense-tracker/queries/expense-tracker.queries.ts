@@ -261,6 +261,119 @@ export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
   };
 };
 
+/**
+ * Projected balance query — same as balance query but includes both 'approved' AND 'pending' expenses.
+ */
+export const buildProjectedBalanceQuery = (filters: ExpenseQueryDto) => {
+  const { startDate, endDate, date, userIds, categories, search } = filters;
+
+  const whereConditions = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  whereConditions.push(`e."isActive" = $${paramIndex}`);
+  params.push(true);
+  paramIndex++;
+
+  // Include both approved and pending
+  whereConditions.push(`e."approvalStatus" = ANY($${paramIndex})`);
+  params.push(['approved', 'pending']);
+  paramIndex++;
+
+  if (userIds && userIds.length > 0) {
+    whereConditions.push(`e."userId" = ANY($${paramIndex})`);
+    params.push(userIds);
+    paramIndex++;
+  }
+
+  if (search) {
+    whereConditions.push(`(
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."email") LIKE LOWER($${paramIndex}) OR
+      LOWER(e."description") LIKE LOWER($${paramIndex})
+    )`);
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  if (categories && categories.length > 0) {
+    whereConditions.push(`e."category" = ANY($${paramIndex})`);
+    params.push(categories);
+    paramIndex++;
+  }
+
+  const baseWhereClause = whereConditions.join(' AND ');
+
+  let openingBalanceQuery = '';
+  let openingBalanceParams = [...params];
+  const openingBalanceParamIndex = paramIndex;
+
+  if (date) {
+    openingBalanceQuery = `
+      SELECT
+        COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' THEN e."amount" ELSE 0 END), 0) as "totalDebit"
+      FROM "expenses" e
+      LEFT JOIN "users" u ON e."userId" = u."id"
+      WHERE ${baseWhereClause} AND e."expenseDate" < $${openingBalanceParamIndex}
+    `;
+    openingBalanceParams.push(date);
+  } else if (startDate) {
+    openingBalanceQuery = `
+      SELECT
+        COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' THEN e."amount" ELSE 0 END), 0) as "totalDebit"
+      FROM "expenses" e
+      LEFT JOIN "users" u ON e."userId" = u."id"
+      WHERE ${baseWhereClause} AND e."expenseDate" < $${openingBalanceParamIndex}
+    `;
+    openingBalanceParams.push(startDate);
+  } else {
+    openingBalanceQuery = `SELECT 0 as "totalCredit", 0 as "totalDebit"`;
+    openingBalanceParams = [];
+  }
+
+  const periodWhereConditions = [...whereConditions];
+  const periodParams = [...params];
+  let periodParamIndex = paramIndex;
+
+  if (date) {
+    periodWhereConditions.push(`DATE(e."expenseDate") = $${periodParamIndex}`);
+    periodParams.push(date);
+    periodParamIndex++;
+  } else {
+    if (startDate) {
+      periodWhereConditions.push(`e."expenseDate" >= $${periodParamIndex}`);
+      periodParams.push(startDate);
+      periodParamIndex++;
+    }
+    if (endDate) {
+      periodWhereConditions.push(`e."expenseDate" <= $${periodParamIndex}`);
+      periodParams.push(endDate);
+      periodParamIndex++;
+    }
+  }
+
+  const periodWhereClause = periodWhereConditions.join(' AND ');
+
+  const periodTotalsQuery = `
+    SELECT
+      COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount" ELSE 0 END), 0) as "periodCredit",
+      COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' THEN e."amount" ELSE 0 END), 0) as "periodDebit"
+    FROM "expenses" e
+    LEFT JOIN "users" u ON e."userId" = u."id"
+    WHERE ${periodWhereClause}
+  `;
+
+  return {
+    openingBalanceQuery,
+    openingBalanceParams,
+    periodTotalsQuery,
+    periodParams,
+  };
+};
+
 export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
   const { startDate, endDate, date, userIds, approvalStatuses, categories, search } = filters;
 
