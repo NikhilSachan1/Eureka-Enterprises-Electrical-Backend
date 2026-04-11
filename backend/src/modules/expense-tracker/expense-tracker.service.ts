@@ -396,6 +396,15 @@ export class ExpenseTrackerService {
           );
         }
 
+        // Load user relation for notification
+        const expenseWithUser = await this.expenseTrackerRepository.findOne(
+          { where: { id: expense.id }, relations: ['user'] },
+          entityManager,
+        );
+        if (expenseWithUser) {
+          this.sendExpenseApprovalNotification(expenseWithUser, createdBy, ApprovalStatus.APPROVED);
+        }
+
         return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.CREDIT_SETTLED };
       });
     } catch (error) {

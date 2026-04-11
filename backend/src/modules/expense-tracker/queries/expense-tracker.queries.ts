@@ -137,7 +137,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
 };
 
 export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, approvalStatuses, categories, search } = filters;
+  const { startDate, endDate, date, userIds } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -157,32 +157,6 @@ export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
   if (userIds && userIds.length > 0) {
     whereConditions.push(`e."userId" = ANY($${paramIndex})`);
     params.push(userIds);
-    paramIndex++;
-  }
-
-  // Search filter (if provided)
-  if (search) {
-    whereConditions.push(`(
-      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(e."description") LIKE LOWER($${paramIndex})
-    )`);
-    params.push(`%${search}%`);
-    paramIndex++;
-  }
-
-  // Approval statuses filter - ADDED LATER
-  if (approvalStatuses && approvalStatuses.length > 0) {
-    whereConditions.push(`e."approvalStatus" = ANY($${paramIndex})`);
-    params.push(approvalStatuses);
-    paramIndex++;
-  }
-
-  // Categories filter
-  if (categories && categories.length > 0) {
-    whereConditions.push(`e."category" = ANY($${paramIndex})`);
-    params.push(categories);
     paramIndex++;
   }
 
@@ -265,7 +239,7 @@ export const buildExpenseBalanceQuery = (filters: ExpenseQueryDto) => {
  * Projected balance query — same as balance query but includes both 'approved' AND 'pending' expenses.
  */
 export const buildProjectedBalanceQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, categories, search } = filters;
+  const { startDate, endDate, date, userIds } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -283,23 +257,6 @@ export const buildProjectedBalanceQuery = (filters: ExpenseQueryDto) => {
   if (userIds && userIds.length > 0) {
     whereConditions.push(`e."userId" = ANY($${paramIndex})`);
     params.push(userIds);
-    paramIndex++;
-  }
-
-  if (search) {
-    whereConditions.push(`(
-      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
-      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
-      LOWER(u."email") LIKE LOWER($${paramIndex}) OR
-      LOWER(e."description") LIKE LOWER($${paramIndex})
-    )`);
-    params.push(`%${search}%`);
-    paramIndex++;
-  }
-
-  if (categories && categories.length > 0) {
-    whereConditions.push(`e."category" = ANY($${paramIndex})`);
-    params.push(categories);
     paramIndex++;
   }
 
@@ -375,7 +332,7 @@ export const buildProjectedBalanceQuery = (filters: ExpenseQueryDto) => {
 };
 
 export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, approvalStatuses, categories, search } = filters;
+  const { startDate, endDate, date, userIds, categories } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -411,29 +368,10 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
     paramIndex++;
   }
 
-  // Approval statuses filter
-  if (approvalStatuses && approvalStatuses.length > 0) {
-    whereConditions.push(`e."approvalStatus" = ANY($${paramIndex})`);
-    params.push(approvalStatuses);
-    paramIndex++;
-  }
-
   // Categories filter
   if (categories && categories.length > 0) {
     whereConditions.push(`e."category" = ANY($${paramIndex})`);
     params.push(categories);
-    paramIndex++;
-  }
-
-  // Search filter
-  if (search) {
-    whereConditions.push(`(
-      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(e."description") LIKE LOWER($${paramIndex})
-    )`);
-    params.push(`%${search}%`);
     paramIndex++;
   }
 
