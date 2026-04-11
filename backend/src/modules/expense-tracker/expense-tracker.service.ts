@@ -1268,6 +1268,24 @@ export class ExpenseTrackerService {
     };
   }
 
+  private async getCategoryLabel(categoryName: string): Promise<string> {
+    try {
+      const config = await this.configurationService.findOneOrFail({
+        where: {
+          module: CONFIGURATION_MODULES.EXPENSE,
+          key: CONFIGURATION_KEYS.EXPENSE_CATEGORIES,
+        },
+      });
+      const configSetting = await this.configSettingService.findOneOrFail({
+        where: { configId: config.id, isActive: true },
+      });
+      const match = configSetting.value.find((item: any) => item.name === categoryName);
+      return match?.label || categoryName;
+    } catch {
+      return categoryName;
+    }
+  }
+
   private async sendExpenseApprovalNotification(
     expense: ExpenseTrackerEntity,
     approvalById: string,
@@ -1286,6 +1304,7 @@ export class ExpenseTrackerService {
         : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
       const employeeName = `${employee.firstName} ${employee.lastName}`;
       const amount = `₹${Number(expense.amount).toLocaleString('en-IN')}`;
+      const categoryLabel = await this.getCategoryLabel(expense.category);
 
       // Send Email notification
       if (employee.email) {
@@ -1295,14 +1314,14 @@ export class ExpenseTrackerService {
 
         await this.emailService.sendMail({
           receiverEmails: employee.email,
-          subject: subjectKey.replace('{category}', expense.category),
+          subject: subjectKey.replace('{category}', categoryLabel),
           template: EMAIL_TEMPLATE.EXPENSE_APPROVAL,
           emailData: {
             employeeName,
             isApproved,
             expenseId: expense.id.substring(0, 8).toUpperCase(),
             amount,
-            category: expense.category,
+            category: categoryLabel,
             expenseDate: this.formatDateForEmail(expense.expenseDate),
             description: expense.description || EXPENSE_EMAIL_CONSTANTS.NOT_APPLICABLE,
             paymentMode: expense.paymentMode,
@@ -1322,7 +1341,7 @@ export class ExpenseTrackerService {
           {
             employeeName,
             amount,
-            category: expense.category,
+            category: categoryLabel,
             approverName,
             remarks: approvalComment,
             isApproved,
