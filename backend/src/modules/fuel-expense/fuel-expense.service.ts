@@ -28,7 +28,16 @@ import {
   FuelExpenseEntityFields,
 } from './constants/fuel-expense.constants';
 import { FuelExpenseEntity } from './entities/fuel-expense.entity';
-import { DataSource, EntityManager, FindOneOptions, In, Not } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  Equal,
+  FindOneOptions,
+  In,
+  LessThan,
+  MoreThan,
+  Not,
+} from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { FuelExpenseFilesService } from '../fuel-expense-files/fuel-expense-files.service';
 import { VehicleMastersService } from '../vehicle-masters/vehicle-masters.service';
@@ -118,7 +127,7 @@ export class FuelExpenseService {
 
       await this.userService.findOneOrFail({ where: { id: userId } });
 
-      await this.validateOdometerReading(vehicleId, odometerKm);
+      await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
       return await this.dataSource.transaction(async (entityManager) => {
         const fuelExpense = await this.fuelExpenseRepository.create(
@@ -200,7 +209,7 @@ export class FuelExpenseService {
 
       await this.userService.findOneOrFail({ where: { id: userId } });
 
-      await this.validateOdometerReading(vehicleId, odometerKm);
+      await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
       return await this.dataSource.transaction(async (entityManager) => {
         const fuelExpense = await this.fuelExpenseRepository.create(
@@ -353,7 +362,7 @@ export class FuelExpenseService {
       }
 
       // Validate odometer reading
-      await this.validateOdometerReading(vehicleId, odometerKm, id);
+      await this.validateOdometerReading(vehicleId, odometerKm, fillDate, id);
 
       return await this.dataSource.transaction(async (entityManager) => {
         // Deactivate the old fuel expense record
@@ -1409,31 +1418,52 @@ export class FuelExpenseService {
   private async validateOdometerReading(
     vehicleId: string,
     odometerKm: number,
+    fillDate: Date,
     excludeFuelExpenseId?: string,
   ) {
     try {
-      // Get the latest fuel expense for this vehicle (including PENDING and APPROVED, not REJECTED)
-      const whereCondition: any = {
+      const baseWhere: any = {
         vehicleId,
         approvalStatus: In([ApprovalStatus.APPROVED, ApprovalStatus.PENDING]),
         isActive: true,
       };
 
       if (excludeFuelExpenseId) {
-        whereCondition.id = Not(excludeFuelExpenseId) as any;
+        baseWhere.id = Not(excludeFuelExpenseId) as any;
       }
 
-      const previousFuelExpense = await this.fuelExpenseRepository.findOne({
-        where: whereCondition,
+      // Record just BEFORE this entry in chronological order (fillDate < new, or same date with lower odometer)
+      const beforeRecord = await this.fuelExpenseRepository.findOne({
+        where: [
+          { ...baseWhere, fillDate: LessThan(fillDate) },
+          { ...baseWhere, fillDate: Equal(fillDate), odometerKm: LessThan(odometerKm) },
+        ],
         order: { fillDate: 'DESC', odometerKm: 'DESC' },
       } as any);
 
-      // If there's a previous record, validate odometer reading
-      if (previousFuelExpense) {
-        const previousOdometer = Number(previousFuelExpense.odometerKm);
-        if (odometerKm < previousOdometer) {
-          throw new BadRequestException(FUEL_EXPENSE_ERRORS.INVALID_ODOMETER_READING);
-        }
+      // Record just AFTER this entry in chronological order (fillDate > new, or same date with higher odometer)
+      const afterRecord = await this.fuelExpenseRepository.findOne({
+        where: [
+          { ...baseWhere, fillDate: MoreThan(fillDate) },
+          { ...baseWhere, fillDate: Equal(fillDate), odometerKm: MoreThan(odometerKm) },
+        ],
+        order: { fillDate: 'ASC', odometerKm: 'ASC' },
+      } as any);
+
+      if (beforeRecord && odometerKm < Number(beforeRecord.odometerKm)) {
+        throw new BadRequestException(
+          `Odometer reading must be ≥ ${Number(beforeRecord.odometerKm)} km (recorded on ${new Date(
+            beforeRecord.fillDate,
+          ).toLocaleDateString('en-GB')})`,
+        );
+      }
+
+      if (afterRecord && odometerKm > Number(afterRecord.odometerKm)) {
+        throw new BadRequestException(
+          `Odometer reading must be ≤ ${Number(afterRecord.odometerKm)} km (recorded on ${new Date(
+            afterRecord.fillDate,
+          ).toLocaleDateString('en-GB')})`,
+        );
       }
     } catch (error) {
       throw error;
