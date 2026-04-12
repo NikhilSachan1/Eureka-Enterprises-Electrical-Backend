@@ -24,6 +24,9 @@ import {
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { VehicleEventEntity } from './entities/vehicle-event.entity';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
+import { VehicleMasterEntity } from '../vehicle-masters/entities/vehicle-master.entity';
+import { UserEntity } from '../users/entities/user.entity';
 
 @Injectable()
 export class VehicleEventsService {
@@ -33,6 +36,7 @@ export class VehicleEventsService {
     private readonly vehicleFilesService: VehicleFilesService,
     private readonly vehicleVersionsService: VehicleVersionsService,
     private readonly dateTimeService: DateTimeService,
+    private readonly whatsAppService: WhatsAppService,
   ) {}
 
   async create(
@@ -149,6 +153,50 @@ export class VehicleEventsService {
     }
   }
 
+  private getUserFullName(user: UserEntity): string {
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    return fullName || user.email || 'User';
+  }
+
+  private async sendVehicleTransactionWhatsappNotification(input: {
+    action: VehicleEventTypes;
+    vehicleMasterId: string;
+    recipientUserId: string;
+    actorUserId: string;
+  }): Promise<void> {
+    try {
+      const userRepo = this.dataSource.getRepository(UserEntity);
+      const vehicleMasterRepo = this.dataSource.getRepository(VehicleMasterEntity);
+
+      const [vehicleMaster, recipient, actor] = await Promise.all([
+        vehicleMasterRepo.findOne({ where: { id: input.vehicleMasterId } }),
+        userRepo.findOne({ where: { id: input.recipientUserId } }),
+        userRepo.findOne({ where: { id: input.actorUserId } }),
+      ]);
+
+      if (!recipient || !actor) return;
+
+      const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
+      if (!recipient.whatsappOptIn || !whatsappNumber) return;
+
+      await this.whatsAppService.sendVehicleTransaction(
+        whatsappNumber,
+        {
+          employeeName: this.getUserFullName(recipient),
+          vehicleNumber: vehicleMaster?.registrationNo || input.vehicleMasterId,
+          actorName: this.getUserFullName(actor),
+          action: input.action,
+        },
+        {
+          referenceId: input.vehicleMasterId,
+          recipientId: recipient.id,
+        },
+      );
+    } catch {
+      // Don't block business flow if WhatsApp fails
+    }
+  }
+
   async action(
     vehicleActionDto: VehicleActionDto & { fromUserId: string },
     vehicleFiles: string[],
@@ -174,6 +222,15 @@ export class VehicleEventsService {
       if (HANDOVER_RESPONSE_ACTIONS.includes(action) && pendingHandover) {
         this.validateHandoverPermissions(action, pendingHandover, fromUserId);
       }
+
+      let whatsappNotification:
+        | {
+            action: VehicleEventTypes;
+            vehicleMasterId: string;
+            recipientUserId: string;
+            actorUserId: string;
+          }
+        | undefined;
 
       await this.dataSource.transaction(async (entityManager: EntityManager) => {
         switch (action) {
@@ -201,6 +258,15 @@ export class VehicleEventsService {
               },
               entityManager,
             );
+
+            if (toUserId) {
+              whatsappNotification = {
+                action,
+                vehicleMasterId,
+                recipientUserId: toUserId,
+                actorUserId: fromUserId,
+              };
+            }
             break;
           }
 
@@ -235,6 +301,16 @@ export class VehicleEventsService {
               { status: VehicleStatus.ASSIGNED, assignedTo: fromUserId, updatedBy: createdBy },
               entityManager,
             );
+
+            const initiatorUserId = pendingHandover?.fromUser;
+            if (initiatorUserId) {
+              whatsappNotification = {
+                action,
+                vehicleMasterId,
+                recipientUserId: initiatorUserId,
+                actorUserId: fromUserId,
+              };
+            }
             break;
           }
 
@@ -264,6 +340,16 @@ export class VehicleEventsService {
                 entityManager,
               );
             }
+
+            const initiatorUserId = pendingHandover?.fromUser;
+            if (initiatorUserId) {
+              whatsappNotification = {
+                action,
+                vehicleMasterId,
+                recipientUserId: initiatorUserId,
+                actorUserId: fromUserId,
+              };
+            }
             break;
           }
 
@@ -292,6 +378,16 @@ export class VehicleEventsService {
                 },
                 entityManager,
               );
+            }
+
+            const assigneeUserId = pendingHandover?.toUser;
+            if (assigneeUserId) {
+              whatsappNotification = {
+                action,
+                vehicleMasterId,
+                recipientUserId: assigneeUserId,
+                actorUserId: fromUserId,
+              };
             }
             break;
           }
@@ -332,6 +428,13 @@ export class VehicleEventsService {
               { status: VehicleStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
               entityManager,
             );
+
+            whatsappNotification = {
+              action,
+              vehicleMasterId,
+              recipientUserId: activeVersion.assignedTo,
+              actorUserId: createdBy,
+            };
             break;
           }
 
@@ -466,6 +569,10 @@ export class VehicleEventsService {
             throw new BadRequestException(VEHICLE_EVENTS_ERRORS.INVALID_ACTION);
         }
       });
+
+      if (whatsappNotification) {
+        void this.sendVehicleTransactionWhatsappNotification(whatsappNotification);
+      }
 
       return {
         message: VEHICLE_EVENTS_SUCCESS_MESSAGES[action],

@@ -21,6 +21,9 @@ import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { buildAssetEventsQuery, buildAssetEventsStatsQuery } from './queries/asset-events.queries';
 import { AssetEventEntity } from './entities/asset-event.entity';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
+import { AssetMasterEntity } from '../asset-masters/entities/asset-master.entity';
+import { UserEntity } from '../users/entities/user.entity';
 
 @Injectable()
 export class AssetEventsService {
@@ -30,6 +33,7 @@ export class AssetEventsService {
     private readonly assetFilesService: AssetFilesService,
     private readonly assetVersionsService: AssetVersionsService,
     private readonly dateTimeService: DateTimeService,
+    private readonly whatsAppService: WhatsAppService,
   ) {}
 
   async create(
@@ -158,6 +162,50 @@ export class AssetEventsService {
     }
   }
 
+  private getUserFullName(user: UserEntity): string {
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    return fullName || user.email || 'User';
+  }
+
+  private async sendAssetTransactionWhatsappNotification(input: {
+    action: AssetEventTypes;
+    assetMasterId: string;
+    recipientUserId: string;
+    actorUserId: string;
+  }): Promise<void> {
+    try {
+      const userRepo = this.dataSource.getRepository(UserEntity);
+      const assetMasterRepo = this.dataSource.getRepository(AssetMasterEntity);
+
+      const [assetMaster, recipient, actor] = await Promise.all([
+        assetMasterRepo.findOne({ where: { id: input.assetMasterId } }),
+        userRepo.findOne({ where: { id: input.recipientUserId } }),
+        userRepo.findOne({ where: { id: input.actorUserId } }),
+      ]);
+
+      if (!recipient || !actor) return;
+
+      const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
+      if (!recipient.whatsappOptIn || !whatsappNumber) return;
+
+      await this.whatsAppService.sendAssetTransaction(
+        whatsappNumber,
+        {
+          employeeName: this.getUserFullName(recipient),
+          assetId: assetMaster?.assetId || input.assetMasterId,
+          actorName: this.getUserFullName(actor),
+          action: input.action,
+        },
+        {
+          referenceId: input.assetMasterId,
+          recipientId: recipient.id,
+        },
+      );
+    } catch {
+      // Don't block business flow if WhatsApp fails
+    }
+  }
+
   async action(
     assetActionDto: AssetActionDto & { fromUserId: string },
     assetFiles: string[],
@@ -187,6 +235,15 @@ export class AssetEventsService {
         this.validateHandoverPermissions(action, pendingHandover, fromUserId);
       }
 
+      let whatsappNotification:
+        | {
+            action: AssetEventTypes;
+            assetMasterId: string;
+            recipientUserId: string;
+            actorUserId: string;
+          }
+        | undefined;
+
       await this.dataSource.transaction(async (entityManager: EntityManager) => {
         switch (action) {
           // Handover Initiate - requires toUserId and files
@@ -213,6 +270,15 @@ export class AssetEventsService {
               },
               entityManager,
             );
+
+            if (toUserId) {
+              whatsappNotification = {
+                action,
+                assetMasterId,
+                recipientUserId: toUserId,
+                actorUserId: fromUserId,
+              };
+            }
             break;
           }
 
@@ -247,6 +313,16 @@ export class AssetEventsService {
               { status: AssetStatus.ASSIGNED, assignedTo: fromUserId, updatedBy: createdBy },
               entityManager,
             );
+
+            const initiatorUserId = pendingHandover?.fromUser;
+            if (initiatorUserId) {
+              whatsappNotification = {
+                action,
+                assetMasterId,
+                recipientUserId: initiatorUserId,
+                actorUserId: fromUserId,
+              };
+            }
             break;
           }
 
@@ -276,6 +352,16 @@ export class AssetEventsService {
                 entityManager,
               );
             }
+
+            const initiatorUserId = pendingHandover?.fromUser;
+            if (initiatorUserId) {
+              whatsappNotification = {
+                action,
+                assetMasterId,
+                recipientUserId: initiatorUserId,
+                actorUserId: fromUserId,
+              };
+            }
             break;
           }
 
@@ -304,6 +390,16 @@ export class AssetEventsService {
                 },
                 entityManager,
               );
+            }
+
+            const assigneeUserId = pendingHandover?.toUser;
+            if (assigneeUserId) {
+              whatsappNotification = {
+                action,
+                assetMasterId,
+                recipientUserId: assigneeUserId,
+                actorUserId: fromUserId,
+              };
             }
             break;
           }
@@ -344,6 +440,13 @@ export class AssetEventsService {
               { status: AssetStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
               entityManager,
             );
+
+            whatsappNotification = {
+              action,
+              assetMasterId,
+              recipientUserId: activeVersion.assignedTo,
+              actorUserId: createdBy,
+            };
             break;
           }
 
@@ -503,6 +606,10 @@ export class AssetEventsService {
             throw new BadRequestException(ASSET_EVENTS_ERRORS.INVALID_ACTION);
         }
       });
+
+      if (whatsappNotification) {
+        void this.sendAssetTransactionWhatsappNotification(whatsappNotification);
+      }
 
       return {
         message: ASSET_EVENTS_SUCCESS_MESSAGES[action],
