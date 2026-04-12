@@ -700,7 +700,7 @@ export class LeaveApplicationsService {
     const transformedLeaveBalances = this.transformLeaveBalanceRecords(leaveBalances);
     const stats = this.calculateStatsFromResults(statsResults, transformedLeaveBalances);
 
-    const grouped = filters.grouped !== false;
+    const grouped = filters.grouped === 'true';
 
     if (grouped) {
       const isSingleUser = filters.userIds && filters.userIds.length === 1;

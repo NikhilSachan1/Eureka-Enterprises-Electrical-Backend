@@ -219,6 +219,8 @@ export class UserController {
         degreeDoc: { type: 'string', format: 'binary' },
         offerLetterDoc: { type: 'string', format: 'binary' },
         experienceLetterDoc: { type: 'string', format: 'binary' },
+        whatsappOptIn: { type: 'boolean', example: true },
+        whatsappNumber: { type: 'string', example: '+919876543210' },
       },
       required: ['firstName', 'lastName', 'email', 'contactNumber', 'roles', 'salary'],
     },
@@ -311,6 +313,8 @@ export class UserController {
         degreeDoc: { type: 'string', format: 'binary' },
         offerLetterDoc: { type: 'string', format: 'binary' },
         experienceLetterDoc: { type: 'string', format: 'binary' },
+        whatsappOptIn: { type: 'boolean', example: true },
+        whatsappNumber: { type: 'string', example: '+919876543210' },
       },
     },
   })

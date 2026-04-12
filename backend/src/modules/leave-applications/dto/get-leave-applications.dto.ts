@@ -1,14 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import {
-  IsArray,
-  IsBoolean,
-  IsDateString,
-  IsEnum,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
   ApprovalStatus,
@@ -98,11 +90,6 @@ export class GetLeaveApplicationsDto extends BaseGetDto {
     default: true,
   })
   @IsOptional()
-  @IsBoolean()
-  @Transform(({ value }) => {
-    if (value === 'false' || value === false) return false;
-    if (value === 'true' || value === true) return true;
-    return true;
-  })
-  grouped?: boolean = true;
+  @IsString()
+  grouped?: string;
 }
