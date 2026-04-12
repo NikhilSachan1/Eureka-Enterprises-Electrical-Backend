@@ -246,4 +246,20 @@ export class CreateEmployeeDto {
   @IsString()
   @IsOptional()
   passportNumber?: string;
+
+  // ==================== WhatsApp Preferences ====================
+
+  @ApiProperty({ description: 'WhatsApp opt-in consent', required: false, example: true })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  whatsappOptIn?: boolean;
+
+  @ApiProperty({
+    description: 'WhatsApp number (if different from contact)',
+    required: false,
+    example: '+919876543210',
+  })
+  @IsOptional()
+  @IsString()
+  whatsappNumber?: string;
 }

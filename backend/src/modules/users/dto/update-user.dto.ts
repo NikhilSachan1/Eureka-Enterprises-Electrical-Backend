@@ -11,7 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { USER_DTO_ERRORS, UserStatus, USERS_ERRORS } from '../constants/user.constants';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class UpdateUserDto {
   // ==================== Basic Information ====================
@@ -222,4 +222,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   passportNumber?: string;
+
+  // ==================== WhatsApp Preferences ====================
+
+  @ApiProperty({ description: 'WhatsApp opt-in consent', required: false })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  whatsappOptIn?: boolean;
+
+  @ApiProperty({ description: 'WhatsApp number (if different from contact)', required: false })
+  @IsOptional()
+  @IsString()
+  whatsappNumber?: string;
 }
