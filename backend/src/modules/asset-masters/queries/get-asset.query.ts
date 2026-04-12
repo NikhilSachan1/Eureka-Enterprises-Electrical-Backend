@@ -92,6 +92,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     warrantyStatus,
     assignedTo,
     search,
+    includeLatestEventFiles,
     sortField,
     sortOrder,
     page,
@@ -238,6 +239,30 @@ export const getAssetQuery = (query: AssetQueryDto) => {
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const orderByColumn = ASSET_SORT_FIELD_MAPPING[sortField] || 'am."createdAt"';
 
+  const latestEventFilesSelect = includeLatestEventFiles
+    ? `,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', af."id",
+                'fileKey', af."fileKey",
+                'fileType', af."fileType",
+                'label', af."label"
+              )
+            )
+            FROM "assets_files" af
+            WHERE af."assetEventsId" = ae."id"
+              AND af."deletedAt" IS NULL
+          ),
+          '[]'::json
+        ) AS "assetFiles"`
+    : '';
+
+  const latestEventFilesJson = includeLatestEventFiles
+    ? `,\n        'assetFiles', ale."assetFiles"`
+    : '';
+
   const dataQuery = `
     SELECT 
       am."id",
@@ -292,7 +317,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         'toUserUser', ale."toUserDetails",
         'metadata', ale."metadata",
         'createdAt', ale."createdAt",
-        'createdBy', ale."createdBy"
+        'createdBy', ale."createdBy"${latestEventFilesJson}
       ) ELSE NULL END as "latestEvent"
     FROM "asset_masters" am
     INNER JOIN LATERAL (
@@ -327,7 +352,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
           'lastName', tu."lastName",
           'email', tu."email",
           'employeeId', tu."employeeId"
-        ) ELSE NULL END AS "toUserDetails"
+        ) ELSE NULL END AS "toUserDetails"${latestEventFilesSelect}
       FROM "assets_events" ae
       LEFT JOIN "users" fu ON ae."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ae."toUser" = tu."id" AND tu."deletedAt" IS NULL
