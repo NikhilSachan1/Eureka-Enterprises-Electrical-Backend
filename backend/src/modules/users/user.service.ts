@@ -276,6 +276,11 @@ export class UserService {
           userData.dateOfJoining = new Date(userData.dateOfJoining);
         }
 
+        // Set whatsappOptInAt when opting in during creation
+        if (userData.whatsappOptIn === true) {
+          userData.whatsappOptInAt = new Date();
+        }
+
         delete userData.roles;
 
         const user = await this.create(userData, entityManager);
@@ -531,6 +536,13 @@ export class UserService {
       }
       if (processedData.dateOfJoining && typeof processedData.dateOfJoining === 'string') {
         processedData.dateOfJoining = new Date(processedData.dateOfJoining);
+      }
+
+      // Set whatsappOptInAt when opting in
+      if (processedData.whatsappOptIn === true && !user.whatsappOptIn) {
+        processedData.whatsappOptInAt = new Date();
+      } else if (processedData.whatsappOptIn === false) {
+        processedData.whatsappOptInAt = null;
       }
 
       await this.userRepository.update({ id }, processedData);
