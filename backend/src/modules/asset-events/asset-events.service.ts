@@ -256,8 +256,8 @@ export class AssetEventsService {
               {
                 assetMasterId,
                 eventType: action,
-                toUser: fromUserId, // The person rejecting
-                fromUser: activeVersion?.assignedTo,
+                toUser: pendingHandover?.fromUser, // Asset goes back to the original holder (initiator)
+                fromUser: fromUserId, // The person rejecting
                 metadata,
                 createdBy,
               },
@@ -286,6 +286,7 @@ export class AssetEventsService {
                 assetMasterId,
                 eventType: action,
                 fromUser: fromUserId, // The person cancelling
+                toUser: fromUserId, // Asset stays with the canceller
                 metadata,
                 createdBy,
               },

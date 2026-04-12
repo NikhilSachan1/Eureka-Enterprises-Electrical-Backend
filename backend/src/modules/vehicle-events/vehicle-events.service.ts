@@ -244,8 +244,8 @@ export class VehicleEventsService {
               {
                 vehicleMasterId,
                 eventType: action,
-                toUser: fromUserId, // The person rejecting
-                fromUser: activeVersion?.assignedTo,
+                toUser: pendingHandover?.fromUser, // Vehicle goes back to original holder (initiator)
+                fromUser: fromUserId, // The person rejecting
                 metadata,
                 createdBy,
               },
@@ -274,6 +274,7 @@ export class VehicleEventsService {
                 vehicleMasterId,
                 eventType: action,
                 fromUser: fromUserId, // The person cancelling
+                toUser: fromUserId, // Asset stays with the canceller
                 metadata,
                 createdBy,
               },
