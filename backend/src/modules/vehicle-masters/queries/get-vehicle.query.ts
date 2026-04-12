@@ -354,8 +354,14 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
       vv."remarks",
       vv."additionalData",
       vv."vehicleMasterId",
-      vv."lastServiceKm",
-      vv."lastServiceDate",
+      COALESCE(
+        (SELECT vs."odometerReading" FROM "vehicle_services" vs WHERE vs."vehicleMasterId" = vm."id" AND vs."serviceStatus" = 'COMPLETED' AND vs."deletedAt" IS NULL ORDER BY vs."serviceDate" DESC, vs."createdAt" DESC LIMIT 1),
+        vv."lastServiceKm"
+      ) as "lastServiceKm",
+      COALESCE(
+        (SELECT vs."serviceDate" FROM "vehicle_services" vs WHERE vs."vehicleMasterId" = vm."id" AND vs."serviceStatus" = 'COMPLETED' AND vs."deletedAt" IS NULL ORDER BY vs."serviceDate" DESC, vs."createdAt" DESC LIMIT 1),
+        vv."lastServiceDate"
+      ) as "lastServiceDate",
       CASE 
         WHEN vv."assignedTo" IS NOT NULL THEN json_build_object(
           'id', u."id",
