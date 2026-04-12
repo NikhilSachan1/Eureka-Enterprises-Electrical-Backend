@@ -227,7 +227,7 @@ export class UpdateUserDto {
 
   @ApiProperty({ description: 'WhatsApp opt-in consent', required: false })
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === 'true' || value === true)
   whatsappOptIn?: boolean;
 
   @ApiProperty({ description: 'WhatsApp number (if different from contact)', required: false })
