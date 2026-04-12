@@ -99,6 +99,10 @@ export class GetLeaveApplicationsDto extends BaseGetDto {
   })
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value }) => {
+    if (value === 'false' || value === false) return false;
+    if (value === 'true' || value === true) return true;
+    return true;
+  })
   grouped?: boolean = true;
 }
