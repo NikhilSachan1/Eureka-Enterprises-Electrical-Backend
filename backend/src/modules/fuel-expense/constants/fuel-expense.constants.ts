@@ -2,6 +2,7 @@ export enum TransactionType {
   CREDIT = 'credit',
   DEBIT = 'debit',
   CREDIT_CARD = 'credit_card',
+  PETRO_CARD = 'petro_card',
 }
 
 export enum ExpenseEntryType {

@@ -9,7 +9,8 @@ export class FuelExpenseStatsDto {
       closingBalance: 1500,
       totalCredit: 800,
       totalDebit: 300,
-      totalCreditCardExpense: 150,
+      totalPetroCardExpense: 150,
+      totalPetroCardDebitApproved: 100,
       periodCredit: 500,
       periodDebit: 200,
     },
@@ -19,7 +20,8 @@ export class FuelExpenseStatsDto {
     closingBalance: number;
     totalCredit: number;
     totalDebit: number;
-    totalCreditCardExpense: number;
+    totalPetroCardExpense: number;
+    totalPetroCardDebitApproved: number;
     periodCredit: number;
     periodDebit: number;
   };
