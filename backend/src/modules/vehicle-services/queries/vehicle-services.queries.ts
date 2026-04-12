@@ -311,7 +311,7 @@ export const buildLatestOdometerQuery = (vehicleMasterId: string) => {
         UNION ALL
         SELECT fe."odometerKm" as odometer
         FROM fuel_expenses fe
-        WHERE fe."vehicleId" = $1 AND fe."deletedAt" IS NULL AND fe."isActive" = true
+        WHERE fe."vehicleId" = $1 AND fe."deletedAt" IS NULL AND fe."isActive" = true AND fe."approvalStatus" != 'rejected'
         UNION ALL
         SELECT GREATEST(vl."startOdometerReading", COALESCE(vl."endOdometerReading", 0)) as odometer
         FROM vehicle_logs vl
