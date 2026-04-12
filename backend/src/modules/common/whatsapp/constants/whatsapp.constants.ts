@@ -13,6 +13,16 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   LEAVE_REJECTED: 'LEAVE_REJECTED',
   WELCOME_EMPLOYEE: 'WELCOME_EMPLOYEE',
   FORGET_PASSWORD: 'FORGET_PASSWORD',
+  ASSET_HANDOVER_INITIATED: 'ASSET_HANDOVER_INITIATED',
+  ASSET_HANDOVER_ACCEPTED: 'ASSET_HANDOVER_ACCEPTED',
+  ASSET_HANDOVER_REJECTED: 'ASSET_HANDOVER_REJECTED',
+  ASSET_HANDOVER_CANCELLED: 'ASSET_HANDOVER_CANCELLED',
+  ASSET_DEALLOCATED: 'ASSET_DEALLOCATED',
+  VEHICLE_HANDOVER_INITIATED: 'VEHICLE_HANDOVER_INITIATED',
+  VEHICLE_HANDOVER_ACCEPTED: 'VEHICLE_HANDOVER_ACCEPTED',
+  VEHICLE_HANDOVER_REJECTED: 'VEHICLE_HANDOVER_REJECTED',
+  VEHICLE_HANDOVER_CANCELLED: 'VEHICLE_HANDOVER_CANCELLED',
+  VEHICLE_DEALLOCATED: 'VEHICLE_DEALLOCATED',
 } as const;
 
 export type WhatsAppTemplateKey = keyof typeof WHATSAPP_TEMPLATE_KEYS;
@@ -193,6 +203,76 @@ export const WHATSAPP_TEMPLATES = {
     contentSid: '',
     sandboxMessage: (data: { employeeName: string; resetLink: string }) =>
       `🔒 *Password Reset Request*\n\nHi *${data.employeeName}*,\n\nA password reset was requested for your account. Click the link below to reset your password:\n\n${data.resetLink}\n\nIf you didn't request this, please ignore this message.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_HANDOVER_INITIATED: {
+    name: 'asset_handover_initiated',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; assetId: string; actorName: string }) =>
+      `📦 *Asset Handover Initiated*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has initiated a handover for asset *${data.assetId}* to you.\n\nPlease accept or reject it from the portal.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_HANDOVER_ACCEPTED: {
+    name: 'asset_handover_accepted',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; assetId: string; actorName: string }) =>
+      `✅ *Asset Handover Accepted*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has accepted the handover for asset *${data.assetId}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_HANDOVER_REJECTED: {
+    name: 'asset_handover_rejected',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; assetId: string; actorName: string }) =>
+      `❌ *Asset Handover Rejected*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has rejected the handover for asset *${data.assetId}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_HANDOVER_CANCELLED: {
+    name: 'asset_handover_cancelled',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; assetId: string; actorName: string }) =>
+      `🚫 *Asset Handover Cancelled*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has cancelled the handover for asset *${data.assetId}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_DEALLOCATED: {
+    name: 'asset_deallocated',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; assetId: string; actorName: string }) =>
+      `📤 *Asset Deallocated*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has deallocated asset *${data.assetId}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  VEHICLE_HANDOVER_INITIATED: {
+    name: 'vehicle_handover_initiated',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; vehicleNumber: string; actorName: string }) =>
+      `🚗 *Vehicle Handover Initiated*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has initiated a handover for vehicle *${data.vehicleNumber}* to you.\n\nPlease accept or reject it from the portal.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  VEHICLE_HANDOVER_ACCEPTED: {
+    name: 'vehicle_handover_accepted',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; vehicleNumber: string; actorName: string }) =>
+      `✅ *Vehicle Handover Accepted*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has accepted the handover for vehicle *${data.vehicleNumber}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  VEHICLE_HANDOVER_REJECTED: {
+    name: 'vehicle_handover_rejected',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; vehicleNumber: string; actorName: string }) =>
+      `❌ *Vehicle Handover Rejected*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has rejected the handover for vehicle *${data.vehicleNumber}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  VEHICLE_HANDOVER_CANCELLED: {
+    name: 'vehicle_handover_cancelled',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; vehicleNumber: string; actorName: string }) =>
+      `🚫 *Vehicle Handover Cancelled*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has cancelled the handover for vehicle *${data.vehicleNumber}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  VEHICLE_DEALLOCATED: {
+    name: 'vehicle_deallocated',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; vehicleNumber: string; actorName: string }) =>
+      `📤 *Vehicle Deallocated*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has deallocated vehicle *${data.vehicleNumber}*.\n\n- *${WHATSAPP_SENDER}*`,
   },
 };
 

@@ -399,4 +399,106 @@ export class WhatsAppService {
       recipientName: data.employeeName,
     });
   }
+
+  async sendAssetTransaction(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      assetId: string;
+      actorName: string;
+      action: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    let templateKey: (typeof WHATSAPP_TEMPLATE_KEYS)[keyof typeof WHATSAPP_TEMPLATE_KEYS];
+
+    switch (data.action) {
+      case 'HANDOVER_INITIATED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.ASSET_HANDOVER_INITIATED;
+        break;
+      case 'HANDOVER_ACCEPTED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.ASSET_HANDOVER_ACCEPTED;
+        break;
+      case 'HANDOVER_REJECTED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.ASSET_HANDOVER_REJECTED;
+        break;
+      case 'HANDOVER_CANCELLED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.ASSET_HANDOVER_CANCELLED;
+        break;
+      case 'DEALLOCATED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.ASSET_DEALLOCATED;
+        break;
+      default:
+        return { success: false, error: 'Invalid asset transaction action' };
+    }
+
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey,
+      templateData: {
+        employeeName: data.employeeName,
+        assetId: data.assetId,
+        actorName: data.actorName,
+      },
+      category: CommunicationCategory.ASSET_TRANSACTION,
+      referenceId: options?.referenceId,
+      referenceType: 'ASSET',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendVehicleTransaction(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      vehicleNumber: string;
+      actorName: string;
+      action: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    let templateKey: (typeof WHATSAPP_TEMPLATE_KEYS)[keyof typeof WHATSAPP_TEMPLATE_KEYS];
+
+    switch (data.action) {
+      case 'HANDOVER_INITIATED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.VEHICLE_HANDOVER_INITIATED;
+        break;
+      case 'HANDOVER_ACCEPTED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.VEHICLE_HANDOVER_ACCEPTED;
+        break;
+      case 'HANDOVER_REJECTED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.VEHICLE_HANDOVER_REJECTED;
+        break;
+      case 'HANDOVER_CANCELLED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.VEHICLE_HANDOVER_CANCELLED;
+        break;
+      case 'DEALLOCATED':
+        templateKey = WHATSAPP_TEMPLATE_KEYS.VEHICLE_DEALLOCATED;
+        break;
+      default:
+        return { success: false, error: 'Invalid vehicle transaction action' };
+    }
+
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey,
+      templateData: {
+        employeeName: data.employeeName,
+        vehicleNumber: data.vehicleNumber,
+        actorName: data.actorName,
+      },
+      category: CommunicationCategory.VEHICLE_TRANSACTION,
+      referenceId: options?.referenceId,
+      referenceType: 'VEHICLE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
 }
