@@ -220,7 +220,7 @@ export const getVehiclesWithServiceDueQuery = (serviceIntervalKm: number, warnin
           -- Get current odometer reading (MAX from fuel_expenses, vehicle_services, or vehicle_logs)
           COALESCE(
             GREATEST(
-              (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleId" = vm.id AND "deletedAt" IS NULL AND "isActive" = true),
+              (SELECT MAX("odometerKm") FROM fuel_expenses WHERE "vehicleId" = vm.id AND "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" != 'rejected'),
               (SELECT MAX("odometerReading") FROM vehicle_services WHERE "vehicleMasterId" = vm.id AND "deletedAt" IS NULL),
               (SELECT GREATEST(MAX("startOdometerReading"), MAX("endOdometerReading")) FROM vehicle_logs WHERE "vehicleId" = vm.id AND "deletedAt" IS NULL)
             ),
