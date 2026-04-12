@@ -18,10 +18,12 @@ import { EmailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
 import { UserRoleService } from '../user-roles/user-role.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { JwtPayload, UserFromRequest, RefreshTokenPayload, RequestMetadata } from './auth.types';
 import { RefreshTokenRepository } from './refresh-token.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { LessThan } from 'typeorm';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +35,7 @@ export class AuthService {
     private emailService: EmailService,
     private userRoleService: UserRoleService,
     private refreshTokenRepository: RefreshTokenRepository,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -300,6 +303,23 @@ export class AuthService {
           currentYear: this.utilityService.getCurrentYear(),
         },
       });
+
+      // Send WhatsApp notification (if opted in)
+      const whatsappNumber = user.whatsappNumber || user.contactNumber;
+      if (user.whatsappOptIn && whatsappNumber) {
+        this.whatsAppService
+          .sendForgetPassword(
+            whatsappNumber,
+            {
+              employeeName: `${user.firstName} ${user.lastName}`,
+              resetLink: resetPasswordLink,
+            },
+            { referenceId: user.id, recipientId: user.id },
+          )
+          .catch((err) =>
+            Logger.error(`Failed to send WhatsApp forget password to ${user.email}:`, err),
+          );
+      }
 
       return {
         message: AUTH_RESPONSES.FORGET_PASSWORD,
