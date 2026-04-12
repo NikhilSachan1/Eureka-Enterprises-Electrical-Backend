@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import { IsNumber, IsOptional, Min, ValidateNested } from 'class-validator';
 import { CreateEmployeeDto } from './create-employee.dto';
 
@@ -83,6 +83,16 @@ export class SalaryDetailsDto {
 
 export class CreateEmployeeWithSalaryDto extends CreateEmployeeDto {
   @ApiProperty({ description: 'Salary details', required: true, type: SalaryDetailsDto })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return plainToInstance(SalaryDetailsDto, JSON.parse(value));
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   @ValidateNested()
   @Type(() => SalaryDetailsDto)
   salary: SalaryDetailsDto;

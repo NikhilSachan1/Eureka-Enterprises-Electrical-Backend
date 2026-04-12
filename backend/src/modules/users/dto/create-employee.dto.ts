@@ -251,7 +251,7 @@ export class CreateEmployeeDto {
 
   @ApiProperty({ description: 'WhatsApp opt-in consent', required: false, example: true })
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === 'true' || value === true)
   whatsappOptIn?: boolean;
 
   @ApiProperty({
