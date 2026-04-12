@@ -11,6 +11,8 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   FUEL_EXPENSE_REJECTED: 'FUEL_EXPENSE_REJECTED',
   LEAVE_APPROVED: 'LEAVE_APPROVED',
   LEAVE_REJECTED: 'LEAVE_REJECTED',
+  WELCOME_EMPLOYEE: 'WELCOME_EMPLOYEE',
+  FORGET_PASSWORD: 'FORGET_PASSWORD',
 } as const;
 
 export type WhatsAppTemplateKey = keyof typeof WHATSAPP_TEMPLATE_KEYS;
@@ -171,6 +173,26 @@ export const WHATSAPP_TEMPLATES = {
       }* to *${data.toDate}* has been rejected by *${data.approverName}*.${
         data.remarks ? `\n\nReason: ${data.remarks}` : ''
       }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  WELCOME_EMPLOYEE: {
+    name: 'welcome_employee',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      email: string;
+      tempPassword: string;
+      employeeId: string;
+      loginUrl: string;
+    }) =>
+      `🎉 *Welcome to Eureka HRMS!*\n\nHi *${data.employeeName}*,\n\nYour account has been created. Here are your login details:\n\n📧 Email: *${data.email}*\n🔑 Password: *${data.tempPassword}*\n🆔 Employee ID: *${data.employeeId}*\n\nPlease login at ${data.loginUrl} and change your password.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  FORGET_PASSWORD: {
+    name: 'forget_password',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; resetLink: string }) =>
+      `🔒 *Password Reset Request*\n\nHi *${data.employeeName}*,\n\nA password reset was requested for your account. Click the link below to reset your password:\n\n${data.resetLink}\n\nIf you didn't request this, please ignore this message.\n\n- *${WHATSAPP_SENDER}*`,
   },
 };
 

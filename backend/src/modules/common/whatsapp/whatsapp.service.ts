@@ -341,4 +341,62 @@ export class WhatsAppService {
       recipientName: data.employeeName,
     });
   }
+
+  async sendWelcomeEmployee(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      email: string;
+      tempPassword: string;
+      employeeId: string;
+      loginUrl: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.WELCOME_EMPLOYEE,
+      templateData: {
+        employeeName: data.employeeName,
+        email: data.email,
+        tempPassword: data.tempPassword,
+        employeeId: data.employeeId,
+        loginUrl: data.loginUrl,
+      },
+      category: CommunicationCategory.WELCOME_EMPLOYEE,
+      referenceId: options?.referenceId,
+      referenceType: 'USER',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendForgetPassword(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      resetLink: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.FORGET_PASSWORD,
+      templateData: {
+        employeeName: data.employeeName,
+        resetLink: data.resetLink,
+      },
+      category: CommunicationCategory.FORGET_PASSWORD,
+      referenceId: options?.referenceId,
+      referenceType: 'USER',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
 }

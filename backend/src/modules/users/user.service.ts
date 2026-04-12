@@ -50,6 +50,7 @@ import { LEAVE_CREDIT_LOG_MESSAGES } from '../leave-balances/constants/leave-cre
 import { EmailService } from '../common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
 import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
+import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 
 @Injectable()
 export class UserService {
@@ -68,6 +69,7 @@ export class UserService {
     @InjectDataSource() private dataSource: DataSource,
     private jwtService: JwtService,
     private emailService: EmailService,
+    private whatsAppService: WhatsAppService,
   ) {}
 
   private validateNotSystemUser(userId: string, operation: 'update' | 'delete' | 'archive'): void {
@@ -358,6 +360,25 @@ export class UserService {
           designation: createEmployeeDto.designation,
           dateOfJoining: createEmployeeDto.dateOfJoining,
         });
+
+        // Send WhatsApp onboarding notification (if opted in)
+        const whatsappNumber =
+          (createEmployeeDto as any).whatsappNumber || (createEmployeeDto as any).contactNumber;
+        if ((createEmployeeDto as any).whatsappOptIn && whatsappNumber) {
+          this.whatsAppService
+            .sendWelcomeEmployee(
+              whatsappNumber,
+              {
+                employeeName: `${createEmployeeDto.firstName} ${createEmployeeDto.lastName}`,
+                email,
+                tempPassword: generatedPassword,
+                employeeId: user.employeeId,
+                loginUrl: Environments.FE_BASE_URL,
+              },
+              { referenceId: user.id, recipientId: user.id },
+            )
+            .catch((err) => Logger.error(`Failed to send WhatsApp welcome to ${email}:`, err));
+        }
 
         return {
           id: user.id,
