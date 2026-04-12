@@ -20,6 +20,8 @@ export const VEHICLE_EVENTS_ERRORS = {
   ONLY_TARGET_USER_CAN_ACCEPT: 'Only the target user of the handover can accept it',
   ONLY_TARGET_USER_CAN_REJECT: 'Only the target user of the handover can reject it',
   ONLY_INITIATOR_CAN_CANCEL: 'Only the initiator of the handover can cancel it',
+  TO_USER_ALREADY_HAS_VEHICLE:
+    'The target user already has a vehicle assigned. A user can only hold one vehicle at a time.',
 };
 
 export const VEHICLE_EVENTS_DTO_ERRORS = {
