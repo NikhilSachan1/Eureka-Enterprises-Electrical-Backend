@@ -212,8 +212,8 @@ export class CardsService {
       const cardsResult = await this.cardsRepository.findAll({ where: whereConditions });
 
       const vehiclesWithCards = await this.vehicleMastersService.findAllRaw({
-        select: ['id', 'registrationNo', 'cardId'],
         where: { deletedAt: null },
+        relations: ['vehicleVersions'],
       });
 
       const cardToVehicleMap = new Map<
@@ -223,11 +223,14 @@ export class CardsService {
 
       for (const vehicle of vehiclesWithCards) {
         if (vehicle.cardId) {
+          const activeVersion = vehicle.vehicleVersions?.find(
+            (version: any) => version.isActive && !version.deletedAt,
+          );
           cardToVehicleMap.set(vehicle.cardId, {
             id: vehicle.id,
             registrationNo: vehicle.registrationNo,
-            brand: (vehicle as any).brand,
-            model: (vehicle as any).model,
+            brand: activeVersion?.brand || null,
+            model: activeVersion?.model || null,
           });
         }
       }
