@@ -45,7 +45,9 @@ export const buildAnnouncementListQuery = (
       OR (t."targetType" = $${paramIndex + 1} AND t."targetId" = $${paramIndex + 2})
       ${
         roleIdArray.length > 0
-          ? `OR (t."targetType" = $${paramIndex + 3} AND t."targetId" = ANY($${paramIndex + 4}))`
+          ? `OR (t."targetType" = $${paramIndex + 3} AND t."targetId" = ANY($${
+              paramIndex + 4
+            }::uuid[]))`
           : ''
       }
     )`);
@@ -218,7 +220,11 @@ export const buildUnacknowledgedAnnouncementsQuery = (userId: string, roleIds: s
       AND (
         t."targetType" = $3
         OR (t."targetType" = $4 AND t."targetId" = $5)
-        ${roleIdArray.length > 0 ? `OR (t."targetType" = $6 AND t."targetId" = ANY($7))` : ''}
+        ${
+          roleIdArray.length > 0
+            ? `OR (t."targetType" = $6 AND t."targetId" = ANY($7::uuid[]))`
+            : ''
+        }
       )
     ORDER BY a."createdAt" DESC
   `;
