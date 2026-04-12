@@ -971,6 +971,23 @@ export class UserService {
           },
         });
 
+        // Send WhatsApp notification (if opted in)
+        const whatsappNumber = user.whatsappNumber || user.contactNumber;
+        if (user.whatsappOptIn && whatsappNumber) {
+          this.whatsAppService
+            .sendForgetPassword(
+              whatsappNumber,
+              {
+                employeeName: `${user.firstName} ${user.lastName}`,
+                resetLink: resetPasswordLink,
+              },
+              { referenceId: user.id, recipientId: user.id },
+            )
+            .catch((err) =>
+              Logger.error(`Failed to send WhatsApp forget password to ${user.email}:`, err),
+            );
+        }
+
         results.push({
           userId,
           email: user.email,
