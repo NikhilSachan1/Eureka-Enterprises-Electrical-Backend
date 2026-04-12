@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsArray } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
@@ -161,6 +161,15 @@ export class VehicleQueryDto extends BaseGetDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Include files from the latest event in response',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includeLatestEventFiles?: boolean;
 
   @ApiPropertyOptional({
     description: 'Sort field',

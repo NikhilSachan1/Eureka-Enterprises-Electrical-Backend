@@ -121,6 +121,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     serviceDueStatuses,
     assignedTo,
     search,
+    includeLatestEventFiles,
     sortField,
     sortOrder,
     page,
@@ -285,6 +286,30 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
 
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
+  const latestEventFilesSelect = includeLatestEventFiles
+    ? `,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', vf."id",
+                'fileKey', vf."fileKey",
+                'fileType', vf."fileType",
+                'label', vf."label"
+              )
+            )
+            FROM "vehicles_files" vf
+            WHERE vf."vehicleEventsId" = ve."id"
+              AND vf."deletedAt" IS NULL
+          ),
+          '[]'::json
+        ) AS "vehicleFiles"`
+    : '';
+
+  const latestEventFilesJson = includeLatestEventFiles
+    ? `,\n        'vehicleFiles', vle."vehicleFiles"`
+    : '';
+
   const sortFieldMap: Record<string, string> = {
     createdAt: 'vm."createdAt"',
     updatedAt: 'vm."updatedAt"',
@@ -390,7 +415,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         'toUserUser', vle."toUserDetails",
         'metadata', vle."metadata",
         'createdAt', vle."createdAt",
-        'createdBy', vle."createdBy"
+        'createdBy', vle."createdBy"${latestEventFilesJson}
       ) ELSE NULL END as "latestEvent"
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
@@ -426,7 +451,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
           'lastName', tu."lastName",
           'email', tu."email",
           'employeeId', tu."employeeId"
-        ) ELSE NULL END AS "toUserDetails"
+        ) ELSE NULL END AS "toUserDetails"${latestEventFilesSelect}
       FROM "vehicles_events" ve
       LEFT JOIN "users" fu ON ve."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ve."toUser" = tu."id" AND tu."deletedAt" IS NULL
