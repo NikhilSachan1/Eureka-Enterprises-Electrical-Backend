@@ -128,11 +128,9 @@ export const buildVehicleEventsQuery = ({
         'fu',
       )} ELSE NULL END as "fromUserDetails",
 
-      -- To user details (new holder - fromUser for REJECT/CANCEL since handover didn't go through)
+      -- To user details (new holder - fromUser for CANCEL since handover didn't go through; REJECT uses toUser = original initiator)
       CASE
-        WHEN ve."eventType" IN ('${VehicleEventTypes.HANDOVER_REJECTED}', '${
-    VehicleEventTypes.HANDOVER_CANCELLED
-  }') THEN
+        WHEN ve."eventType" = '${VehicleEventTypes.HANDOVER_CANCELLED}' THEN
           CASE WHEN fu."id" IS NOT NULL THEN ${getUserJsonBuildObject('fu')} ELSE NULL END
         ELSE
           CASE WHEN tu."id" IS NOT NULL THEN ${getUserJsonBuildObject('tu')} ELSE NULL END
