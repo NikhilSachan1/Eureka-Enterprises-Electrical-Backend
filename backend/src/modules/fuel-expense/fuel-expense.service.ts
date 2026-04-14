@@ -284,21 +284,20 @@ export class FuelExpenseService {
         };
       });
 
-      // Send WhatsApp approval notification to employee (non-blocking)
+      // Send WhatsApp force-created notification to employee (non-blocking)
       try {
         const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
         if (employee.whatsappOptIn && whatsappNumber) {
           const adminName = admin
             ? `${admin.firstName} ${admin.lastName}`
             : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
-          await this.whatsAppService.sendFuelExpenseApproval(
+          await this.whatsAppService.sendFuelExpenseForceCreated(
             whatsappNumber,
             {
               employeeName: `${employee.firstName} ${employee.lastName}`,
               amount: `₹${Number(createFuelExpenseDto.fuelAmount).toLocaleString('en-IN')}`,
               vehicleNumber: vehicle.registrationNo,
-              approverName: adminName,
-              isApproved: true,
+              createdByName: adminName,
             },
             { referenceId: result.id, recipientId: employee.id },
           );

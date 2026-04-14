@@ -296,21 +296,23 @@ export class ExpenseTrackerService {
         return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_FORCE_CREATED, id: expense.id };
       });
 
-      // Send WhatsApp approval notification to employee (non-blocking)
+      // Send WhatsApp force-created notification to employee (non-blocking)
       try {
         const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
         if (employee.whatsappOptIn && whatsappNumber) {
           const adminName = admin
             ? `${admin.firstName} ${admin.lastName}`
             : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
-          await this.whatsAppService.sendExpenseApproval(
+          const formattedCategory = category
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          await this.whatsAppService.sendExpenseForceCreated(
             whatsappNumber,
             {
               employeeName: `${employee.firstName} ${employee.lastName}`,
               amount: `₹${Number(amount).toLocaleString('en-IN')}`,
-              category,
-              approverName: adminName,
-              isApproved: true,
+              category: formattedCategory,
+              createdByName: adminName,
             },
             { referenceId: result.id, recipientId: employee.id },
           );

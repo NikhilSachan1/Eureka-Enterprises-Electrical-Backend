@@ -8,10 +8,12 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   EXPENSE_SUBMITTED: 'EXPENSE_SUBMITTED',
   EXPENSE_APPROVED: 'EXPENSE_APPROVED',
   EXPENSE_REJECTED: 'EXPENSE_REJECTED',
+  EXPENSE_FORCE_CREATED: 'EXPENSE_FORCE_CREATED',
   FUEL_EXPENSE_SUBMITTED: 'FUEL_EXPENSE_SUBMITTED',
   FUEL_EXPENSE_APPROVED: 'FUEL_EXPENSE_APPROVED',
   FUEL_EXPENSE_REJECTED: 'FUEL_EXPENSE_REJECTED',
   FUEL_EXPENSE_REIMBURSED: 'FUEL_EXPENSE_REIMBURSED',
+  FUEL_EXPENSE_FORCE_CREATED: 'FUEL_EXPENSE_FORCE_CREATED',
   LEAVE_APPROVED: 'LEAVE_APPROVED',
   LEAVE_REJECTED: 'LEAVE_REJECTED',
   WELCOME_EMPLOYEE: 'WELCOME_EMPLOYEE',
@@ -124,6 +126,18 @@ export const WHATSAPP_TEMPLATES = {
       }\n\n- *${WHATSAPP_SENDER}*`,
   },
 
+  EXPENSE_FORCE_CREATED: {
+    name: 'expense_force_created',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      amount: string;
+      category: string;
+      createdByName: string;
+    }) =>
+      `🧾 *Expense Entry Added*\n\nHi *${data.employeeName}*,\n\nAn expense of *${data.amount}* for *${data.category}* has been added for you by *${data.createdByName}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
   FUEL_EXPENSE_SUBMITTED: {
     name: 'fuel_expense_submitted',
     contentSid: '',
@@ -136,6 +150,18 @@ export const WHATSAPP_TEMPLATES = {
     contentSid: '',
     sandboxMessage: (data: { employeeName: string; amount: string; processedBy: string }) =>
       `💰 *Fuel Expense Reimbursed*\n\nHi *${data.employeeName}*,\n\nYour fuel expense settlement of *${data.amount}* has been processed by *${data.processedBy}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  FUEL_EXPENSE_FORCE_CREATED: {
+    name: 'fuel_expense_force_created',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      amount: string;
+      vehicleNumber: string;
+      createdByName: string;
+    }) =>
+      `⛽ *Fuel Expense Entry Added*\n\nHi *${data.employeeName}*,\n\nA fuel expense of *${data.amount}* for vehicle *${data.vehicleNumber}* has been added for you by *${data.createdByName}*.\n\n- *${WHATSAPP_SENDER}*`,
   },
 
   FUEL_EXPENSE_APPROVED: {
