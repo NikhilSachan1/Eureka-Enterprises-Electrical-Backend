@@ -292,6 +292,66 @@ export class WhatsAppService {
     });
   }
 
+  async sendExpenseForceCreated(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      amount: string;
+      category: string;
+      createdByName: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.EXPENSE_FORCE_CREATED,
+      templateData: {
+        employeeName: data.employeeName,
+        amount: data.amount,
+        category: data.category,
+        createdByName: data.createdByName,
+      },
+      category: CommunicationCategory.EXPENSE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendFuelExpenseForceCreated(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      amount: string;
+      vehicleNumber: string;
+      createdByName: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.FUEL_EXPENSE_FORCE_CREATED,
+      templateData: {
+        employeeName: data.employeeName,
+        amount: data.amount,
+        vehicleNumber: data.vehicleNumber,
+        createdByName: data.createdByName,
+      },
+      category: CommunicationCategory.FUEL_EXPENSE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'FUEL_EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
   async sendFuelExpenseSubmitted(
     phoneNumber: string,
     data: {
