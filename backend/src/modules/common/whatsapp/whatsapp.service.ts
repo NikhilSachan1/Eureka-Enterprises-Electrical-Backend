@@ -227,6 +227,34 @@ export class WhatsAppService {
     });
   }
 
+  async sendExpenseSubmitted(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      amount: string;
+      category: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.EXPENSE_SUBMITTED,
+      templateData: {
+        employeeName: data.employeeName,
+        amount: data.amount,
+        category: data.category,
+      },
+      category: CommunicationCategory.EXPENSE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
   async sendExpenseApproval(
     phoneNumber: string,
     data: {
@@ -259,6 +287,34 @@ export class WhatsAppService {
       category: CommunicationCategory.EXPENSE_APPROVAL,
       referenceId: options?.referenceId,
       referenceType: 'EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendFuelExpenseSubmitted(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      amount: string;
+      vehicleNumber: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.FUEL_EXPENSE_SUBMITTED,
+      templateData: {
+        employeeName: data.employeeName,
+        amount: data.amount,
+        vehicleNumber: data.vehicleNumber,
+      },
+      category: CommunicationCategory.FUEL_EXPENSE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'FUEL_EXPENSE',
       recipientId: options?.recipientId,
       recipientName: data.employeeName,
     });

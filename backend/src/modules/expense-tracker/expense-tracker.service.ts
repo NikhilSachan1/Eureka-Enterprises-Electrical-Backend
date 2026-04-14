@@ -93,7 +93,9 @@ export class ExpenseTrackerService {
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate, timezone);
 
-      return await this.dataSource.transaction(async (entityManager) => {
+      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
+
+      const result = await this.dataSource.transaction(async (entityManager) => {
         const expense = await this.expenseTrackerRepository.create(
           {
             ...createExpenseDto,
@@ -119,8 +121,28 @@ export class ExpenseTrackerService {
           );
         }
 
-        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_CREATED };
+        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_CREATED, id: expense.id };
       });
+
+      // Send WhatsApp notification to employee (non-blocking)
+      try {
+        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+        if (employee.whatsappOptIn && whatsappNumber) {
+          await this.whatsAppService.sendExpenseSubmitted(
+            whatsappNumber,
+            {
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              amount: `₹${Number(amount).toLocaleString('en-IN')}`,
+              category,
+            },
+            { referenceId: result.id, recipientId: employee.id },
+          );
+        }
+      } catch (err) {
+        Logger.error('Failed to send expense submitted WhatsApp notification:', err);
+      }
+
+      return { message: result.message };
     } catch (error) {
       throw error;
     }
@@ -242,7 +264,11 @@ export class ExpenseTrackerService {
         throw new BadRequestException(EXPENSE_TRACKER_ERRORS.INVALID_EXPENSE_DATE);
       }
 
-      return await this.dataSource.transaction(async (entityManager) => {
+      const { userId } = forceExpenseDto;
+      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
+      const admin = await this.userService.findOne({ id: createdBy });
+
+      const result = await this.dataSource.transaction(async (entityManager) => {
         const expense = await this.expenseTrackerRepository.create({
           ...forceExpenseDto,
           isActive: true,
@@ -267,8 +293,33 @@ export class ExpenseTrackerService {
             entityManager,
           );
         }
-        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_FORCE_CREATED };
+        return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_FORCE_CREATED, id: expense.id };
       });
+
+      // Send WhatsApp approval notification to employee (non-blocking)
+      try {
+        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+        if (employee.whatsappOptIn && whatsappNumber) {
+          const adminName = admin
+            ? `${admin.firstName} ${admin.lastName}`
+            : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
+          await this.whatsAppService.sendExpenseApproval(
+            whatsappNumber,
+            {
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              amount: `₹${Number(amount).toLocaleString('en-IN')}`,
+              category,
+              approverName: adminName,
+              isApproved: true,
+            },
+            { referenceId: result.id, recipientId: employee.id },
+          );
+        }
+      } catch (err) {
+        Logger.error('Failed to send force expense WhatsApp notification:', err);
+      }
+
+      return { message: result.message };
     } catch (error) {
       throw error;
     }

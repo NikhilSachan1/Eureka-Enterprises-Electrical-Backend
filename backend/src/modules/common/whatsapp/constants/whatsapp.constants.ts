@@ -5,8 +5,10 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   ATTENDANCE_APPROVED: 'ATTENDANCE_APPROVED',
   ATTENDANCE_REJECTED: 'ATTENDANCE_REJECTED',
   ATTENDANCE_REGULARIZED: 'ATTENDANCE_REGULARIZED',
+  EXPENSE_SUBMITTED: 'EXPENSE_SUBMITTED',
   EXPENSE_APPROVED: 'EXPENSE_APPROVED',
   EXPENSE_REJECTED: 'EXPENSE_REJECTED',
+  FUEL_EXPENSE_SUBMITTED: 'FUEL_EXPENSE_SUBMITTED',
   FUEL_EXPENSE_APPROVED: 'FUEL_EXPENSE_APPROVED',
   FUEL_EXPENSE_REJECTED: 'FUEL_EXPENSE_REJECTED',
   LEAVE_APPROVED: 'LEAVE_APPROVED',
@@ -80,6 +82,13 @@ export const WHATSAPP_TEMPLATES = {
       }\n\n- *${WHATSAPP_SENDER}*`,
   },
 
+  EXPENSE_SUBMITTED: {
+    name: 'expense_submitted',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; amount: string; category: string }) =>
+      `🧾 *Expense Submitted*\n\nHi *${data.employeeName}*,\n\nYour expense of *${data.amount}* for *${data.category}* has been submitted successfully and is pending approval.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
   EXPENSE_APPROVED: {
     name: 'expense_approved',
     contentSid: '',
@@ -112,6 +121,13 @@ export const WHATSAPP_TEMPLATES = {
       }* for *${data.category}* has been rejected by *${data.approverName}*.${
         data.remarks ? `\n\nReason: ${data.remarks}` : ''
       }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  FUEL_EXPENSE_SUBMITTED: {
+    name: 'fuel_expense_submitted',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; amount: string; vehicleNumber: string }) =>
+      `⛽ *Fuel Expense Submitted*\n\nHi *${data.employeeName}*,\n\nYour fuel expense of *${data.amount}* for vehicle *${data.vehicleNumber}* has been submitted successfully and is pending approval.\n\n- *${WHATSAPP_SENDER}*`,
   },
 
   FUEL_EXPENSE_APPROVED: {

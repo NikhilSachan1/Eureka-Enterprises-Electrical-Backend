@@ -116,7 +116,7 @@ export class FuelExpenseService {
       await this.validateFillDate(fillDate, timezone);
       await this.validatePaymentMode(paymentMode);
 
-      await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
+      const vehicle = await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
       await this.validateVehicleAssignment(vehicleId, userId);
 
@@ -130,11 +130,11 @@ export class FuelExpenseService {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
-      await this.userService.findOneOrFail({ where: { id: userId } });
+      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
 
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
-      return await this.dataSource.transaction(async (entityManager) => {
+      const result = await this.dataSource.transaction(async (entityManager) => {
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
             ...createFuelExpenseDto,
@@ -160,8 +160,28 @@ export class FuelExpenseService {
           );
         }
 
-        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREATED };
+        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREATED, id: fuelExpense.id };
       });
+
+      // Send WhatsApp notification to employee (non-blocking)
+      try {
+        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+        if (employee.whatsappOptIn && whatsappNumber) {
+          await this.whatsAppService.sendFuelExpenseSubmitted(
+            whatsappNumber,
+            {
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              amount: `₹${Number(createFuelExpenseDto.fuelAmount).toLocaleString('en-IN')}`,
+              vehicleNumber: vehicle.registrationNo,
+            },
+            { referenceId: result.id, recipientId: employee.id },
+          );
+        }
+      } catch (err) {
+        Logger.error('Failed to send fuel expense submitted WhatsApp notification:', err);
+      }
+
+      return { message: result.message };
     } catch (error) {
       throw error;
     }
@@ -200,7 +220,7 @@ export class FuelExpenseService {
       // Validate payment mode
       await this.validatePaymentMode(paymentMode);
 
-      await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
+      const vehicle = await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
       await this.validateVehicleAssignment(vehicleId, userId);
 
@@ -214,11 +234,12 @@ export class FuelExpenseService {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
-      await this.userService.findOneOrFail({ where: { id: userId } });
+      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
+      const admin = await this.userService.findOne({ id: createdBy });
 
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
-      return await this.dataSource.transaction(async (entityManager) => {
+      const result = await this.dataSource.transaction(async (entityManager) => {
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
             ...createFuelExpenseDto,
@@ -247,8 +268,36 @@ export class FuelExpenseService {
           );
         }
 
-        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_FORCE_CREATED };
+        return {
+          message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_FORCE_CREATED,
+          id: fuelExpense.id,
+        };
       });
+
+      // Send WhatsApp approval notification to employee (non-blocking)
+      try {
+        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+        if (employee.whatsappOptIn && whatsappNumber) {
+          const adminName = admin
+            ? `${admin.firstName} ${admin.lastName}`
+            : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
+          await this.whatsAppService.sendFuelExpenseApproval(
+            whatsappNumber,
+            {
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              amount: `₹${Number(createFuelExpenseDto.fuelAmount).toLocaleString('en-IN')}`,
+              vehicleNumber: vehicle.registrationNo,
+              approverName: adminName,
+              isApproved: true,
+            },
+            { referenceId: result.id, recipientId: employee.id },
+          );
+        }
+      } catch (err) {
+        Logger.error('Failed to send force fuel expense WhatsApp notification:', err);
+      }
+
+      return { message: result.message };
     } catch (error) {
       throw error;
     }
