@@ -68,13 +68,15 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     paramIndex++;
   }
 
-  // Search filter (name, email, employee ID)
+  // Search filter (name, email, description, amount, transaction ID)
   if (search) {
     whereConditions.push(`(
-      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(e."description") LIKE LOWER($${paramIndex})
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."email") LIKE LOWER($${paramIndex}) OR
+      LOWER(e."description") LIKE LOWER($${paramIndex}) OR
+      LOWER(e."transactionId") LIKE LOWER($${paramIndex}) OR
+      CAST(e."amount" AS TEXT) LIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;

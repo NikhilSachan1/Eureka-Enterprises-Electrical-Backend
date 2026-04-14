@@ -84,12 +84,13 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
   // Search filter (description, transaction ID, vehicle registration)
   if (search) {
     whereConditions.push(`(
-      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(fe."description") LIKE LOWER($${paramIndex}) OR 
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."email") LIKE LOWER($${paramIndex}) OR
+      LOWER(fe."description") LIKE LOWER($${paramIndex}) OR
       LOWER(fe."transactionId") LIKE LOWER($${paramIndex}) OR
-      LOWER(v."registrationNo") LIKE LOWER($${paramIndex})
+      LOWER(v."registrationNo") LIKE LOWER($${paramIndex}) OR
+      CAST(fe."fuelAmount" AS TEXT) LIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
@@ -230,12 +231,13 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
   // Search filter (if provided)
   if (search) {
     whereConditions.push(`(
-      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR 
-      LOWER(u."email") LIKE LOWER($${paramIndex}) OR 
-      LOWER(fe."description") LIKE LOWER($${paramIndex}) OR 
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."email") LIKE LOWER($${paramIndex}) OR
+      LOWER(fe."description") LIKE LOWER($${paramIndex}) OR
       LOWER(fe."transactionId") LIKE LOWER($${paramIndex}) OR
-      LOWER(v."registrationNo") LIKE LOWER($${paramIndex})
+      LOWER(v."registrationNo") LIKE LOWER($${paramIndex}) OR
+      CAST(fe."fuelAmount" AS TEXT) LIKE $${paramIndex}
     )`);
     params.push(`%${search}%`);
     paramIndex++;
