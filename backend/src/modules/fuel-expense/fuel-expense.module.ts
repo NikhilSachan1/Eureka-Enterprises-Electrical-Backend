@@ -7,6 +7,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SharedModule } from '../shared/shared.module';
 import { FuelExpenseFilesModule } from '../fuel-expense-files/fuel-expense-files.module';
 import { VehicleMastersModule } from '../vehicle-masters/vehicle-masters.module';
+import { VehicleVersionsModule } from '../vehicle-versions/vehicle-versions.module';
 import { CardsModule } from '../cards/cards.module';
 import { UsersModule } from '../users/user.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
@@ -20,6 +21,7 @@ import { EmailModule } from '../common/email/email.module';
     SharedModule,
     FuelExpenseFilesModule,
     VehicleMastersModule,
+    VehicleVersionsModule,
     forwardRef(() => CardsModule),
     UsersModule,
     ConfigurationsModule,

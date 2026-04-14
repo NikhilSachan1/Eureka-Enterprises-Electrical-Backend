@@ -41,6 +41,8 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { FuelExpenseFilesService } from '../fuel-expense-files/fuel-expense-files.service';
 import { VehicleMastersService } from '../vehicle-masters/vehicle-masters.service';
+import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
+import { VehicleStatus } from '../vehicle-masters/constants/vehicle-masters.constants';
 import { CardsService } from '../cards/cards.service';
 import { UserService } from '../users/user.service';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -75,6 +77,7 @@ export class FuelExpenseService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly fuelExpenseFilesService: FuelExpenseFilesService,
     private readonly vehicleMastersService: VehicleMastersService,
+    private readonly vehicleVersionsService: VehicleVersionsService,
     @Inject(forwardRef(() => CardsService))
     private readonly cardsService: CardsService,
     private readonly userService: UserService,
@@ -114,6 +117,8 @@ export class FuelExpenseService {
       await this.validatePaymentMode(paymentMode);
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
+
+      await this.validateVehicleAssignment(vehicleId, userId);
 
       let cardId = providedCardId;
       if (!cardId) {
@@ -196,6 +201,8 @@ export class FuelExpenseService {
       await this.validatePaymentMode(paymentMode);
 
       await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
+
+      await this.validateVehicleAssignment(vehicleId, userId);
 
       let cardId = providedCardId;
       if (!cardId) {
@@ -1412,6 +1419,20 @@ export class FuelExpenseService {
           availablePaymentModes.join(', '),
         ),
       );
+    }
+  }
+
+  private async validateVehicleAssignment(vehicleId: string, userId: string): Promise<void> {
+    const assignment = await this.vehicleVersionsService.findOne({
+      where: {
+        vehicleMasterId: vehicleId,
+        assignedTo: userId,
+        isActive: true,
+        status: VehicleStatus.ASSIGNED,
+      },
+    });
+    if (!assignment) {
+      throw new BadRequestException(FUEL_EXPENSE_ERRORS.VEHICLE_NOT_ASSIGNED_TO_USER);
     }
   }
 
