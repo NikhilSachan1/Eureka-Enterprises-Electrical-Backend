@@ -453,6 +453,10 @@ export class FuelExpenseService {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
+      if (paymentMode === TransactionType.PETRO_CARD && !cardId) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.CARD_REQUIRED_FOR_PAYMENT_MODE);
+      }
+
       // Validate odometer reading
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate, id);
 
