@@ -130,6 +130,11 @@ export class FuelExpenseService {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
+      const cardRequiredModes = [TransactionType.CREDIT_CARD, TransactionType.PETRO_CARD];
+      if (cardRequiredModes.includes(paymentMode as TransactionType) && !cardId) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.CARD_REQUIRED_FOR_PAYMENT_MODE);
+      }
+
       const employee = await this.userService.findOneOrFail({ where: { id: userId } });
 
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
@@ -232,6 +237,11 @@ export class FuelExpenseService {
         }
       } else {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
+      }
+
+      const cardRequiredModes = [TransactionType.CREDIT_CARD, TransactionType.PETRO_CARD];
+      if (cardRequiredModes.includes(paymentMode as TransactionType) && !cardId) {
+        throw new BadRequestException(FUEL_EXPENSE_ERRORS.CARD_REQUIRED_FOR_PAYMENT_MODE);
       }
 
       const employee = await this.userService.findOneOrFail({ where: { id: userId } });
