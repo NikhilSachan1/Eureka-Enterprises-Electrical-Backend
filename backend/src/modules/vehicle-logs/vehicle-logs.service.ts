@@ -92,8 +92,8 @@ export class VehicleLogsService {
       throw new ConflictException(VEHICLE_LOG_ERRORS.DUPLICATE_LOG);
     }
 
-    // Check for pending logs from previous days
-    await this.checkPendingLogs(vehicleId, logDate);
+    // Auto-complete pending logs from previous days using current start as their end
+    await this.checkPendingLogs(vehicleId, logDate, createDto.startOdometerReading);
 
     // Validate odometer sequence against previous day
     await this.validateStartOdometerSequence(vehicleId, logDate, createDto.startOdometerReading);
@@ -446,26 +446,45 @@ export class VehicleLogsService {
     return { vehicleId, driverId };
   }
 
-  private async checkPendingLogs(vehicleId: string, currentLogDate: Date) {
-    // Find any STARTED logs with dates before the current log date
-    const pendingLogs = await this.vehicleLogsRepository.findAll({
+  private async checkPendingLogs(
+    vehicleId: string,
+    currentLogDate: Date,
+    currentStartOdometer: number,
+  ) {
+    // Find any STARTED logs with dates before the current log date, sorted ascending by date
+    const [pendingLogs] = await this.vehicleLogsRepository.findAll({
       where: {
         vehicleId,
         status: VehicleLogStatus.STARTED,
         logDate: LessThan(currentLogDate),
         deletedAt: IsNull(),
       },
+      order: { logDate: SortOrder.ASC },
     });
 
-    if (pendingLogs[0]?.length > 0) {
-      throw new BadRequestException({
-        message: VEHICLE_LOG_ERRORS.PENDING_LOGS_EXIST,
-        pendingLogs: pendingLogs[0].map((log) => ({
-          id: log.id,
-          logDate: log.logDate,
-          startOdometerReading: log.startOdometerReading,
-        })),
-      });
+    if (pendingLogs.length === 0) return;
+
+    // Auto-complete each pending log:
+    // Each log's end = next pending log's start, last pending log's end = currentStartOdometer
+    for (let i = 0; i < pendingLogs.length; i++) {
+      const log = pendingLogs[i];
+      const endOdometer =
+        i < pendingLogs.length - 1 ? pendingLogs[i + 1].startOdometerReading : currentStartOdometer;
+
+      if (endOdometer < log.startOdometerReading) {
+        throw new BadRequestException(VEHICLE_LOG_ERRORS.INVALID_ODOMETER);
+      }
+
+      const totalKmTraveled = endOdometer - log.startOdometerReading;
+
+      await this.vehicleLogsRepository.update(
+        { id: log.id },
+        {
+          endOdometerReading: endOdometer,
+          status: VehicleLogStatus.COMPLETED,
+          totalKmTraveled,
+        },
+      );
     }
   }
 
