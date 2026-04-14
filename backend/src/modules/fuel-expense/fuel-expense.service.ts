@@ -130,7 +130,7 @@ export class FuelExpenseService {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
-      const cardRequiredModes = [TransactionType.CREDIT_CARD, TransactionType.PETRO_CARD];
+      const cardRequiredModes = [TransactionType.PETRO_CARD];
       if (cardRequiredModes.includes(paymentMode as TransactionType) && !cardId) {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.CARD_REQUIRED_FOR_PAYMENT_MODE);
       }
@@ -239,7 +239,7 @@ export class FuelExpenseService {
         await this.cardsService.findOneOrFail({ where: { id: cardId } });
       }
 
-      const cardRequiredModes = [TransactionType.CREDIT_CARD, TransactionType.PETRO_CARD];
+      const cardRequiredModes = [TransactionType.PETRO_CARD];
       if (cardRequiredModes.includes(paymentMode as TransactionType) && !cardId) {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.CARD_REQUIRED_FOR_PAYMENT_MODE);
       }
