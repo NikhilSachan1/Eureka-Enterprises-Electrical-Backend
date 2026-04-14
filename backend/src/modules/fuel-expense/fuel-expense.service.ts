@@ -325,9 +325,10 @@ export class FuelExpenseService {
       await this.validatePaymentMode(paymentMode);
 
       // Validate user exists
-      await this.userService.findOneOrFail({ where: { id: userId } });
+      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
+      const admin = await this.userService.findOne({ id: createdBy });
 
-      return await this.dataSource.transaction(async (entityManager) => {
+      const result = await this.dataSource.transaction(async (entityManager) => {
         // Create fuel expense credit/settlement record (auto-approved)
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
@@ -358,8 +359,34 @@ export class FuelExpenseService {
           );
         }
 
-        return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREDIT_SETTLED };
+        return {
+          message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREDIT_SETTLED,
+          id: fuelExpense.id,
+        };
       });
+
+      // Send WhatsApp reimbursement notification to employee (non-blocking)
+      try {
+        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+        if (employee.whatsappOptIn && whatsappNumber) {
+          const adminName = admin
+            ? `${admin.firstName} ${admin.lastName}`
+            : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
+          await this.whatsAppService.sendFuelExpenseReimbursed(
+            whatsappNumber,
+            {
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              amount: `₹${Number(createCreditFuelExpenseDto.fuelAmount).toLocaleString('en-IN')}`,
+              processedBy: adminName,
+            },
+            { referenceId: result.id, recipientId: employee.id },
+          );
+        }
+      } catch (err) {
+        Logger.error('Failed to send fuel expense reimbursement WhatsApp notification:', err);
+      }
+
+      return { message: result.message };
     } catch (error) {
       throw error;
     }

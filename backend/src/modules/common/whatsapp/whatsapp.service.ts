@@ -320,6 +320,34 @@ export class WhatsAppService {
     });
   }
 
+  async sendFuelExpenseReimbursed(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      amount: string;
+      processedBy: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.FUEL_EXPENSE_REIMBURSED,
+      templateData: {
+        employeeName: data.employeeName,
+        amount: data.amount,
+        processedBy: data.processedBy,
+      },
+      category: CommunicationCategory.FUEL_EXPENSE_REIMBURSEMENT,
+      referenceId: options?.referenceId,
+      referenceType: 'FUEL_EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
   async sendFuelExpenseApproval(
     phoneNumber: string,
     data: {
