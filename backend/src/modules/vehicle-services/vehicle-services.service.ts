@@ -1,6 +1,16 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOneOptions,
+  FindOptionsWhere,
+  LessThan,
+  MoreThan,
+  Equal,
+  IsNull,
+  Not,
+} from 'typeorm';
 import { VehicleServicesRepository } from './vehicle-services.repository';
 import { VehicleServiceEntity } from './entities/vehicle-service.entity';
 import {
@@ -84,6 +94,64 @@ export class VehicleServicesService {
     }
   }
 
+  private async validateOdometerReading(
+    vehicleMasterId: string,
+    odometerReading: number,
+    serviceDate: Date,
+    excludeServiceId?: string,
+  ): Promise<void> {
+    const baseWhere: any = {
+      vehicleMasterId,
+      deletedAt: IsNull(),
+    };
+
+    if (excludeServiceId) {
+      baseWhere.id = Not(excludeServiceId);
+    }
+
+    // Record just BEFORE this entry in chronological order
+    const beforeRecord = await this.vehicleServicesRepository.findOne({
+      where: [
+        { ...baseWhere, serviceDate: LessThan(serviceDate) },
+        {
+          ...baseWhere,
+          serviceDate: Equal(serviceDate),
+          odometerReading: LessThan(odometerReading),
+        },
+      ],
+      order: { serviceDate: 'DESC', odometerReading: 'DESC' },
+    } as any);
+
+    // Record just AFTER this entry in chronological order
+    const afterRecord = await this.vehicleServicesRepository.findOne({
+      where: [
+        { ...baseWhere, serviceDate: MoreThan(serviceDate) },
+        {
+          ...baseWhere,
+          serviceDate: Equal(serviceDate),
+          odometerReading: MoreThan(odometerReading),
+        },
+      ],
+      order: { serviceDate: 'ASC', odometerReading: 'ASC' },
+    } as any);
+
+    if (beforeRecord && odometerReading < Number(beforeRecord.odometerReading)) {
+      throw new BadRequestException(
+        `Odometer reading must be ≥ ${Number(
+          beforeRecord.odometerReading,
+        )} km (recorded on ${new Date(beforeRecord.serviceDate).toLocaleDateString('en-GB')})`,
+      );
+    }
+
+    if (afterRecord && odometerReading > Number(afterRecord.odometerReading)) {
+      throw new BadRequestException(
+        `Odometer reading must be ≤ ${Number(
+          afterRecord.odometerReading,
+        )} km (recorded on ${new Date(afterRecord.serviceDate).toLocaleDateString('en-GB')})`,
+      );
+    }
+  }
+
   async create(
     createDto: CreateVehicleServiceDto & { createdBy: string },
     serviceFiles?: string[],
@@ -94,6 +162,12 @@ export class VehicleServicesService {
     await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleMasterId } });
 
     this.validateServiceDate(serviceDate, timezone);
+
+    await this.validateOdometerReading(
+      vehicleMasterId,
+      createDto.odometerReading,
+      new Date(serviceDate),
+    );
 
     const resetsServiceInterval =
       createDto.resetsServiceInterval ?? (await this.shouldResetInterval(serviceType));
@@ -276,6 +350,19 @@ export class VehicleServicesService {
 
     if (updateDto.serviceDate) {
       this.validateServiceDate(updateDto.serviceDate, timezone);
+    }
+
+    if (updateDto.odometerReading !== undefined || updateDto.serviceDate !== undefined) {
+      const effectiveOdometer = updateDto.odometerReading ?? service.odometerReading;
+      const effectiveDate = updateDto.serviceDate
+        ? new Date(updateDto.serviceDate)
+        : service.serviceDate;
+      await this.validateOdometerReading(
+        service.vehicleMasterId,
+        effectiveOdometer,
+        effectiveDate,
+        service.id,
+      );
     }
 
     const serviceType = updateDto.serviceType || service.serviceType;
