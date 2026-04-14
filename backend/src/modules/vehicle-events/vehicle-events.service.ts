@@ -232,10 +232,20 @@ export class VehicleEventsService {
           }
         | undefined;
 
-      // Validate toUser doesn't already have a vehicle assigned
+      // Validate toUser doesn't already have a vehicle assigned (on initiate)
       if (action === VehicleEventTypes.HANDOVER_INITIATED && toUserId) {
         const existingAssignment = await this.vehicleVersionsService.findOne({
           where: { assignedTo: toUserId, isActive: true, status: VehicleStatus.ASSIGNED },
+        });
+        if (existingAssignment) {
+          throw new BadRequestException(VEHICLE_EVENTS_ERRORS.TO_USER_ALREADY_HAS_VEHICLE);
+        }
+      }
+
+      // Validate accepting user doesn't already have a vehicle assigned (on accept)
+      if (action === VehicleEventTypes.HANDOVER_ACCEPTED) {
+        const existingAssignment = await this.vehicleVersionsService.findOne({
+          where: { assignedTo: fromUserId, isActive: true, status: VehicleStatus.ASSIGNED },
         });
         if (existingAssignment) {
           throw new BadRequestException(VEHICLE_EVENTS_ERRORS.TO_USER_ALREADY_HAS_VEHICLE);
