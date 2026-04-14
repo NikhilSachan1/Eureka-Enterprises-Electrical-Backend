@@ -118,10 +118,13 @@ export const buildAssetEventsQuery = ({
         'cb',
       )} ELSE NULL END as "createdByUser",
       
-      -- From user details (previous holder - always fromUser)
-      CASE WHEN fu."id" IS NOT NULL THEN ${getUserJsonBuildObject(
-        'fu',
-      )} ELSE NULL END as "fromUserDetails",
+      -- From user details (previous holder - for REJECT use toUser=A since fromUser=B is the rejector)
+      CASE
+        WHEN ae."eventType" = '${AssetEventTypes.HANDOVER_REJECTED}' THEN
+          CASE WHEN tu."id" IS NOT NULL THEN ${getUserJsonBuildObject('tu')} ELSE NULL END
+        ELSE
+          CASE WHEN fu."id" IS NOT NULL THEN ${getUserJsonBuildObject('fu')} ELSE NULL END
+      END as "fromUserDetails",
 
       -- To user details (new holder - fromUser for CANCEL since handover didn't go through; REJECT uses toUser = original initiator)
       CASE
