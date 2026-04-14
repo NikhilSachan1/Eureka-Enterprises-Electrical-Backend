@@ -556,7 +556,6 @@ export class FuelExpenseService {
         filters.startDate ||
         filters.endDate ||
         filters.date ||
-        (filters.userIds && filters.userIds.length > 0) ||
         (filters.approvalStatuses && filters.approvalStatuses.length > 0) ||
         filters.search ||
         (filters.paymentModes && filters.paymentModes.length > 0) ||
@@ -585,7 +584,12 @@ export class FuelExpenseService {
         // Calculate fuel efficiency only if no data filters are applied
         // When filters are applied, LAG() operates on filtered data which gives incorrect results
         let fuelEfficiency = null;
-        if (!hasDataFilters && record.previousOdometerKm && Number(record.previousOdometerKm) > 0) {
+        if (
+          filters.vehicleId &&
+          !hasDataFilters &&
+          record.previousOdometerKm &&
+          Number(record.previousOdometerKm) > 0
+        ) {
           const distanceTraveled = Number(record.odometerKm) - Number(record.previousOdometerKm);
           const fuelLiters = Number(record.fuelLiters);
 
