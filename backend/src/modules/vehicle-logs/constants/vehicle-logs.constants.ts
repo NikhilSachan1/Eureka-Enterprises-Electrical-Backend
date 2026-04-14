@@ -8,6 +8,8 @@ export const VEHICLE_LOG_ERRORS = {
   VEHICLE_NOT_FOUND: 'Vehicle not found',
   VEHICLE_NOT_ASSIGNED: 'Vehicle is not currently assigned to any user',
   INVALID_ODOMETER: 'End odometer reading must be greater than or equal to start odometer reading',
+  PENDING_LOG_ODOMETER_CONFLICT:
+    'Cannot auto-complete the incomplete log from {date} (start: {previousStart} km). Your new reading ({current} km) must be at least {previousStart} km.',
   DUPLICATE_LOG: 'A log already exists for this vehicle on this date',
   START_ODOMETER_PROOF_REQUIRED: 'Start odometer proof (photo) is required',
   END_ODOMETER_PROOF_REQUIRED: 'End odometer proof (photo) is required',

@@ -472,7 +472,16 @@ export class VehicleLogsService {
         i < pendingLogs.length - 1 ? pendingLogs[i + 1].startOdometerReading : currentStartOdometer;
 
       if (endOdometer < log.startOdometerReading) {
-        throw new BadRequestException(VEHICLE_LOG_ERRORS.INVALID_ODOMETER);
+        const logDateFormatted = new Date(log.logDate).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+        throw new BadRequestException(
+          VEHICLE_LOG_ERRORS.PENDING_LOG_ODOMETER_CONFLICT.replace('{date}', logDateFormatted)
+            .replace('{previousStart}', String(log.startOdometerReading))
+            .replace('{current}', String(currentStartOdometer)),
+        );
       }
 
       const totalKmTraveled = endOdometer - log.startOdometerReading;
