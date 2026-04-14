@@ -21,6 +21,7 @@ import {
 } from '../common/file-upload/constants/files.constants';
 import { VehicleLogUserInterceptor } from './interceptors/vehicle-log-user.interceptor';
 import { RequestWithTimezone } from './vehicle-logs.types';
+import { Roles } from '../roles/constants/role.constants';
 
 @ApiTags('Vehicle Logs')
 @ApiBearerAuth('JWT-auth')
@@ -118,7 +119,16 @@ export class VehicleLogsController {
     description:
       'Use status=STARTED for pending logs. Use includeFiles=true to get files in response.',
   })
-  async findAll(@Query() query: GetVehicleLogDto) {
+  async findAll(@Query() query: GetVehicleLogDto, @Request() req: RequestWithTimezone) {
+    // Employees and Drivers can only see their own logs
+    if (
+      req.user.role !== Roles.HR &&
+      req.user.role !== Roles.ADMIN &&
+      req.user.role !== Roles.MANAGER &&
+      req.user.role !== Roles.SUPER_ADMIN
+    ) {
+      query.driverId = req.user.id;
+    }
     return await this.vehicleLogsService.findAll(query);
   }
 
