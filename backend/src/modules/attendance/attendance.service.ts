@@ -1928,6 +1928,10 @@ export class AttendanceService {
         );
       }
 
+      if (approvalStatus === ApprovalStatus.APPROVED && !attendance.checkInTime) {
+        throw new BadRequestException(ATTENDANCE_ERRORS.CANNOT_APPROVE_WITHOUT_CHECKIN);
+      }
+
       // Store previous approval status for food expense handling
       const previousApprovalStatus = attendance.approvalStatus;
 
