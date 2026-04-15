@@ -811,6 +811,7 @@ export class VehicleMastersService {
   ) {
     const vehicle = await this.vehicleMastersRepository.findOne({
       where: { id: vehicleId },
+      relations: ['card'],
     });
 
     if (!vehicle) {
@@ -834,7 +835,8 @@ export class VehicleMastersService {
       );
     }
 
-    if (vehicle.cardId) {
+    // vehicle.card is null if the card was already soft-deleted (TypeORM filters it out)
+    if (vehicle.card) {
       throw new BadRequestException(VEHICLE_MASTERS_ERRORS.VEHICLE_CANNOT_DELETE_CARD_LINKED);
     }
 

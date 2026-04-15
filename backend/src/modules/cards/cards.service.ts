@@ -461,5 +461,13 @@ export class CardsService {
     if (fuelExpense) {
       throw new BadRequestException(CARD_ERRORS.CARD_HAS_FUEL_EXPENSES);
     }
+
+    const vehicle = await this.vehicleMastersService.findOne({
+      where: { cardId, deletedAt: null },
+    });
+
+    if (vehicle) {
+      throw new BadRequestException(CARD_ERRORS.CARD_LINKED_TO_VEHICLE);
+    }
   }
 }
