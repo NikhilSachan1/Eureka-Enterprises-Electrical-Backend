@@ -524,7 +524,7 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
     SELECT
       COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
       COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit",
-      COALESCE(SUM(CASE WHEN fe."paymentMode" = '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalPetroCardExpense",
+      COALESCE(SUM(CASE WHEN fe."paymentMode" = '${TransactionType.PETRO_CARD}' AND fe."approvalStatus" <> 'rejected' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalPetroCardExpense",
       COALESCE(SUM(CASE WHEN fe."paymentMode" = '${TransactionType.PETRO_CARD}' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalPetroCardDebitApproved",
       COUNT(*) as "totalRecords",
       COUNT(CASE WHEN fe."approvalStatus" = 'pending' THEN 1 END) as "pendingCount",

@@ -58,7 +58,8 @@ export const FUEL_EXPENSE_ERRORS = {
   COULD_NOT_CALCULATE_VEHICLE_AVERAGE: 'Could not calculate vehicle average: {error}',
   FUEL_EXPENSE_CANNOT_DELETE_OTHERS: 'You can only delete your own fuel expenses',
   VEHICLE_NOT_ASSIGNED_TO_USER: 'This vehicle is not currently assigned to the specified user',
-  CARD_REQUIRED_FOR_PAYMENT_MODE: 'A card ID is required when payment mode is petro card',
+  CARD_REQUIRED_FOR_PAYMENT_MODE:
+    'No petro card is linked to this vehicle. Please link a petro card before adding a petro card expense.',
   FUEL_EXPENSE_CANNOT_DELETE_NON_PENDING:
     'Only pending fuel expenses can be deleted. This fuel expense is already {status}',
   FUEL_EXPENSE_ALREADY_DELETED: 'Fuel expense is already deleted',
