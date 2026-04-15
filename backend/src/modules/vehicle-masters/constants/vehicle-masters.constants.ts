@@ -4,6 +4,8 @@ export const VEHICLE_MASTERS_ERRORS = {
   VEHICLE_ALREADY_DELETED: 'Vehicle is already deleted',
   VEHICLE_CANNOT_DELETE_ASSIGNED:
     'Cannot delete vehicle with status {status}. Only AVAILABLE vehicles can be deleted by non-admin users.',
+  VEHICLE_CANNOT_DELETE_CARD_LINKED:
+    'Cannot delete vehicle with a petro card linked. Please unlink the card before deleting.',
   INVALID_ACTION: 'Invalid action',
   INVALID_DATE_RANGE: 'End date must be after start date',
   ASSIGNED_USER_NOT_FOUND: 'Assigned user not found',
