@@ -834,6 +834,12 @@ export class VehicleMastersService {
       );
     }
 
+    // Free the petro card before soft-deleting so its unique constraint
+    // doesn't block future assignment to another vehicle
+    if (vehicle.cardId) {
+      await this.vehicleMastersRepository.update({ id: vehicleId }, { cardId: null });
+    }
+
     await this.vehicleMastersRepository.delete({ id: vehicleId, deletedBy });
 
     return {
