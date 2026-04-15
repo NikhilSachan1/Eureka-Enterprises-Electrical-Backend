@@ -329,9 +329,22 @@ export class AttendanceService {
     return { configSettingId, shiftConfigs };
   }
 
+  private getHourMinuteInTimezone(date: Date, timezone: string): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+    // Some V8 versions return "24" for midnight with hour12:false — normalise to 0
+    const hours = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10) % 24;
+    const minutes = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+    return hours * 100 + minutes;
+  }
+
   private async validateShiftTiming(shiftTimings: any, currentTime: Date) {
-    // Convert current time to UTC for validation
-    const currentHourMinute = currentTime.getUTCHours() * 100 + currentTime.getUTCMinutes();
+    const shiftTimezone = shiftTimings.timezone || 'UTC';
+    const currentHourMinute = this.getHourMinuteInTimezone(currentTime, shiftTimezone);
     const [startHour, startMinute] = shiftTimings.startTime.split(':').map(Number);
     const [endHour, endMinute] = shiftTimings.endTime.split(':').map(Number);
     const shiftStart = startHour * 100 + startMinute;
@@ -847,7 +860,8 @@ export class AttendanceService {
   }
 
   private async validateTimeWithinShift(shiftConfigs: any, timeToValidate: Date, timeType: string) {
-    const timeHourMinute = timeToValidate.getUTCHours() * 100 + timeToValidate.getUTCMinutes();
+    const shiftTimezone = shiftConfigs.timezone || 'UTC';
+    const timeHourMinute = this.getHourMinuteInTimezone(timeToValidate, shiftTimezone);
     const [startHour, startMinute] = shiftConfigs.startTime.split(':').map(Number);
     const [endHour, endMinute] = shiftConfigs.endTime.split(':').map(Number);
     const shiftStart = startHour * 100 + startMinute;
@@ -1143,7 +1157,8 @@ export class AttendanceService {
   }
 
   private async getShiftStatus(shiftConfigs: any, currentTime: Date): Promise<ShiftStatus> {
-    const currentHourMinute = currentTime.getUTCHours() * 100 + currentTime.getUTCMinutes();
+    const shiftTimezone = shiftConfigs.timezone || 'UTC';
+    const currentHourMinute = this.getHourMinuteInTimezone(currentTime, shiftTimezone);
     const [startHour, startMinute] = shiftConfigs.startTime.split(':').map(Number);
     const [endHour, endMinute] = shiftConfigs.endTime.split(':').map(Number);
     const shiftStart = startHour * 100 + startMinute;

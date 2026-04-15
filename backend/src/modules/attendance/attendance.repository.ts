@@ -68,7 +68,10 @@ export class AttendanceRepository {
       const repository = entityManager
         ? entityManager.getRepository(AttendanceEntity)
         : this.repository;
-      return await repository.update(identifierConditions, updateData);
+      return await repository.update(identifierConditions, {
+        ...updateData,
+        updatedAt: new Date(),
+      });
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
