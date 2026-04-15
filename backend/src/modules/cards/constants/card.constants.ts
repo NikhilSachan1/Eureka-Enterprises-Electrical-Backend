@@ -3,6 +3,8 @@ export const CARD_ERRORS = {
   CARD_NOT_FOUND: 'Card not found',
   EXPIRY_WARNING_DAYS_CONFIG_NOT_FOUND: 'Card expiry warning days configuration not found',
   CARD_HAS_FUEL_EXPENSES: 'Card cannot be deleted as it has associated fuel expenses',
+  CARD_LINKED_TO_VEHICLE:
+    'Cannot delete card as it is linked to a vehicle. Please unlink the card before deleting.',
   VEHICLE_ALREADY_HAS_CARD: 'This vehicle already has a card assigned',
   CARD_ALREADY_ASSIGNED: 'This card is already assigned to another vehicle',
   CARD_NOT_ASSIGNED: 'This card is not assigned to any vehicle',
