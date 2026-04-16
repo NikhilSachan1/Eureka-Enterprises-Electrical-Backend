@@ -128,11 +128,14 @@ export class CardsService {
           throw new BadRequestException(CARD_ERRORS.VEHICLE_ID_REQUIRED);
         }
 
+        // Load card relation so TypeORM filters out soft-deleted cards automatically
         const vehicle = await this.vehicleMastersService.findOneOrFail({
           where: { id: vehicleMasterId },
+          relations: ['card'],
         });
 
-        if (vehicle.cardId && vehicle.cardId !== cardId) {
+        // Use vehicle.card (not vehicle.cardId) — vehicle.card is null if the linked card was soft-deleted
+        if (vehicle.card && vehicle.card.id !== cardId) {
           throw new ConflictException(CARD_ERRORS.VEHICLE_ALREADY_HAS_CARD);
         }
 
@@ -142,6 +145,10 @@ export class CardsService {
         if (vehicleWithCard && vehicleWithCard.id !== vehicleMasterId) {
           throw new ConflictException(CARD_ERRORS.CARD_ALREADY_ASSIGNED);
         }
+
+        // Null out cardId on any soft-deleted vehicle still holding this card
+        // to avoid the unique constraint violation on UPDATE
+        await this.vehicleMastersService.updateMaster({ cardId }, { cardId: null });
 
         await this.vehicleMastersService.updateMaster(
           { id: vehicleMasterId },
