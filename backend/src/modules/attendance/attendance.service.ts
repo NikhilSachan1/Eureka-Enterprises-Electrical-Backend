@@ -1947,6 +1947,10 @@ export class AttendanceService {
         throw new BadRequestException(ATTENDANCE_ERRORS.CANNOT_APPROVE_WITHOUT_CHECKIN);
       }
 
+      if (approvalStatus === ApprovalStatus.REJECTED && !attendance.checkInTime) {
+        throw new BadRequestException(ATTENDANCE_ERRORS.CANNOT_REJECT_WITHOUT_CHECKIN);
+      }
+
       // Store previous approval status for food expense handling
       const previousApprovalStatus = attendance.approvalStatus;
 

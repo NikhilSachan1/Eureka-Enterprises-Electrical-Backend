@@ -49,6 +49,8 @@ export const ATTENDANCE_ERRORS = {
   ATTENDANCE_REJECTED: 'Attendance has been rejected. Please contact admin.',
   CANNOT_APPROVE_WITHOUT_CHECKIN:
     'Cannot approve attendance — employee has not checked in for this day.',
+  CANNOT_REJECT_WITHOUT_CHECKIN:
+    'Cannot reject attendance — employee has not checked in for this day.',
   MUST_CHECK_OUT_FIRST: 'Already checked in. Please check out first.',
   MANUAL_CHECK_OUT_NOT_ALLOWED: 'Manual check out is not allowed for your organization',
   REGULARIZATION_NOT_ALLOWED: 'Regularization is not allowed for your organization',
