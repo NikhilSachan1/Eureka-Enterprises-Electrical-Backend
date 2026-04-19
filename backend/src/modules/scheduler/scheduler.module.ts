@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SchedulerService } from './scheduler.service';
+import { SchedulerController } from './scheduler.controller';
 import { AttendanceCronService } from './crons/attendance.cron.service';
 import { LeaveCronService } from './crons/leave.cron.service';
 import { PayrollCronService } from './crons/payroll.cron.service';
@@ -23,6 +24,7 @@ import { SharedModule } from '../shared/shared.module';
 import { CronLogModule } from '../cron-logs/cron-log.module';
 
 @Module({
+  controllers: [SchedulerController],
   imports: [
     SharedModule,
     AttendanceModule,

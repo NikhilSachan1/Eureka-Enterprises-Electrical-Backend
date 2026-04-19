@@ -339,6 +339,7 @@ export class LeaveApplicationsService {
     fromDate: string,
     numberOfDays: number,
     timezone?: string,
+    isForced?: boolean,
   ) {
     const leaveCategoriesConfigSetting = await this.configurationService.findOneOrFail({
       where: {
@@ -384,7 +385,7 @@ export class LeaveApplicationsService {
     // Use timezone-aware date comparison
     const fromDateStr = fromDate.split('T')[0];
 
-    if (this.dateTimeService.isPastDate(fromDateStr, timezone) && !config.allowBackwardApply) {
+    if (this.dateTimeService.isPastDate(fromDateStr, timezone) && !config.allowBackwardApply && !isForced) {
       throw new BadRequestException(
         LEAVE_APPLICATION_ERRORS.BACKWARD_LEAVE_NOT_ALLOWED.replace(
           '{leaveCategory}',
@@ -579,6 +580,7 @@ export class LeaveApplicationsService {
         fromDate,
         numberOfDays,
         timezone,
+        true, // isForced — skip backward date restriction
       );
 
       const leaveBalance = await this.validateLeaveBalance(
