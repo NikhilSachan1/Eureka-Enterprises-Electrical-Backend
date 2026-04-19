@@ -197,9 +197,10 @@ export class AttendanceService {
         throw new BadRequestException(ATTENDANCE_ERRORS.ATTENDANCE_REJECTED);
       }
 
-      // UPDATE existing record if status is NOT_CHECKED_IN_YET or HOLIDAY
+      // UPDATE existing record if status is NOT_CHECKED_IN_YET, ABSENT, or HOLIDAY
       if (
         existingAttendance.status === AttendanceStatus.NOT_CHECKED_IN_YET ||
+        existingAttendance.status === AttendanceStatus.ABSENT ||
         existingAttendance.status === AttendanceStatus.HOLIDAY
       ) {
         await this.attendanceRepository.update(
@@ -1524,6 +1525,11 @@ export class AttendanceService {
   async getAttendanceHistory(attendanceHistoryDto: AttendanceHistoryDto) {
     try {
       const { date, userId } = attendanceHistoryDto;
+
+      const user = await this.userService.findOne({ id: userId });
+      if (!user) {
+        throw new NotFoundException(ATTENDANCE_ERRORS.USER_NOT_FOUND);
+      }
 
       const attendance = await this.attendanceRepository.findAll({
         where: {
