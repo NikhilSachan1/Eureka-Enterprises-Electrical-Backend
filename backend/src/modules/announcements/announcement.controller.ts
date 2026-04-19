@@ -38,7 +38,7 @@ export class AnnouncementController {
     @Body() createAnnouncementDto: CreateAnnouncementDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return await this.announcementService.create(createAnnouncementDto, req.user.id);
+    return await this.announcementService.create(createAnnouncementDto, req.user.id, req.timezone);
   }
 
   @Get()
@@ -92,7 +92,13 @@ export class AnnouncementController {
     @Body() updateAnnouncementDto: UpdateAnnouncementDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return await this.announcementService.update(id, updateAnnouncementDto, req.user.id);
+    return await this.announcementService.update(
+      id,
+      updateAnnouncementDto,
+      req.user.id,
+      undefined,
+      req.timezone,
+    );
   }
 
   @Post('acknowledge')

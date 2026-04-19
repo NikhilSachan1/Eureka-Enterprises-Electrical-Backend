@@ -7,6 +7,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     role: string[];
   };
+  timezone?: string;
 }
 
 export interface AnnouncementWithAck extends AnnouncementEntity {
