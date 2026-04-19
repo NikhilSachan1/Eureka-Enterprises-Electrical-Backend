@@ -287,10 +287,8 @@ export class LeaveCronService {
 
   private async getLeaveConfigurations(): Promise<Array<{ id: string; key: string }>> {
     const configurations = await this.configurationService.findAll({
-      where: {
-        module: CONFIGURATION_MODULES.LEAVE,
-      },
-    });
+      module: CONFIGURATION_MODULES.LEAVE,
+    } as any);
 
     return configurations.records.map((config) => ({
       id: config.id,
