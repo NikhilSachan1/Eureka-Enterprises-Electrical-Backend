@@ -32,12 +32,17 @@ export class ForceAttendanceDto {
   attendanceDate: string;
 
   @ApiProperty({
-    description: 'The check-in time in HH:MM format (required for all scenarios)',
+    description: 'The check-in time in HH:MM format (required for non-leave statuses)',
     example: '09:30',
+    required: false,
   })
+  @ValidateIf(
+    (obj) =>
+      obj.status !== AttendanceStatus.LEAVE && obj.status !== AttendanceStatus.LEAVE_WITHOUT_PAY,
+  )
   @IsString()
   @IsNotEmpty()
-  checkInTime: string;
+  checkInTime?: string;
 
   @ApiProperty({
     description:
