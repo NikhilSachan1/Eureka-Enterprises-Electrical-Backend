@@ -31,6 +31,7 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
+  EntrySourceType,
   LeaveCycleType,
 } from 'src/utils/master-constants/master-constants';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -55,6 +56,7 @@ import {
 } from './queries/leave-queries.dto';
 import { UserService } from '../users/user.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { AttendanceStatus, AttendanceType } from '../attendance/constants/attendance.constants';
 import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
@@ -385,7 +387,11 @@ export class LeaveApplicationsService {
     // Use timezone-aware date comparison
     const fromDateStr = fromDate.split('T')[0];
 
-    if (this.dateTimeService.isPastDate(fromDateStr, timezone) && !config.allowBackwardApply && !isForced) {
+    if (
+      this.dateTimeService.isPastDate(fromDateStr, timezone) &&
+      !config.allowBackwardApply &&
+      !isForced
+    ) {
       throw new BadRequestException(
         LEAVE_APPLICATION_ERRORS.BACKWARD_LEAVE_NOT_ALLOWED.replace(
           '{leaveCategory}',
@@ -651,6 +657,62 @@ export class LeaveApplicationsService {
           updateLeaveBalanceData.updatedData,
           entityManager,
         );
+
+        // Create or update attendance record for each leave date
+        const lwpCategories = ['LWP', 'LEAVE_WITHOUT_PAY', 'UNPAID', 'UNPAID_LEAVE'];
+        const isLWP = lwpCategories.includes(leaveCategory.toUpperCase());
+        const attendanceLeaveStatus = isLWP
+          ? AttendanceStatus.LEAVE_WITHOUT_PAY
+          : AttendanceStatus.LEAVE;
+
+        for (const date of dateRange) {
+          const existingAttendance = await this.attendanceService.findOne({
+            where: { userId, attendanceDate: new Date(date), isActive: true },
+          });
+
+          if (existingAttendance) {
+            // Deactivate existing record (preserve history)
+            await this.attendanceService.update(
+              { id: existingAttendance.id },
+              { isActive: false, updatedBy: createdBy },
+              entityManager,
+            );
+            // Create new record with LEAVE status
+            await this.attendanceService.create(
+              {
+                ...existingAttendance,
+                status: attendanceLeaveStatus,
+                approvalStatus: ApprovalStatus.APPROVED,
+                approvalAt: new Date(),
+                approvalBy: createdBy,
+                approvalComment: `Force leave applied - ${leaveCategory}`,
+                isActive: true,
+                createdBy,
+                updatedBy: createdBy,
+              },
+              entityManager,
+            );
+          } else {
+            // No record: create fresh
+            await this.attendanceService.create(
+              {
+                userId,
+                attendanceDate: new Date(date),
+                status: attendanceLeaveStatus,
+                entrySourceType: EntrySourceType.SYSTEM,
+                attendanceType: AttendanceType.SYSTEM,
+                approvalStatus: ApprovalStatus.APPROVED,
+                approvalAt: new Date(),
+                approvalBy: createdBy,
+                approvalComment: `Force leave applied - ${leaveCategory}`,
+                isActive: true,
+                createdBy,
+                updatedBy: createdBy,
+              },
+              entityManager,
+            );
+          }
+        }
       });
 
       return this.utilityService.getSuccessMessage(
@@ -1123,29 +1185,48 @@ export class LeaveApplicationsService {
               // attendance status will be changed to leave only if approval is for current date or earlier
               await this.dataSource.transaction(async (entityManager) => {
                 if (attendanceStatus) {
-                  const attendance = await this.attendanceService.findOneOrFail({
+                  const attendance = await this.attendanceService.findOne({
                     where: { userId: userId, attendanceDate: fromDate, isActive: true },
                   });
-                  await this.attendanceService.update(
-                    { id: attendance.id },
-                    {
-                      isActive: false,
-                      updatedBy: approvalBy,
-                    },
-                    entityManager,
-                  );
-                  await this.attendanceService.create(
-                    {
-                      ...attendance,
-                      status: attendanceStatus,
-                      approvalStatus: ApprovalStatus.APPROVED,
-                      approvalAt: new Date(),
-                      approvalBy,
-                      approvalComment: `${DEFAULT_APPROVAL_COMMENT.LEAVE_APPLICATION} - ${approvalComment}`,
-                      updatedBy: approvalBy,
-                    },
-                    entityManager,
-                  );
+                  if (attendance) {
+                    // Existing record: deactivate and create updated one
+                    await this.attendanceService.update(
+                      { id: attendance.id },
+                      { isActive: false, updatedBy: approvalBy },
+                      entityManager,
+                    );
+                    await this.attendanceService.create(
+                      {
+                        ...attendance,
+                        status: attendanceStatus,
+                        approvalStatus: ApprovalStatus.APPROVED,
+                        approvalAt: new Date(),
+                        approvalBy,
+                        approvalComment: `${DEFAULT_APPROVAL_COMMENT.LEAVE_APPLICATION} - ${approvalComment}`,
+                        updatedBy: approvalBy,
+                      },
+                      entityManager,
+                    );
+                  } else {
+                    // No record yet: create fresh
+                    await this.attendanceService.create(
+                      {
+                        userId,
+                        attendanceDate: fromDate,
+                        status: attendanceStatus,
+                        entrySourceType: EntrySourceType.SYSTEM,
+                        attendanceType: AttendanceType.SYSTEM,
+                        approvalStatus: ApprovalStatus.APPROVED,
+                        approvalAt: new Date(),
+                        approvalBy,
+                        approvalComment: `${DEFAULT_APPROVAL_COMMENT.LEAVE_APPLICATION} - ${approvalComment}`,
+                        isActive: true,
+                        createdBy: approvalBy,
+                        updatedBy: approvalBy,
+                      },
+                      entityManager,
+                    );
+                  }
                   await this.leaveApplicationsRepository.update(
                     { id: leaveApplicationId },
                     {
