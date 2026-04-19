@@ -1065,6 +1065,16 @@ export class AttendanceService {
           throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_ALREADY_EXISTS);
         }
 
+        // If force attendance is PRESENT, cancel any existing approved leave for that date
+        if (status === AttendanceStatus.PRESENT) {
+          await this.cancelLeaveForForceAttendance(
+            userId,
+            targetDateOnly,
+            createdBy,
+            entityManager,
+          );
+        }
+
         if (isSameDay) {
           return await this.handleSameDayForceAttendance(
             userId,
@@ -2960,6 +2970,63 @@ export class AttendanceService {
       },
       entityManager,
     );
+  }
+
+  private async cancelLeaveForForceAttendance(
+    userId: string,
+    attendanceDate: Date,
+    cancelledBy: string,
+    entityManager: EntityManager,
+  ): Promise<void> {
+    const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
+    if (!leaveApplication) return;
+
+    const financialYear = this.utilityService.getFinancialYear(attendanceDate);
+    const dateStr = this.dateTimeService.toDateString(attendanceDate);
+
+    // Credit back 1 day to leave balance
+    await this.leaveBalancesService.update(
+      {
+        userId,
+        leaveCategory: leaveApplication.leaveCategory,
+        financialYear,
+      },
+      { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+      entityManager,
+    );
+
+    this.logger.log(
+      `Credited back 1 day of ${leaveApplication.leaveCategory} leave for user ${userId} on ${dateStr} (force attendance applied)`,
+    );
+
+    // Cancel the leave application (single-day) or just log for multi-day
+    const fromDate = new Date(leaveApplication.fromDate);
+    const toDate = new Date(leaveApplication.toDate);
+    const isSingleDayLeave = fromDate.toDateString() === toDate.toDateString();
+
+    if (isSingleDayLeave) {
+      await this.leaveApplicationsService.update(
+        { id: leaveApplication.id },
+        {
+          approvalStatus: LeaveApprovalStatus.CANCELLED,
+          approvalReason: LEAVE_REGULARIZATION_CONSTANTS.LEAVE_CANCELLED_REASON_PRESENT.replace(
+            '{date}',
+            dateStr,
+          ),
+          approvalBy: cancelledBy,
+          approvalAt: new Date(),
+          updatedBy: cancelledBy,
+        },
+        entityManager,
+      );
+      this.logger.log(
+        `Cancelled leave application ${leaveApplication.id} for user ${userId} on ${dateStr} due to force attendance`,
+      );
+    } else {
+      this.logger.log(
+        `Multi-day leave application ${leaveApplication.id} — credited back 1 day for ${dateStr} but application not cancelled (spans multiple days)`,
+      );
+    }
   }
 
   private async findLeaveApplicationForDate(userId: string, date: Date): Promise<any | null> {
