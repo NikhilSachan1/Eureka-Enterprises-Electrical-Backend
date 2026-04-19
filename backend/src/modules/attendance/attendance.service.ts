@@ -12,6 +12,7 @@ import {
   EntityManager,
   FindOptionsWhere,
   FindOneOptions,
+  In,
   LessThanOrEqual,
   MoreThanOrEqual,
 } from 'typeorm';
@@ -46,6 +47,7 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from '../../utils/master-constants/master-constants';
+import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { AttendanceEntity } from './entities/attendance.entity';
 import { UtilityService } from '../../utils/utility/utility.service';
 import { buildAttendanceListQuery, buildAttendanceStatsQuery } from './queries/attendance-queries';
@@ -79,6 +81,7 @@ export class AttendanceService {
   constructor(
     private readonly attendanceRepository: AttendanceRepository,
     private readonly configurationService: ConfigurationService,
+    private readonly configSettingService: ConfigSettingService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly utilityService: UtilityService,
     private readonly dateTimeService: DateTimeService,
@@ -334,6 +337,17 @@ export class AttendanceService {
       select: { configSettings: { id: true, value: true } },
     });
     return { configSettingId, shiftConfigs };
+  }
+
+  /** Same calendar config as leave applications (`leaveConfigId` on leave_applications). */
+  private async getLeaveCalendarLeaveConfigId(): Promise<string> {
+    const leaveCalendarSetting = await this.configurationService.findOneOrFail({
+      where: { module: CONFIGURATION_MODULES.LEAVE, key: CONFIGURATION_KEYS.CALENDAR_SETTINGS },
+    });
+    const configSetting = await this.configSettingService.findOneOrFail({
+      where: { configId: leaveCalendarSetting.id, isActive: true },
+    });
+    return configSetting.id;
   }
 
   private getHourMinuteInTimezone(date: Date, timezone: string): number {
@@ -1017,6 +1031,7 @@ export class AttendanceService {
         attendanceType,
         status,
         assignmentSnapshot,
+        leaveCategory,
       } = forceAttendanceDto;
 
       // Use timezone-aware date comparison
@@ -1071,6 +1086,23 @@ export class AttendanceService {
             userId,
             targetDateOnly,
             createdBy,
+            entityManager,
+          );
+        }
+
+        // LEAVE: debit paid balance + leave application; LEAVE_WITHOUT_PAY: leave application only (no balance debit)
+        if (status === AttendanceStatus.LEAVE || status === AttendanceStatus.LEAVE_WITHOUT_PAY) {
+          return await this.handleForceLeaveOnAttendance(
+            userId,
+            createdBy,
+            targetDateOnly,
+            leaveCategory,
+            status,
+            reason,
+            notes,
+            entrySourceType,
+            attendanceType,
+            configSettingId,
             entityManager,
           );
         }
@@ -3027,6 +3059,141 @@ export class AttendanceService {
         `Multi-day leave application ${leaveApplication.id} — credited back 1 day for ${dateStr} but application not cancelled (spans multiple days)`,
       );
     }
+  }
+
+  private async handleForceLeaveOnAttendance(
+    userId: string,
+    createdBy: string,
+    attendanceDate: Date,
+    leaveCategory: string,
+    status: AttendanceStatus,
+    forceAttendanceReason: string,
+    notes: string,
+    entrySourceType: string,
+    attendanceType: AttendanceType,
+    shiftConfigId: string,
+    entityManager: EntityManager,
+  ): Promise<{ message: string }> {
+    const dateStr = this.dateTimeService.toDateString(attendanceDate);
+    const financialYear = this.utilityService.getFinancialYear(attendanceDate);
+    const isLWP = status === AttendanceStatus.LEAVE_WITHOUT_PAY;
+
+    const leaveReasonLine = LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace(
+      '{date}',
+      dateStr,
+    );
+    const applicationReason = `${(forceAttendanceReason || '').trim()} — ${leaveReasonLine}`;
+
+    const conflictingLeave = await this.leaveApplicationsService.findOne({
+      where: {
+        userId,
+        approvalStatus: In([LeaveApprovalStatus.APPROVED, LeaveApprovalStatus.PENDING]),
+        fromDate: LessThanOrEqual(attendanceDate),
+        toDate: MoreThanOrEqual(attendanceDate),
+      },
+    });
+    if (conflictingLeave) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_LEAVE_ALREADY_RECORDED);
+    }
+
+    if (!isLWP) {
+      // Check leave balance
+      const leaveBalance = await this.leaveBalancesService.findOne({
+        where: { userId, leaveCategory, financialYear },
+      });
+
+      if (!leaveBalance) {
+        throw new BadRequestException(
+          `No leave balance found for category "${leaveCategory}" in financial year ${financialYear}`,
+        );
+      }
+
+      const available = parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
+      if (available < 1) {
+        throw new BadRequestException(
+          `Insufficient leave balance for "${leaveCategory}". Available: ${available} days`,
+        );
+      }
+
+      // Debit 1 day from leave balance
+      await this.leaveBalancesService.update(
+        { userId, leaveCategory, financialYear },
+        { consumed: () => '(consumed::int + 1)::varchar' } as any,
+        entityManager,
+      );
+
+      this.logger.log(
+        `Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr} (force attendance)`,
+      );
+
+      // Create a forced leave application record
+      await this.leaveApplicationsService.create(
+        {
+          userId,
+          leaveConfigId: leaveBalance.leaveConfigId,
+          leaveType: LeaveType.FULL_DAY,
+          leaveCategory,
+          entrySourceType,
+          leaveApplicationType: LeaveApplicationType.FORCED,
+          fromDate: attendanceDate,
+          toDate: attendanceDate,
+          reason: applicationReason,
+          approvalStatus: LeaveApprovalStatus.APPROVED,
+          approvalBy: createdBy,
+          approvalAt: new Date(),
+          approvalReason: leaveReasonLine,
+          createdBy,
+        },
+        entityManager,
+      );
+    } else {
+      const leaveConfigId = await this.getLeaveCalendarLeaveConfigId();
+      await this.leaveApplicationsService.create(
+        {
+          userId,
+          leaveConfigId,
+          leaveType: LeaveType.FULL_DAY,
+          leaveCategory,
+          entrySourceType,
+          leaveApplicationType: LeaveApplicationType.FORCED,
+          fromDate: attendanceDate,
+          toDate: attendanceDate,
+          reason: applicationReason,
+          approvalStatus: LeaveApprovalStatus.APPROVED,
+          approvalBy: createdBy,
+          approvalAt: new Date(),
+          approvalReason: leaveReasonLine,
+          createdBy,
+        },
+        entityManager,
+      );
+      this.logger.log(
+        `Created LWP leave application for user ${userId} on ${dateStr} (force attendance, no balance debit)`,
+      );
+    }
+
+    // Create attendance record with LEAVE / LEAVE_WITHOUT_PAY status
+    await this.attendanceRepository.create(
+      {
+        userId,
+        attendanceDate,
+        status,
+        notes: notes || LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_NOTES.replace('{date}', dateStr),
+        attendanceType,
+        entrySourceType,
+        approvalStatus: ApprovalStatus.APPROVED,
+        approvalBy: createdBy,
+        approvalAt: new Date(),
+        approvalComment: DEFAULT_APPROVAL_COMMENT.FORCED,
+        shiftConfigId,
+        isActive: true,
+        createdBy,
+        updatedBy: createdBy,
+      },
+      entityManager,
+    );
+
+    return { message: ATTENDANCE_RESPONSES.FORCE_ATTENDANCE_SUCCESS };
   }
 
   private async findLeaveApplicationForDate(userId: string, date: Date): Promise<any | null> {

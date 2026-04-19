@@ -71,6 +71,8 @@ export const ATTENDANCE_ERRORS = {
     'Force attendance is not allowed before the employee joining date',
   FORCE_ATTENDANCE_ALREADY_EXISTS:
     'Employee already has attendance record for this date. Please use regularization instead.',
+  FORCE_LEAVE_ALREADY_RECORDED:
+    'A leave application already exists for this date. Cancel or adjust it before forcing leave again.',
   FORCE_ATTENDANCE_PERMISSION_DENIED:
     'You do not have permission to force attendance for this user',
   FORCE_ATTENDANCE_BEFORE_SHIFT_NOT_ALLOWED: 'Force attendance is not allowed before shift starts',
