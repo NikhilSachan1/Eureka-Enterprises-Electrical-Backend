@@ -473,9 +473,14 @@ export class ExpenseTrackerService {
     createdBy: string;
     referenceId?: string;
     referenceType?: string;
+    /** When set (e.g. food allowance tied to an attendance calendar day), use start-of-day instead of "now". */
+    expenseDate?: Date;
+    approvalAt?: Date;
   }): Promise<ExpenseTrackerEntity> {
     const referenceType = data.referenceType || SYSTEM_EXPENSE_DEFAULTS.DEFAULT_REFERENCE_TYPE;
     const approvalReason = `${SYSTEM_EXPENSE_DEFAULTS.APPROVAL_REASON_PREFIX}: ${referenceType}`;
+    const expenseDate = data.expenseDate ?? new Date();
+    const approvalAt = data.approvalAt ?? new Date();
 
     const expense = await this.expenseTrackerRepository.create({
       userId: data.userId,
@@ -483,10 +488,10 @@ export class ExpenseTrackerService {
       amount: data.amount,
       description: data.description,
       paymentMode: SYSTEM_EXPENSE_DEFAULTS.PAYMENT_MODE,
-      expenseDate: new Date(),
+      expenseDate,
       isActive: true,
       approvalStatus: ApprovalStatus.APPROVED,
-      approvalAt: new Date(),
+      approvalAt,
       approvalBy: data.createdBy,
       approvalReason,
       transactionType: TransactionType.CREDIT,
