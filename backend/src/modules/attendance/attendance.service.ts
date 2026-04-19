@@ -703,7 +703,14 @@ export class AttendanceService {
             );
           }
           break;
-        case AttendanceStatus.HOLIDAY:
+        case AttendanceStatus.HOLIDAY: {
+          const isHoliday = await this.isDateInHolidayCalendar(existingAttendance.attendanceDate);
+          if (!isHoliday) {
+            const dateStr = new Date(existingAttendance.attendanceDate).toISOString().split('T')[0];
+            throw new BadRequestException(
+              ATTENDANCE_ERRORS.HOLIDAY_NOT_IN_CALENDAR.replace('{date}', dateStr),
+            );
+          }
           if (existingAttendance.status === AttendanceStatus.PRESENT) {
             //Reverted food expense here.
 
@@ -833,6 +840,7 @@ export class AttendanceService {
             });
           }
           break;
+        }
         default:
           throw new BadRequestException(ATTENDANCE_ERRORS.INVALID_STATUS);
       }
@@ -2233,6 +2241,38 @@ export class AttendanceService {
       this.logger.error(
         `Failed to handle food expense for attendance ${attendance.id}: ${error.message}`,
       );
+    }
+  }
+
+  /**
+   * Returns true if the given date is present in the holiday_calendar config for its financial year.
+   */
+  private async isDateInHolidayCalendar(attendanceDate: Date): Promise<boolean> {
+    try {
+      const dateStr = new Date(attendanceDate).toISOString().split('T')[0];
+      const financialYear = this.utilityService.getFinancialYear(new Date(attendanceDate));
+
+      const config = await this.configurationService.findOne({
+        where: {
+          module: CONFIGURATION_MODULES.LEAVE,
+          key: CONFIGURATION_KEYS.HOLIDAY_CALENDAR,
+        },
+      });
+
+      if (!config) return false;
+
+      const [configSetting] = await this.dataSource.query(
+        `SELECT value FROM config_settings
+         WHERE "configId" = $1 AND "contextKey" = $2 AND "isActive" = true AND "deletedAt" IS NULL
+         LIMIT 1`,
+        [config.id, financialYear],
+      );
+
+      if (!configSetting?.value?.holidays) return false;
+
+      return configSetting.value.holidays.some((h: any) => h.date === dateStr);
+    } catch {
+      return false;
     }
   }
 
