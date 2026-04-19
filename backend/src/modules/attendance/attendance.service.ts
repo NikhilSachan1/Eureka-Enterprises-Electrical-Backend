@@ -2910,67 +2910,75 @@ export class AttendanceService {
     const dateStr = this.dateTimeService.toDateString(attendanceDate);
     const financialYear = this.utilityService.getFinancialYear(attendanceDate);
 
-    // Check if user has leave balance for this category
-    const leaveBalance = await this.leaveBalancesService.findOne({
-      where: {
-        userId,
-        leaveCategory,
-        financialYear,
-      },
-    });
+    // If an approved leave application already exists for this date, balance is already debited
+    const existingLeaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
+    if (existingLeaveApplication) {
+      this.logger.log(
+        `Leave application already exists for user ${userId} on ${dateStr} — skipping balance debit and application creation`,
+      );
+    } else {
+      // Check if user has leave balance for this category
+      const leaveBalance = await this.leaveBalancesService.findOne({
+        where: {
+          userId,
+          leaveCategory,
+          financialYear,
+        },
+      });
 
-    if (!leaveBalance) {
-      throw new BadRequestException(
-        `No leave balance found for category "${leaveCategory}" in financial year ${financialYear}`,
+      if (!leaveBalance) {
+        throw new BadRequestException(
+          `No leave balance found for category "${leaveCategory}" in financial year ${financialYear}`,
+        );
+      }
+
+      const availableBalance =
+        parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
+      if (availableBalance < 1) {
+        throw new BadRequestException(
+          `Insufficient leave balance for "${leaveCategory}". Available: ${availableBalance.toFixed(
+            2,
+          )} days`,
+        );
+      }
+
+      // Debit 1 day from leave balance (increment consumed)
+      await this.leaveBalancesService.update(
+        {
+          userId,
+          leaveCategory,
+          financialYear,
+        },
+        { consumed: () => '(consumed::int + 1)::varchar' } as any,
+        entityManager,
+      );
+
+      this.logger.log(`Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr}`);
+
+      // Create a forced leave application record
+      await this.leaveApplicationsService.create(
+        {
+          userId,
+          leaveConfigId: leaveBalance.leaveConfigId,
+          leaveType: LeaveType.FULL_DAY,
+          leaveCategory,
+          entrySourceType,
+          leaveApplicationType: LeaveApplicationType.FORCED,
+          fromDate: attendanceDate,
+          toDate: attendanceDate,
+          reason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace('{date}', dateStr),
+          approvalStatus: LeaveApprovalStatus.APPROVED,
+          approvalBy: userId,
+          approvalAt: new Date(),
+          approvalReason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace(
+            '{date}',
+            dateStr,
+          ),
+          createdBy: userId,
+        },
+        entityManager,
       );
     }
-
-    const availableBalance =
-      parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
-    if (availableBalance < 1) {
-      throw new BadRequestException(
-        `Insufficient leave balance for "${leaveCategory}". Available: ${availableBalance.toFixed(
-          2,
-        )} days`,
-      );
-    }
-
-    // Debit 1 day from leave balance (increment consumed)
-    await this.leaveBalancesService.update(
-      {
-        userId,
-        leaveCategory,
-        financialYear,
-      },
-      { consumed: () => '(consumed::int + 1)::varchar' } as any,
-      entityManager,
-    );
-
-    this.logger.log(`Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr}`);
-
-    // Create a forced leave application record
-    await this.leaveApplicationsService.create(
-      {
-        userId,
-        leaveConfigId: leaveBalance.leaveConfigId,
-        leaveType: LeaveType.FULL_DAY,
-        leaveCategory,
-        entrySourceType,
-        leaveApplicationType: LeaveApplicationType.FORCED,
-        fromDate: attendanceDate,
-        toDate: attendanceDate,
-        reason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace('{date}', dateStr),
-        approvalStatus: LeaveApprovalStatus.APPROVED,
-        approvalBy: userId,
-        approvalAt: new Date(),
-        approvalReason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace(
-          '{date}',
-          dateStr,
-        ),
-        createdBy: userId,
-      },
-      entityManager,
-    );
 
     // Deactivate old attendance record
     await this.attendanceRepository.update(
