@@ -42,11 +42,31 @@ export class AnnouncementService {
    * Converts an ISO date string (potentially in any timezone) to a UTC Date
    * by interpreting it as start-of-day or end-of-day in the given timezone.
    * This prevents the +05:30 offset shift when the frontend sends IST timestamps.
+   *
+   * If the string already has explicit timezone info (Z or +/-offset), JavaScript
+   * handles it natively. If it's timezone-naive (e.g. "2026-04-19T23:24:01"),
+   * it is interpreted as the given timezone and converted to UTC.
    */
-  private parseDateWithTimezone(isoStr: string, timezone: string, isEndOfDay = false): Date {
+  private parseDateWithTimezone(isoStr: string, timezone: string): Date {
     const tz = this.dateTimeService.getSafeTimezone(timezone);
-    const dateOnly = new Date(isoStr).toLocaleDateString('en-CA', { timeZone: tz });
-    return this.dateTimeService.getDateInUTC(dateOnly, tz, isEndOfDay);
+
+    // String already has explicit timezone — let JS handle it directly
+    if (/Z$|[+-]\d{2}:?\d{2}$/.test(isoStr)) {
+      return new Date(isoStr);
+    }
+
+    // Timezone-naive string — interpret as the given timezone
+    const [datePart, timePart = '00:00:00'] = isoStr.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour = 0, minute = 0, second = 0] = timePart.split(':').map(Number);
+
+    // Build a local Date then compute the offset for the target timezone
+    const tempDate = new Date(year, month - 1, day, hour, minute, second);
+    const utcWall = new Date(tempDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzWall = new Date(tempDate.toLocaleString('en-US', { timeZone: tz }));
+    const offsetMs = utcWall.getTime() - tzWall.getTime();
+
+    return new Date(tempDate.getTime() + offsetMs);
   }
 
   async create(
@@ -59,7 +79,7 @@ export class AnnouncementService {
 
       if (createAnnouncementDto.startAt && createAnnouncementDto.expiryAt) {
         const startDate = this.parseDateWithTimezone(createAnnouncementDto.startAt, tz);
-        const expiryDate = this.parseDateWithTimezone(createAnnouncementDto.expiryAt, tz, true);
+        const expiryDate = this.parseDateWithTimezone(createAnnouncementDto.expiryAt, tz);
         if (startDate >= expiryDate) {
           throw new BadRequestException(ANNOUNCEMENT_ERRORS.INVALID_DATE_RANGE);
         }
@@ -70,7 +90,7 @@ export class AnnouncementService {
       const announcement = await this.announcementRepository.create({
         ...announcementData,
         startAt: startAt ? this.parseDateWithTimezone(startAt, tz) : null,
-        expiryAt: expiryAt ? this.parseDateWithTimezone(expiryAt, tz, true) : null,
+        expiryAt: expiryAt ? this.parseDateWithTimezone(expiryAt, tz) : null,
         createdBy: userId,
         updatedBy: userId,
       });
@@ -279,7 +299,7 @@ export class AnnouncementService {
           ? this.parseDateWithTimezone(updateAnnouncementDto.startAt, tz)
           : new Date(announcement.startAt);
         const expiryDate = updateAnnouncementDto.expiryAt
-          ? this.parseDateWithTimezone(updateAnnouncementDto.expiryAt, tz, true)
+          ? this.parseDateWithTimezone(updateAnnouncementDto.expiryAt, tz)
           : new Date(announcement.expiryAt);
         if (startDate >= expiryDate) {
           throw new BadRequestException(ANNOUNCEMENT_ERRORS.INVALID_DATE_RANGE);
@@ -302,9 +322,7 @@ export class AnnouncementService {
         updateData.startAt = startAtStr ? this.parseDateWithTimezone(startAtStr, tz) : null;
       }
       if (expiryAtStr !== undefined) {
-        updateData.expiryAt = expiryAtStr
-          ? this.parseDateWithTimezone(expiryAtStr, tz, true)
-          : null;
+        updateData.expiryAt = expiryAtStr ? this.parseDateWithTimezone(expiryAtStr, tz) : null;
       }
 
       if (
