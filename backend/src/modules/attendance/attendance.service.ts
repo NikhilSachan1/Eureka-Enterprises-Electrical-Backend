@@ -290,14 +290,20 @@ export class AttendanceService {
       throw new BadRequestException(errorMsg);
     }
 
+    const needsApprovalOnCheckout =
+      existingAttendance.approvalStatus === ApprovalStatus.PENDING ||
+      existingAttendance.approvalStatus === ApprovalStatus.NOT_APPLICABLE;
+
     await this.attendanceRepository.update(
       { id: existingAttendance.id },
       {
         checkOutTime: currentTime,
-        status:
-          existingAttendance.approvalStatus === ApprovalStatus.PENDING
-            ? AttendanceStatus.APPROVAL_PENDING
-            : existingAttendance.status,
+        status: needsApprovalOnCheckout
+          ? AttendanceStatus.APPROVAL_PENDING
+          : existingAttendance.status,
+        approvalStatus: needsApprovalOnCheckout
+          ? ApprovalStatus.PENDING
+          : existingAttendance.approvalStatus,
         notes: notes
           ? `${existingAttendance.notes || ''} / ${notes}`.trim()
           : existingAttendance.notes,
