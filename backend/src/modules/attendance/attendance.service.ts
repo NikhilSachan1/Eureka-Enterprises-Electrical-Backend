@@ -2254,6 +2254,27 @@ export class AttendanceService {
   // ==================== Food Expense Handling ====================
 
   /**
+   * PG `date` columns may hydrate as strings; normalize to a real Date at local start-of-day
+   * for calendar math and expense timestamps.
+   */
+  private normalizeAttendanceCalendarDate(attendanceDate: Date | string): Date {
+    if (typeof attendanceDate === 'string') {
+      return this.dateTimeService.toDate(attendanceDate.split('T')[0]);
+    }
+    return new Date(
+      attendanceDate.getFullYear(),
+      attendanceDate.getMonth(),
+      attendanceDate.getDate(),
+    );
+  }
+
+  private formatLocalYyyyMmDd(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate(),
+    ).padStart(2, '0')}`;
+  }
+
+  /**
    * Handle food expense crediting/reversal based on attendance approval
    * - On approval: Credit daily food allowance
    * - On rejection: If previously approved, reverse the credit
@@ -2267,28 +2288,15 @@ export class AttendanceService {
     try {
       const userId = attendance.userId;
       const attendanceDate = attendance.attendanceDate;
-      const dateStr = this.dateTimeService.toDateString(attendanceDate);
       const snapshot = attendance.assignmentSnapshot;
 
       if (newApprovalStatus === ApprovalStatus.APPROVED) {
-        await this.creditFoodExpenseForAttendance(
-          userId,
-          attendanceDate,
-          dateStr,
-          approvalBy,
-          snapshot,
-        );
+        await this.creditFoodExpenseForAttendance(userId, attendanceDate, approvalBy, snapshot);
       } else if (
         newApprovalStatus === ApprovalStatus.REJECTED &&
         previousApprovalStatus === ApprovalStatus.APPROVED
       ) {
-        await this.reverseFoodExpenseForAttendance(
-          userId,
-          attendanceDate,
-          dateStr,
-          approvalBy,
-          snapshot,
-        );
+        await this.reverseFoodExpenseForAttendance(userId, attendanceDate, approvalBy, snapshot);
       }
     } catch (error) {
       this.logger.error(
@@ -2335,14 +2343,13 @@ export class AttendanceService {
    */
   private async handleFoodExpenseForStatusChange(
     userId: string,
-    attendanceDate: Date,
+    attendanceDate: Date | string,
     previousStatus: AttendanceStatus,
     newStatus: AttendanceStatus,
     actionBy: string,
     assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ): Promise<void> {
     try {
-      const dateStr = this.dateTimeService.toDateString(attendanceDate);
       const wasPresentBefore = previousStatus === AttendanceStatus.PRESENT;
       const isPresentNow = newStatus === AttendanceStatus.PRESENT;
 
@@ -2350,7 +2357,6 @@ export class AttendanceService {
         await this.creditFoodExpenseForAttendance(
           userId,
           attendanceDate,
-          dateStr,
           actionBy,
           assignmentSnapshot,
         );
@@ -2358,7 +2364,6 @@ export class AttendanceService {
         await this.reverseFoodExpenseForAttendance(
           userId,
           attendanceDate,
-          dateStr,
           actionBy,
           assignmentSnapshot,
         );
@@ -2427,11 +2432,13 @@ export class AttendanceService {
    */
   private async creditFoodExpenseForAttendance(
     userId: string,
-    attendanceDate: Date,
-    dateStr: string,
+    attendanceDate: Date | string,
     approvalBy: string,
     assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ): Promise<void> {
+    const calendarDate = this.normalizeAttendanceCalendarDate(attendanceDate);
+    const dateStr = this.formatLocalYyyyMmDd(calendarDate);
+
     // Salary structure and food allowance come from the attendance owner (e.g. the driver)
     const salaryStructure = await this.getSalaryStructureForUser(userId);
     if (!salaryStructure || !salaryStructure.foodAllowance) {
@@ -2441,7 +2448,7 @@ export class AttendanceService {
 
     const dailyFoodAllowance = this.calculateDailyFoodAllowance(
       Number(salaryStructure.foodAllowance),
-      attendanceDate,
+      calendarDate,
     );
 
     if (dailyFoodAllowance <= 0) {
@@ -2462,6 +2469,8 @@ export class AttendanceService {
         dateStr,
       ),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+      expenseDate: calendarDate,
+      approvalAt: calendarDate,
     });
 
     this.logger.log(
@@ -2475,11 +2484,13 @@ export class AttendanceService {
    */
   private async reverseFoodExpenseForAttendance(
     userId: string,
-    attendanceDate: Date,
-    dateStr: string,
+    attendanceDate: Date | string,
     approvalBy: string,
     assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ): Promise<void> {
+    const calendarDate = this.normalizeAttendanceCalendarDate(attendanceDate);
+    const dateStr = this.formatLocalYyyyMmDd(calendarDate);
+
     const salaryStructure = await this.getSalaryStructureForUser(userId);
     if (!salaryStructure || !salaryStructure.foodAllowance) {
       return;
@@ -2487,7 +2498,7 @@ export class AttendanceService {
 
     const dailyFoodAllowance = this.calculateDailyFoodAllowance(
       Number(salaryStructure.foodAllowance),
-      attendanceDate,
+      calendarDate,
     );
 
     if (dailyFoodAllowance <= 0) {
@@ -2508,6 +2519,8 @@ export class AttendanceService {
         dateStr,
       ),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+      expenseDate: calendarDate,
+      approvalAt: calendarDate,
     });
 
     this.logger.log(
@@ -2517,7 +2530,7 @@ export class AttendanceService {
 
   async creditFoodExpenseForAutoApproval(
     userId: string,
-    attendanceDate: Date,
+    attendanceDate: Date | string,
     status: string,
     assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ): Promise<void> {
@@ -2532,14 +2545,7 @@ export class AttendanceService {
       return;
     }
 
-    const dateStr = this.dateTimeService.toDateString(attendanceDate);
-    await this.creditFoodExpenseForAttendance(
-      userId,
-      attendanceDate,
-      dateStr,
-      'SYSTEM',
-      assignmentSnapshot,
-    );
+    await this.creditFoodExpenseForAttendance(userId, attendanceDate, 'SYSTEM', assignmentSnapshot);
   }
 
   private async getSalaryStructureForUser(userId: string) {
@@ -2969,7 +2975,7 @@ export class AttendanceService {
 
     // If previous status was PRESENT, reverse food expense
     if (previousStatus === AttendanceStatus.PRESENT) {
-      await this.reverseFoodExpenseForAttendance(userId, attendanceDate, dateStr, userId);
+      await this.reverseFoodExpenseForAttendance(userId, attendanceDate, userId);
       this.logger.log(`Reversed food expense for user ${userId} on ${dateStr} (was PRESENT)`);
     }
 
