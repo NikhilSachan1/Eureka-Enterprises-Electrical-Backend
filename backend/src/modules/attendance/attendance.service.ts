@@ -2471,7 +2471,7 @@ export class AttendanceService {
       ),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
       expenseDate: calendarDate,
-      approvalAt: calendarDate,
+      approvalAt: new Date(),
       transactionType: TransactionType.DEBIT,
     });
 
@@ -2522,7 +2522,7 @@ export class AttendanceService {
       ),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
       expenseDate: calendarDate,
-      approvalAt: calendarDate,
+      approvalAt: new Date(),
       transactionType: TransactionType.DEBIT,
     });
 

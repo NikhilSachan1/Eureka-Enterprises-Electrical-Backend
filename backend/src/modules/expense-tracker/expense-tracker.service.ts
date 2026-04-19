@@ -52,6 +52,7 @@ import {
   EMAIL_TEMPLATE,
   EMAIL_REDIRECT_ROUTES,
 } from '../common/email/constants/email.constants';
+import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -493,13 +494,13 @@ export class ExpenseTrackerService {
       isActive: true,
       approvalStatus: ApprovalStatus.APPROVED,
       approvalAt,
-      approvalBy: data.createdBy,
+      approvalBy: SYSTEM_USER_ID,
       approvalReason,
       transactionType,
       expenseEntryType: ExpenseEntryType.FORCED,
       entrySourceType: EntrySourceType.WEB,
       transactionId: data.referenceId,
-      createdBy: data.createdBy,
+      createdBy: SYSTEM_USER_ID,
     });
 
     return expense;
