@@ -699,7 +699,7 @@ export class AttendanceService {
             // Force leave - debit leave balance and mark as leave
             await this.forceLeaveAndDebitBalance(
               userId,
-              existingAttendance.attendanceDate,
+              new Date(existingAttendance.attendanceDate),
               attendanceId,
               existingAttendance.status as AttendanceStatus,
               leaveCategory,
