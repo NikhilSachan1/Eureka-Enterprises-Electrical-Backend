@@ -86,6 +86,8 @@ export const ATTENDANCE_ERRORS = {
   ATTENDANCE_APPROVAL_ALREADY_PROCESSED:
     'Attendance approval is already processed and has {status} status',
   USER_NOT_FOUND: 'User not found',
+  HOLIDAY_NOT_IN_CALENDAR:
+    'Cannot regularize as holiday — {date} is not marked as a holiday in the system calendar.',
 };
 
 export const ATTENDANCE_RESPONSES = {
