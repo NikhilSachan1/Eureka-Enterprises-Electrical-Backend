@@ -1034,6 +1034,17 @@ export class AttendanceService {
         throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED);
       }
 
+      // Validate date is not before the employee's joining date
+      const targetUser = await this.userService.findOne({ id: userId });
+      if (targetUser?.dateOfJoining) {
+        const joiningDateStr = this.dateTimeService.toDateString(
+          new Date(targetUser.dateOfJoining),
+        );
+        if (attendanceDateStr < joiningDateStr) {
+          throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_BEFORE_JOINING_DATE);
+        }
+      }
+
       const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
       const isPreviousDay = this.dateTimeService.isPastDate(attendanceDateStr, timezone);
       const isSameDay = this.dateTimeService.isToday(attendanceDateStr, timezone);

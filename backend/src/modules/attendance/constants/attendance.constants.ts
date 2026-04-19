@@ -67,6 +67,8 @@ export const ATTENDANCE_ERRORS = {
   FORCE_ATTENDANCE_INVALID_TIME_FORMAT: 'Invalid time format. Use HH:MM format',
   FORCE_ATTENDANCE_CHECK_OUT_BEFORE_CHECK_IN: 'Check-out time cannot be before check-in time',
   FORCE_ATTENDANCE_FUTURE_DATE_NOT_ALLOWED: 'Force attendance is not allowed for future dates',
+  FORCE_ATTENDANCE_BEFORE_JOINING_DATE:
+    'Force attendance is not allowed before the employee joining date',
   FORCE_ATTENDANCE_ALREADY_EXISTS:
     'Employee already has attendance record for this date. Please use regularization instead.',
   FORCE_ATTENDANCE_PERMISSION_DENIED:
