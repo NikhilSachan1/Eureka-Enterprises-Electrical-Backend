@@ -658,7 +658,7 @@ export class LeaveApplicationsService {
           entityManager,
         );
 
-        // Create or update attendance record for each leave date
+        // Create or update attendance record for each leave date (skip future dates — cron handles them)
         const lwpCategories = ['LWP', 'LEAVE_WITHOUT_PAY', 'UNPAID', 'UNPAID_LEAVE'];
         const isLWP = lwpCategories.includes(leaveCategory.toUpperCase());
         const attendanceLeaveStatus = isLWP
@@ -666,6 +666,11 @@ export class LeaveApplicationsService {
           : AttendanceStatus.LEAVE;
 
         for (const date of dateRange) {
+          const dateStr = this.dateTimeService.toDateString(new Date(date));
+          if (this.dateTimeService.isFutureDate(dateStr, timezone)) {
+            continue;
+          }
+
           const existingAttendance = await this.attendanceService.findOne({
             where: { userId, attendanceDate: new Date(date), isActive: true },
           });
