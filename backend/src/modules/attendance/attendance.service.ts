@@ -2924,7 +2924,9 @@ export class AttendanceService {
       parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
     if (availableBalance < 1) {
       throw new BadRequestException(
-        `Insufficient leave balance for "${leaveCategory}". Available: ${availableBalance} days`,
+        `Insufficient leave balance for "${leaveCategory}". Available: ${availableBalance.toFixed(
+          2,
+        )} days`,
       );
     }
 
@@ -3111,7 +3113,9 @@ export class AttendanceService {
       const available = parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
       if (available < 1) {
         throw new BadRequestException(
-          `Insufficient leave balance for "${leaveCategory}". Available: ${available} days`,
+          `Insufficient leave balance for "${leaveCategory}". Available: ${available.toFixed(
+            2,
+          )} days`,
         );
       }
 
