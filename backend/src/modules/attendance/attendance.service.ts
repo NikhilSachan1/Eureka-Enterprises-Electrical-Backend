@@ -73,6 +73,7 @@ import {
   EMAIL_REDIRECT_ROUTES,
 } from '../common/email/constants/email.constants';
 import { Roles } from '../roles/constants/role.constants';
+import { TransactionType } from '../expense-tracker/constants/expense-tracker.constants';
 
 @Injectable()
 export class AttendanceService {
@@ -2471,6 +2472,7 @@ export class AttendanceService {
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
       expenseDate: calendarDate,
       approvalAt: calendarDate,
+      transactionType: TransactionType.DEBIT,
     });
 
     this.logger.log(
@@ -2521,6 +2523,7 @@ export class AttendanceService {
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
       expenseDate: calendarDate,
       approvalAt: calendarDate,
+      transactionType: TransactionType.DEBIT,
     });
 
     this.logger.log(
