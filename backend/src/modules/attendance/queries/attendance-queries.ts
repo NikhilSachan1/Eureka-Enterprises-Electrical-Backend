@@ -109,9 +109,9 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       ${getUserSelectFields('cb', 'createdBy')},
       ${getUserSelectFields('ab', 'approvalBy')}
     FROM "attendances" a
-    LEFT JOIN "users" u ON a."userId" = u."id"
-    LEFT JOIN "users" cb ON a."createdBy" = cb."id"
-    LEFT JOIN "users" ab ON a."approvalBy" = ab."id"
+    INNER JOIN "users" u ON a."userId" = u."id" AND u."deletedAt" IS NULL
+    LEFT JOIN "users" cb ON a."createdBy" = cb."id" AND cb."deletedAt" IS NULL
+    LEFT JOIN "users" ab ON a."approvalBy" = ab."id" AND ab."deletedAt" IS NULL
     WHERE ${whereClause}
     ORDER BY ${orderByField} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -121,7 +121,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
   const countQuery = `
     SELECT COUNT(*) as total
     FROM "attendances" a
-    LEFT JOIN "users" u ON a."userId" = u."id"
+    INNER JOIN "users" u ON a."userId" = u."id" AND u."deletedAt" IS NULL
     WHERE ${whereClause}
   `;
 
@@ -205,7 +205,7 @@ export function buildAttendanceStatsQuery(query: AttendanceQueryDto) {
       a."approvalStatus",
       COUNT(*) as count
     FROM "attendances" a
-    LEFT JOIN "users" u ON a."userId" = u."id"
+    INNER JOIN "users" u ON a."userId" = u."id" AND u."deletedAt" IS NULL
     WHERE ${whereClause}
     GROUP BY a."status", a."approvalStatus"
   `;

@@ -85,6 +85,7 @@ export const ATTENDANCE_ERRORS = {
   USER_ID_REQUIRED: 'userId is required for admin, manager and hr role',
   ATTENDANCE_APPROVAL_ALREADY_PROCESSED:
     'Attendance approval is already processed and has {status} status',
+  USER_NOT_FOUND: 'User not found',
 };
 
 export const ATTENDANCE_RESPONSES = {
