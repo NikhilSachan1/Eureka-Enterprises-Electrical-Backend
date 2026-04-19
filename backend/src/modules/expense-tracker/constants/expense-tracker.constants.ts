@@ -69,7 +69,7 @@ export const DEFAULT_EXPENSE = {
 };
 
 export const SYSTEM_EXPENSE_DEFAULTS = {
-  PAYMENT_MODE: 'BANK_TRANSFER',
+  PAYMENT_MODE: 'SYSTEM',
   APPROVAL_REASON_PREFIX: 'System generated',
   DEFAULT_REFERENCE_TYPE: 'SYSTEM',
 } as const;
