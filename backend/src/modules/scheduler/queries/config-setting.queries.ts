@@ -43,6 +43,7 @@ export const getPendingActivationSettingsQuery = () => {
         AND cs."isActive" = false
         AND cs."effectiveFrom" IS NOT NULL
         AND cs."effectiveFrom" <= CURRENT_DATE
+        AND (cs."effectiveTo" IS NULL OR cs."effectiveTo" >= CURRENT_DATE)
       ORDER BY cs."configId", cs."contextKey" NULLS FIRST, cs."effectiveFrom" ASC
     `,
     params: [],
