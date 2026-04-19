@@ -70,7 +70,7 @@ export class LeaveBalancesService {
     entityManager?: EntityManager,
   ) {
     try {
-      await this.findOneOrFail({ where: { id: identifierConditions.id } });
+      await this.findOneOrFail({ where: identifierConditions });
       await this.leaveBalancesRepository.update(identifierConditions, updateData, entityManager);
       return this.utilityService.getSuccessMessage(
         LEAVE_BALANCE_FIELD_NAMES.LEAVE_BALANCE,
