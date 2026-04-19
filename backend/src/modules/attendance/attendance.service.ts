@@ -2972,12 +2972,6 @@ export class AttendanceService {
       entityManager,
     );
 
-    // If previous status was PRESENT, reverse food expense
-    if (previousStatus === AttendanceStatus.PRESENT) {
-      await this.reverseFoodExpenseForAttendance(userId, attendanceDate, userId);
-      this.logger.log(`Reversed food expense for user ${userId} on ${dateStr} (was PRESENT)`);
-    }
-
     // Deactivate old attendance record
     await this.attendanceRepository.update(
       { id: attendanceId },
