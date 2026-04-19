@@ -62,7 +62,6 @@ export class RegularizeAttendanceDto {
   @ValidateIf((obj) => obj.status === AttendanceStatus.LEAVE)
   @IsNotEmpty({ message: 'Leave category is required when status is leave' })
   @IsString()
-  @IsOptional()
   leaveCategory?: string;
 
   @IsEnum(EntrySourceType)
