@@ -707,8 +707,7 @@ export class LeaveCronService {
         result.categoriesProcessed++;
 
         const annualQuota = Number(categoryConfig.annualQuota) || 0;
-        const monthlyQuota = annualQuota / 12;
-        const shouldHaveCreditedByNow = Math.floor(monthlyQuota * currentMonth * 100) / 100;
+        const shouldHaveCreditedByNow = Math.floor((annualQuota * currentMonth) / 12);
 
         for (const user of activeUsers) {
           try {
