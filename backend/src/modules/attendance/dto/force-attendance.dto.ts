@@ -8,6 +8,7 @@ import {
   IsUUID,
   IsEnum,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { AttendanceStatus, AttendanceType } from '../constants/attendance.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
@@ -92,4 +93,17 @@ export class ForceAttendanceDto {
   @Type(() => AssignmentSnapshotDto)
   @IsOptional()
   assignmentSnapshot?: AssignmentSnapshotDto;
+
+  @ApiPropertyOptional({
+    description:
+      'Leave category (required when status is leave or leaveWithoutPay, e.g. "casual", "sick")',
+    example: 'casual',
+  })
+  @ValidateIf(
+    (obj) =>
+      obj.status === AttendanceStatus.LEAVE || obj.status === AttendanceStatus.LEAVE_WITHOUT_PAY,
+  )
+  @IsNotEmpty({ message: 'Leave category is required when status is leave or leaveWithoutPay' })
+  @IsString()
+  leaveCategory?: string;
 }

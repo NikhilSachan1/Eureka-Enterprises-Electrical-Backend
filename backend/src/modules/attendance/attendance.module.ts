@@ -12,11 +12,13 @@ import { SalaryStructureModule } from '../salary-structures/salary-structure.mod
 import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module';
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
+import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([AttendanceEntity]),
     ConfigurationsModule,
+    ConfigSettingsModule,
     SharedModule,
     EmailModule,
     UsersModule,
