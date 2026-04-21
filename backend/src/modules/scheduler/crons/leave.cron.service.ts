@@ -290,14 +290,10 @@ export class LeaveCronService {
   }
 
   private async getLeaveConfigurations(): Promise<Array<{ id: string; key: string }>> {
-    const configurations = await this.configurationService.findAll({
-      module: CONFIGURATION_MODULES.LEAVE,
-    } as any);
-
-    return configurations.records.map((config) => ({
-      id: config.id,
-      key: config.key,
-    }));
+    return this.dataSource.query(
+      `SELECT id, key FROM configurations WHERE module = $1 AND "deletedAt" IS NULL`,
+      [CONFIGURATION_MODULES.LEAVE],
+    );
   }
 
   private prepareNewFYConfigValue(configKey: string, previousValue: any): any {
