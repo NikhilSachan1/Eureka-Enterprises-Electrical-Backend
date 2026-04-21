@@ -3,6 +3,7 @@ import { IsEnum, IsString, IsOptional, IsUUID, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import { UserPermissionStatsSortFields } from '../constants/user-permission.constants';
+import { PermissionPlatform } from '../../permissions/constants/permission.constants';
 
 export class GetUserPermissionStatsDto extends BaseGetDto {
   @ApiPropertyOptional({
@@ -26,6 +27,15 @@ export class GetUserPermissionStatsDto extends BaseGetDto {
   @IsString({ each: true })
   @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
   roles?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Filter by platform (web or mobile)',
+    example: 'web',
+    enum: PermissionPlatform,
+  })
+  @IsOptional()
+  @IsEnum(PermissionPlatform)
+  platform?: PermissionPlatform;
 
   @ApiPropertyOptional({
     description: 'Search by first name, last name, or email',

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { PermissionPlatform } from '../../permissions/constants/permission.constants';
 
 export class GetUserPermissionDto {
   @ApiProperty({
@@ -21,6 +22,16 @@ export class GetUserPermissionDto {
   @IsOptional()
   @IsUUID()
   roleId?: string;
+
+  @ApiProperty({
+    description: 'Filter by platform (web or mobile)',
+    example: 'web',
+    enum: PermissionPlatform,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(PermissionPlatform)
+  platform?: PermissionPlatform;
 
   @ApiProperty({ description: 'Is active', example: true, required: false })
   @Transform(({ value }) => {

@@ -2,16 +2,21 @@ import { Entity, Column, OneToMany, Index } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { RolePermissionEntity } from '../../role-permissions/entities/role-permission.entity';
 import { UserPermissionEntity } from '../../user-permissions/entities/user-permission.entity';
+import { PermissionPlatform } from '../constants/permission.constants';
 
 @Entity('permissions')
 export class PermissionEntity extends BaseEntity {
   @Index('IDX_PERMISSIONS_NAME')
-  @Column({ type: 'text', unique: true })
+  @Column({ type: 'text' })
   name: string;
 
   @Index('IDX_PERMISSIONS_MODULE')
   @Column({ type: 'text' })
   module: string;
+
+  @Index('IDX_PERMISSIONS_PLATFORM')
+  @Column({ type: 'varchar', length: 10, default: PermissionPlatform.WEB })
+  platform: PermissionPlatform;
 
   @Column({ type: 'text', nullable: true })
   label: string;

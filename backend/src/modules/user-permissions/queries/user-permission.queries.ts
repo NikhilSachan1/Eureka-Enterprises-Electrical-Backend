@@ -5,6 +5,7 @@ export function getUserPermissionsQuery({
   userId,
   roleId,
   isActive,
+  platform,
 }: GetUserPermissionsQueryOptions) {
   const filters: string[] = [
     `ur."userId" = '${userId}'`,
@@ -21,11 +22,16 @@ export function getUserPermissionsQuery({
     filters.push(`rp."isActive" = ${isActive}`);
   }
 
+  if (platform) {
+    filters.push(`p."platform" = '${platform}'`);
+  }
+
   return `
     SELECT 
       p.name as "permissionName",
       p.module as "permissionModule",
       p.id as "permissionId",
+      p.platform as "permissionPlatform",
       rp."isActive" as "isGranted",
       r.id as "roleId",
       r.name as "roleName",
@@ -35,11 +41,12 @@ export function getUserPermissionsQuery({
     INNER JOIN user_roles ur ON rp."roleId" = ur."roleId"
     INNER JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
     WHERE ${filters.join(' AND ')}
+    ORDER BY p.module ASC, p.name ASC
   `;
 }
 
 export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsDto) {
-  const { sortField, sortOrder, roles, search, userIds } = options;
+  const { sortField, sortOrder, roles, search, userIds, platform } = options;
   const orderByClause = buildOrderByClause(sortField, sortOrder);
 
   // Build dynamic WHERE clause for user filters
@@ -71,6 +78,10 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
 
   const whereClause = userFilters.join(' AND ');
 
+  // Build platform filter for permissions join
+  const platformFilter = platform ? `AND p."platform" = '${platform}'` : '';
+  const platformFilterForTotal = platform ? `AND "platform" = '${platform}'` : '';
+
   const usersQuery = `
     WITH user_permission_stats AS (
       SELECT 
@@ -91,7 +102,11 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
       LEFT JOIN user_roles ur ON u.id = ur."userId" AND ur."deletedAt" IS NULL
       LEFT JOIN roles r ON ur."roleId" = r.id AND r."deletedAt" IS NULL
       LEFT JOIN role_permissions rp ON r.id = rp."roleId" AND rp."isActive" = true AND rp."deletedAt" IS NULL
+      LEFT JOIN permissions p ON rp."permissionId" = p.id AND p."deletedAt" IS NULL ${platformFilter}
       LEFT JOIN user_permission_overrides up ON u.id = up."userId" AND up."deletedAt" IS NULL
+      LEFT JOIN permissions p2 ON up."permissionId" = p2.id AND p2."deletedAt" IS NULL ${
+        platformFilter ? platformFilter.replace('p.', 'p2.') : ''
+      }
       WHERE ${whereClause}
       GROUP BY u.id, u."employeeId", u."firstName", u."lastName", u.email, u.status, u."createdAt", u."updatedAt"
       ${havingClause}
@@ -99,7 +114,7 @@ export function findAllUsersWithPermissionStats(options: GetUserPermissionStatsD
     total_permissions AS (
       SELECT COUNT(*) as total_count
       FROM permissions 
-      WHERE "deletedAt" IS NULL
+      WHERE "deletedAt" IS NULL ${platformFilterForTotal}
     )
     SELECT 
       ups.*,

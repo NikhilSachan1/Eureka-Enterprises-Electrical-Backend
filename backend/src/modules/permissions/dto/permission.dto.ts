@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsEnum } from 'class-validator';
+import { PermissionPlatform } from '../constants/permission.constants';
 
 export class CreatePermissionDto {
   @ApiProperty({ description: 'Permission name', example: 'LEAVE_ADD_BUTTON' })
@@ -9,6 +10,17 @@ export class CreatePermissionDto {
   @ApiProperty({ description: 'Module name', example: 'leave' })
   @IsString()
   module: string;
+
+  @ApiProperty({
+    description: 'Platform (web or mobile)',
+    example: 'web',
+    enum: PermissionPlatform,
+    default: PermissionPlatform.WEB,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(PermissionPlatform)
+  platform?: PermissionPlatform;
 
   @ApiProperty({
     description: 'Human readable label',
