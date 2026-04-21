@@ -576,6 +576,64 @@ export class UserService {
     });
   }
 
+  private async validateUserCanBeDeleted(userId: string): Promise<void> {
+    const checks: Array<{ query: string; message: string }> = [
+      {
+        query: `SELECT 1 FROM asset_versions WHERE "assignedTo" = $1 AND "isActive" = true LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_ASSET_ASSIGNED,
+      },
+      {
+        query: `SELECT 1 FROM vehicle_versions WHERE "assignedTo" = $1 AND "isActive" = true LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_VEHICLE_ASSIGNED,
+      },
+      {
+        query: `SELECT 1 FROM site_allocations WHERE "userId" = $1 AND "isCurrentlyAllocated" = true LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_SITE_ALLOCATED,
+      },
+      {
+        query: `SELECT 1 FROM leave_applications WHERE "userId" = $1 AND "approvalStatus" = 'pending' LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_PENDING_LEAVE,
+      },
+      {
+        query: `SELECT 1 FROM salary_structures WHERE "userId" = $1 AND "isActive" = true LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_ACTIVE_SALARY_STRUCTURE,
+      },
+      {
+        query: `SELECT 1 FROM expenses WHERE "userId" = $1 AND "approvalStatus" = 'pending' LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_PENDING_EXPENSES,
+      },
+      {
+        query: `SELECT 1 FROM fuel_expenses WHERE "userId" = $1 AND "approvalStatus" = 'pending' LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_PENDING_FUEL_EXPENSES,
+      },
+      {
+        query: `SELECT 1 FROM fnf_settlements WHERE "userId" = $1 AND "status" NOT IN ('COMPLETED', 'CANCELLED') LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_OPEN_FNF,
+      },
+      {
+        query: `SELECT 1 FROM attendances WHERE "userId" = $1 AND "approvalStatus" = 'PENDING' AND "isActive" = true LIMIT 1`,
+        message: USERS_ERRORS.USER_HAS_PENDING_ATTENDANCE,
+      },
+    ];
+
+    const results = await Promise.all(
+      checks.map(({ query }) => this.dataSource.query(query, [userId])),
+    );
+
+    const violations = checks
+      .filter((_, index) => results[index].length > 0)
+      .map(({ message }) => message);
+
+    if (violations.length > 0) {
+      throw new BadRequestException(
+        USERS_ERRORS.USER_HAS_ACTIVE_ASSOCIATIONS.replace(
+          '{issues}',
+          violations.map((v, i) => `${i + 1}. ${v}`).join(' '),
+        ),
+      );
+    }
+  }
+
   async delete(id: string, deletedBy: string) {
     try {
       this.validateNotSystemUser(id, 'delete');
@@ -589,6 +647,8 @@ export class UserService {
       if (user.status !== UserStatus.ARCHIVED) {
         throw new BadRequestException(USERS_ERRORS.USER_NOT_ARCHIVED_TO_DELETE);
       }
+
+      await this.validateUserCanBeDeleted(id);
 
       await this.userRepository.delete(id, deletedBy);
       return this.utilityService.getSuccessMessage(
@@ -642,6 +702,8 @@ export class UserService {
     if (user.status !== UserStatus.ARCHIVED) {
       throw new BadRequestException(USERS_ERRORS.USER_NOT_ARCHIVED_TO_DELETE);
     }
+
+    await this.validateUserCanBeDeleted(userId);
 
     await this.userRepository.delete(userId, deletedBy);
 

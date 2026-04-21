@@ -38,6 +38,27 @@ export const USERS_ERRORS = {
   SYSTEM_USER_UPDATE_FORBIDDEN: 'System user cannot be modified.',
   SYSTEM_USER_DELETE_FORBIDDEN: 'System user cannot be deleted.',
   SYSTEM_USER_ARCHIVE_FORBIDDEN: 'System user cannot be archived.',
+  // Deletion blocking checks
+  USER_HAS_ASSET_ASSIGNED:
+    'User has an active asset assignment. Deallocate the asset before deleting.',
+  USER_HAS_VEHICLE_ASSIGNED:
+    'User has an active vehicle assignment. Deallocate the vehicle before deleting.',
+  USER_HAS_SITE_ALLOCATED:
+    'User is currently allocated to a site. Remove the site allocation before deleting.',
+  USER_HAS_PENDING_LEAVE:
+    'User has pending leave applications. Approve or reject them before deleting.',
+  USER_HAS_ACTIVE_SALARY_STRUCTURE:
+    'User has an active salary structure. Archive it before deleting.',
+  USER_HAS_PENDING_EXPENSES:
+    'User has pending expense claims. Approve or reject them before deleting.',
+  USER_HAS_PENDING_FUEL_EXPENSES:
+    'User has pending fuel expense claims. Approve or reject them before deleting.',
+  USER_HAS_OPEN_FNF:
+    'User has an in-progress Full & Final settlement. Complete or cancel it before deleting.',
+  USER_HAS_PENDING_ATTENDANCE:
+    'User has pending attendance records awaiting approval. Clear them before deleting.',
+  USER_HAS_ACTIVE_ASSOCIATIONS:
+    'Cannot delete user. Resolve the following before deleting: {issues}',
 };
 
 export const USER_DTO_ERRORS = {
