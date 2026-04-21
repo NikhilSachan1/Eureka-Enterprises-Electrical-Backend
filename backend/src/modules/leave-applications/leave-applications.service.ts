@@ -1318,7 +1318,7 @@ export class LeaveApplicationsService {
                       leaveCategory,
                       financialYear: this.utilityService.getFinancialYear(fromDate),
                     },
-                    { consumed: () => '(consumed::int + 1)::varchar' } as any,
+                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
                     entityManager,
                   );
                 } else {
@@ -1339,7 +1339,7 @@ export class LeaveApplicationsService {
                       leaveCategory,
                       financialYear: this.utilityService.getFinancialYear(fromDate),
                     },
-                    { consumed: () => '(consumed::int + 1)::varchar' } as any,
+                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
                     entityManager,
                   );
                 }
@@ -1369,7 +1369,7 @@ export class LeaveApplicationsService {
                     leaveCategory,
                     financialYear: this.utilityService.getFinancialYear(new Date(fromDate)),
                   },
-                  { consumed: () => '(consumed::int + 1)::varchar' } as any,
+                  { consumed: () => '(consumed::int - 1)::varchar' } as any,
                   entityManager,
                 );
               });
@@ -1435,7 +1435,7 @@ export class LeaveApplicationsService {
                       leaveCategory,
                       financialYear: this.utilityService.getFinancialYear(fromDate),
                     },
-                    { consumed: () => '(consumed::int + 1)::varchar' } as any,
+                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
                     entityManager,
                   );
                 } else {
@@ -1456,7 +1456,7 @@ export class LeaveApplicationsService {
                       leaveCategory,
                       financialYear: this.utilityService.getFinancialYear(fromDate),
                     },
-                    { consumed: () => '(consumed::int + 1)::varchar' } as any,
+                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
                     entityManager,
                   );
                 }
@@ -1486,7 +1486,7 @@ export class LeaveApplicationsService {
                     leaveCategory,
                     financialYear: this.utilityService.getFinancialYear(new Date(fromDate)),
                   },
-                  { consumed: () => '(consumed::int + 1)::varchar' } as any,
+                  { consumed: () => '(consumed::int - 1)::varchar' } as any,
                   entityManager,
                 );
               });
