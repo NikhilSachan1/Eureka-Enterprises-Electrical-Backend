@@ -26,7 +26,7 @@ export const getVehiclesWithExpiringDocumentsQuery = (warningDays: number) => {
           vm.id as "vehicleMasterId",
           vm."registrationNo",
           vv.id as "vehicleVersionId",
-          vv."number",
+          vv."registrationNo" as "number",
           vv."brand",
           vv."model",
           vv."assignedTo",
@@ -207,7 +207,7 @@ export const getVehiclesWithServiceDueQuery = (serviceIntervalKm: number, warnin
         SELECT 
           vm.id as "vehicleMasterId",
           vm."registrationNo",
-          vv."number",
+          vv."registrationNo" as "number",
           vv."brand",
           vv."model",
           vv."assignedTo",
@@ -295,7 +295,7 @@ export const getVehiclesWithoutServiceHistoryQuery = () => {
         vv."model"
       FROM vehicle_masters vm
       INNER JOIN LATERAL (
-        SELECT "number", "brand", "model", "lastServiceKm", "status"
+        SELECT "registrationNo" as "number", "brand", "model", "lastServiceKm", "status"
         FROM vehicle_versions
         WHERE "vehicleMasterId" = vm.id
           AND "isActive" = true
