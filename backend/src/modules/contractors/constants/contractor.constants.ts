@@ -9,7 +9,11 @@ export const CONTRACTOR_ERRORS = {
   INVALID_CONTACT_NUMBER: 'Invalid contact number format',
   INVALID_IFSC: 'Invalid IFSC code format. Expected format: ABCD0123456',
   CANNOT_DELETE_SELF_CONTRACTOR: 'Cannot delete the self contractor (company contractor)',
-  CANNOT_DELETE_HAS_SITES: 'Cannot delete contractor with existing sites',
+  CANNOT_DELETE_HAS_SITES: 'Cannot delete contractor. Remove all associated sites before deleting.',
+  CONTRACTOR_HAS_PENDING_DOCUMENTS:
+    'Contractor has site documents with pending or partial payments. Settle all payments before deleting.',
+  CONTRACTOR_HAS_ACTIVE_ASSOCIATIONS:
+    'Cannot delete contractor. Resolve the following before deleting: {issues}',
 };
 
 export const CONTRACTOR_RESPONSES = {
