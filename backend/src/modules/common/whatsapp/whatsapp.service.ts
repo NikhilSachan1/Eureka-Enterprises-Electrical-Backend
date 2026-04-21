@@ -486,6 +486,254 @@ export class WhatsAppService {
     });
   }
 
+  async sendAttendanceSubmission(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      date: string;
+      checkInTime: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ATTENDANCE_SUBMITTED,
+      templateData: {
+        employeeName: data.employeeName,
+        date: data.date,
+        checkInTime: data.checkInTime,
+      },
+      category: CommunicationCategory.ATTENDANCE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'ATTENDANCE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendAttendanceCheckOut(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      date: string;
+      checkOutTime: string;
+      totalHours?: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ATTENDANCE_CHECKED_OUT,
+      templateData: {
+        employeeName: data.employeeName,
+        date: data.date,
+        checkOutTime: data.checkOutTime,
+        totalHours: data.totalHours,
+      },
+      category: CommunicationCategory.ATTENDANCE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'ATTENDANCE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendAttendanceForceCreated(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      date: string;
+      status: string;
+      createdByName: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ATTENDANCE_FORCE_CREATED,
+      templateData: {
+        employeeName: data.employeeName,
+        date: data.date,
+        status: data.status,
+        createdByName: data.createdByName,
+      },
+      category: CommunicationCategory.ATTENDANCE_FORCE_CREATED,
+      referenceId: options?.referenceId,
+      referenceType: 'ATTENDANCE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendAttendanceAbsentMarked(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      date: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ATTENDANCE_ABSENT_MARKED,
+      templateData: {
+        employeeName: data.employeeName,
+        date: data.date,
+      },
+      category: CommunicationCategory.ATTENDANCE_ABSENT,
+      referenceId: options?.referenceId,
+      referenceType: 'ATTENDANCE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendLeaveSubmission(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      totalDays: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.LEAVE_SUBMITTED,
+      templateData: {
+        employeeName: data.employeeName,
+        leaveType: data.leaveType,
+        fromDate: data.fromDate,
+        toDate: data.toDate,
+        totalDays: data.totalDays,
+      },
+      category: CommunicationCategory.LEAVE_SUBMISSION,
+      referenceId: options?.referenceId,
+      referenceType: 'LEAVE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendLeaveCancellation(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      cancelledByName: string;
+      remarks?: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.LEAVE_CANCELLED,
+      templateData: {
+        employeeName: data.employeeName,
+        leaveType: data.leaveType,
+        fromDate: data.fromDate,
+        toDate: data.toDate,
+        cancelledByName: data.cancelledByName,
+        remarks: data.remarks,
+      },
+      category: CommunicationCategory.LEAVE_CANCELLATION,
+      referenceId: options?.referenceId,
+      referenceType: 'LEAVE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendLeaveForceApplied(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      totalDays: string;
+      appliedByName: string;
+      reason?: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.LEAVE_FORCE_APPLIED,
+      templateData: {
+        employeeName: data.employeeName,
+        leaveType: data.leaveType,
+        fromDate: data.fromDate,
+        toDate: data.toDate,
+        totalDays: data.totalDays,
+        appliedByName: data.appliedByName,
+        reason: data.reason,
+      },
+      category: CommunicationCategory.LEAVE_FORCE_APPLIED,
+      referenceId: options?.referenceId,
+      referenceType: 'LEAVE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendLeaveBalanceCredited(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      leaveCategory: string;
+      credited: string;
+      total: string;
+      month: string;
+    },
+    options?: {
+      referenceId?: string;
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.LEAVE_BALANCE_CREDITED,
+      templateData: {
+        employeeName: data.employeeName,
+        leaveCategory: data.leaveCategory,
+        credited: data.credited,
+        total: data.total,
+        month: data.month,
+      },
+      category: CommunicationCategory.LEAVE_BALANCE_CREDITED,
+      referenceId: options?.referenceId,
+      referenceType: 'LEAVE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
   async sendWelcomeEmployee(
     phoneNumber: string,
     data: {

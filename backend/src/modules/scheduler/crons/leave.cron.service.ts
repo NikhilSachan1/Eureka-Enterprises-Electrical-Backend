@@ -7,6 +7,8 @@ import { ConfigurationService } from '../../configurations/configuration.service
 import { ConfigSettingService } from '../../config-settings/config-setting.service';
 import { EmailService } from '../../common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../../common/email/constants/email.constants';
+import { WhatsAppService } from '../../common/whatsapp/whatsapp.service';
+import { UserService } from '../../users/user.service';
 import {
   CRON_SCHEDULES,
   CRON_NAMES,
@@ -55,6 +57,8 @@ export class LeaveCronService {
     private readonly utilityService: UtilityService,
     private readonly emailService: EmailService,
     private readonly cronLogService: CronLogService,
+    private readonly whatsAppService: WhatsAppService,
+    private readonly userService: UserService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -846,7 +850,44 @@ export class LeaveCronService {
       `[${cronName}] Credited ${toCredit} ${leaveCategory} to user ${userId} (total: ${shouldHaveCreditedByNow})`,
     );
 
+    // Fire-and-forget WhatsApp notification
+    this.sendLeaveBalanceCreditedNotification(
+      userId,
+      leaveCategory,
+      toCredit,
+      shouldHaveCreditedByNow,
+      this.getMonthNameFromFYMonth(currentMonth),
+    );
+
     return toCredit;
+  }
+
+  private async sendLeaveBalanceCreditedNotification(
+    userId: string,
+    leaveCategory: string,
+    credited: number,
+    total: number,
+    month: string,
+  ) {
+    try {
+      const employee = await this.userService.findOne({ id: userId });
+      if (!employee) return;
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
+      await this.whatsAppService.sendLeaveBalanceCredited(
+        whatsappNumber,
+        {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          leaveCategory,
+          credited: String(credited),
+          total: String(total),
+          month,
+        },
+        { recipientId: employee.id },
+      );
+    } catch (error) {
+      this.logger.error('Failed to send leave balance credited WhatsApp notification:', error);
+    }
   }
 
   /**
