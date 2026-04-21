@@ -23,7 +23,6 @@ import {
   getSiteStatsByContractorQuery,
   getDocumentStatsByContractorQuery,
   getOverallContractorStatsQuery,
-  getContractorSiteCountQuery,
 } from './queries/contractor.queries';
 import { ContractorStats, OverallContractorStats } from './contractor.types';
 
@@ -273,11 +272,7 @@ export class ContractorService {
       throw new BadRequestException(CONTRACTOR_ERRORS.CANNOT_DELETE_SELF_CONTRACTOR);
     }
 
-    // Check if contractor has sites
-    const hasSites = await this.hasActiveSites(id);
-    if (hasSites) {
-      throw new BadRequestException(CONTRACTOR_ERRORS.CANNOT_DELETE_HAS_SITES);
-    }
+    await this.validateContractorCanBeDeleted(id);
 
     await this.contractorRepository.update({ id }, { deletedBy });
     await this.contractorRepository.softDelete({ id });
@@ -289,12 +284,35 @@ export class ContractorService {
   }
 
   /**
-   * Check if a contractor is assigned to any active (non-deleted) sites
+   * Validate that a contractor can be deleted by checking all active associations.
+   * Runs all checks in parallel and throws a single error listing every violation found.
    */
-  private async hasActiveSites(contractorId: string): Promise<boolean> {
-    const result = await this.dataSource.query(getContractorSiteCountQuery, [contractorId]);
-    const siteCount = parseInt(result[0]?.siteCount) || 0;
-    return siteCount > 0;
+  private async validateContractorCanBeDeleted(contractorId: string): Promise<void> {
+    const checks = [
+      {
+        query: `SELECT 1 FROM site_contractors sc INNER JOIN sites s ON s.id = sc."siteId" AND s."deletedAt" IS NULL WHERE sc."contractorId" = $1 LIMIT 1`,
+        message: CONTRACTOR_ERRORS.CANNOT_DELETE_HAS_SITES,
+      },
+      {
+        query: `SELECT 1 FROM site_documents WHERE "contractorId" = $1 AND "paymentStatus" NOT IN ('PAID') AND "deletedAt" IS NULL LIMIT 1`,
+        message: CONTRACTOR_ERRORS.CONTRACTOR_HAS_PENDING_DOCUMENTS,
+      },
+    ];
+
+    const results = await Promise.all(
+      checks.map(({ query }) => this.dataSource.query(query, [contractorId])),
+    );
+
+    const violations = checks.filter((_, i) => results[i].length > 0).map(({ message }) => message);
+
+    if (violations.length > 0) {
+      throw new BadRequestException(
+        CONTRACTOR_ERRORS.CONTRACTOR_HAS_ACTIVE_ASSOCIATIONS.replace(
+          '{issues}',
+          violations.map((v, i) => `${i + 1}. ${v}`).join(' '),
+        ),
+      );
+    }
   }
 
   /**
@@ -330,16 +348,8 @@ export class ContractorService {
           continue;
         }
 
-        // Check if contractor has sites
-        const hasSites = await this.hasActiveSites(contractorId);
-        if (hasSites) {
-          results.push({
-            id: contractorId,
-            success: false,
-            message: CONTRACTOR_ERRORS.CANNOT_DELETE_HAS_SITES,
-          });
-          continue;
-        }
+        // Check all deletion preconditions
+        await this.validateContractorCanBeDeleted(contractorId);
 
         // Soft delete the contractor
         await this.contractorRepository.update({ id: contractorId }, { deletedBy });

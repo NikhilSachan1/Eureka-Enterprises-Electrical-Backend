@@ -23,7 +23,6 @@ import {
   getSiteStatsByCompanyQuery,
   getChildCompanyStatsByParentQuery,
   getOverallCompanyStatsQuery,
-  getCompanySiteCountQuery,
 } from './queries/company.queries';
 import { CompanyStats, OverallCompanyStats } from './company.types';
 
@@ -415,17 +414,7 @@ export class CompanyService {
 
   async remove(id: string, deletedBy: string) {
     await this.findOneOrFail({ where: { id } });
-
-    const hasChildren = await this.hasChildCompanies(id);
-    if (hasChildren) {
-      throw new BadRequestException(COMPANY_ERRORS.CANNOT_DELETE_HAS_CHILDREN);
-    }
-
-    // Check if company has sites
-    const hasSites = await this.hasActiveSites(id);
-    if (hasSites) {
-      throw new BadRequestException(COMPANY_ERRORS.CANNOT_DELETE_HAS_SITES);
-    }
+    await this.validateCompanyCanBeDeleted(id);
 
     await this.companyRepository.update({ id }, { deletedBy });
     await this.companyRepository.softDelete({ id });
@@ -437,12 +426,39 @@ export class CompanyService {
   }
 
   /**
-   * Check if a company has any active (non-deleted) sites
+   * Validate that a company can be deleted by checking all active associations.
+   * Runs all checks in parallel and throws a single error listing every violation found.
    */
-  private async hasActiveSites(companyId: string): Promise<boolean> {
-    const result = await this.dataSource.query(getCompanySiteCountQuery, [companyId]);
-    const siteCount = parseInt(result[0]?.siteCount) || 0;
-    return siteCount > 0;
+  private async validateCompanyCanBeDeleted(companyId: string): Promise<void> {
+    const checks = [
+      {
+        query: `SELECT 1 FROM companies WHERE "parentCompanyId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+        message: COMPANY_ERRORS.CANNOT_DELETE_HAS_CHILDREN,
+      },
+      {
+        query: `SELECT 1 FROM sites WHERE "companyId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+        message: COMPANY_ERRORS.CANNOT_DELETE_HAS_SITES,
+      },
+      {
+        query: `SELECT 1 FROM site_allocations sa INNER JOIN sites s ON s.id = sa."siteId" WHERE s."companyId" = $1 AND sa."isCurrentlyAllocated" = true AND s."deletedAt" IS NULL LIMIT 1`,
+        message: COMPANY_ERRORS.COMPANY_HAS_ALLOCATED_EMPLOYEES,
+      },
+    ];
+
+    const results = await Promise.all(
+      checks.map(({ query }) => this.dataSource.query(query, [companyId])),
+    );
+
+    const violations = checks.filter((_, i) => results[i].length > 0).map(({ message }) => message);
+
+    if (violations.length > 0) {
+      throw new BadRequestException(
+        COMPANY_ERRORS.COMPANY_HAS_ACTIVE_ASSOCIATIONS.replace(
+          '{issues}',
+          violations.map((v, i) => `${i + 1}. ${v}`).join(' '),
+        ),
+      );
+    }
   }
 
   /**
@@ -468,27 +484,8 @@ export class CompanyService {
           continue;
         }
 
-        // Check if company has children
-        const hasChildren = await this.hasChildCompanies(companyId);
-        if (hasChildren) {
-          results.push({
-            id: companyId,
-            success: false,
-            message: COMPANY_ERRORS.CANNOT_DELETE_HAS_CHILDREN,
-          });
-          continue;
-        }
-
-        // Check if company has sites
-        const hasSites = await this.hasActiveSites(companyId);
-        if (hasSites) {
-          results.push({
-            id: companyId,
-            success: false,
-            message: COMPANY_ERRORS.CANNOT_DELETE_HAS_SITES,
-          });
-          continue;
-        }
+        // Check all deletion preconditions
+        await this.validateCompanyCanBeDeleted(companyId);
 
         // Soft delete the company
         await this.companyRepository.update({ id: companyId }, { deletedBy });
@@ -556,13 +553,6 @@ export class CompanyService {
     }
 
     return hierarchy;
-  }
-
-  private async hasChildCompanies(companyId: string): Promise<boolean> {
-    const count = await this.companyRepository.count({
-      where: { parentCompanyId: companyId, deletedAt: IsNull() },
-    });
-    return count > 0;
   }
 
   private buildFullAddress(data: Partial<CreateCompanyDto>): string {

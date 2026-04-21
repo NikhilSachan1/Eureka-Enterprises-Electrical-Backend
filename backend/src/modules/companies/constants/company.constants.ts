@@ -4,9 +4,13 @@ export const COMPANY_ERRORS = {
   EMAIL_ALREADY_EXISTS: 'Company with this email already exists',
   GST_ALREADY_EXISTS: 'Company with this GST number already exists',
   INVALID_GST_FORMAT: 'Invalid GST number format. Expected format: 22AAAAA0000A1Z5',
-  CANNOT_DELETE_HAS_SITES: 'Cannot delete company with existing sites',
+  CANNOT_DELETE_HAS_SITES: 'Cannot delete company. Remove all associated sites before deleting.',
   CANNOT_DELETE_HAS_CHILDREN:
-    'Cannot delete company with child companies. Please delete or reassign child companies first.',
+    'Cannot delete company. Delete or reassign all child companies before deleting.',
+  COMPANY_HAS_ALLOCATED_EMPLOYEES:
+    'Company has employees currently allocated to its sites. Remove all site allocations before deleting.',
+  COMPANY_HAS_ACTIVE_ASSOCIATIONS:
+    'Cannot delete company. Resolve the following before deleting: {issues}',
   PARENT_NOT_FOUND: 'Parent company not found',
   CANNOT_BE_OWN_PARENT: 'Company cannot be its own parent',
   CIRCULAR_REFERENCE:
