@@ -7,11 +7,47 @@ import {
   ValidateNested,
   ValidateIf,
   IsEnum,
+  IsIn,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { ApprovalStatus } from '../constants/leave-application.constants';
 import { AttendanceStatus } from 'src/modules/attendance/constants/attendance.constants';
 import { Type } from 'class-transformer';
+
+@ValidatorConstraint({ name: 'attendanceStatusMatchesApproval' })
+class AttendanceStatusMatchesApproval implements ValidatorConstraintInterface {
+  validate(value: string, args: ValidationArguments): boolean {
+    if (!value) return true;
+
+    const { approvalStatus } = args.object as LeaveApprovalDto;
+
+    if (approvalStatus === ApprovalStatus.APPROVED) {
+      return value === AttendanceStatus.LEAVE || value === AttendanceStatus.LEAVE_WITHOUT_PAY;
+    }
+    if (approvalStatus === ApprovalStatus.REJECTED) {
+      return value === AttendanceStatus.PRESENT || value === AttendanceStatus.ABSENT;
+    }
+
+    return true;
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    const { approvalStatus } = args.object as LeaveApprovalDto;
+
+    if (approvalStatus === ApprovalStatus.APPROVED) {
+      return 'When approving a leave, attendanceStatus must be "leave"';
+    }
+    if (approvalStatus === ApprovalStatus.REJECTED) {
+      return 'When rejecting a leave, attendanceStatus must be "present" or "absent"';
+    }
+
+    return 'Invalid attendanceStatus for the given approvalStatus';
+  }
+}
 
 export class LeaveApprovalDto {
   @ApiProperty({
@@ -40,12 +76,19 @@ export class LeaveApprovalDto {
   approvalComment: string;
 
   @ApiProperty({
-    description: 'The attendance status (required when leave date is current date or earlier)',
-    example: 'present',
+    description:
+      'Required when leave date is today or past. approve → "leave"/"leaveWithoutPay"; reject → "present"/"absent"',
+    example: 'leave',
   })
-  @IsString()
-  @IsEnum([AttendanceStatus.PRESENT, AttendanceStatus.ABSENT])
   @IsOptional()
+  @IsString()
+  @IsIn([
+    AttendanceStatus.PRESENT,
+    AttendanceStatus.ABSENT,
+    AttendanceStatus.LEAVE,
+    AttendanceStatus.LEAVE_WITHOUT_PAY,
+  ])
+  @Validate(AttendanceStatusMatchesApproval)
   attendanceStatus: string;
 }
 
