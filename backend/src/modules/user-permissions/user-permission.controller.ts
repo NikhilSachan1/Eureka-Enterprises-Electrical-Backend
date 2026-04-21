@@ -37,11 +37,12 @@ export class UserPermissionController {
   @Get()
   @ApiOperation({
     summary: 'Get user permissions',
-    description: 'Retrieves user permissions filtered by user ID, role ID, and active status.',
+    description:
+      'Retrieves user permissions filtered by user ID, role ID, platform, and active status.',
   })
   @UseInterceptors(UserPermissionUserIdInterceptor)
-  async getUserPermissions(@Query() { userId, roleId, isActive }: GetUserPermissionDto) {
-    return await this.userPermissionService.getUserPermissions(userId, roleId, isActive);
+  async getUserPermissions(@Query() { userId, roleId, platform, isActive }: GetUserPermissionDto) {
+    return await this.userPermissionService.getUserPermissions(userId, roleId, isActive, platform);
   }
 
   @Get('stats')

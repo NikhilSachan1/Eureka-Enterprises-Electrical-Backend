@@ -21,6 +21,7 @@ import {
   USER_PERMISSION_SUCCESS_MESSAGES,
 } from './constants/user-permission.constants';
 import { NotFoundException } from '@nestjs/common';
+import { PermissionPlatform } from '../permissions/constants/permission.constants';
 
 @Injectable()
 export class UserPermissionService {
@@ -118,10 +119,11 @@ export class UserPermissionService {
     userId: string,
     roleId?: string,
     isActive?: boolean,
+    platform?: PermissionPlatform,
   ): Promise<UserPermissionResult> {
     try {
       const rolePermissions = await this.userPermissionRepository.executeRawQuery(
-        getUserPermissionsQuery({ userId, roleId, isActive }),
+        getUserPermissionsQuery({ userId, roleId, isActive, platform }),
       );
 
       // Get user-specific permission overrides
@@ -129,6 +131,11 @@ export class UserPermissionService {
         where: { userId },
         relations: ['permission'],
       });
+
+      // Filter overrides by platform if specified
+      const filteredOverrides = platform
+        ? userOverrides.filter((override) => override.permission.platform === platform)
+        : userOverrides;
 
       const permissionMap = new Map();
 
@@ -149,17 +156,19 @@ export class UserPermissionService {
           id: rp.permissionId,
           name: rp.permissionName,
           module: rp.permissionModule,
+          platform: rp.permissionPlatform,
           source: PermissionSource.ROLE,
           isGranted: rp.isGranted,
         });
       });
 
       // Apply user-specific overrides (these take precedence)
-      userOverrides.forEach((override) => {
+      filteredOverrides.forEach((override) => {
         permissionMap.set(override.permission.id, {
           id: override.permission.id,
           name: override.permission.name,
           module: override.permission.module,
+          platform: override.permission.platform,
           source: PermissionSource.OVERRIDE,
           isGranted: override.isGranted,
         });
@@ -182,6 +191,7 @@ export class UserPermissionService {
             id: permission.id,
             name: permission.name,
             label: permission.label,
+            platform: permission.platform,
             source: permission.source,
             isGranted: permission.isGranted,
           });
@@ -194,20 +204,24 @@ export class UserPermissionService {
             id: string;
             name: string;
             label?: string;
+            platform?: PermissionPlatform;
             source: PermissionSource;
             isGranted: boolean;
           }>
         >,
       );
 
-      // Convert to array format
-      const permissionsArray = Object.keys(groupedByModule).map((module) => ({
-        module,
-        permissions: groupedByModule[module],
-      }));
+      // Convert to array format and sort by module name for consistent ordering
+      const permissionsArray = Object.keys(groupedByModule)
+        .sort()
+        .map((module) => ({
+          module,
+          permissions: groupedByModule[module].sort((a, b) => a.name.localeCompare(b.name)),
+        }));
 
       return {
         userId,
+        ...(platform && { platform }),
         ...(roleInfo && { role: roleInfo }),
         permissions: permissionsArray,
       };

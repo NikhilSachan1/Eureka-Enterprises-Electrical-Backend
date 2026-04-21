@@ -3,7 +3,11 @@ import { PermissionRepository } from './permission.repository';
 import { EntityManager, FindManyOptions, FindOneOptions, FindOptionsWhere, ILike } from 'typeorm';
 import { PermissionEntity } from './entities/permission.entity';
 import { CreatePermissionDto, DeletePermissionDto, GetPermissionDto } from './dto';
-import { PERMISSION_ERRORS, PERMISSION_FIELD_NAMES } from './constants/permission.constants';
+import {
+  PERMISSION_ERRORS,
+  PERMISSION_FIELD_NAMES,
+  PermissionPlatform,
+} from './constants/permission.constants';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { ConfigurationService } from '../configurations/configuration.service';
 import {
@@ -28,18 +32,21 @@ export class PermissionService {
   ) {
     await this.validateModuleExists(createDto.module);
 
-    // Check for active permission with same name
+    // Default platform to 'web' if not provided
+    const platform = createDto.platform || PermissionPlatform.WEB;
+
+    // Check for active permission with same name AND platform combination
     const existingPermission = await this.permissionRepository.findOne({
-      where: { name: createDto.name, deletedAt: null },
+      where: { name: createDto.name, platform, deletedAt: null },
     });
 
     if (existingPermission) {
-      throw new BadRequestException(PERMISSION_ERRORS.ALREADY_EXISTS(createDto.name));
+      throw new BadRequestException(PERMISSION_ERRORS.ALREADY_EXISTS(createDto.name, platform));
     }
 
     // Handle legacy soft-deleted records - rename them to allow new record creation
     const softDeletedPermission = await this.permissionRepository.findOne({
-      where: { name: createDto.name },
+      where: { name: createDto.name, platform },
     });
 
     if (softDeletedPermission && softDeletedPermission.deletedAt) {
@@ -54,7 +61,7 @@ export class PermissionService {
       );
     }
 
-    await this.permissionRepository.create(createDto, entityManager);
+    await this.permissionRepository.create({ ...createDto, platform }, entityManager);
 
     return this.utilityService.getSuccessMessage(
       PERMISSION_FIELD_NAMES.PERMISSION,
@@ -86,7 +93,7 @@ export class PermissionService {
     records: PermissionEntity[];
     totalRecords: number;
   }> {
-    const { module, search, page, sortField, sortOrder } = options;
+    const { module, platform, search, page, sortField, sortOrder } = options;
 
     // Build where conditions
     const where: FindOptionsWhere<PermissionEntity> = { deletedAt: null };
@@ -94,6 +101,11 @@ export class PermissionService {
     // Filter by module name
     if (module) {
       where.module = module;
+    }
+
+    // Filter by platform
+    if (platform) {
+      where.platform = platform;
     }
 
     // Search by label (case-insensitive)
