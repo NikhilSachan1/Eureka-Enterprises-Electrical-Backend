@@ -5,6 +5,10 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   ATTENDANCE_APPROVED: 'ATTENDANCE_APPROVED',
   ATTENDANCE_REJECTED: 'ATTENDANCE_REJECTED',
   ATTENDANCE_REGULARIZED: 'ATTENDANCE_REGULARIZED',
+  ATTENDANCE_SUBMITTED: 'ATTENDANCE_SUBMITTED',
+  ATTENDANCE_CHECKED_OUT: 'ATTENDANCE_CHECKED_OUT',
+  ATTENDANCE_FORCE_CREATED: 'ATTENDANCE_FORCE_CREATED',
+  ATTENDANCE_ABSENT_MARKED: 'ATTENDANCE_ABSENT_MARKED',
   EXPENSE_SUBMITTED: 'EXPENSE_SUBMITTED',
   EXPENSE_APPROVED: 'EXPENSE_APPROVED',
   EXPENSE_REJECTED: 'EXPENSE_REJECTED',
@@ -16,6 +20,10 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   FUEL_EXPENSE_FORCE_CREATED: 'FUEL_EXPENSE_FORCE_CREATED',
   LEAVE_APPROVED: 'LEAVE_APPROVED',
   LEAVE_REJECTED: 'LEAVE_REJECTED',
+  LEAVE_SUBMITTED: 'LEAVE_SUBMITTED',
+  LEAVE_CANCELLED: 'LEAVE_CANCELLED',
+  LEAVE_FORCE_APPLIED: 'LEAVE_FORCE_APPLIED',
+  LEAVE_BALANCE_CREDITED: 'LEAVE_BALANCE_CREDITED',
   WELCOME_EMPLOYEE: 'WELCOME_EMPLOYEE',
   FORGET_PASSWORD: 'FORGET_PASSWORD',
   ASSET_HANDOVER_INITIATED: 'ASSET_HANDOVER_INITIATED',
@@ -83,6 +91,48 @@ export const WHATSAPP_TEMPLATES = {
       } → ${data.newStatus}${
         data.notes ? `\n\n📝 *Notes:* ${data.notes}` : ''
       }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ATTENDANCE_SUBMITTED: {
+    name: 'attendance_submitted',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; date: string; checkInTime: string }) =>
+      `🕐 *Check-In Recorded*\n\nHi *${data.employeeName}*,\n\nYour check-in for *${data.date}* has been recorded at *${data.checkInTime}*. Your attendance is pending approval.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ATTENDANCE_CHECKED_OUT: {
+    name: 'attendance_checked_out',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      date: string;
+      checkOutTime: string;
+      totalHours?: string;
+    }) =>
+      `🕔 *Check-Out Recorded*\n\nHi *${data.employeeName}*,\n\nYour check-out for *${
+        data.date
+      }* has been recorded at *${data.checkOutTime}*.${
+        data.totalHours ? `\n\n⏱️ *Total Hours:* ${data.totalHours}` : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ATTENDANCE_FORCE_CREATED: {
+    name: 'attendance_force_created',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      date: string;
+      status: string;
+      createdByName: string;
+    }) =>
+      `📋 *Attendance Entry Added*\n\nHi *${data.employeeName}*,\n\nAn attendance entry has been added for *${data.date}* with status *${data.status}* by *${data.createdByName}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ATTENDANCE_ABSENT_MARKED: {
+    name: 'attendance_absent_marked',
+    contentSid: '',
+    sandboxMessage: (data: { employeeName: string; date: string }) =>
+      `⚠️ *Marked as Absent*\n\nHi *${data.employeeName}*,\n\nYou have been marked *ABSENT* for *${data.date}* as no check-in was recorded.\n\nIf this is incorrect, please contact your manager and ask for regularization.\n\n- *${WHATSAPP_SENDER}*`,
   },
 
   EXPENSE_SUBMITTED: {
@@ -233,6 +283,71 @@ export const WHATSAPP_TEMPLATES = {
       }* to *${data.toDate}* has been rejected by *${data.approverName}*.${
         data.remarks ? `\n\nReason: ${data.remarks}` : ''
       }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  LEAVE_SUBMITTED: {
+    name: 'leave_submitted',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      totalDays: string;
+    }) =>
+      `📝 *Leave Application Submitted*\n\nHi *${data.employeeName}*,\n\nYour *${data.leaveType}* from *${data.fromDate}* to *${data.toDate}* (*${data.totalDays} day(s)*) has been submitted and is pending approval.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  LEAVE_CANCELLED: {
+    name: 'leave_cancelled',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      cancelledByName: string;
+      remarks?: string;
+    }) =>
+      `🚫 *Leave Cancelled*\n\nHi *${data.employeeName}*,\n\nYour *${data.leaveType}* from *${
+        data.fromDate
+      }* to *${data.toDate}* has been cancelled by *${data.cancelledByName}*.${
+        data.remarks ? `\n\nReason: ${data.remarks}` : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  LEAVE_FORCE_APPLIED: {
+    name: 'leave_force_applied',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      leaveType: string;
+      fromDate: string;
+      toDate: string;
+      totalDays: string;
+      appliedByName: string;
+      reason?: string;
+    }) =>
+      `📋 *Leave Applied on Your Behalf*\n\nHi *${data.employeeName}*,\n\n*${
+        data.leaveType
+      }* from *${data.fromDate}* to *${data.toDate}* (*${
+        data.totalDays
+      } day(s)*) has been applied for you by *${data.appliedByName}*.${
+        data.reason ? `\n\nReason: ${data.reason}` : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  LEAVE_BALANCE_CREDITED: {
+    name: 'leave_balance_credited',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      leaveCategory: string;
+      credited: string;
+      total: string;
+      month: string;
+    }) =>
+      `✅ *Leave Balance Credited*\n\nHi *${data.employeeName}*,\n\n*${data.credited} day(s)* of *${data.leaveCategory}* have been credited for *${data.month}*.\n\n📊 *Total Balance:* ${data.total} days\n\n- *${WHATSAPP_SENDER}*`,
   },
 
   WELCOME_EMPLOYEE: {

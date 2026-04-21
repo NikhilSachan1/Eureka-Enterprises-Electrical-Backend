@@ -465,6 +465,8 @@ export class AttendanceCronService {
           entityManager,
         );
         count++;
+        // Fire-and-forget absent WhatsApp notification
+        this.attendanceService.sendAbsentNotification(record.userId, today);
       } catch (error) {
         errors.push(`Mark absent failed for attendance ${record.id}: ${error.message}`);
         this.logger.error(`Mark absent failed for attendance ${record.id}`, error);
@@ -512,6 +514,8 @@ export class AttendanceCronService {
           entityManager,
         );
         count++;
+        // Fire-and-forget absent WhatsApp notification
+        this.attendanceService.sendAbsentNotification(user.id, today);
       } catch (error) {
         errors.push(`Create absent failed for user ${user.id}: ${error.message}`);
         this.logger.error(`Create absent failed for user ${user.id}`, error);

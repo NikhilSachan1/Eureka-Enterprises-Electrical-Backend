@@ -114,7 +114,7 @@ export class AttendanceService {
     const currentTimeUTC = new Date();
     const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
 
-    return await this.dataSource.transaction(async (entityManager) => {
+    const result = await this.dataSource.transaction(async (entityManager) => {
       const existingAttendance = await this.attendanceRepository.findOne(
         {
           where: {
@@ -154,6 +154,15 @@ export class AttendanceService {
           throw new BadRequestException(ATTENDANCE_ERRORS.INVALID_ACTION);
       }
     });
+
+    // Fire-and-forget WhatsApp notifications (do not block the response)
+    if (action === AttendanceAction.CHECK_IN && 'checkInTime' in result) {
+      this.sendCheckInNotification(userId, todayDate, result.checkInTime);
+    } else if (action === AttendanceAction.CHECK_OUT && 'checkOutTime' in result) {
+      this.sendCheckOutNotification(userId, todayDate, result.checkOutTime, result.workDuration);
+    }
+
+    return result;
   }
 
   private async handleCheckIn(
@@ -1065,7 +1074,7 @@ export class AttendanceService {
       const isPreviousDay = this.dateTimeService.isPastDate(attendanceDateStr, timezone);
       const isSameDay = this.dateTimeService.isToday(attendanceDateStr, timezone);
 
-      return await this.dataSource.transaction(async (entityManager) => {
+      const forceResult = await this.dataSource.transaction(async (entityManager) => {
         const existingAttendance = await this.attendanceRepository.findOne(
           {
             where: {
@@ -1146,6 +1155,13 @@ export class AttendanceService {
           );
         }
       });
+
+      // Fire-and-forget notification for non-LEAVE force attendance (LEAVE has its own notification)
+      if (status !== AttendanceStatus.LEAVE && status !== AttendanceStatus.LEAVE_WITHOUT_PAY) {
+        this.sendForceAttendanceNotification(userId, createdBy, targetDateOnly, status);
+      }
+
+      return forceResult;
     } catch (error) {
       throw error;
     }
@@ -2245,6 +2261,109 @@ export class AttendanceService {
       }
     } catch (error) {
       Logger.error('Failed to send attendance regularization notification:', error);
+    }
+  }
+
+  private async sendCheckInNotification(userId: string, attendanceDate: Date, checkInTime: Date) {
+    try {
+      const employee = await this.userService.findOne({ id: userId });
+      if (!employee) return;
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
+      await this.whatsAppService.sendAttendanceSubmission(
+        whatsappNumber,
+        {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          date: this.formatDateForEmail(attendanceDate),
+          checkInTime: this.formatTime(checkInTime),
+        },
+        { recipientId: employee.id },
+      );
+    } catch (error) {
+      Logger.error('Failed to send check-in WhatsApp notification:', error);
+    }
+  }
+
+  private async sendCheckOutNotification(
+    userId: string,
+    attendanceDate: Date,
+    checkOutTime: Date,
+    workDurationSeconds: number,
+  ) {
+    try {
+      const employee = await this.userService.findOne({ id: userId });
+      if (!employee) return;
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
+      let totalHours: string | undefined;
+      if (workDurationSeconds) {
+        const hours = Math.floor(workDurationSeconds / 3600);
+        const minutes = Math.floor((workDurationSeconds % 3600) / 60);
+        totalHours = `${hours}h ${minutes}m`;
+      }
+      await this.whatsAppService.sendAttendanceCheckOut(
+        whatsappNumber,
+        {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          date: this.formatDateForEmail(attendanceDate),
+          checkOutTime: this.formatTime(checkOutTime),
+          totalHours,
+        },
+        { recipientId: employee.id },
+      );
+    } catch (error) {
+      Logger.error('Failed to send check-out WhatsApp notification:', error);
+    }
+  }
+
+  private async sendForceAttendanceNotification(
+    userId: string,
+    createdById: string,
+    attendanceDate: Date,
+    status: string,
+  ) {
+    try {
+      const [employee, createdBy] = await Promise.all([
+        this.userService.findOne({ id: userId }),
+        this.userService.findOne({ id: createdById }),
+      ]);
+      if (!employee) return;
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
+      const createdByName = createdBy
+        ? `${createdBy.firstName} ${createdBy.lastName}`
+        : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER;
+      await this.whatsAppService.sendAttendanceForceCreated(
+        whatsappNumber,
+        {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          date: this.formatDateForEmail(attendanceDate),
+          status: status.toUpperCase().replace(/_/g, ' '),
+          createdByName,
+        },
+        { recipientId: employee.id },
+      );
+    } catch (error) {
+      Logger.error('Failed to send force attendance WhatsApp notification:', error);
+    }
+  }
+
+  async sendAbsentNotification(userId: string, attendanceDate: Date) {
+    try {
+      const employee = await this.userService.findOne({ id: userId });
+      if (!employee) return;
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
+      await this.whatsAppService.sendAttendanceAbsentMarked(
+        whatsappNumber,
+        {
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          date: this.formatDateForEmail(attendanceDate),
+        },
+        { recipientId: employee.id },
+      );
+    } catch (error) {
+      Logger.error('Failed to send absent WhatsApp notification:', error);
     }
   }
 
