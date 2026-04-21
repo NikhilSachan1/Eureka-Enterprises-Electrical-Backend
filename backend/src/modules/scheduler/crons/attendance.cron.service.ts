@@ -241,6 +241,8 @@ export class AttendanceCronService {
       entrySourceType: EntrySourceType.SYSTEM,
       attendanceType: AttendanceType.SYSTEM,
       isActive: true,
+      createdBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
+      updatedBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
     };
 
     // Priority 1: Holiday (no approval needed)
@@ -421,6 +423,7 @@ export class AttendanceCronService {
           checkOutTime: shiftEndTime,
           status: AttendanceStatus.CHECKED_OUT,
           notes: this.appendNote(record.notes, SYSTEM_NOTES.AUTO_CHECKOUT),
+          updatedBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
         };
 
         // Only set approvalStatus to PENDING if not already APPROVED
@@ -461,6 +464,7 @@ export class AttendanceCronService {
             status: AttendanceStatus.ABSENT,
             approvalStatus: ApprovalStatus.PENDING,
             notes: this.appendNote(record.notes, SYSTEM_NOTES.MARKED_ABSENT),
+            updatedBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
           },
           entityManager,
         );
@@ -510,6 +514,8 @@ export class AttendanceCronService {
             attendanceType: AttendanceType.SYSTEM,
             notes: SYSTEM_NOTES.MARKED_ABSENT,
             isActive: true,
+            createdBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
+            updatedBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
           },
           entityManager,
         );
@@ -586,6 +592,7 @@ export class AttendanceCronService {
           const { query: updateQuery, params: updateParams } = markApprovalPendingQuery(
             record.id,
             SYSTEM_NOTES.MARKED_APPROVAL_PENDING,
+            SYSTEM_DEFAULTS.SYSTEM_USER_ID,
           );
           await entityManager.query(updateQuery, updateParams);
           result.markedPending++;

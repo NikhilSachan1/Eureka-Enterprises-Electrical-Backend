@@ -257,18 +257,23 @@ export const getCheckedOutPendingFromPreviousDayQuery = (previousDate: Date) => 
   };
 };
 
-export const markApprovalPendingQuery = (attendanceId: string, systemNote: string) => {
+export const markApprovalPendingQuery = (
+  attendanceId: string,
+  systemNote: string,
+  systemUserId: string,
+) => {
   return {
     query: `
       UPDATE attendances
       SET "status" = $1,
-          "notes" = CASE 
+          "notes" = CASE
             WHEN "notes" IS NULL OR "notes" = '' THEN $2
             ELSE "notes" || ' / ' || $2
           END,
-          "updatedAt" = $3
-      WHERE id = $4
+          "updatedAt" = $3,
+          "updatedBy" = $4
+      WHERE id = $5
     `,
-    params: [AttendanceStatus.APPROVAL_PENDING, systemNote, new Date(), attendanceId],
+    params: [AttendanceStatus.APPROVAL_PENDING, systemNote, new Date(), systemUserId, attendanceId],
   };
 };
