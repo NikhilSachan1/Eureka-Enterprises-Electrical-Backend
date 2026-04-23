@@ -213,11 +213,22 @@ export class LeaveApplicationsService {
     financialYear: string,
     numberOfDays: number,
   ) {
-    const leaveBalance = await this.leaveBalanceService.findOneOrFail({
-      where: { userId, leaveCategory, financialYear },
-    });
+    // Use ORDER BY to consistently pick the highest-allocation row when duplicates exist
+    const [leaveBalance] = await this.dataSource.query(
+      `SELECT * FROM leave_balances
+       WHERE "userId" = $1 AND "leaveCategory" = $2 AND "financialYear" = $3 AND "deletedAt" IS NULL
+       ORDER BY "totalAllocated"::numeric DESC
+       LIMIT 1`,
+      [userId, leaveCategory, financialYear],
+    );
 
-    const balance = parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed);
+    if (!leaveBalance) {
+      throw new NotFoundException(LEAVE_APPLICATION_ERRORS.NOT_FOUND);
+    }
+
+    const balance = Math.floor(
+      parseFloat(leaveBalance.totalAllocated) - parseFloat(leaveBalance.consumed),
+    );
 
     if (balance < numberOfDays) {
       throw new BadRequestException(
