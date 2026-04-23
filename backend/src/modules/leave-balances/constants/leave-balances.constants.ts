@@ -9,9 +9,9 @@ export const LEAVE_BALANCE_FIELD_NAMES = {
 };
 
 export const LEAVE_BALANCE_SORT_FIELDS = {
-  totalAllocated: 'leave_balances."totalAllocated"',
-  consumed: 'leave_balances."consumed"',
-  createdAt: 'leave_balances."createdAt"',
+  totalAllocated: 'lb."totalAllocated"',
+  consumed: 'lb."consumed"',
+  createdAt: 'lb."createdAt"',
   userFirstName: 'u."firstName"',
   userLastName: 'u."lastName"',
   userEmail: 'u."email"',
