@@ -85,8 +85,8 @@ export class LeaveBalancesService {
     records: LeaveBalanceEntity[];
     totalRecords: number;
   }> {
-    const query = buildLeaveBalanceQuery(options);
-    const records = await this.leaveBalancesRepository.rawQuery(query);
+    const { query, params } = buildLeaveBalanceQuery(options);
+    const records = await this.leaveBalancesRepository.rawQuery(query, params);
     return {
       records,
       totalRecords: records.length,

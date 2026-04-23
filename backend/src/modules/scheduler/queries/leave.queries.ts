@@ -69,6 +69,8 @@ export const getUserLeaveBalanceQuery = (
         AND "leaveCategory" = $2
         AND "financialYear" = $3
         AND "deletedAt" IS NULL
+      ORDER BY "totalAllocated"::numeric DESC
+      LIMIT 1
     `,
     params: [userId, leaveCategory, financialYear],
   };
@@ -110,6 +112,15 @@ export const createLeaveBalanceQuery = (
         "totalAllocated", "creditSource", "notes", "createdAt", "updatedAt"
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+      ON CONFLICT ("userId", "leaveCategory", "financialYear")
+      DO UPDATE SET
+        "totalAllocated" = EXCLUDED."totalAllocated",
+        "leaveConfigId"  = EXCLUDED."leaveConfigId",
+        "notes" = CASE
+          WHEN leave_balances."notes" IS NULL OR leave_balances."notes" = '' THEN EXCLUDED."notes"
+          ELSE leave_balances."notes" || ' / ' || EXCLUDED."notes"
+        END,
+        "updatedAt" = EXCLUDED."updatedAt"
       RETURNING id
     `,
     params: [

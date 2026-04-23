@@ -1,9 +1,10 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index, Unique } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { ConfigSettingEntity } from 'src/modules/config-settings/entities/config-setting.entity';
 
 @Entity('leave_balances')
+@Unique('UQ_LEAVE_BALANCE_USER_CATEGORY_FY', ['userId', 'leaveCategory', 'financialYear'])
 export class LeaveBalanceEntity extends BaseEntity {
   @Column({ name: 'userId' })
   userId: string;
