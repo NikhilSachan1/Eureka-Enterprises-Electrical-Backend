@@ -9,14 +9,14 @@ export const buildLeaveBalanceQuery = (options: GetAllLeaveBalanceDto) => {
   const userFilter = userIds?.length
     ? (() => {
         params.push(userIds);
-        return `AND lb."userId" = ANY($${params.length})`;
+        return `AND "userId" = ANY($${params.length})`;
       })()
     : '';
 
   const fyFilter = financialYear
     ? (() => {
         params.push(financialYear);
-        return `AND lb."financialYear" = $${params.length}`;
+        return `AND "financialYear" = $${params.length}`;
       })()
     : '';
 

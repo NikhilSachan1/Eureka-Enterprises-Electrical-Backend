@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
   LEAVE_BALANCE_ERRORS,
@@ -11,6 +11,7 @@ export class GetAllLeaveBalanceDto extends BaseGetDto {
   @ApiProperty({ description: 'User IDs', type: [String], required: false })
   @IsOptional()
   @IsArray()
+  @IsUUID('4', { each: true, message: 'Each userId must be a valid UUID' })
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   userIds?: string[];
 
