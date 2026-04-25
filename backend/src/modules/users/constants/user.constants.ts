@@ -59,6 +59,8 @@ export const USERS_ERRORS = {
     'User has pending attendance records awaiting approval. Clear them before deleting.',
   USER_HAS_ACTIVE_ASSOCIATIONS:
     'Cannot delete user. Resolve the following before deleting: {issues}',
+  USER_HAS_ACTIVE_ASSOCIATIONS_ARCHIVE:
+    'Cannot archive user. Resolve the following before archiving: {issues}',
 };
 
 export const USER_DTO_ERRORS = {

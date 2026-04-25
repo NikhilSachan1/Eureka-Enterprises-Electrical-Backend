@@ -519,6 +519,9 @@ export class UserService {
       if (updateData.status === UserStatus.ARCHIVED && user.status === UserStatus.ARCHIVED) {
         throw new BadRequestException(USERS_ERRORS.USER_ALREADY_ARCHIVED);
       }
+      if (updateData.status === UserStatus.ARCHIVED && user.status !== UserStatus.ARCHIVED) {
+        await this.validateUserAssociations(id, 'archive');
+      }
       if (updateData.status === UserStatus.ACTIVE && user.status === UserStatus.ACTIVE) {
         throw new BadRequestException(USERS_ERRORS.USER_ALREADY_ACTIVE);
       }
@@ -576,42 +579,41 @@ export class UserService {
     });
   }
 
-  private async validateUserCanBeDeleted(userId: string): Promise<void> {
+  private async validateUserAssociations(
+    userId: string,
+    operation: 'delete' | 'archive',
+  ): Promise<void> {
     const checks: Array<{ query: string; message: string }> = [
       {
-        query: `SELECT 1 FROM asset_versions WHERE "assignedTo" = $1 AND "isActive" = true LIMIT 1`,
+        query: `SELECT 1 FROM asset_versions WHERE "assignedTo" = $1 AND "isActive" = true AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_ASSET_ASSIGNED,
       },
       {
-        query: `SELECT 1 FROM vehicle_versions WHERE "assignedTo" = $1 AND "isActive" = true LIMIT 1`,
+        query: `SELECT 1 FROM vehicle_versions WHERE "assignedTo" = $1 AND "isActive" = true AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_VEHICLE_ASSIGNED,
       },
       {
-        query: `SELECT 1 FROM site_allocations WHERE "userId" = $1 AND "isCurrentlyAllocated" = true LIMIT 1`,
+        query: `SELECT 1 FROM site_allocations WHERE "userId" = $1 AND "isCurrentlyAllocated" = true AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_SITE_ALLOCATED,
       },
       {
-        query: `SELECT 1 FROM leave_applications WHERE "userId" = $1 AND "approvalStatus" = 'pending' LIMIT 1`,
+        query: `SELECT 1 FROM leave_applications WHERE "userId" = $1 AND "approvalStatus" = 'pending' AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_PENDING_LEAVE,
       },
       {
-        query: `SELECT 1 FROM salary_structures WHERE "userId" = $1 AND "isActive" = true LIMIT 1`,
-        message: USERS_ERRORS.USER_HAS_ACTIVE_SALARY_STRUCTURE,
-      },
-      {
-        query: `SELECT 1 FROM expenses WHERE "userId" = $1 AND "approvalStatus" = 'pending' LIMIT 1`,
+        query: `SELECT 1 FROM expenses WHERE "userId" = $1 AND "approvalStatus" = 'pending' AND "isActive" = true AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_PENDING_EXPENSES,
       },
       {
-        query: `SELECT 1 FROM fuel_expenses WHERE "userId" = $1 AND "approvalStatus" = 'pending' LIMIT 1`,
+        query: `SELECT 1 FROM fuel_expenses WHERE "userId" = $1 AND "approvalStatus" = 'pending' AND "isActive" = true AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_PENDING_FUEL_EXPENSES,
       },
       {
-        query: `SELECT 1 FROM fnf_settlements WHERE "userId" = $1 AND "status" NOT IN ('COMPLETED', 'CANCELLED') LIMIT 1`,
+        query: `SELECT 1 FROM fnf_settlements WHERE "userId" = $1 AND "status" NOT IN ('COMPLETED', 'CANCELLED') AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_OPEN_FNF,
       },
       {
-        query: `SELECT 1 FROM attendances WHERE "userId" = $1 AND "approvalStatus" = 'PENDING' AND "isActive" = true LIMIT 1`,
+        query: `SELECT 1 FROM attendances WHERE "userId" = $1 AND "approvalStatus" = 'PENDING' AND "isActive" = true AND "deletedAt" IS NULL LIMIT 1`,
         message: USERS_ERRORS.USER_HAS_PENDING_ATTENDANCE,
       },
     ];
@@ -625,11 +627,12 @@ export class UserService {
       .map(({ message }) => message);
 
     if (violations.length > 0) {
+      const errorTemplate =
+        operation === 'archive'
+          ? USERS_ERRORS.USER_HAS_ACTIVE_ASSOCIATIONS_ARCHIVE
+          : USERS_ERRORS.USER_HAS_ACTIVE_ASSOCIATIONS;
       throw new BadRequestException(
-        USERS_ERRORS.USER_HAS_ACTIVE_ASSOCIATIONS.replace(
-          '{issues}',
-          violations.map((v, i) => `${i + 1}. ${v}`).join(' '),
-        ),
+        errorTemplate.replace('{issues}', violations.map((v, i) => `${i + 1}. ${v}`).join(' ')),
       );
     }
   }
@@ -648,7 +651,7 @@ export class UserService {
         throw new BadRequestException(USERS_ERRORS.USER_NOT_ARCHIVED_TO_DELETE);
       }
 
-      await this.validateUserCanBeDeleted(id);
+      await this.validateUserAssociations(id, 'delete');
 
       await this.userRepository.delete(id, deletedBy);
       return this.utilityService.getSuccessMessage(
@@ -703,7 +706,7 @@ export class UserService {
       throw new BadRequestException(USERS_ERRORS.USER_NOT_ARCHIVED_TO_DELETE);
     }
 
-    await this.validateUserCanBeDeleted(userId);
+    await this.validateUserAssociations(userId, 'delete');
 
     await this.userRepository.delete(userId, deletedBy);
 
