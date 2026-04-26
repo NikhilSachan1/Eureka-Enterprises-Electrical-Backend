@@ -38,6 +38,8 @@ export const LEAVE_APPLICATION_ERRORS = {
     'Leave cancellation is not allowed after leave date is passed or current date, for cancellation contact the Admin or HR',
   LEAVE_REJECTED_CANNOT_BE_APPROVED:
     'Rejected leave application cannot be approved, ask employee to reapply the leave application',
+  ATTENDANCE_ALREADY_EXISTS:
+    'Attendance already exists for {date}. Consider using regularize instead.',
 };
 
 export const LEAVE_APPLICATION_FIELD_NAMES = {

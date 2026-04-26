@@ -486,6 +486,18 @@ export class LeaveApplicationsService {
         numberOfDays,
       );
 
+      // Check for existing attendance records before starting transaction
+      for (const date of dateRange) {
+        const existingAttendance = await this.attendanceService.findOne({
+          where: { userId, attendanceDate: new Date(date), isActive: true },
+        });
+        if (existingAttendance) {
+          throw new BadRequestException(
+            LEAVE_APPLICATION_ERRORS.ATTENDANCE_ALREADY_EXISTS.replace('{date}', date),
+          );
+        }
+      }
+
       await this.dataSource.transaction(async (entityManager) => {
         for (const date of dateRange) {
           const existingLeaveApplication = await this.findOne({
@@ -603,36 +615,63 @@ export class LeaveApplicationsService {
         true, // isForced — skip backward date restriction
       );
 
+      // Separate dates: ones with existing attendance (skip) vs ones without (apply)
+      const applicableDates: string[] = [];
+      const skippedDates: { date: string; reason: string }[] = [];
+
+      for (const date of dateRange) {
+        const existingLeaveApplication = await this.findOne({
+          where: {
+            userId,
+            leaveCategory,
+            fromDate: new Date(date),
+            toDate: new Date(date),
+            approvalStatus: In([ApprovalStatus.PENDING, ApprovalStatus.APPROVED]),
+          },
+        });
+
+        if (existingLeaveApplication) {
+          skippedDates.push({
+            date,
+            reason: LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ALREADY_EXISTS.replace(
+              '{fromDate}',
+              date,
+            ).replace('{toDate}', date),
+          });
+          continue;
+        }
+
+        const existingAttendance = await this.attendanceService.findOne({
+          where: { userId, attendanceDate: new Date(date), isActive: true },
+        });
+
+        if (existingAttendance) {
+          skippedDates.push({
+            date,
+            reason: LEAVE_APPLICATION_ERRORS.ATTENDANCE_ALREADY_EXISTS.replace('{date}', date),
+          });
+          continue;
+        }
+
+        applicableDates.push(date);
+      }
+
+      if (applicableDates.length === 0) {
+        throw new BadRequestException({
+          message: 'No dates available for leave application. All dates have conflicts.',
+          skippedDates,
+        });
+      }
+
       const leaveBalance = await this.validateLeaveBalance(
         userId,
         leaveCategory,
         financialYear,
-        numberOfDays,
+        applicableDates.length,
       );
 
       await this.dataSource.transaction(async (entityManager) => {
-        for (const date of dateRange) {
-          const existingLeaveApplication = await this.findOne({
-            where: {
-              userId,
-              leaveCategory,
-              fromDate: new Date(date),
-              toDate: new Date(date),
-              approvalStatus: In([ApprovalStatus.PENDING, ApprovalStatus.APPROVED]),
-            },
-          });
-
-          if (existingLeaveApplication) {
-            throw new BadRequestException(
-              LEAVE_APPLICATION_ERRORS.LEAVE_APPLICATION_ALREADY_EXISTS.replace(
-                '{fromDate}',
-                date,
-              ).replace('{toDate}', date),
-            );
-          }
-        }
-
-        const leaveApplicationPromises = dateRange.map((date) => {
+        const leaveApplicationPromises = applicableDates.map((date) => {
           const leaveApplicationData = {
             userId,
             leaveType,
@@ -662,7 +701,7 @@ export class LeaveApplicationsService {
             financialYear,
           },
           updatedData: {
-            consumed: (parseFloat(leaveBalance.consumed) + numberOfDays).toString(),
+            consumed: (parseFloat(leaveBalance.consumed) + applicableDates.length).toString(),
           },
         };
 
@@ -672,65 +711,36 @@ export class LeaveApplicationsService {
           entityManager,
         );
 
-        // Create or update attendance record for each leave date (skip future dates — cron handles them)
+        // Create attendance records for applicable leave dates (skip future dates — cron handles them)
         const lwpCategories = ['LWP', 'LEAVE_WITHOUT_PAY', 'UNPAID', 'UNPAID_LEAVE'];
         const isLWP = lwpCategories.includes(leaveCategory.toUpperCase());
         const attendanceLeaveStatus = isLWP
           ? AttendanceStatus.LEAVE_WITHOUT_PAY
           : AttendanceStatus.LEAVE;
 
-        for (const date of dateRange) {
+        for (const date of applicableDates) {
           const dateStr = this.dateTimeService.toDateString(new Date(date));
           if (this.dateTimeService.isFutureDate(dateStr, timezone)) {
             continue;
           }
 
-          const existingAttendance = await this.attendanceService.findOne({
-            where: { userId, attendanceDate: new Date(date), isActive: true },
-          });
-
-          if (existingAttendance) {
-            // Deactivate existing record (preserve history)
-            await this.attendanceService.update(
-              { id: existingAttendance.id },
-              { isActive: false, updatedBy: createdBy },
-              entityManager,
-            );
-            // Create new record with LEAVE status
-            await this.attendanceService.create(
-              {
-                ...existingAttendance,
-                status: attendanceLeaveStatus,
-                approvalStatus: ApprovalStatus.APPROVED,
-                approvalAt: new Date(),
-                approvalBy: createdBy,
-                approvalComment: `Force leave applied - ${leaveCategory}`,
-                isActive: true,
-                createdBy,
-                updatedBy: createdBy,
-              },
-              entityManager,
-            );
-          } else {
-            // No record: create fresh
-            await this.attendanceService.create(
-              {
-                userId,
-                attendanceDate: new Date(date),
-                status: attendanceLeaveStatus,
-                entrySourceType: EntrySourceType.SYSTEM,
-                attendanceType: AttendanceType.SYSTEM,
-                approvalStatus: ApprovalStatus.APPROVED,
-                approvalAt: new Date(),
-                approvalBy: createdBy,
-                approvalComment: `Force leave applied - ${leaveCategory}`,
-                isActive: true,
-                createdBy,
-                updatedBy: createdBy,
-              },
-              entityManager,
-            );
-          }
+          await this.attendanceService.create(
+            {
+              userId,
+              attendanceDate: new Date(date),
+              status: attendanceLeaveStatus,
+              entrySourceType: EntrySourceType.SYSTEM,
+              attendanceType: AttendanceType.SYSTEM,
+              approvalStatus: ApprovalStatus.APPROVED,
+              approvalAt: new Date(),
+              approvalBy: createdBy,
+              approvalComment: `Force leave applied - ${leaveCategory}`,
+              isActive: true,
+              createdBy,
+              updatedBy: createdBy,
+            },
+            entityManager,
+          );
         }
       });
 
@@ -741,13 +751,14 @@ export class LeaveApplicationsService {
         leaveCategory,
         fromDate,
         toDate,
-        numberOfDays,
+        applicableDates.length,
       );
 
-      return this.utilityService.getSuccessMessage(
-        LEAVE_APPLICATION_FIELD_NAMES.LEAVE_APPLICATION,
-        DataSuccessOperationType.CREATE,
-      );
+      return {
+        message: `Force leave applied for ${applicableDates.length} out of ${dateRange.length} days.`,
+        appliedDates: applicableDates,
+        ...(skippedDates.length > 0 && { skippedDates }),
+      };
     } catch (error) {
       throw error;
     }
