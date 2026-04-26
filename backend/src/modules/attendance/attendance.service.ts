@@ -2179,9 +2179,14 @@ export class AttendanceService {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
-  private formatTime(date: Date | string): string {
+  private formatTime(date: Date | string, timezone = 'Asia/Kolkata'): string {
     const d = new Date(date);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: timezone,
+    });
   }
 
   async sendRegularizationNotification(
