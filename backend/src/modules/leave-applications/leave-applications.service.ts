@@ -787,8 +787,13 @@ export class LeaveApplicationsService {
     const transformedRecords = this.transformLeaveApplicationRecords(records);
     const totalRecords = totalRecordsResult[0]?.total || 0;
 
-    // Get unique user IDs from the filtered results (not just current page)
-    const uniqueUserIds = uniqueUserResults.map((row) => row.userId);
+    // Get unique user IDs: prefer from filtered results, fallback to filter's userIds
+    const uniqueUserIds =
+      uniqueUserResults.length > 0
+        ? uniqueUserResults.map((row) => row.userId)
+        : filters.userIds?.length
+        ? filters.userIds
+        : [];
 
     let leaveBalances = [];
     if (uniqueUserIds.length > 0) {
