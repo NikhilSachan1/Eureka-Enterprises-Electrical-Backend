@@ -2598,6 +2598,50 @@ export class AttendanceService {
     this.logger.log(
       `Credited food expense ₹${dailyFoodAllowance} for user ${userId} (recipient: ${recipientUserId}) on ${dateStr}`,
     );
+
+    // Fire-and-forget WhatsApp notification to the recipient
+    this.sendFoodExpenseCreditedNotification(
+      recipientUserId,
+      dailyFoodAllowance,
+      dateStr,
+      recipientUserId !== userId ? userId : undefined,
+    );
+  }
+
+  private async sendFoodExpenseCreditedNotification(
+    recipientUserId: string,
+    amount: number,
+    dateStr: string,
+    onBehalfOfUserId?: string,
+  ) {
+    try {
+      const recipient = await this.userService.findOne({ id: recipientUserId });
+      if (!recipient) return;
+      const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
+      if (!recipient.whatsappOptIn || !whatsappNumber) return;
+
+      let creditedFor: string | undefined;
+      if (onBehalfOfUserId) {
+        // Food credited to engineer on behalf of driver
+        const driver = await this.userService.findOne({ id: onBehalfOfUserId });
+        if (driver) {
+          creditedFor = `${driver.firstName} ${driver.lastName}`;
+        }
+      }
+
+      await this.whatsAppService.sendFoodExpenseCredited(
+        whatsappNumber,
+        {
+          employeeName: `${recipient.firstName} ${recipient.lastName}`,
+          amount: amount.toString(),
+          date: this.formatDateForEmail(new Date(dateStr)),
+          creditedFor,
+        },
+        { recipientId: recipient.id },
+      );
+    } catch (error) {
+      Logger.error('Failed to send food expense credited WhatsApp notification:', error);
+    }
   }
 
   /**

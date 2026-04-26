@@ -893,4 +893,32 @@ export class WhatsAppService {
       recipientName: data.employeeName,
     });
   }
+
+  async sendFoodExpenseCredited(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      amount: string;
+      date: string;
+      creditedFor?: string;
+    },
+    options?: {
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.FOOD_EXPENSE_CREDITED,
+      templateData: {
+        employeeName: data.employeeName,
+        amount: data.amount,
+        date: data.date,
+        creditedFor: data.creditedFor,
+      },
+      category: CommunicationCategory.FOOD_EXPENSE_CREDITED,
+      referenceType: 'EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
 }
