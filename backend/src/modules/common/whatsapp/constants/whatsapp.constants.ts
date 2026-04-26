@@ -36,6 +36,7 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   VEHICLE_HANDOVER_REJECTED: 'VEHICLE_HANDOVER_REJECTED',
   VEHICLE_HANDOVER_CANCELLED: 'VEHICLE_HANDOVER_CANCELLED',
   VEHICLE_DEALLOCATED: 'VEHICLE_DEALLOCATED',
+  FOOD_EXPENSE_CREDITED: 'FOOD_EXPENSE_CREDITED',
 } as const;
 
 export type WhatsAppTemplateKey = keyof typeof WHATSAPP_TEMPLATE_KEYS;
@@ -438,6 +439,22 @@ export const WHATSAPP_TEMPLATES = {
     contentSid: '',
     sandboxMessage: (data: { employeeName: string; vehicleNumber: string; actorName: string }) =>
       `📤 *Vehicle Deallocated*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has deallocated vehicle *${data.vehicleNumber}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  FOOD_EXPENSE_CREDITED: {
+    name: 'food_expense_credited',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      amount: string;
+      date: string;
+      creditedFor?: string;
+    }) =>
+      `🍽️ *Food Allowance Credited*\n\nHi *${data.employeeName}*,\n\nFood allowance of *₹${
+        data.amount
+      }* has been credited for *${data.date}*.${
+        data.creditedFor ? `\n\n👤 *On behalf of:* ${data.creditedFor}` : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
   },
 };
 
