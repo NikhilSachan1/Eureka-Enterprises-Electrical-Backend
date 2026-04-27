@@ -4,12 +4,14 @@ import {
   TriggerableCronJob,
   CRON_DEPENDENCIES,
   CRON_JOB_DESCRIPTIONS,
+  CRON_JOB_SCHEDULES,
   JOBS_REQUIRING_DATE,
   JOBS_REQUIRING_MONTH_YEAR,
   JOBS_REQUIRING_YEAR,
   CRON_TRIGGER_ERRORS,
   CRON_TRIGGER_SUCCESS,
 } from './constants/cron-trigger.constants';
+import { sendAt } from 'cron';
 import { CronLogService } from '../cron-logs/cron-log.service';
 import { CronJobStatus, CronTriggerType } from '../cron-logs/constants/cron-log.constants';
 
@@ -64,9 +66,21 @@ export class CronTriggerService {
         requiredParameters.push('year');
       }
 
+      const schedule = CRON_JOB_SCHEDULES[jobName];
+      let nextRunAt: string | null = null;
+      try {
+        const nextDate = sendAt(schedule.cron);
+        nextRunAt = nextDate.toISO();
+      } catch {
+        nextRunAt = null;
+      }
+
       return {
         name: jobName,
         description: CRON_JOB_DESCRIPTIONS[jobName],
+        schedule: schedule.timezoneLabel,
+        cronExpression: schedule.cron,
+        nextRunAt,
         requiredParameters,
         dependencies: CRON_DEPENDENCIES[jobName],
       };
