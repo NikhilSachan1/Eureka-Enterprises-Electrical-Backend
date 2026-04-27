@@ -152,6 +152,116 @@ export const CRON_JOB_DESCRIPTIONS: Record<TriggerableCronJob, string> = {
     'Orchestrator: Runs FY Leave Config Copy → Leave Carry Forward on April 1st',
 };
 
+// Maps each job to its cron schedule expression (UTC)
+// Some jobs are orchestrator-controlled and don't have their own @Cron decorator
+import { CRON_SCHEDULES } from '../../scheduler/constants/scheduler.constants';
+
+export const CRON_JOB_SCHEDULES: Record<
+  TriggerableCronJob,
+  { cron: string; timezoneLabel: string }
+> = {
+  [TriggerableCronJob.CONFIG_ACTIVATION]: {
+    cron: CRON_SCHEDULES.DAILY_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.SALARY_STRUCTURE_ACTIVATION]: {
+    cron: CRON_SCHEDULES.DAILY_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.DAILY_ATTENDANCE_ENTRY]: {
+    cron: CRON_SCHEDULES.DAILY_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.END_OF_DAY_ATTENDANCE]: {
+    cron: CRON_SCHEDULES.DAILY_SHIFT_END_IST,
+    timezoneLabel: '9:00 PM IST',
+  },
+  [TriggerableCronJob.AUTO_APPROVE_ATTENDANCE]: {
+    cron: CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '1st of month, 12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.FY_LEAVE_CONFIG_AUTO_COPY]: {
+    cron: CRON_SCHEDULES.APRIL_1_ORCHESTRATOR,
+    timezoneLabel: 'April 1, 12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.LEAVE_CARRY_FORWARD]: {
+    cron: CRON_SCHEDULES.APRIL_1_ORCHESTRATOR,
+    timezoneLabel: 'April 1, 12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.AUTO_APPROVE_LEAVES]: {
+    cron: CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '1st of month, 12:00 AM IST (via orchestrator)',
+  },
+  [TriggerableCronJob.CARD_EXPIRY_ALERT]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_CARD_ALERTS,
+    timezoneLabel: '9:00 AM IST',
+  },
+  [TriggerableCronJob.ASSET_CALIBRATION_EXPIRY_ALERT]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_ASSET_CALIBRATION,
+    timezoneLabel: '9:02 AM IST',
+  },
+  [TriggerableCronJob.ASSET_WARRANTY_EXPIRY_ALERT]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_ASSET_WARRANTY,
+    timezoneLabel: '9:04 AM IST',
+  },
+  [TriggerableCronJob.VEHICLE_DOCUMENT_EXPIRY_ALERT]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_VEHICLE_DOCS,
+    timezoneLabel: '9:06 AM IST',
+  },
+  [TriggerableCronJob.VEHICLE_SERVICE_DUE_REMINDER]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_VEHICLE_SERVICE,
+    timezoneLabel: '9:08 AM IST',
+  },
+  [TriggerableCronJob.PENDING_EXPENSE_REMINDER]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_EXPENSE_REMINDERS,
+    timezoneLabel: '9:10 AM IST',
+  },
+  [TriggerableCronJob.FY_LEAVE_CONFIG_REMINDER]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_FY_LEAVE_REMINDER,
+    timezoneLabel: '9:12 AM IST (Mar 15-31 only)',
+  },
+  [TriggerableCronJob.LEAVE_APPROVAL_REMINDER]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_LEAVE_APPROVAL,
+    timezoneLabel: '9:14 AM IST (25th-EOM only)',
+  },
+  [TriggerableCronJob.ATTENDANCE_APPROVAL_REMINDER]: {
+    cron: CRON_SCHEDULES.DAILY_9AM_ATTENDANCE_APPROVAL,
+    timezoneLabel: '9:16 AM IST (25th-EOM only)',
+  },
+  [TriggerableCronJob.CELEBRATION_WISHES]: {
+    cron: CRON_SCHEDULES.DAILY_8AM_IST,
+    timezoneLabel: '8:00 AM IST',
+  },
+  [TriggerableCronJob.MONTHLY_PAYROLL_GENERATION]: {
+    cron: CRON_SCHEDULES.MONTHLY_SECOND_1AM_IST,
+    timezoneLabel: '2nd of month, 1:00 AM IST',
+  },
+  [TriggerableCronJob.MONTHLY_LEAVE_ACCRUAL]: {
+    cron: CRON_SCHEDULES.MONTHLY_FIRST_1230AM_IST,
+    timezoneLabel: '1st of month, 12:30 AM IST',
+  },
+  [TriggerableCronJob.PUBLISH_SCHEDULED_ANNOUNCEMENTS]: {
+    cron: CRON_SCHEDULES.EVERY_30_MINUTES || '*/30 * * * *',
+    timezoneLabel: 'Every 30 minutes',
+  },
+  [TriggerableCronJob.EXPIRE_ANNOUNCEMENTS]: {
+    cron: CRON_SCHEDULES.DAILY_6AM_IST,
+    timezoneLabel: '6:00 AM IST',
+  },
+  [TriggerableCronJob.DAILY_MIDNIGHT_ORCHESTRATOR]: {
+    cron: CRON_SCHEDULES.DAILY_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '12:00 AM IST',
+  },
+  [TriggerableCronJob.MONTHLY_AUTO_APPROVE_ORCHESTRATOR]: {
+    cron: CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_ORCHESTRATOR,
+    timezoneLabel: '1st of month, 12:00 AM IST',
+  },
+  [TriggerableCronJob.APRIL_1_FY_ORCHESTRATOR]: {
+    cron: CRON_SCHEDULES.APRIL_1_ORCHESTRATOR,
+    timezoneLabel: 'April 1, 12:00 AM IST',
+  },
+};
+
 export const CRON_TRIGGER_ERRORS = {
   JOB_NOT_FOUND: 'Cron job not found',
   INVALID_JOB_NAME: 'Invalid cron job name',
