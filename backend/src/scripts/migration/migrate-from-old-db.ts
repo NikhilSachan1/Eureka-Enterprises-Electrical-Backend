@@ -32,6 +32,16 @@ const NEW_DB = {
   ssl: { rejectUnauthorized: false },
 };
 
+// New Dev DB — source for roles, permissions, role_permissions
+const DEV_NEW_DB = {
+  host: 'eureka-enterprises.c4bfdwj2okvo.ap-south-1.rds.amazonaws.com',
+  port: 5432,
+  user: 'postgres',
+  password: 'adminadmin',
+  database: 'european_union',
+  ssl: { rejectUnauthorized: false },
+};
+
 const MIGRATION_START_DATE = '2026-04-01';
 const FINANCIAL_YEAR = '2026-2027';
 const LEAVE_ANNUAL_QUOTA = 52;
@@ -151,11 +161,17 @@ async function main() {
     await newDb.query('BEGIN');
 
     try {
-      // Pre-step: Ensure expense categories config has all categories
+      // Pre-step 0: Migrate Roles, Permissions, Role Permissions from prod new DB
+      await migrateRolesAndPermissions(newDb);
+
+      // Pre-step 1: Ensure expense categories config has all categories
       await ensureExpenseCategories(newDb);
 
       // Step 1: Migrate Users
       const migratedUserIds = await migrateUsers(oldDb, newDb);
+
+      // Step 1b: Migrate User Documents
+      const migratedUserDocIds = await migrateUserDocuments(oldDb, newDb, migratedUserIds);
 
       // Step 2: Migrate User Roles
       await migrateUserRoles(oldDb, newDb, migratedUserIds);
@@ -175,6 +191,7 @@ async function main() {
       // Save migration manifest for rollback
       await saveMigrationManifest(newDb, {
         userIds: migratedUserIds,
+        userDocIds: migratedUserDocIds,
         attendanceIds: migratedAttendanceIds,
         expenseIds: migratedExpenseIds,
         expenseFileIds: migratedExpenseFileIds,
@@ -192,6 +209,7 @@ async function main() {
       // Print summary
       log('─── SUMMARY ───');
       log(`Users migrated: ${migratedUserIds.length}`);
+      log(`User documents migrated: ${migratedUserDocIds.length}`);
       log(`Attendance migrated: ${migratedAttendanceIds.length}`);
       log(`Expenses migrated: ${migratedExpenseIds.length}`);
       log(`Expense files migrated: ${migratedExpenseFileIds.length}`);
@@ -207,7 +225,135 @@ async function main() {
   }
 }
 
-// ─── STEP 0: ENSURE EXPENSE CATEGORIES ──────────────────────────────────────
+// ─── PRE-STEP 0: MIGRATE ROLES, PERMISSIONS, ROLE_PERMISSIONS ────────────────
+
+async function migrateRolesAndPermissions(newDb: Client) {
+  log('Pre-step 0: Migrating roles, permissions, role_permissions from prod new DB...');
+
+  const prodDb = new Client(DEV_NEW_DB);
+  await prodDb.connect();
+
+  try {
+    // 1. Get prod roles
+    const prodRoles = await prodDb.query(
+      `SELECT * FROM roles WHERE "deletedAt" IS NULL ORDER BY name`,
+    );
+    log(`  Prod roles: ${prodRoles.rows.map((r: any) => r.name).join(', ')}`);
+
+    // 2. Get current test roles
+    const testRoles = await newDb.query(
+      `SELECT id, name FROM roles WHERE "deletedAt" IS NULL`,
+    );
+    const testRoleByName: Record<string, string> = {};
+    for (const r of testRoles.rows) {
+      testRoleByName[r.name] = r.id;
+    }
+
+    // Temporarily disable FK checks on user_roles → roles
+    await newDb.query(`ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS "FK_86033897c009fcca8b6505d6be2"`);
+
+    // 3. For each prod role, update the existing test role (matched by name) to prod's ID and data
+    //    This avoids unique constraint issues and FK violations
+    for (const prodRole of prodRoles.rows) {
+      const oldTestId = testRoleByName[prodRole.name];
+
+      if (oldTestId && oldTestId !== prodRole.id) {
+        // Role exists with different ID — update user_roles first, then update the role row
+        await newDb.query(
+          `UPDATE user_roles SET "roleId" = $1 WHERE "roleId" = $2`,
+          [oldTestId, oldTestId], // no-op placeholder, real remap below
+        );
+        // Update the role row: change ID and all fields
+        await newDb.query(
+          `UPDATE roles SET id = $1, label = $2, description = $3,
+           "isEditable" = $4, "isDeletable" = $5, "updatedAt" = NOW()
+           WHERE name = $6`,
+          [prodRole.id, prodRole.label, prodRole.description,
+           prodRole.isEditable, prodRole.isDeletable, prodRole.name],
+        );
+        // Now remap user_roles from old ID to new ID
+        const updated = await newDb.query(
+          `UPDATE user_roles SET "roleId" = $1 WHERE "roleId" = $2`,
+          [prodRole.id, oldTestId],
+        );
+        if (updated.rowCount > 0) {
+          log(`  Remapped ${updated.rowCount} user_roles: ${prodRole.name} (${oldTestId} → ${prodRole.id})`);
+        }
+      } else if (oldTestId && oldTestId === prodRole.id) {
+        // Same ID — just update fields
+        await newDb.query(
+          `UPDATE roles SET label = $1, description = $2,
+           "isEditable" = $3, "isDeletable" = $4, "updatedAt" = NOW()
+           WHERE id = $5`,
+          [prodRole.label, prodRole.description, prodRole.isEditable, prodRole.isDeletable, prodRole.id],
+        );
+      } else {
+        // Role doesn't exist in test — insert fresh
+        await newDb.query(
+          `INSERT INTO roles (id, name, description, label, "isEditable", "isDeletable", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [prodRole.id, prodRole.name, prodRole.description, prodRole.label,
+           prodRole.isEditable, prodRole.isDeletable, prodRole.createdAt, prodRole.updatedAt],
+        );
+      }
+    }
+    log(`  Roles: ${prodRoles.rows.length} synced`);
+
+    // 4. Delete orphan test roles not in prod
+    await newDb.query(
+      `DELETE FROM roles WHERE "deletedAt" IS NULL
+       AND id NOT IN (${prodRoles.rows.map((_: any, i: number) => `$${i + 1}`).join(',')})
+       AND id NOT IN (SELECT DISTINCT "roleId" FROM user_roles)`,
+      prodRoles.rows.map((r: any) => r.id),
+    );
+
+    // Re-add FK constraint
+    await newDb.query(
+      `ALTER TABLE user_roles ADD CONSTRAINT "FK_86033897c009fcca8b6505d6be2"
+       FOREIGN KEY ("roleId") REFERENCES roles(id) ON DELETE CASCADE ON UPDATE CASCADE`,
+    );
+
+    // 5. Clear and re-insert permissions and role_permissions
+    await newDb.query(`DELETE FROM role_permissions`);
+    await newDb.query(`DELETE FROM permissions`);
+
+    // 6. Copy all permissions
+    const prodPerms = await prodDb.query(
+      `SELECT * FROM permissions WHERE "deletedAt" IS NULL`,
+    );
+    for (const perm of prodPerms.rows) {
+      await newDb.query(
+        `INSERT INTO permissions (id, name, module, label, description, "isEditable", "isDeletable", platform, "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          perm.id, perm.name, perm.module, perm.label, perm.description,
+          perm.isEditable, perm.isDeletable, perm.platform,
+          perm.createdAt, perm.updatedAt,
+        ],
+      );
+    }
+    log(`  Permissions: ${prodPerms.rows.length} synced`);
+
+    // 7. Copy all role_permissions
+    const prodRP = await prodDb.query(
+      `SELECT * FROM role_permissions WHERE "deletedAt" IS NULL`,
+    );
+    for (const rp of prodRP.rows) {
+      await newDb.query(
+        `INSERT INTO role_permissions (id, "roleId", "permissionId", "isActive", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO NOTHING`,
+        [rp.id, rp.roleId, rp.permissionId, rp.isActive, rp.createdAt, rp.updatedAt],
+      );
+    }
+    log(`  Role permissions: ${prodRP.rows.length} synced`);
+  } finally {
+    await prodDb.end();
+  }
+}
+
+// ─── PRE-STEP 1: ENSURE EXPENSE CATEGORIES ──────────────────────────────────
 
 async function ensureExpenseCategories(newDb: Client) {
   log('Ensuring expense categories config...');
@@ -355,6 +501,59 @@ async function migrateUsers(oldDb: Client, newDb: Client): Promise<string[]> {
   }
 
   log(`Users: ${migratedIds.length} processed (${oldUsers.rows.length} total in old DB)`);
+  return migratedIds;
+}
+
+// ─── STEP 1b: MIGRATE USER DOCUMENTS ─────────────────────────────────────────
+
+const DOC_COLUMN_MAP: Record<string, string> = {
+  aadharDocument: 'AADHAR',
+  panDocument: 'PAN',
+  drivingLicenseDocument: 'DRIVING_LICENSE',
+  uanDocument: 'UAN',
+  passportDocument: 'PASSPORT',
+  educationDocument: 'EDUCATION_CERTIFICATE',
+};
+
+async function migrateUserDocuments(oldDb: Client, newDb: Client, userIds: string[]): Promise<string[]> {
+  log('Step 1b: Migrating user documents...');
+
+  const oldUsers = await oldDb.query(`
+    SELECT id, "aadharDocument", "panDocument", "drivingLicenseDocument",
+           "uanDocument", "passportDocument", "educationDocument"
+    FROM users WHERE "deletedAt" IS NULL
+  `);
+
+  const migratedIds: string[] = [];
+
+  for (const user of oldUsers.rows) {
+    if (!userIds.includes(user.id)) continue;
+
+    for (const [oldCol, docType] of Object.entries(DOC_COLUMN_MAP)) {
+      const fileKey = user[oldCol];
+      if (!fileKey || fileKey.trim() === '') continue;
+
+      // Check if already exists
+      const existing = await newDb.query(
+        `SELECT id FROM user_documents WHERE "userId" = $1 AND "documentType" = $2 AND "deletedAt" IS NULL LIMIT 1`,
+        [user.id, docType],
+      );
+      if (existing.rows.length > 0) {
+        migratedIds.push(existing.rows[0].id);
+        continue;
+      }
+
+      const result = await newDb.query(
+        `INSERT INTO user_documents ("userId", "documentType", "fileKey", "createdAt", "updatedAt", "createdBy")
+         VALUES ($1, $2, $3, NOW(), NOW(), $4) RETURNING id`,
+        [user.id, docType, fileKey, SYSTEM_USER_ID],
+      );
+
+      migratedIds.push(result.rows[0].id);
+    }
+  }
+
+  log(`User documents: ${migratedIds.length} migrated`);
   return migratedIds;
 }
 
@@ -719,6 +918,7 @@ async function saveMigrationManifest(
   newDb: Client,
   data: {
     userIds: string[];
+    userDocIds: string[];
     attendanceIds: string[];
     expenseIds: string[];
     expenseFileIds: string[];
@@ -763,7 +963,7 @@ async function rollback(newDb: Client) {
   }
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-  const { userIds, attendanceIds, expenseIds, expenseFileIds, leaveBalanceIds } = manifest.ids;
+  const { userIds, userDocIds, attendanceIds, expenseIds, expenseFileIds, leaveBalanceIds } = manifest.ids;
 
   await newDb.query('BEGIN');
 
@@ -789,6 +989,11 @@ async function rollback(newDb: Client) {
       log(`  Deleted ${attendanceIds.length} attendance records`);
     }
 
+    if (userDocIds?.length) {
+      await newDb.query(`DELETE FROM user_documents WHERE id = ANY($1)`, [userDocIds]);
+      log(`  Deleted ${userDocIds.length} user documents`);
+    }
+
     if (userIds?.length) {
       await newDb.query(`DELETE FROM user_roles WHERE "userId" = ANY($1)`, [userIds]);
       log(`  Deleted user roles`);
@@ -800,6 +1005,10 @@ async function rollback(newDb: Client) {
       );
       log(`  Deleted migrated users`);
     }
+
+    // Note: Roles, permissions, role_permissions are NOT rolled back.
+    // They were synced from dev new DB and represent the correct state.
+    log(`  Roles/permissions/role_permissions: NOT rolled back (synced from dev DB — correct state)`);
 
     await newDb.query('COMMIT');
     log('ROLLBACK completed successfully');
