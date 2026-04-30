@@ -1,8 +1,7 @@
-import { Controller, Get, Query, Request } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query, Request, ForbiddenException } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { GetDashboardDto } from './dto/dashboard.dto';
-import { DashboardSection, DashboardPeriod } from './constants/dashboard.constants';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('JWT-auth')
@@ -29,66 +28,145 @@ export class DashboardController {
     return await this.dashboardService.getMobileDashboard(userId);
   }
 
-  @Get()
-  @ApiOperation({
-    summary: 'Get dashboard data',
-    description: `
-      Fetches dashboard data based on requested sections and filters.
-      
-      **Available Sections:**
-      - overview: Quick stats (employees, attendance, approvals, payroll)
-      - birthdays: Employee birthdays (today/week/month)
-      - anniversaries: Work anniversaries (today/week/month)
-      - festivals: Upcoming holidays from calendar
-      - attendance: Attendance summary and trends
-      - leave: Leave summary and approvals
-      - payroll: Payroll status and trends
-      - expenses: Expense summary
-      - alerts: Expiring cards, documents, assets
-      - approvals: Pending approvals (leave, attendance, expense)
-      - employees: New joiners, exiting, probation
-      - team: Manager's team data
-      
-      **Role-based Access:**
-      - ADMIN/HR: All sections
-      - MANAGER: Most sections + team section
-      - EMPLOYEE: Personal data only
-    `,
-  })
-  @ApiQuery({
-    name: 'section',
-    required: false,
-    enum: DashboardSection,
-    description: 'Single section to fetch',
-  })
-  @ApiQuery({
-    name: 'sections',
-    required: false,
-    type: String,
-    description: 'Multiple sections (comma-separated): overview,birthdays,alerts',
-  })
-  @ApiQuery({
-    name: 'period',
-    required: false,
-    enum: DashboardPeriod,
-    description: 'Time period for data',
-  })
-  @ApiQuery({
-    name: 'startDate',
-    required: false,
-    type: String,
-    description: 'Start date for custom period (YYYY-MM-DD)',
-  })
-  @ApiQuery({
-    name: 'endDate',
-    required: false,
-    type: String,
-    description: 'End date for custom period (YYYY-MM-DD)',
-  })
-  async getDashboard(@Query() query: GetDashboardDto, @Request() req: any) {
-    const userId = req?.user?.id;
-    const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
+  // ==================== Section-wise Endpoints ====================
 
-    return await this.dashboardService.getDashboard(query, userId, userRole);
+  @Get('overview')
+  @ApiOperation({ summary: 'Get overview stats (employees, attendance, approvals, payroll)' })
+  async getOverview(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getOverview();
+  }
+
+  @Get('alerts')
+  @ApiOperation({
+    summary: 'Get top alerts (cards, vehicle docs, vehicle service, asset calibration/warranty)',
+  })
+  async getAlerts(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getAlerts();
+  }
+
+  @Get('approvals')
+  @ApiOperation({ summary: 'Get pending approvals (leave, attendance, expense, fuel)' })
+  async getApprovals(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getApprovals();
+  }
+
+  @Get('attendance-summary')
+  @ApiOperation({ summary: "Get today's attendance summary (present, absent, leave, etc.)" })
+  async getAttendanceSummary(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getAttendance();
+  }
+
+  @Get('leave-summary')
+  @ApiOperation({ summary: 'Get leave summary (pending approvals, current month leaves, upcoming)' })
+  async getLeaveSummary(@Query() query: GetDashboardDto, @Request() req: any) {
+    this.assertAdminAccess(req);
+    const dateRange = this.dashboardService.getDateRange(query);
+    return await this.dashboardService.getLeave(dateRange);
+  }
+
+  @Get('expense-summary')
+  @ApiOperation({ summary: 'Get expense summary (totals, categories, top spenders)' })
+  async getExpenseSummary(@Query() query: GetDashboardDto, @Request() req: any) {
+    this.assertAdminAccess(req);
+    const dateRange = this.dashboardService.getDateRange(query);
+    return await this.dashboardService.getExpenses(dateRange);
+  }
+
+  @Get('employees-summary')
+  @ApiOperation({ summary: 'Get employees summary (headcount, new joiners, exiting, probation)' })
+  async getEmployeesSummary(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getEmployees();
+  }
+
+  @Get('payroll-summary')
+  @ApiOperation({ summary: 'Get payroll summary (current month status and trends)' })
+  async getPayrollSummary(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getPayroll();
+  }
+
+  @Get('birthdays')
+  @ApiOperation({ summary: 'Get birthdays (today, this week, this month)' })
+  async getBirthdays() {
+    return await this.dashboardService.getBirthdays();
+  }
+
+  @Get('anniversaries')
+  @ApiOperation({ summary: 'Get work anniversaries (today, this week, this month)' })
+  async getAnniversaries() {
+    return await this.dashboardService.getAnniversaries();
+  }
+
+  @Get('festivals')
+  @ApiOperation({ summary: 'Get upcoming holidays/festivals' })
+  async getFestivals() {
+    return await this.dashboardService.getFestivals();
+  }
+
+  // ==================== New Endpoints ====================
+
+  @Get('vehicle-readings')
+  @ApiOperation({
+    summary: 'Get vehicle reading anomalies and vehicles without recent readings (2+ days)',
+  })
+  async getVehicleReadings(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getVehicleReadings();
+  }
+
+  @Get('projects-pipeline')
+  @ApiOperation({
+    summary:
+      'Get project pipeline counts (active/upcoming/onHold/completed) and active projects financial totals',
+  })
+  async getProjectsPipeline(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getProjectsPipeline();
+  }
+
+  @Get('ledger-balances')
+  @ApiOperation({
+    summary: 'Get expense + fuel ledger (approvals, opening/closing, employee-wise pay/collect)',
+  })
+  async getLedgerBalances(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getLedgerBalances();
+  }
+
+  @Get('cron-health')
+  @ApiOperation({ summary: 'Get cron job health (last run, status, duration per cron)' })
+  async getCronHealth(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getCronHealth();
+  }
+
+  @Get('leave-exhaustion')
+  @ApiOperation({
+    summary: 'Get employees with leave balance <= 2 days remaining (proactive HR alert)',
+  })
+  async getLeaveExhaustion(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getLeaveExhaustion();
+  }
+
+  @Get('payroll-status')
+  @ApiOperation({ summary: 'Get current month payroll status (generated/pending/paid)' })
+  async getPayrollStatus(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getPayrollStatus();
+  }
+
+  // ==================== Helpers ====================
+
+  private assertAdminAccess(req: any): void {
+    const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
+    if (!this.dashboardService.isAdminRole(userRole)) {
+      throw new ForbiddenException('Access denied. Admin/Manager/HR role required.');
+    }
   }
 }

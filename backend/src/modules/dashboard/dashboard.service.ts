@@ -3,7 +3,6 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { GetDashboardDto } from './dto/dashboard.dto';
 import {
-  DashboardSection,
   DashboardPeriod,
   DASHBOARD_CONSTANTS,
   DASHBOARD_ERRORS,
@@ -11,7 +10,6 @@ import {
   AlertSeverity,
 } from './constants/dashboard.constants';
 import {
-  DashboardResponse,
   OverviewData,
   BirthdayData,
   AnniversaryData,
@@ -53,117 +51,6 @@ export class DashboardService {
     private readonly utilityService: UtilityService,
     private readonly dateTimeService: DateTimeService,
   ) {}
-
-  async getDashboard(
-    query: GetDashboardDto,
-    userId: string,
-    userRole: string,
-  ): Promise<DashboardResponse> {
-    const sections = this.determineSections(query);
-    const dateRange = this.getDateRange(query);
-
-    const response: DashboardResponse = {};
-
-    // Execute sections in parallel where possible
-    const sectionPromises: Promise<void>[] = [];
-
-    for (const section of sections) {
-      if (!this.canAccessSection(section, userRole)) {
-        continue; // Skip sections user can't access
-      }
-
-      switch (section) {
-        case DashboardSection.OVERVIEW:
-          sectionPromises.push(
-            this.getOverview().then((data) => {
-              response.overview = data;
-            }),
-          );
-          break;
-        case DashboardSection.BIRTHDAYS:
-          sectionPromises.push(
-            this.getBirthdays().then((data) => {
-              response.birthdays = data;
-            }),
-          );
-          break;
-        case DashboardSection.ANNIVERSARIES:
-          sectionPromises.push(
-            this.getAnniversaries().then((data) => {
-              response.anniversaries = data;
-            }),
-          );
-          break;
-        case DashboardSection.FESTIVALS:
-          sectionPromises.push(
-            this.getFestivals().then((data) => {
-              response.festivals = data;
-            }),
-          );
-          break;
-        case DashboardSection.ATTENDANCE:
-          sectionPromises.push(
-            this.getAttendance().then((data) => {
-              response.attendance = data;
-            }),
-          );
-          break;
-        case DashboardSection.LEAVE:
-          sectionPromises.push(
-            this.getLeave(dateRange).then((data) => {
-              response.leave = data;
-            }),
-          );
-          break;
-        case DashboardSection.PAYROLL:
-          sectionPromises.push(
-            this.getPayroll().then((data) => {
-              response.payroll = data;
-            }),
-          );
-          break;
-        case DashboardSection.EXPENSES:
-          sectionPromises.push(
-            this.getExpenses(dateRange).then((data) => {
-              response.expenses = data;
-            }),
-          );
-          break;
-        case DashboardSection.ALERTS:
-          sectionPromises.push(
-            this.getAlerts().then((data) => {
-              response.alerts = data;
-            }),
-          );
-          break;
-        case DashboardSection.APPROVALS:
-          sectionPromises.push(
-            this.getApprovals().then((data) => {
-              response.approvals = data;
-            }),
-          );
-          break;
-        case DashboardSection.EMPLOYEES:
-          sectionPromises.push(
-            this.getEmployees().then((data) => {
-              response.employees = data;
-            }),
-          );
-          break;
-        case DashboardSection.TEAM:
-          sectionPromises.push(
-            this.getTeam().then((data) => {
-              response.team = data;
-            }),
-          );
-          break;
-      }
-    }
-
-    await Promise.all(sectionPromises);
-
-    return response;
-  }
 
   // ==================== Mobile Dashboard ====================
 
@@ -309,34 +196,7 @@ export class DashboardService {
 
   // ==================== Web Dashboard Helpers ====================
 
-  private determineSections(query: GetDashboardDto): DashboardSection[] {
-    // If specific section requested
-    if (query.section) {
-      const section = query.section.toLowerCase() as DashboardSection;
-      if (!Object.values(DashboardSection).includes(section)) {
-        throw new BadRequestException(
-          DASHBOARD_ERRORS.INVALID_SECTION.replace('{section}', query.section),
-        );
-      }
-      return [section];
-    }
-
-    // If multiple sections requested
-    if (query.sections && query.sections.length > 0) {
-      return query.sections.map((s) => {
-        const section = s.toLowerCase() as DashboardSection;
-        if (!Object.values(DashboardSection).includes(section)) {
-          throw new BadRequestException(DASHBOARD_ERRORS.INVALID_SECTION.replace('{section}', s));
-        }
-        return section;
-      });
-    }
-
-    // Default: return all sections
-    return Object.values(DashboardSection);
-  }
-
-  private getDateRange(query: GetDashboardDto): { startDate: string; endDate: string } {
+  getDateRange(query: GetDashboardDto): { startDate: string; endDate: string } {
     const today = new Date();
 
     if (query.period === DashboardPeriod.CUSTOM) {
@@ -391,50 +251,13 @@ export class DashboardService {
     return date.toISOString().split('T')[0];
   }
 
-  private canAccessSection(section: DashboardSection, userRole: string): boolean {
-    const roleAccess: Record<string, DashboardSection[]> = {
-      [Roles.ADMIN]: Object.values(DashboardSection),
-      [Roles.HR]: Object.values(DashboardSection),
-      [Roles.MANAGER]: [
-        DashboardSection.OVERVIEW,
-        DashboardSection.BIRTHDAYS,
-        DashboardSection.ANNIVERSARIES,
-        DashboardSection.FESTIVALS,
-        DashboardSection.ATTENDANCE,
-        DashboardSection.LEAVE,
-        DashboardSection.EXPENSES,
-        DashboardSection.ALERTS,
-        DashboardSection.TEAM,
-      ],
-      [Roles.EMPLOYEE]: [
-        DashboardSection.OVERVIEW,
-        DashboardSection.BIRTHDAYS,
-        DashboardSection.ANNIVERSARIES,
-        DashboardSection.FESTIVALS,
-        DashboardSection.ATTENDANCE,
-        DashboardSection.LEAVE,
-        DashboardSection.PAYROLL,
-        DashboardSection.EXPENSES,
-      ],
-      [Roles.DRIVER]: [
-        DashboardSection.OVERVIEW,
-        DashboardSection.BIRTHDAYS,
-        DashboardSection.ANNIVERSARIES,
-        DashboardSection.FESTIVALS,
-        DashboardSection.ATTENDANCE,
-        DashboardSection.LEAVE,
-        DashboardSection.PAYROLL,
-        DashboardSection.EXPENSES,
-      ],
-    };
-
-    const allowedSections = roleAccess[userRole] || [];
-    return allowedSections.includes(section);
+  isAdminRole(userRole: string): boolean {
+    return [Roles.SUPER_ADMIN, Roles.ADMIN, Roles.HR, Roles.MANAGER].includes(userRole as Roles);
   }
 
   // ==================== Section Implementations ====================
 
-  private async getOverview(): Promise<OverviewData> {
+  async getOverview(): Promise<OverviewData> {
     const today = this.formatDate(new Date());
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
@@ -488,7 +311,7 @@ export class DashboardService {
     };
   }
 
-  private async getBirthdays(): Promise<BirthdayData> {
+  async getBirthdays(): Promise<BirthdayData> {
     const today = new Date();
     const weekEnd = new Date(today);
     weekEnd.setDate(today.getDate() + 7);
@@ -537,7 +360,7 @@ export class DashboardService {
     };
   }
 
-  private async getAnniversaries(): Promise<AnniversaryData> {
+  async getAnniversaries(): Promise<AnniversaryData> {
     const today = new Date();
     const weekEnd = new Date(today);
     weekEnd.setDate(today.getDate() + 7);
@@ -587,7 +410,7 @@ export class DashboardService {
     };
   }
 
-  private async getFestivals(): Promise<FestivalData> {
+  async getFestivals(): Promise<FestivalData> {
     const today = new Date();
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
@@ -645,7 +468,7 @@ export class DashboardService {
     };
   }
 
-  private async getAttendance(): Promise<AttendanceData> {
+  async getAttendance(): Promise<AttendanceData> {
     const today = this.formatDate(new Date());
     const trendStartDate = new Date();
     trendStartDate.setDate(trendStartDate.getDate() - DASHBOARD_CONSTANTS.DEFAULT_TREND_DAYS);
@@ -701,7 +524,7 @@ export class DashboardService {
     };
   }
 
-  private async getLeave(dateRange: { startDate: string; endDate: string }): Promise<LeaveData> {
+  async getLeave(dateRange: { startDate: string; endDate: string }): Promise<LeaveData> {
     const today = new Date();
     const upcomingEndDate = new Date();
     upcomingEndDate.setDate(today.getDate() + DASHBOARD_CONSTANTS.DEFAULT_UPCOMING_DAYS);
@@ -754,7 +577,7 @@ export class DashboardService {
     };
   }
 
-  private async getPayroll(): Promise<PayrollData> {
+  async getPayroll(): Promise<PayrollData> {
     const today = new Date();
     const currentMonth = today.getMonth() + 1;
     const currentYear = today.getFullYear();
@@ -830,7 +653,7 @@ export class DashboardService {
     };
   }
 
-  private async getExpenses(dateRange: {
+  async getExpenses(dateRange: {
     startDate: string;
     endDate: string;
   }): Promise<ExpenseData> {
@@ -876,7 +699,7 @@ export class DashboardService {
     };
   }
 
-  private async getAlerts(): Promise<AlertsData> {
+  async getAlerts(): Promise<AlertsData> {
     const today = new Date();
     const warningDate = new Date(today);
     warningDate.setDate(today.getDate() + DASHBOARD_CONSTANTS.ALERT_WARNING_DAYS);
@@ -1079,7 +902,7 @@ export class DashboardService {
     };
   }
 
-  private async getApprovals(): Promise<ApprovalsData> {
+  async getApprovals(): Promise<ApprovalsData> {
     const [leaveApprovals, attendanceApprovals, expenseApprovals] = await Promise.all([
       this.executeQuery(queries.getPendingLeaveApprovalsQuery(20)),
       this.executeQuery(queries.getPendingAttendanceApprovalsQuery(20)),
@@ -1117,7 +940,7 @@ export class DashboardService {
     };
   }
 
-  private async getEmployees(): Promise<EmployeesData> {
+  async getEmployees(): Promise<EmployeesData> {
     const today = new Date();
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -1160,7 +983,7 @@ export class DashboardService {
     };
   }
 
-  private async getTeam(): Promise<TeamData> {
+  async getTeam(): Promise<TeamData> {
     // TODO: Implement team-specific queries based on manager's team members
     return {
       overview: {
@@ -1188,5 +1011,402 @@ export class DashboardService {
       this.logger.error(`Query execution failed: ${error.message}`, error.stack);
       return [];
     }
+  }
+
+  // ==================== NEW: Vehicle Readings ====================
+
+  async getVehicleReadings(): Promise<{
+    anomalies: { count: number; items: Array<{ vehicleId: string; registrationNo: string; brand: string; model: string; reason: string; reportedAt: string }> };
+    noReading2Days: { count: number; items: Array<{ vehicleId: string; registrationNo: string; brand: string; model: string; lastReadingDate: string | null }> };
+  }> {
+    // Anomalies: vehicle_logs where odometer dropped or unreasonable jump
+    const anomalies = await this.dataSource.query(`
+      WITH active_versions AS (
+        SELECT DISTINCT ON (vm.id) vm.id as "vehicleMasterId", vm."registrationNo", vv.brand, vv.model
+        FROM vehicle_masters vm
+        JOIN vehicle_versions vv ON vv."vehicleMasterId" = vm.id
+        WHERE vm."deletedAt" IS NULL AND vv."deletedAt" IS NULL AND vv."isActive" = true
+        ORDER BY vm.id, vv."createdAt" DESC
+      ),
+      log_pairs AS (
+        SELECT
+          vl."vehicleId",
+          vl."endOdometerReading"::numeric as current_odo,
+          vl."createdAt",
+          LAG(vl."endOdometerReading"::numeric) OVER (PARTITION BY vl."vehicleId" ORDER BY vl."createdAt") as prev_odo,
+          LAG(vl."createdAt") OVER (PARTITION BY vl."vehicleId" ORDER BY vl."createdAt") as prev_time
+        FROM vehicle_logs vl
+        WHERE vl."deletedAt" IS NULL AND vl."endOdometerReading" IS NOT NULL
+      )
+      SELECT av."vehicleMasterId" as "vehicleId", av."registrationNo", av.brand, av.model,
+        CASE
+          WHEN lp.current_odo < lp.prev_odo THEN 'Odometer rollback: ' || lp.current_odo || ' < previous ' || lp.prev_odo
+          ELSE 'Unusual jump: ' || (lp.current_odo - lp.prev_odo) || ' km in short interval'
+        END as reason,
+        lp."createdAt"::text as "reportedAt"
+      FROM log_pairs lp
+      JOIN active_versions av ON av."vehicleMasterId" = lp."vehicleId"
+      WHERE lp.current_odo < lp.prev_odo
+         OR (lp.current_odo - lp.prev_odo > 1000 AND EXTRACT(EPOCH FROM (lp."createdAt" - lp.prev_time))/3600 < 12)
+      ORDER BY lp."createdAt" DESC
+      LIMIT 20
+    `);
+
+    // No reading in last 2+ days
+    const noReading = await this.dataSource.query(`
+      WITH active_versions AS (
+        SELECT DISTINCT ON (vm.id) vm.id as "vehicleMasterId", vm."registrationNo", vv.brand, vv.model
+        FROM vehicle_masters vm
+        JOIN vehicle_versions vv ON vv."vehicleMasterId" = vm.id
+        WHERE vm."deletedAt" IS NULL AND vv."deletedAt" IS NULL
+          AND vv."isActive" = true AND vv."status" != 'RETIRED'
+        ORDER BY vm.id, vv."createdAt" DESC
+      ),
+      last_readings AS (
+        SELECT "vehicleId", MAX("createdAt") as last_reading
+        FROM vehicle_logs WHERE "deletedAt" IS NULL
+        GROUP BY "vehicleId"
+      )
+      SELECT av."vehicleMasterId" as "vehicleId", av."registrationNo", av.brand, av.model,
+        lr.last_reading::text as "lastReadingDate"
+      FROM active_versions av
+      LEFT JOIN last_readings lr ON lr."vehicleId" = av."vehicleMasterId"
+      WHERE lr.last_reading IS NULL
+         OR lr.last_reading < NOW() - INTERVAL '2 days'
+      ORDER BY lr.last_reading ASC NULLS FIRST
+      LIMIT 20
+    `);
+
+    return {
+      anomalies: { count: anomalies.length, items: anomalies },
+      noReading2Days: { count: noReading.length, items: noReading },
+    };
+  }
+
+  // ==================== NEW: Projects Pipeline ====================
+
+  async getProjectsPipeline(): Promise<{
+    counts: { active: number; upcoming: number; onHold: number; completed: number; total: number };
+    activeContractTotal: number;
+    activeSpendToDate: number;
+    activeNetPL: number;
+  }> {
+    const counts = await this.dataSource.query(`
+      SELECT
+        COUNT(CASE WHEN status = 'ACTIVE' THEN 1 END)::int as active,
+        COUNT(CASE WHEN status = 'UPCOMING' THEN 1 END)::int as upcoming,
+        COUNT(CASE WHEN status = 'ON_HOLD' THEN 1 END)::int as "onHold",
+        COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END)::int as completed,
+        COUNT(*)::int as total
+      FROM sites WHERE "deletedAt" IS NULL
+    `);
+
+    const totals = await this.dataSource.query(`
+      WITH expense_totals AS (
+        SELECT s.id as "siteId", COALESCE(SUM(e.amount::numeric), 0) as spend
+        FROM sites s
+        LEFT JOIN expenses e ON e."siteId" = s.id
+          AND e."deletedAt" IS NULL AND e."isActive" = true
+          AND e."approvalStatus" = 'approved'
+        WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+        GROUP BY s.id
+      )
+      SELECT
+        COALESCE(SUM(s."estimatedBudget"::numeric), 0) as "contractTotal",
+        COALESCE(SUM(et.spend), 0) as "spendToDate",
+        COALESCE(SUM(COALESCE(s."estimatedBudget"::numeric, 0) - COALESCE(et.spend, 0)), 0) as "netPL"
+      FROM sites s
+      LEFT JOIN expense_totals et ON et."siteId" = s.id
+      WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+    `);
+
+    return {
+      counts: counts[0] || { active: 0, upcoming: 0, onHold: 0, completed: 0, total: 0 },
+      activeContractTotal: Number(totals[0]?.contractTotal) || 0,
+      activeSpendToDate: Number(totals[0]?.spendToDate) || 0,
+      activeNetPL: Number(totals[0]?.netPL) || 0,
+    };
+  }
+
+  // ==================== NEW: Ledger Balances ====================
+
+  async getLedgerBalances(): Promise<{
+    expense: {
+      approvals: { pending: number; approved: number; rejected: number; total: number };
+      balances: { opening: number; closing: number };
+      employeeWise: Array<{ userId: string; firstName: string; lastName: string; employeeId: string; net: number; status: 'pay' | 'collect' | 'settled' }>;
+    };
+    fuel: {
+      approvals: { pending: number; approved: number; rejected: number; total: number };
+      balances: { opening: number; closing: number };
+      employeeWise: Array<{ userId: string; firstName: string; lastName: string; employeeId: string; net: number; status: 'pay' | 'collect' | 'settled' }>;
+    };
+  }> {
+    const today = new Date();
+    const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+
+    // Expense approvals counts (all-time)
+    const expApprovals = await this.dataSource.query(`
+      SELECT
+        COUNT(CASE WHEN "approvalStatus" = 'pending' THEN 1 END)::int as pending,
+        COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int as approved,
+        COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int as rejected,
+        COUNT(*)::int as total
+      FROM expenses WHERE "deletedAt" IS NULL AND "isActive" = true
+    `);
+
+    // Expense balances: opening = before current month, closing = total
+    const expBalances = await this.dataSource.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN "expenseDate" < $1 THEN
+          CASE WHEN "transactionType" = 'credit' THEN amount::numeric ELSE -amount::numeric END
+        END), 0) as opening,
+        COALESCE(SUM(
+          CASE WHEN "transactionType" = 'credit' THEN amount::numeric ELSE -amount::numeric END
+        ), 0) as closing
+      FROM expenses
+      WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+    `, [monthStart]);
+
+    // Expense employee-wise net
+    const expByUser = await this.dataSource.query(`
+      SELECT u.id as "userId", u."firstName", u."lastName", u."employeeId",
+        COALESCE(SUM(
+          CASE WHEN e."transactionType" = 'credit' THEN e.amount::numeric ELSE -e.amount::numeric END
+        ), 0) as net
+      FROM users u
+      LEFT JOIN expenses e ON e."userId" = u.id
+        AND e."deletedAt" IS NULL AND e."isActive" = true AND e."approvalStatus" = 'approved'
+      WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+      GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
+      HAVING COALESCE(SUM(
+        CASE WHEN e."transactionType" = 'credit' THEN e.amount::numeric ELSE -e.amount::numeric END
+      ), 0) != 0
+      ORDER BY ABS(COALESCE(SUM(
+        CASE WHEN e."transactionType" = 'credit' THEN e.amount::numeric ELSE -e.amount::numeric END
+      ), 0)) DESC
+      LIMIT 50
+    `);
+
+    // Fuel approvals
+    const fuelApprovals = await this.dataSource.query(`
+      SELECT
+        COUNT(CASE WHEN "approvalStatus" = 'pending' THEN 1 END)::int as pending,
+        COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int as approved,
+        COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int as rejected,
+        COUNT(*)::int as total
+      FROM fuel_expenses WHERE "deletedAt" IS NULL AND "isActive" = true
+    `);
+
+    // Fuel balances (uses fillDate + fuelAmount)
+    const fuelBalances = await this.dataSource.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN "fillDate" < $1 THEN
+          CASE WHEN "transactionType" = 'credit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
+        END), 0) as opening,
+        COALESCE(SUM(
+          CASE WHEN "transactionType" = 'credit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
+        ), 0) as closing
+      FROM fuel_expenses
+      WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+    `, [monthStart]);
+
+    // Fuel employee-wise net
+    const fuelByUser = await this.dataSource.query(`
+      SELECT u.id as "userId", u."firstName", u."lastName", u."employeeId",
+        COALESCE(SUM(
+          CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END
+        ), 0) as net
+      FROM users u
+      LEFT JOIN fuel_expenses fe ON fe."userId" = u.id
+        AND fe."deletedAt" IS NULL AND fe."isActive" = true AND fe."approvalStatus" = 'approved'
+      WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+      GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
+      HAVING COALESCE(SUM(
+        CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END
+      ), 0) != 0
+      ORDER BY ABS(COALESCE(SUM(
+        CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END
+      ), 0)) DESC
+      LIMIT 50
+    `);
+
+    const mapStatus = (net: number): 'pay' | 'collect' | 'settled' => {
+      if (net > 0) return 'pay';
+      if (net < 0) return 'collect';
+      return 'settled';
+    };
+
+    return {
+      expense: {
+        approvals: expApprovals[0] || { pending: 0, approved: 0, rejected: 0, total: 0 },
+        balances: {
+          opening: Number(expBalances[0]?.opening) || 0,
+          closing: Number(expBalances[0]?.closing) || 0,
+        },
+        employeeWise: expByUser.map((u: any) => ({
+          userId: u.userId, firstName: u.firstName, lastName: u.lastName, employeeId: u.employeeId,
+          net: Number(u.net), status: mapStatus(Number(u.net)),
+        })),
+      },
+      fuel: {
+        approvals: fuelApprovals[0] || { pending: 0, approved: 0, rejected: 0, total: 0 },
+        balances: {
+          opening: Number(fuelBalances[0]?.opening) || 0,
+          closing: Number(fuelBalances[0]?.closing) || 0,
+        },
+        employeeWise: fuelByUser.map((u: any) => ({
+          userId: u.userId, firstName: u.firstName, lastName: u.lastName, employeeId: u.employeeId,
+          net: Number(u.net), status: mapStatus(Number(u.net)),
+        })),
+      },
+    };
+  }
+
+  // ==================== NEW: Cron Health ====================
+
+  async getCronHealth(): Promise<{
+    summary: { total: number; success: number; failed: number; running: number };
+    items: Array<{
+      cronName: string;
+      lastRunAt: string | null;
+      status: string | null;
+      durationMs: number | null;
+      errorMessage: string | null;
+    }>;
+  }> {
+    // Get latest log per cron job name
+    const items = await this.dataSource.query(`
+      SELECT DISTINCT ON ("jobName") "jobName" as "cronName",
+        "startedAt"::text as "lastRunAt",
+        status,
+        "durationMs",
+        "errorMessage"
+      FROM cron_logs
+      ORDER BY "jobName", "startedAt" DESC
+    `);
+
+    const summary = items.reduce(
+      (acc: any, row: any) => {
+        acc.total++;
+        if (row.status === 'SUCCESS') acc.success++;
+        else if (row.status === 'FAILED') acc.failed++;
+        else if (row.status === 'RUNNING') acc.running++;
+        return acc;
+      },
+      { total: 0, success: 0, failed: 0, running: 0 },
+    );
+
+    return {
+      summary,
+      items: items.map((r: any) => ({
+        cronName: r.cronName,
+        lastRunAt: r.lastRunAt,
+        status: r.status,
+        durationMs: r.durationMs ? Number(r.durationMs) : null,
+        errorMessage: r.errorMessage,
+      })),
+    };
+  }
+
+  // ==================== NEW: Leave Exhaustion ====================
+
+  async getLeaveExhaustion(): Promise<{
+    threshold: number;
+    count: number;
+    items: Array<{
+      userId: string;
+      firstName: string;
+      lastName: string;
+      employeeId: string;
+      leaveCategory: string;
+      remaining: number;
+      totalAllocated: number;
+      consumed: number;
+    }>;
+  }> {
+    const today = new Date();
+    const fyMonth = today.getMonth() >= 3 ? today.getMonth() - 2 : today.getMonth() + 10;
+    const fyStartYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+    const financialYear = `${fyStartYear}-${fyStartYear + 1}`;
+
+    const THRESHOLD = 2;
+
+    const items = await this.dataSource.query(
+      `
+      SELECT u.id as "userId", u."firstName", u."lastName", u."employeeId",
+        lb."leaveCategory",
+        lb."totalAllocated"::numeric as "totalAllocated",
+        lb.consumed::numeric as consumed,
+        (lb."totalAllocated"::numeric + lb."carriedForward"::numeric + lb.adjusted::numeric - lb.consumed::numeric) as remaining
+      FROM leave_balances lb
+      JOIN users u ON u.id = lb."userId"
+      WHERE lb."deletedAt" IS NULL
+        AND lb."financialYear" = $1
+        AND u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+        AND (lb."totalAllocated"::numeric + lb."carriedForward"::numeric + lb.adjusted::numeric - lb.consumed::numeric) <= $2
+      ORDER BY remaining ASC, u."firstName"
+      `,
+      [financialYear, THRESHOLD],
+    );
+
+    return {
+      threshold: THRESHOLD,
+      count: items.length,
+      items: items.map((r: any) => ({
+        userId: r.userId,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        employeeId: r.employeeId,
+        leaveCategory: r.leaveCategory,
+        remaining: Number(r.remaining),
+        totalAllocated: Number(r.totalAllocated),
+        consumed: Number(r.consumed),
+      })),
+    };
+    void fyMonth;
+  }
+
+  // ==================== NEW: Payroll Status ====================
+
+  async getPayrollStatus(): Promise<{
+    currentMonth: { month: number; year: number; label: string };
+    counts: { generated: number; pending: number; paid: number; total: number; activeEmployees: number };
+    lastGeneratedAt: string | null;
+  }> {
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
+
+    const counts = await this.dataSource.query(
+      `
+      SELECT
+        COUNT(*)::int as generated,
+        COUNT(CASE WHEN status = 'PAID' THEN 1 END)::int as paid,
+        COUNT(CASE WHEN status != 'PAID' THEN 1 END)::int as pending,
+        MAX("createdAt")::text as "lastGeneratedAt"
+      FROM payroll
+      WHERE "deletedAt" IS NULL AND month = $1 AND year = $2
+      `,
+      [month, year],
+    );
+
+    const empCount = await this.dataSource.query(
+      `SELECT COUNT(*)::int as c FROM users WHERE "deletedAt" IS NULL AND status = 'ACTIVE'`,
+    );
+
+    const monthLabel = today.toLocaleString('en-US', { month: 'long' });
+
+    return {
+      currentMonth: { month, year, label: `${monthLabel} ${year}` },
+      counts: {
+        generated: counts[0]?.generated || 0,
+        pending: counts[0]?.pending || 0,
+        paid: counts[0]?.paid || 0,
+        total: empCount[0]?.c || 0,
+        activeEmployees: empCount[0]?.c || 0,
+      },
+      lastGeneratedAt: counts[0]?.lastGeneratedAt || null,
+    };
   }
 }
