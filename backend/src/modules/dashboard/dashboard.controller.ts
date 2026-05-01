@@ -61,7 +61,9 @@ export class DashboardController {
   }
 
   @Get('leave-summary')
-  @ApiOperation({ summary: 'Get leave summary (pending approvals, current month leaves, upcoming)' })
+  @ApiOperation({
+    summary: 'Get leave summary (pending approvals, current month leaves, upcoming)',
+  })
   async getLeaveSummary(@Query() query: GetDashboardDto, @Request() req: any) {
     this.assertAdminAccess(req);
     const dateRange = this.dashboardService.getDateRange(query);
@@ -109,6 +111,24 @@ export class DashboardController {
   }
 
   // ==================== New Endpoints ====================
+
+  @Get('asset-summary')
+  @ApiOperation({
+    summary: 'Get asset stock counts by status (total, available, assigned, lost, retired)',
+  })
+  async getAssetSummary(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getAssetSummary();
+  }
+
+  @Get('vehicle-summary')
+  @ApiOperation({
+    summary: 'Get vehicle fleet counts by status (total, available, assigned, retired)',
+  })
+  async getVehicleSummary(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.dashboardService.getVehicleSummary();
+  }
 
   @Get('vehicle-readings')
   @ApiOperation({

@@ -653,10 +653,7 @@ export class DashboardService {
     };
   }
 
-  async getExpenses(dateRange: {
-    startDate: string;
-    endDate: string;
-  }): Promise<ExpenseData> {
+  async getExpenses(dateRange: { startDate: string; endDate: string }): Promise<ExpenseData> {
     const [summary, categoryData, topSpenders, pendingApprovals] = await Promise.all([
       this.executeQuery(queries.getExpenseSummaryQuery(dateRange.startDate, dateRange.endDate)),
       this.executeQuery(
@@ -1051,8 +1048,27 @@ export class DashboardService {
   // ==================== NEW: Vehicle Readings ====================
 
   async getVehicleReadings(): Promise<{
-    anomalies: { count: number; items: Array<{ vehicleId: string; registrationNo: string; brand: string; model: string; reason: string; reportedAt: string }> };
-    noReading2Days: { count: number; items: Array<{ vehicleId: string; registrationNo: string; brand: string; model: string; lastReadingDate: string | null }> };
+    anomalies: {
+      count: number;
+      items: Array<{
+        vehicleId: string;
+        registrationNo: string;
+        brand: string;
+        model: string;
+        reason: string;
+        reportedAt: string;
+      }>;
+    };
+    noReading2Days: {
+      count: number;
+      items: Array<{
+        vehicleId: string;
+        registrationNo: string;
+        brand: string;
+        model: string;
+        lastReadingDate: string | null;
+      }>;
+    };
   }> {
     // Anomalies: vehicle_logs where odometer dropped or unreasonable jump
     const anomalies = await this.dataSource.query(`
@@ -1118,6 +1134,62 @@ export class DashboardService {
     };
   }
 
+  // ==================== NEW: Asset Summary ====================
+
+  async getAssetSummary(): Promise<{
+    total: number;
+    available: number;
+    assigned: number;
+    lost: number;
+    retired: number;
+    underMaintenance: number;
+  }> {
+    const rows = await this.dataSource.query(`
+      SELECT av.status, COUNT(*)::int as count
+      FROM asset_masters am
+      JOIN asset_versions av ON av."assetMasterId" = am.id AND av."isActive" = true
+      WHERE am."deletedAt" IS NULL AND av."deletedAt" IS NULL
+      GROUP BY av.status
+    `);
+    const map: Record<string, number> = {};
+    for (const r of rows) map[r.status] = Number(r.count);
+    const total = Object.values(map).reduce((s: number, v: number) => s + v, 0);
+    return {
+      total,
+      available: map['AVAILABLE'] || 0,
+      assigned: map['ASSIGNED'] || 0,
+      lost: map['LOST'] || 0,
+      retired: map['RETIRED'] || 0,
+      underMaintenance: map['UNDER_MAINTENANCE'] || 0,
+    };
+  }
+
+  // ==================== NEW: Vehicle Summary ====================
+
+  async getVehicleSummary(): Promise<{
+    total: number;
+    available: number;
+    assigned: number;
+    retired: number;
+  }> {
+    const rows = await this.dataSource.query(`
+      SELECT vv.status, COUNT(*)::int as count
+      FROM vehicle_masters vm
+      JOIN vehicle_versions vv ON vv."vehicleMasterId" = vm.id AND vv."isActive" = true
+      WHERE vm."deletedAt" IS NULL AND vv."deletedAt" IS NULL
+      GROUP BY vv.status
+    `);
+    const map: Record<string, number> = {};
+    for (const r of rows) map[r.status] = Number(r.count);
+    const total = Object.values(map).reduce((s: number, v: number) => s + v, 0);
+    return {
+      total,
+      available: map['AVAILABLE'] || 0,
+      assigned: map['ASSIGNED'] || 0,
+      retired: map['RETIRED'] || 0,
+    };
+  }
+
   // ==================== NEW: Projects Pipeline ====================
 
   async getProjectsPipeline(): Promise<{
@@ -1125,6 +1197,15 @@ export class DashboardService {
     activeContractTotal: number;
     activeSpendToDate: number;
     activeNetPL: number;
+    activeProjects: Array<{
+      id: string;
+      name: string;
+      projectCode: string | null;
+      contractAmount: number;
+      spendToDate: number;
+      netPL: number;
+      progressPercent: number;
+    }>;
   }> {
     const counts = await this.dataSource.query(`
       SELECT
@@ -1136,30 +1217,67 @@ export class DashboardService {
       FROM sites WHERE "deletedAt" IS NULL
     `);
 
-    const totals = await this.dataSource.query(`
-      WITH expense_totals AS (
-        SELECT s.id as "siteId", COALESCE(SUM(e.amount::numeric), 0) as spend
+    const [totals, projects] = await Promise.all([
+      this.dataSource.query(`
+        WITH expense_totals AS (
+          SELECT s.id as "siteId", COALESCE(SUM(e.amount::numeric), 0) as spend
+          FROM sites s
+          LEFT JOIN expenses e ON e."siteId" = s.id
+            AND e."deletedAt" IS NULL AND e."isActive" = true
+            AND e."approvalStatus" = 'approved'
+          WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+          GROUP BY s.id
+        )
+        SELECT
+          COALESCE(SUM(s."estimatedBudget"::numeric), 0) as "contractTotal",
+          COALESCE(SUM(et.spend), 0) as "spendToDate",
+          COALESCE(SUM(COALESCE(s."estimatedBudget"::numeric, 0) - COALESCE(et.spend, 0)), 0) as "netPL"
         FROM sites s
-        LEFT JOIN expenses e ON e."siteId" = s.id
-          AND e."deletedAt" IS NULL AND e."isActive" = true
-          AND e."approvalStatus" = 'approved'
+        LEFT JOIN expense_totals et ON et."siteId" = s.id
         WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
-        GROUP BY s.id
-      )
-      SELECT
-        COALESCE(SUM(s."estimatedBudget"::numeric), 0) as "contractTotal",
-        COALESCE(SUM(et.spend), 0) as "spendToDate",
-        COALESCE(SUM(COALESCE(s."estimatedBudget"::numeric, 0) - COALESCE(et.spend, 0)), 0) as "netPL"
-      FROM sites s
-      LEFT JOIN expense_totals et ON et."siteId" = s.id
-      WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
-    `);
+      `),
+      this.dataSource.query(`
+        WITH expense_totals AS (
+          SELECT s.id as "siteId", COALESCE(SUM(e.amount::numeric), 0) as spend
+          FROM sites s
+          LEFT JOIN expenses e ON e."siteId" = s.id
+            AND e."deletedAt" IS NULL AND e."isActive" = true
+            AND e."approvalStatus" = 'approved'
+          WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+          GROUP BY s.id
+        )
+        SELECT
+          s.id,
+          s.name,
+          s."projectCode",
+          COALESCE(s."estimatedBudget"::numeric, 0) as "contractAmount",
+          COALESCE(et.spend, 0) as "spendToDate",
+          COALESCE(s."estimatedBudget"::numeric, 0) - COALESCE(et.spend, 0) as "netPL",
+          CASE
+            WHEN COALESCE(s."estimatedBudget"::numeric, 0) = 0 THEN 0
+            ELSE ROUND((COALESCE(et.spend, 0) / s."estimatedBudget"::numeric) * 100)
+          END as "progressPercent"
+        FROM sites s
+        LEFT JOIN expense_totals et ON et."siteId" = s.id
+        WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+        ORDER BY s."createdAt" DESC
+      `),
+    ]);
 
     return {
       counts: counts[0] || { active: 0, upcoming: 0, onHold: 0, completed: 0, total: 0 },
       activeContractTotal: Number(totals[0]?.contractTotal) || 0,
       activeSpendToDate: Number(totals[0]?.spendToDate) || 0,
       activeNetPL: Number(totals[0]?.netPL) || 0,
+      activeProjects: projects.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        projectCode: p.projectCode || null,
+        contractAmount: Number(p.contractAmount),
+        spendToDate: Number(p.spendToDate),
+        netPL: Number(p.netPL),
+        progressPercent: Number(p.progressPercent),
+      })),
     };
   }
 
@@ -1186,7 +1304,8 @@ export class DashboardService {
         `),
 
         // Expense balances (approved only)
-        this.dataSource.query(`
+        this.dataSource.query(
+          `
           SELECT
             COALESCE(SUM(CASE WHEN "expenseDate" < $1
               THEN CASE WHEN "transactionType" = 'debit' THEN amount::numeric ELSE -amount::numeric END
@@ -1196,7 +1315,9 @@ export class DashboardService {
             ), 0) AS closing
           FROM expenses
           WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
-        `, [monthStart]),
+        `,
+          [monthStart],
+        ),
 
         // Expense employee-wise net (approved only)
         this.dataSource.query(`
@@ -1224,7 +1345,8 @@ export class DashboardService {
         `),
 
         // Fuel balances (approved only)
-        this.dataSource.query(`
+        this.dataSource.query(
+          `
           SELECT
             COALESCE(SUM(CASE WHEN "fillDate" < $1
               THEN CASE WHEN "transactionType" = 'debit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
@@ -1234,7 +1356,9 @@ export class DashboardService {
             ), 0) AS closing
           FROM fuel_expenses
           WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
-        `, [monthStart]),
+        `,
+          [monthStart],
+        ),
 
         // Fuel employee-wise net (approved only)
         this.dataSource.query(`
@@ -1272,9 +1396,7 @@ export class DashboardService {
       return {
         payable: {
           count: mapped.filter((u) => u.status === 'payable').length,
-          totalAmount: mapped
-            .filter((u) => u.status === 'payable')
-            .reduce((s, u) => s + u.net, 0),
+          totalAmount: mapped.filter((u) => u.status === 'payable').reduce((s, u) => s + u.net, 0),
           employees: mapped.filter((u) => u.status === 'payable'),
         },
         overpaid: {
@@ -1415,7 +1537,13 @@ export class DashboardService {
 
   async getPayrollStatus(): Promise<{
     currentMonth: { month: number; year: number; label: string };
-    counts: { generated: number; pending: number; paid: number; total: number; activeEmployees: number };
+    counts: {
+      generated: number;
+      pending: number;
+      paid: number;
+      total: number;
+      activeEmployees: number;
+    };
     lastGeneratedAt: string | null;
   }> {
     const today = new Date();
