@@ -73,6 +73,14 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogEndOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogOther: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  orgFiles: [
+    ALLOWED_FILE_CATEGORY.IMAGE,
+    ALLOWED_FILE_CATEGORY.PDF,
+    ALLOWED_FILE_CATEGORY.TXT,
+    ALLOWED_FILE_CATEGORY.CSV,
+    ALLOWED_FILE_CATEGORY.JSON,
+    ALLOWED_FILE_CATEGORY.HTML,
+  ],
 };
 
 export const FOLDER_NAME_PREFIX = 'user_';
@@ -129,6 +137,8 @@ export const DATABASE_FIELD_NAMES = {
   vehicleLogOther: 'otherFiles',
   // DSR files
   dsrFiles: 'fileKeys',
+  // Org files
+  orgFiles: 'orgFileKeys',
 };
 
 export const FILE_ERRORS = {
@@ -151,4 +161,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   SITE_DOCUMENT_FILES: 'site-document-files',
   DSR_FILES: 'dsr-files',
   VEHICLE_LOG_FILES: 'vehicle-log-files',
+  ORG_FILES: 'org-files',
 };
