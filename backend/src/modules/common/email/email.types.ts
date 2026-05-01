@@ -127,6 +127,18 @@ export interface IEmailDataValues {
   failedAt?: string;
   durationMs?: number;
   serverName?: string;
+
+  // Asset Lost / Recovered
+  assetId?: string;
+  assetName?: string;
+  serialNumber?: string;
+  actorName?: string;
+  lastSeenDate?: string;
+  lastSeenLocation?: string;
+  markedOn?: string;
+  recoveryAmount?: string;
+  recoveredOn?: string;
+  refundedAmount?: string;
 }
 
 export interface VehicleDocumentEmailItem {

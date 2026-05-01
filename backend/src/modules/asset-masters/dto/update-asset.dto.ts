@@ -96,6 +96,11 @@ export class UpdateAssetDto {
   @IsDateString()
   purchaseDate?: string;
 
+  @ApiProperty({ description: 'Purchase price (in INR)', example: '15000', required: false })
+  @IsOptional()
+  @IsString()
+  purchasePrice?: string;
+
   @ApiProperty({ description: 'Vendor name', example: 'HP India Sales Pvt Ltd', required: false })
   @IsOptional()
   @IsString()

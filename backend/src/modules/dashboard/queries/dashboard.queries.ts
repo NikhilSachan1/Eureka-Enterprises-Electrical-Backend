@@ -347,6 +347,29 @@ export const getPendingExpenseApprovalsQuery = (limit = 10) => ({
   params: ['pending', limit],
 });
 
+export const getPendingFuelExpenseApprovalsQuery = (limit = 10) => ({
+  query: `
+    SELECT
+      fe.id,
+      fe."userId",
+      CONCAT(u."firstName", ' ', u."lastName") as "userName",
+      u."profilePicture" as "userProfilePic",
+      fe."fuelAmount" as "amount",
+      fe."description",
+      fe."fillDate",
+      fe."createdAt" as "claimedAt",
+      EXTRACT(DAY FROM NOW() - fe."createdAt")::int as "aging"
+    FROM fuel_expenses fe
+    JOIN users u ON u.id = fe."userId"
+    WHERE fe."approvalStatus" = $1
+      AND fe."deletedAt" IS NULL
+      AND fe."isActive" = true
+    ORDER BY fe."createdAt" ASC
+    LIMIT $2
+  `,
+  params: ['pending', limit],
+});
+
 // ==================== Employees Queries ====================
 
 export const getNewJoinersQuery = (startDate: string, endDate: string) => ({

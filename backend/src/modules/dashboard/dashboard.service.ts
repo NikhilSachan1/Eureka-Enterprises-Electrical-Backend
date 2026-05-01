@@ -887,6 +887,18 @@ export class DashboardService {
       }
     }
 
+    // Lost assets count (status = LOST on active version)
+    const lostCountRow = await this.dataSource.query(
+      `SELECT COUNT(*)::int as count
+       FROM asset_versions av
+       INNER JOIN asset_masters am ON am.id = av."assetMasterId"
+       WHERE av."isActive" = true
+         AND av."deletedAt" IS NULL
+         AND am."deletedAt" IS NULL
+         AND av.status = 'LOST'`,
+    );
+    const lostAssetsTotal = Number(lostCountRow[0]?.count) || 0;
+
     return {
       critical,
       warning,
@@ -897,17 +909,23 @@ export class DashboardService {
         vehicleServiceDue: { overdue: serviceOverdue, dueSoon: serviceDueSoon },
         assetCalibration: { overdue: calibrationOverdue, dueSoon: calibrationDueSoon },
         assetWarranty: { expired: warrantyExpired, expiringSoon: warrantyExpiringSoon },
+        lostAssets: { total: lostAssetsTotal },
         total: { critical: critical.length, warning: warning.length, info: info.length },
       },
     };
   }
 
   async getApprovals(): Promise<ApprovalsData> {
-    const [leaveApprovals, attendanceApprovals, expenseApprovals] = await Promise.all([
-      this.executeQuery(queries.getPendingLeaveApprovalsQuery(20)),
-      this.executeQuery(queries.getPendingAttendanceApprovalsQuery(20)),
-      this.executeQuery(queries.getPendingExpenseApprovalsQuery(20)),
-    ]);
+    const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals] =
+      await Promise.all([
+        this.executeQuery(queries.getPendingLeaveApprovalsQuery(20)),
+        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(20)),
+        this.executeQuery(queries.getPendingExpenseApprovalsQuery(20)),
+        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(20)),
+      ]);
+
+    //TODO: temporary for now
+    const siteDocumentsApprovals = [];
 
     const calculateAging = (items: any[]) => ({
       days1: items.filter((i) => i.aging <= 1).length,
@@ -931,11 +949,28 @@ export class DashboardService {
         items: expenseApprovals,
         aging: calculateAging(expenseApprovals),
       },
+      fuelExpense: {
+        count: fuelExpenseApprovals.length,
+        items: fuelExpenseApprovals,
+        aging: calculateAging(fuelExpenseApprovals),
+      },
+      siteDocuments: {
+        count: siteDocumentsApprovals.length,
+        items: siteDocumentsApprovals,
+        aging: calculateAging(siteDocumentsApprovals),
+      },
       totals: {
         leave: leaveApprovals.length,
         attendance: attendanceApprovals.length,
         expense: expenseApprovals.length,
-        total: leaveApprovals.length + attendanceApprovals.length + expenseApprovals.length,
+        fuelExpense: fuelExpenseApprovals.length,
+        siteDocuments: siteDocumentsApprovals.length,
+        total:
+          leaveApprovals.length +
+          attendanceApprovals.length +
+          expenseApprovals.length +
+          fuelExpenseApprovals.length +
+          siteDocumentsApprovals.length,
       },
     };
   }
@@ -1130,111 +1165,126 @@ export class DashboardService {
 
   // ==================== NEW: Ledger Balances ====================
 
-  async getLedgerBalances(): Promise<{
-    expense: {
-      approvals: { pending: number; approved: number; rejected: number; total: number };
-      balances: { opening: number; closing: number };
-      employeeWise: Array<{ userId: string; firstName: string; lastName: string; employeeId: string; net: number; status: 'pay' | 'collect' | 'settled' }>;
-    };
-    fuel: {
-      approvals: { pending: number; approved: number; rejected: number; total: number };
-      balances: { opening: number; closing: number };
-      employeeWise: Array<{ userId: string; firstName: string; lastName: string; employeeId: string; net: number; status: 'pay' | 'collect' | 'settled' }>;
-    };
-  }> {
+  async getLedgerBalances() {
     const today = new Date();
     const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // Expense approvals counts (all-time)
-    const expApprovals = await this.dataSource.query(`
-      SELECT
-        COUNT(CASE WHEN "approvalStatus" = 'pending' THEN 1 END)::int as pending,
-        COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int as approved,
-        COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int as rejected,
-        COUNT(*)::int as total
-      FROM expenses WHERE "deletedAt" IS NULL AND "isActive" = true
-    `);
+    // debit = company owes employee (+), credit = company paid employee (-)
+    const EXP_NET = `CASE WHEN e."transactionType" = 'debit' THEN e.amount::numeric ELSE -e.amount::numeric END`;
+    const FUEL_NET = `CASE WHEN fe."transactionType" = 'debit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END`;
 
-    // Expense balances: opening = before current month, closing = total
-    const expBalances = await this.dataSource.query(`
-      SELECT
-        COALESCE(SUM(CASE WHEN "expenseDate" < $1 THEN
-          CASE WHEN "transactionType" = 'credit' THEN amount::numeric ELSE -amount::numeric END
-        END), 0) as opening,
-        COALESCE(SUM(
-          CASE WHEN "transactionType" = 'credit' THEN amount::numeric ELSE -amount::numeric END
-        ), 0) as closing
-      FROM expenses
-      WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
-    `, [monthStart]);
+    const [expApprovals, expBalances, expByUser, fuelApprovals, fuelBalances, fuelByUser] =
+      await Promise.all([
+        // Expense approval counts
+        this.dataSource.query(`
+          SELECT
+            COUNT(CASE WHEN "approvalStatus" = 'pending'  THEN 1 END)::int AS pending,
+            COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int AS approved,
+            COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int AS rejected,
+            COUNT(*)::int AS total
+          FROM expenses WHERE "deletedAt" IS NULL AND "isActive" = true
+        `),
 
-    // Expense employee-wise net
-    const expByUser = await this.dataSource.query(`
-      SELECT u.id as "userId", u."firstName", u."lastName", u."employeeId",
-        COALESCE(SUM(
-          CASE WHEN e."transactionType" = 'credit' THEN e.amount::numeric ELSE -e.amount::numeric END
-        ), 0) as net
-      FROM users u
-      LEFT JOIN expenses e ON e."userId" = u.id
-        AND e."deletedAt" IS NULL AND e."isActive" = true AND e."approvalStatus" = 'approved'
-      WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
-      GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
-      HAVING COALESCE(SUM(
-        CASE WHEN e."transactionType" = 'credit' THEN e.amount::numeric ELSE -e.amount::numeric END
-      ), 0) != 0
-      ORDER BY ABS(COALESCE(SUM(
-        CASE WHEN e."transactionType" = 'credit' THEN e.amount::numeric ELSE -e.amount::numeric END
-      ), 0)) DESC
-      LIMIT 50
-    `);
+        // Expense balances (approved only)
+        this.dataSource.query(`
+          SELECT
+            COALESCE(SUM(CASE WHEN "expenseDate" < $1
+              THEN CASE WHEN "transactionType" = 'debit' THEN amount::numeric ELSE -amount::numeric END
+            END), 0) AS opening,
+            COALESCE(SUM(
+              CASE WHEN "transactionType" = 'debit' THEN amount::numeric ELSE -amount::numeric END
+            ), 0) AS closing
+          FROM expenses
+          WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+        `, [monthStart]),
 
-    // Fuel approvals
-    const fuelApprovals = await this.dataSource.query(`
-      SELECT
-        COUNT(CASE WHEN "approvalStatus" = 'pending' THEN 1 END)::int as pending,
-        COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int as approved,
-        COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int as rejected,
-        COUNT(*)::int as total
-      FROM fuel_expenses WHERE "deletedAt" IS NULL AND "isActive" = true
-    `);
+        // Expense employee-wise net (approved only)
+        this.dataSource.query(`
+          SELECT
+            u.id AS "userId", u."firstName", u."lastName", u."employeeId",
+            COALESCE(SUM(${EXP_NET}), 0) AS net
+          FROM users u
+          LEFT JOIN expenses e ON e."userId" = u.id
+            AND e."deletedAt" IS NULL AND e."isActive" = true AND e."approvalStatus" = 'approved'
+          WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+          GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
+          HAVING COALESCE(SUM(${EXP_NET}), 0) != 0
+          ORDER BY ABS(COALESCE(SUM(${EXP_NET}), 0)) DESC
+          LIMIT 50
+        `),
 
-    // Fuel balances (uses fillDate + fuelAmount)
-    const fuelBalances = await this.dataSource.query(`
-      SELECT
-        COALESCE(SUM(CASE WHEN "fillDate" < $1 THEN
-          CASE WHEN "transactionType" = 'credit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
-        END), 0) as opening,
-        COALESCE(SUM(
-          CASE WHEN "transactionType" = 'credit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
-        ), 0) as closing
-      FROM fuel_expenses
-      WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
-    `, [monthStart]);
+        // Fuel approval counts
+        this.dataSource.query(`
+          SELECT
+            COUNT(CASE WHEN "approvalStatus" = 'pending'  THEN 1 END)::int AS pending,
+            COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int AS approved,
+            COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int AS rejected,
+            COUNT(*)::int AS total
+          FROM fuel_expenses WHERE "deletedAt" IS NULL AND "isActive" = true
+        `),
 
-    // Fuel employee-wise net
-    const fuelByUser = await this.dataSource.query(`
-      SELECT u.id as "userId", u."firstName", u."lastName", u."employeeId",
-        COALESCE(SUM(
-          CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END
-        ), 0) as net
-      FROM users u
-      LEFT JOIN fuel_expenses fe ON fe."userId" = u.id
-        AND fe."deletedAt" IS NULL AND fe."isActive" = true AND fe."approvalStatus" = 'approved'
-      WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
-      GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
-      HAVING COALESCE(SUM(
-        CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END
-      ), 0) != 0
-      ORDER BY ABS(COALESCE(SUM(
-        CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END
-      ), 0)) DESC
-      LIMIT 50
-    `);
+        // Fuel balances (approved only)
+        this.dataSource.query(`
+          SELECT
+            COALESCE(SUM(CASE WHEN "fillDate" < $1
+              THEN CASE WHEN "transactionType" = 'debit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
+            END), 0) AS opening,
+            COALESCE(SUM(
+              CASE WHEN "transactionType" = 'debit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
+            ), 0) AS closing
+          FROM fuel_expenses
+          WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+        `, [monthStart]),
 
-    const mapStatus = (net: number): 'pay' | 'collect' | 'settled' => {
-      if (net > 0) return 'pay';
-      if (net < 0) return 'collect';
+        // Fuel employee-wise net (approved only)
+        this.dataSource.query(`
+          SELECT
+            u.id AS "userId", u."firstName", u."lastName", u."employeeId",
+            COALESCE(SUM(${FUEL_NET}), 0) AS net
+          FROM users u
+          LEFT JOIN fuel_expenses fe ON fe."userId" = u.id
+            AND fe."deletedAt" IS NULL AND fe."isActive" = true AND fe."approvalStatus" = 'approved'
+          WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+          GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
+          HAVING COALESCE(SUM(${FUEL_NET}), 0) != 0
+          ORDER BY ABS(COALESCE(SUM(${FUEL_NET}), 0)) DESC
+          LIMIT 50
+        `),
+      ]);
+
+    // net > 0 = company owes employee (PAYABLE)
+    // net < 0 = company paid more than owed (OVERPAID)
+    const mapStatus = (net: number): 'payable' | 'overpaid' | 'settled' => {
+      if (net > 0) return 'payable';
+      if (net < 0) return 'overpaid';
       return 'settled';
+    };
+
+    const buildSummary = (rows: any[]) => {
+      const mapped = rows.map((u: any) => ({
+        userId: u.userId,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        employeeId: u.employeeId,
+        net: Number(u.net),
+        status: mapStatus(Number(u.net)),
+      }));
+      return {
+        payable: {
+          count: mapped.filter((u) => u.status === 'payable').length,
+          totalAmount: mapped
+            .filter((u) => u.status === 'payable')
+            .reduce((s, u) => s + u.net, 0),
+          employees: mapped.filter((u) => u.status === 'payable'),
+        },
+        overpaid: {
+          count: mapped.filter((u) => u.status === 'overpaid').length,
+          totalAmount: mapped
+            .filter((u) => u.status === 'overpaid')
+            .reduce((s, u) => s + Math.abs(u.net), 0),
+          employees: mapped.filter((u) => u.status === 'overpaid'),
+        },
+      };
     };
 
     return {
@@ -1244,10 +1294,7 @@ export class DashboardService {
           opening: Number(expBalances[0]?.opening) || 0,
           closing: Number(expBalances[0]?.closing) || 0,
         },
-        employeeWise: expByUser.map((u: any) => ({
-          userId: u.userId, firstName: u.firstName, lastName: u.lastName, employeeId: u.employeeId,
-          net: Number(u.net), status: mapStatus(Number(u.net)),
-        })),
+        ...buildSummary(expByUser),
       },
       fuel: {
         approvals: fuelApprovals[0] || { pending: 0, approved: 0, rejected: 0, total: 0 },
@@ -1255,10 +1302,7 @@ export class DashboardService {
           opening: Number(fuelBalances[0]?.opening) || 0,
           closing: Number(fuelBalances[0]?.closing) || 0,
         },
-        employeeWise: fuelByUser.map((u: any) => ({
-          userId: u.userId, firstName: u.firstName, lastName: u.lastName, employeeId: u.employeeId,
-          net: Number(u.net), status: mapStatus(Number(u.net)),
-        })),
+        ...buildSummary(fuelByUser),
       },
     };
   }

@@ -4,3 +4,5 @@ export * from './update-asset.dto';
 export * from './asset-action.dto';
 export * from './bulk-delete-asset.dto';
 export * from './asset-list-response.dto';
+export * from './mark-lost.dto';
+export * from './mark-recovered.dto';

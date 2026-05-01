@@ -1,6 +1,7 @@
 import { AssetQueryDto } from '../dto/asset-query.dto';
 import {
   ASSET_SORT_FIELD_MAPPING,
+  AssetEventTypes,
   AssetType,
   AssetStatus,
   AssetFileTypes,
@@ -8,6 +9,51 @@ import {
   WarrantyStatus,
   EXPIRING_SOON_DAYS,
 } from '../constants/asset-masters.constants';
+
+export const getLostAssetsQuery = () => `
+  SELECT
+    am.id                             AS "assetMasterId",
+    am."assetId",
+    av.id                             AS "assetVersionId",
+    av.name,
+    av.model,
+    av."serialNumber",
+    av.category,
+    av."purchasePrice",
+    latest_event.id                   AS "lostEventId",
+    latest_event.metadata             AS "lostMetadata",
+    latest_event."createdAt"          AS "markedAt",
+    prev_user.id                      AS "previousAssigneeId",
+    prev_user."firstName"             AS "previousAssigneeFirstName",
+    prev_user."lastName"              AS "previousAssigneeLastName",
+    prev_user."employeeId"            AS "previousAssigneeEmployeeId",
+    prev_user."email"                 AS "previousAssigneeEmail",
+    actor.id                          AS "markedById",
+    actor."firstName"                 AS "markedByFirstName",
+    actor."lastName"                  AS "markedByLastName",
+    recovery_exp.id                   AS "recoveryExpenseId",
+    recovery_exp.amount               AS "recoveryAmount"
+  FROM asset_masters am
+  INNER JOIN asset_versions av
+    ON av."assetMasterId" = am.id AND av."isActive" = true
+  LEFT JOIN LATERAL (
+    SELECT * FROM assets_events
+    WHERE "assetMasterId" = am.id
+      AND "eventType" = '${AssetEventTypes.LOST}'
+      AND "deletedAt" IS NULL
+    ORDER BY "createdAt" DESC
+    LIMIT 1
+  ) latest_event ON TRUE
+  LEFT JOIN users prev_user ON prev_user.id = latest_event."fromUser"
+  LEFT JOIN users actor     ON actor.id      = latest_event."createdBy"
+  LEFT JOIN expenses recovery_exp
+    ON recovery_exp."transactionId" = latest_event.id::text
+   AND recovery_exp."deletedAt" IS NULL
+  WHERE am."deletedAt" IS NULL
+    AND av."deletedAt" IS NULL
+    AND av.status = '${AssetStatus.LOST}'
+  ORDER BY latest_event."createdAt" DESC NULLS LAST
+`;
 
 export const getAssetStatsQuery = () => {
   return `

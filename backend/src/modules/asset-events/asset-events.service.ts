@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateAssetEventDto } from './dto/create-asset-event.dto';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, FindOneOptions } from 'typeorm';
 import { AssetEventsRepository } from './asset-events.repository';
 import { AssetActionDto } from '../asset-versions/dto/asset-action.dto';
 import { AssetFilesService } from '../asset-files/asset-files.service';
@@ -45,6 +45,18 @@ export class AssetEventsService {
     } catch (error) {
       throw error;
     }
+  }
+
+  async findOneEvent(options: FindOneOptions<AssetEventEntity>, entityManager?: EntityManager) {
+    return this.assetEventsRepository.findOne(options, entityManager);
+  }
+
+  async updateEventMetadata(
+    id: string,
+    metadata: Record<string, any>,
+    entityManager: EntityManager,
+  ) {
+    return entityManager.getRepository(AssetEventEntity).update({ id }, { metadata });
   }
 
   private validateActionRequirements(
@@ -665,6 +677,8 @@ export class AssetEventsService {
         HANDOVER_ACCEPTED: Number(statsRow.HANDOVER_ACCEPTED || 0),
         HANDOVER_REJECTED: Number(statsRow.HANDOVER_REJECTED || 0),
         HANDOVER_CANCELLED: Number(statsRow.HANDOVER_CANCELLED || 0),
+        LOST: Number(statsRow.LOST || 0),
+        RECOVERED: Number(statsRow.RECOVERED || 0),
       },
     };
 
