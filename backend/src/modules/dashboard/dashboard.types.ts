@@ -269,6 +269,7 @@ export interface AlertsData {
     vehicleServiceDue: { overdue: number; dueSoon: number };
     assetCalibration: { overdue: number; dueSoon: number };
     assetWarranty: { expired: number; expiringSoon: number };
+    lostAssets: { total: number };
     total: { critical: number; warning: number; info: number };
   };
 }
@@ -323,10 +324,22 @@ export interface ApprovalsData {
     items: ExpenseApprovalItem[];
     aging: { days1: number; days2_3: number; days4Plus: number };
   };
+  fuelExpense: {
+    count: number;
+    items: any[];
+    aging: { days1: number; days2_3: number; days4Plus: number };
+  };
+  siteDocuments: {
+    count: number;
+    items: any[];
+    aging: { days1: number; days2_3: number; days4Plus: number };
+  };
   totals: {
     leave: number;
     attendance: number;
     expense: number;
+    fuelExpense: number;
+    siteDocuments: number;
     total: number;
   };
 }

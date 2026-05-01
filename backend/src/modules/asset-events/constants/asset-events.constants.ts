@@ -36,6 +36,8 @@ export const ASSET_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
   [AssetEventTypes.ASSIGNED]: 'Asset assigned successfully',
   [AssetEventTypes.ASSET_ADDED]: 'Asset added successfully',
   [AssetEventTypes.UPDATED]: 'Asset updated successfully',
+  [AssetEventTypes.LOST]: 'Asset marked as lost successfully',
+  [AssetEventTypes.RECOVERED]: 'Asset marked as recovered successfully',
 };
 
 export const VALID_ACTIONS_BY_STATUS: Record<string, AssetEventTypes[]> = {
@@ -45,6 +47,7 @@ export const VALID_ACTIONS_BY_STATUS: Record<string, AssetEventTypes[]> = {
     AssetEventTypes.DAMAGED,
     AssetEventTypes.RETIRED,
     AssetEventTypes.CALIBRATED,
+    AssetEventTypes.LOST,
   ],
   [AssetStatus.ASSIGNED]: [
     AssetEventTypes.HANDOVER_INITIATED,
@@ -53,19 +56,23 @@ export const VALID_ACTIONS_BY_STATUS: Record<string, AssetEventTypes[]> = {
     AssetEventTypes.DAMAGED,
     AssetEventTypes.RETIRED,
     AssetEventTypes.CALIBRATED,
+    AssetEventTypes.LOST,
   ],
   [AssetStatus.UNDER_MAINTENANCE]: [
     AssetEventTypes.AVAILABLE,
     AssetEventTypes.DAMAGED,
     AssetEventTypes.RETIRED,
     AssetEventTypes.CALIBRATED,
+    AssetEventTypes.LOST,
   ],
   [AssetStatus.DAMAGED]: [
     AssetEventTypes.AVAILABLE,
     AssetEventTypes.UNDER_MAINTENANCE,
     AssetEventTypes.RETIRED,
+    AssetEventTypes.LOST,
   ],
   [AssetStatus.RETIRED]: [],
+  [AssetStatus.LOST]: [AssetEventTypes.RECOVERED],
 };
 
 export const HANDOVER_RESPONSE_ACTIONS = [

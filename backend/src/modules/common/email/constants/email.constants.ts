@@ -44,6 +44,9 @@ export const EMAIL_SUBJECT = {
   FUEL_EXPENSE_REJECTED: 'Fuel Expense Rejected - {vehicleNo}',
   LEAVE_APPROVED: 'Leave Approved - {leaveCategory}',
   LEAVE_REJECTED: 'Leave Rejected - {leaveCategory}',
+  // Asset lost / recovered
+  ASSET_LOST: '🚨 Eureka HRMS - Asset Marked as Lost: {assetName}',
+  ASSET_RECOVERED: '✅ Eureka HRMS - Asset Recovered: {assetName}',
 };
 
 export const EMAIL_TEMPLATE = {
@@ -69,6 +72,9 @@ export const EMAIL_TEMPLATE = {
   EXPENSE_APPROVAL: 'expenseApproval',
   FUEL_EXPENSE_APPROVAL: 'fuelExpenseApproval',
   LEAVE_APPROVAL: 'leaveApproval',
+  // Asset lost / recovered
+  ASSET_LOST: 'assetLost',
+  ASSET_RECOVERED: 'assetRecovered',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {
@@ -100,4 +106,6 @@ export const TEMPLATE_CATEGORY_MAP: Record<string, CommunicationCategory> = {
   fyLeaveConfigReminder: CommunicationCategory.FY_LEAVE_CONFIG_REMINDER,
   welcomeEmployee: CommunicationCategory.WELCOME_EMPLOYEE,
   cronFailure: CommunicationCategory.CRON_FAILURE,
+  assetLost: CommunicationCategory.ASSET_TRANSACTION,
+  assetRecovered: CommunicationCategory.ASSET_TRANSACTION,
 };

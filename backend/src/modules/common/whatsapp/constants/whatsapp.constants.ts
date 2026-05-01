@@ -31,6 +31,8 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   ASSET_HANDOVER_REJECTED: 'ASSET_HANDOVER_REJECTED',
   ASSET_HANDOVER_CANCELLED: 'ASSET_HANDOVER_CANCELLED',
   ASSET_DEALLOCATED: 'ASSET_DEALLOCATED',
+  ASSET_LOST: 'ASSET_LOST',
+  ASSET_RECOVERED: 'ASSET_RECOVERED',
   VEHICLE_HANDOVER_INITIATED: 'VEHICLE_HANDOVER_INITIATED',
   VEHICLE_HANDOVER_ACCEPTED: 'VEHICLE_HANDOVER_ACCEPTED',
   VEHICLE_HANDOVER_REJECTED: 'VEHICLE_HANDOVER_REJECTED',
@@ -404,6 +406,45 @@ export const WHATSAPP_TEMPLATES = {
     contentSid: '',
     sandboxMessage: (data: { employeeName: string; assetId: string; actorName: string }) =>
       `📤 *Asset Deallocated*\n\nHi *${data.employeeName}*,\n\n*${data.actorName}* has deallocated asset *${data.assetId}*.\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_LOST: {
+    name: 'asset_lost',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      assetId: string;
+      assetName: string;
+      actorName: string;
+      reason: string;
+      lastSeenDate: string;
+      recoveryAmount?: string;
+    }) =>
+      `🚨 *Asset Marked as Lost*\n\nHi *${data.employeeName}*,\n\nThe asset *${data.assetName}* (ID: ${data.assetId}) previously assigned to you has been marked as lost by *${data.actorName}*.\n\n📝 *Reason:* ${data.reason}\n📅 *Last seen:* ${data.lastSeenDate}${
+        data.recoveryAmount && Number(data.recoveryAmount) > 0
+          ? `\n\n💰 *Recovery:* ₹${data.recoveryAmount} has been added to your account as a debit. Please contact HR if you have any concerns.`
+          : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  ASSET_RECOVERED: {
+    name: 'asset_recovered',
+    contentSid: '',
+    sandboxMessage: (data: {
+      employeeName: string;
+      assetId: string;
+      assetName: string;
+      actorName: string;
+      notes?: string;
+      refundedAmount?: string;
+    }) =>
+      `✅ *Asset Recovered*\n\nHi *${data.employeeName}*,\n\nGood news! The previously lost asset *${data.assetName}* (ID: ${data.assetId}) has been recovered by *${data.actorName}*.${
+        data.notes ? `\n\n📝 *Notes:* ${data.notes}` : ''
+      }${
+        data.refundedAmount && Number(data.refundedAmount) > 0
+          ? `\n\n💰 *Refund:* ₹${data.refundedAmount} has been credited back to your account.`
+          : ''
+      }\n\n- *${WHATSAPP_SENDER}*`,
   },
 
   VEHICLE_HANDOVER_INITIATED: {

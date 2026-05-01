@@ -921,4 +921,68 @@ export class WhatsAppService {
       recipientName: data.employeeName,
     });
   }
+
+  async sendAssetLost(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      assetId: string;
+      assetName: string;
+      actorName: string;
+      reason: string;
+      lastSeenDate: string;
+      recoveryAmount?: string;
+    },
+    options?: { referenceId?: string; recipientId?: string },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ASSET_LOST,
+      templateData: {
+        employeeName: data.employeeName,
+        assetId: data.assetId,
+        assetName: data.assetName,
+        actorName: data.actorName,
+        reason: data.reason,
+        lastSeenDate: data.lastSeenDate,
+        recoveryAmount: data.recoveryAmount,
+      },
+      category: CommunicationCategory.ASSET_TRANSACTION,
+      referenceId: options?.referenceId,
+      referenceType: 'ASSET',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
+
+  async sendAssetRecovered(
+    phoneNumber: string,
+    data: {
+      employeeName: string;
+      assetId: string;
+      assetName: string;
+      actorName: string;
+      notes?: string;
+      refundedAmount?: string;
+    },
+    options?: { referenceId?: string; recipientId?: string },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.ASSET_RECOVERED,
+      templateData: {
+        employeeName: data.employeeName,
+        assetId: data.assetId,
+        assetName: data.assetName,
+        actorName: data.actorName,
+        notes: data.notes,
+        refundedAmount: data.refundedAmount,
+      },
+      category: CommunicationCategory.ASSET_TRANSACTION,
+      referenceId: options?.referenceId,
+      referenceType: 'ASSET',
+      recipientId: options?.recipientId,
+      recipientName: data.employeeName,
+    });
+  }
 }

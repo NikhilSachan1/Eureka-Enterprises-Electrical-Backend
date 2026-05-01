@@ -9,6 +9,7 @@ import {
   Delete,
   Query,
   Get,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AssetMastersService } from './asset-masters.service';
 import {
@@ -17,6 +18,8 @@ import {
   AssetQueryDto,
   BulkDeleteAssetDto,
   AssetListResponseDto,
+  MarkLostDto,
+  MarkRecoveredDto,
 } from './dto';
 import {
   FIELD_NAMES,
@@ -33,6 +36,7 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { AssetActionDto } from './dto/asset-action.dto';
+import { Roles } from '../roles/constants/role.constants';
 
 @ApiTags('Asset Management')
 @ApiBearerAuth('JWT-auth')
@@ -103,6 +107,17 @@ export class AssetMastersController {
     return await this.assetMastersService.findAll(query);
   }
 
+  @Get('lost')
+  @ApiOperation({
+    summary: 'List currently lost assets',
+    description:
+      'Admin-only. Returns all assets with status = LOST, joined with previous assignee, marked-by user, and recovery expense.',
+  })
+  async findLost(@Request() req: any) {
+    this.assertAdminAccess(req);
+    return await this.assetMastersService.findLost();
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get asset details',
@@ -162,5 +177,68 @@ export class AssetMastersController {
       deletedBy,
       userRole,
     });
+  }
+
+  // ==================== LOST / RECOVERED FLOW ====================
+
+  @Post(':assetMasterId/mark-lost')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.ASSET_FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: MarkLostDto })
+  @ApiOperation({
+    summary: 'Mark asset as LOST',
+    description:
+      'Admin/HR only. Updates asset status to LOST, creates an event with metadata + files, ' +
+      'and (if recoveryAmount > 0 and asset was assigned) creates a debit expense on the previous assignee.',
+  })
+  async markLost(
+    @Request() req: any,
+    @Param('assetMasterId') assetMasterId: string,
+    @Body() dto: MarkLostDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.ASSET_FILES)
+    { assetFiles }: { assetFiles: string[] } = { assetFiles: [] },
+  ) {
+    this.assertAdminAccess(req);
+    const actorUserId = req?.user?.id;
+    return await this.assetMastersService.markLost(assetMasterId, dto, assetFiles, actorUserId);
+  }
+
+  @Post(':assetMasterId/mark-recovered')
+  @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.ASSET_FILES, maxCount: 10 }]))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: MarkRecoveredDto })
+  @ApiOperation({
+    summary: 'Mark previously LOST asset as RECOVERED',
+    description:
+      'Admin/HR only. Updates asset status to AVAILABLE, creates a RECOVERED event. ' +
+      'If refundRecoveryAmount=true, automatically creates a credit expense reversing the original debit.',
+  })
+  async markRecovered(
+    @Request() req: any,
+    @Param('assetMasterId') assetMasterId: string,
+    @Body() dto: MarkRecoveredDto,
+    @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.ASSET_FILES)
+    { assetFiles }: { assetFiles: string[] } = { assetFiles: [] },
+  ) {
+    this.assertAdminAccess(req);
+    const actorUserId = req?.user?.id;
+    return await this.assetMastersService.markRecovered(
+      assetMasterId,
+      dto,
+      assetFiles,
+      actorUserId,
+    );
+  }
+
+  // ==================== Helpers ====================
+
+  private assertAdminAccess(req: any): void {
+    const role = req?.user?.activeRole || req?.user?.roles?.[0];
+    const allowed: string[] = [Roles.SUPER_ADMIN, Roles.ADMIN, Roles.HR];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenException(
+        'Access denied. Only Super Admin, Admin, or HR can perform this action.',
+      );
+    }
   }
 }

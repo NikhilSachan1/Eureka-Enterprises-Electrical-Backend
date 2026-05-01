@@ -49,6 +49,9 @@ export class AssetVersionEntity extends BaseEntity {
   @Column({ type: 'date', nullable: true })
   purchaseDate: Date;
 
+  @Column({ type: 'varchar', nullable: true, default: '0' })
+  purchasePrice: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   vendorName: string;
 
