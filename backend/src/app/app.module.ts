@@ -59,6 +59,7 @@ import { SiteDocumentModule } from 'src/modules/site-documents/site-document.mod
 import { DsrModule } from 'src/modules/daily-status-reports/dsr.module';
 import { VehicleLogsModule } from 'src/modules/vehicle-logs/vehicle-logs.module';
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module';
+import { OrgFilesModule } from 'src/modules/org-files/org-files.module';
 
 @Module({
   imports: [
@@ -112,6 +113,7 @@ import { AnalyticsModule } from 'src/modules/analytics/analytics.module';
     DsrModule,
     VehicleLogsModule,
     AnalyticsModule,
+    OrgFilesModule,
   ],
   controllers: [AppController],
   providers: [

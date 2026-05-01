@@ -54,6 +54,7 @@ import { DailyStatusReportEntity } from 'src/modules/daily-status-reports/entiti
 import { DsrEditHistoryEntity } from 'src/modules/daily-status-reports/entities/dsr-edit-history.entity';
 import { DsrFileEntity } from 'src/modules/daily-status-reports/entities/dsr-file.entity';
 import { FnfEntity } from 'src/modules/fnf/entities/fnf.entity';
+import { OrgFileNodeEntity } from 'src/modules/org-files/entities/org-file-node.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -142,6 +143,7 @@ export class ConfigService {
         DsrEditHistoryEntity,
         DsrFileEntity,
         FnfEntity,
+        OrgFileNodeEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,
