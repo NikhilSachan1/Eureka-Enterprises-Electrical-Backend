@@ -90,3 +90,27 @@ export const getContractorSiteCountQuery = `
   INNER JOIN sites s ON s.id = sc."siteId" AND s."deletedAt" IS NULL
   WHERE sc."contractorId" = $1
 `;
+
+/**
+ * Check if a contractor has any active site associations (for delete validation).
+ * Returns 1 row if found, 0 rows if safe to delete.
+ */
+export const checkContractorHasSitesQuery = `
+  SELECT 1 FROM site_contractors sc
+  INNER JOIN sites s ON s.id = sc."siteId" AND s."deletedAt" IS NULL
+  WHERE sc."contractorId" = $1
+  LIMIT 1
+`;
+
+/**
+ * Check if a contractor has pending or partially paid invoices (for delete validation).
+ * Returns 1 row if found, 0 rows if safe to delete.
+ */
+export const checkContractorHasPendingInvoicesQuery = `
+  SELECT 1
+  FROM site_invoices
+  WHERE "contractorId" = $1
+    AND "deletedAt" IS NULL
+    AND ("approvalStatus" <> 'APPROVED' OR "paidTotal" < "totalAmount")
+  LIMIT 1
+`;

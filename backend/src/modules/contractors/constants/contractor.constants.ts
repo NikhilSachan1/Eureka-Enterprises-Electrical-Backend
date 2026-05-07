@@ -14,6 +14,7 @@ export const CONTRACTOR_ERRORS = {
     'Contractor has site documents with pending or partial payments. Settle all payments before deleting.',
   CONTRACTOR_HAS_ACTIVE_ASSOCIATIONS:
     'Cannot delete contractor. Resolve the following before deleting: {issues}',
+  DELETE_FAILED: 'Failed to delete contractor',
 };
 
 export const CONTRACTOR_RESPONSES = {
@@ -21,6 +22,8 @@ export const CONTRACTOR_RESPONSES = {
   UPDATED: 'Contractor updated successfully',
   DELETED: 'Contractor deleted successfully',
   RESTORED: 'Contractor restored successfully',
+  BULK_DELETE_COMPLETED: (successCount: number, failureCount: number) =>
+    `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
 };
 
 export const CONTRACTOR_FIELD_NAMES = {

@@ -1,5 +1,7 @@
 export const NOTE_ERRORS = {
   DEBIT_NOTE_NOT_FOUND: 'Debit note not found.',
+  CONTRACTOR_ID_REQUIRED: 'contractorId is required for SALE side (debit note).',
+  VENDOR_ID_REQUIRED: 'vendorId is required for PURCHASE side (credit note).',
   CREDIT_NOTE_NOT_FOUND: 'Credit note not found.',
   SITE_NOT_FOUND: 'Site not found.',
   CONTRACTOR_NOT_FOUND: 'Contractor not found.',

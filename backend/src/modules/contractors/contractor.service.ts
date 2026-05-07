@@ -23,6 +23,8 @@ import {
   getSiteStatsByContractorQuery,
   getDocumentStatsByContractorQuery,
   getOverallContractorStatsQuery,
+  checkContractorHasSitesQuery,
+  checkContractorHasPendingInvoicesQuery,
 } from './queries/contractor.queries';
 import { ContractorStats, OverallContractorStats } from './contractor.types';
 
@@ -288,13 +290,18 @@ export class ContractorService {
    * Runs all checks in parallel and throws a single error listing every violation found.
    */
   private async validateContractorCanBeDeleted(contractorId: string): Promise<void> {
+    // site_documents.paymentStatus was dropped by the financial-module
+    // repurposing migration (1835000000000). The "has pending payments"
+    // check now lives on site_invoices: a contractor has pending payments
+    // if any approved invoice is not yet fully covered by bank transfers
+    // (paidTotal < totalAmount).
     const checks = [
       {
-        query: `SELECT 1 FROM site_contractors sc INNER JOIN sites s ON s.id = sc."siteId" AND s."deletedAt" IS NULL WHERE sc."contractorId" = $1 LIMIT 1`,
+        query: checkContractorHasSitesQuery,
         message: CONTRACTOR_ERRORS.CANNOT_DELETE_HAS_SITES,
       },
       {
-        query: `SELECT 1 FROM site_documents WHERE "contractorId" = $1 AND "paymentStatus" NOT IN ('PAID') AND "deletedAt" IS NULL LIMIT 1`,
+        query: checkContractorHasPendingInvoicesQuery,
         message: CONTRACTOR_ERRORS.CONTRACTOR_HAS_PENDING_DOCUMENTS,
       },
     ];
@@ -358,13 +365,13 @@ export class ContractorService {
         results.push({
           id: contractorId,
           success: true,
-          message: 'Contractor deleted successfully',
+          message: CONTRACTOR_RESPONSES.DELETED,
         });
       } catch (error) {
         results.push({
           id: contractorId,
           success: false,
-          message: error.message || 'Failed to delete contractor',
+          message: error.message || CONTRACTOR_ERRORS.DELETE_FAILED,
         });
       }
     }
@@ -373,7 +380,7 @@ export class ContractorService {
     const failureCount = results.filter((r) => !r.success).length;
 
     return {
-      message: `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
+      message: CONTRACTOR_RESPONSES.BULK_DELETE_COMPLETED(successCount, failureCount),
       totalRequested: contractorIds.length,
       successCount,
       failureCount,
