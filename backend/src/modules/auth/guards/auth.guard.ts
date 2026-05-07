@@ -60,10 +60,9 @@ export class AuthGuard implements CanActivate {
         throw new ForbiddenException(AUTH_ERRORS.USER_HAS_NO_ROLES);
       }
 
-      // if (!roles.includes(activeRole)) {
-      //   throw new ForbiddenException(AUTH_ERRORS.INVALID_ACTIVE_ROLE);
-      // }
-
+      if (!roles.includes(activeRole)) {
+        throw new ForbiddenException(AUTH_ERRORS.INVALID_ACTIVE_ROLE);
+      }
 
       const userFromRequest: UserFromRequest = {
         id: user.id,
