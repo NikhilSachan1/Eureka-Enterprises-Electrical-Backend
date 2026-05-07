@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+// import { Cron } from '@nestjs/schedule';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { CRON_NAMES, CRON_SCHEDULES } from '../constants/scheduler.constants';
+import { CRON_NAMES } from '../constants/scheduler.constants';
 import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 
@@ -28,17 +28,14 @@ interface RefreshResult {
 export class FinancialCronService {
   private readonly logger = new Logger(FinancialCronService.name);
 
-  private static readonly VIEWS = [
-    'mv_site_financial_summary',
-    'mv_universal_financial_view',
-  ];
+  private static readonly VIEWS = ['mv_site_financial_summary', 'mv_universal_financial_view'];
 
   constructor(
     private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
-  @Cron(CRON_SCHEDULES.EVERY_5_MINUTES)
+  // @Cron(CRON_SCHEDULES.EVERY_5_MINUTES)
   async refreshMaterializedViews(): Promise<RefreshResult | null> {
     const cronName = CRON_NAMES.REFRESH_FINANCIAL_MATERIALIZED_VIEWS;
 
@@ -55,9 +52,7 @@ export class FinancialCronService {
           await this.dataSource.query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${view}`);
           result.refreshedViews.push(view);
           result.durationsMs[view] = Date.now() - startedAt;
-          this.logger.debug(
-            `[${cronName}] Refreshed ${view} in ${result.durationsMs[view]}ms`,
-          );
+          this.logger.debug(`[${cronName}] Refreshed ${view} in ${result.durationsMs[view]}ms`);
         } catch (error) {
           // CONCURRENTLY can fail on the very first refresh (when the MV has
           // not been populated yet). Fall back to a non-concurrent refresh
@@ -73,12 +68,8 @@ export class FinancialCronService {
             result.durationsMs[view] = Date.now() - startedAt;
           } catch (fallbackError) {
             const fallbackMsg =
-              fallbackError instanceof Error
-                ? fallbackError.message
-                : String(fallbackError);
-            this.logger.error(
-              `[${cronName}] Fallback refresh failed for ${view}: ${fallbackMsg}`,
-            );
+              fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+            this.logger.error(`[${cronName}] Fallback refresh failed for ${view}: ${fallbackMsg}`);
             result.errors.push({ view, error: fallbackMsg });
           }
         }
