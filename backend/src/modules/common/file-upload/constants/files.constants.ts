@@ -68,8 +68,11 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   contract: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   workOrder: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   completionCertificate: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  photo: [ALLOWED_FILE_CATEGORY.IMAGE],
+  inspectionReport: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   other: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   dsrFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  financialFile: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogEndOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogOther: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
@@ -104,8 +107,11 @@ export const FIELD_NAMES = {
   SITE_DOC_CONTRACT: 'contract',
   SITE_DOC_WORK_ORDER: 'workOrder',
   SITE_DOC_COMPLETION_CERTIFICATE: 'completionCertificate',
+  SITE_DOC_PHOTO: 'photo',
+  SITE_DOC_INSPECTION_REPORT: 'inspectionReport',
   SITE_DOC_OTHER: 'other',
   DSR_FILES: 'dsrFiles',
+  FINANCIAL_FILE: 'financialFile',
   VEHICLE_LOG_START_ODOMETER: 'vehicleLogStartOdometer',
   VEHICLE_LOG_END_ODOMETER: 'vehicleLogEndOdometer',
   VEHICLE_LOG_OTHER: 'vehicleLogOther',
@@ -139,6 +145,8 @@ export const DATABASE_FIELD_NAMES = {
   dsrFiles: 'fileKeys',
   // Org files
   orgFiles: 'orgFileKeys',
+  // Financial module file (single attachment per document)
+  financialFile: 'fileKey',
 };
 
 export const FILE_ERRORS = {
@@ -162,4 +170,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   DSR_FILES: 'dsr-files',
   VEHICLE_LOG_FILES: 'vehicle-log-files',
   ORG_FILES: 'org-files',
+  FINANCIAL_FILES: 'financial-files',
 };

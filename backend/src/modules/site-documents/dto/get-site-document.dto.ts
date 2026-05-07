@@ -3,6 +3,14 @@ import { IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
+/**
+ * Get Site Document DTO - Repurposed for non-financial documents only.
+ * 
+ * Financial filters (direction, paymentStatus, dueDate, overdueOnly) have been removed.
+ * 
+ * For financial documents, use dedicated modules:
+ * - purchase-orders, site-invoices, bank-transfers, etc.
+ */
 export class GetSiteDocumentDto extends BaseGetDto {
   @ApiPropertyOptional({ description: 'Search by document number' })
   @IsString()
@@ -19,25 +27,20 @@ export class GetSiteDocumentDto extends BaseGetDto {
   @IsOptional()
   contractorId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by vendor ID' })
+  @IsUUID()
+  @IsOptional()
+  vendorId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by document type' })
   @IsString()
   @IsOptional()
   documentType?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by direction (PAYABLE or RECEIVABLE)' })
-  @IsString()
-  @IsOptional()
-  direction?: string;
-
   @ApiPropertyOptional({ description: 'Filter by status' })
   @IsString()
   @IsOptional()
   status?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by payment status' })
-  @IsString()
-  @IsOptional()
-  paymentStatus?: string;
 
   @ApiPropertyOptional({ description: 'Filter by document date from' })
   @IsDateString()
@@ -49,21 +52,6 @@ export class GetSiteDocumentDto extends BaseGetDto {
   @IsOptional()
   documentDateTo?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by due date from' })
-  @IsDateString()
-  @IsOptional()
-  dueDateFrom?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by due date to' })
-  @IsDateString()
-  @IsOptional()
-  dueDateTo?: string;
-
-  @ApiPropertyOptional({ description: 'Filter overdue documents only' })
-  @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
-  overdueOnly?: boolean;
-
   @ApiPropertyOptional({ description: 'Include site details' })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
@@ -73,4 +61,9 @@ export class GetSiteDocumentDto extends BaseGetDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   includeContractor?: boolean;
+
+  @ApiPropertyOptional({ description: 'Include vendor details' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includeVendor?: boolean;
 }

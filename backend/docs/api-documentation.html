@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financial Module — API Documentation</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8f9fa;color:#212529;display:flex;min-height:100vh}
+a{color:#0d6efd;text-decoration:none}
+a:hover{text-decoration:underline}
+/* SIDEBAR */
+#sidebar{width:280px;min-width:280px;background:#1a1d23;color:#c9d1d9;position:sticky;top:0;height:100vh;overflow-y:auto;padding:0 0 40px}
+#sidebar-header{padding:20px 18px 16px;border-bottom:1px solid #30363d}
+#sidebar-header h1{font-size:15px;font-weight:700;color:#fff;line-height:1.3}
+#sidebar-header p{font-size:11px;color:#8b949e;margin-top:4px}
+.nav-section{padding:12px 18px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#8b949e}
+.nav-group summary{padding:7px 18px;cursor:pointer;font-size:13px;color:#c9d1d9;list-style:none;display:flex;align-items:center;gap:6px}
+.nav-group summary:hover{background:#21262d;color:#fff}
+.nav-group summary::before{content:'▸';font-size:10px;transition:.15s}
+.nav-group[open] summary::before{content:'▾'}
+.nav-item{display:block;padding:5px 18px 5px 36px;font-size:12px;color:#8b949e}
+.nav-item:hover{color:#fff;background:#21262d}
+/* CONTENT */
+#content{flex:1;padding:32px;max-width:1100px}
+.page-title{font-size:28px;font-weight:800;color:#212529;margin-bottom:6px}
+.page-sub{font-size:14px;color:#6c757d;margin-bottom:32px}
+/* CARDS */
+.module-header{display:flex;align-items:center;gap:10px;margin:40px 0 16px;padding-bottom:10px;border-bottom:2px solid #e9ecef}
+.module-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.module-header h2{font-size:20px;font-weight:700;color:#212529}
+.module-header small{font-size:12px;color:#6c757d;font-weight:400;margin-left:6px}
+/* ENDPOINT */
+.endpoint{background:#fff;border:1px solid #e9ecef;border-radius:10px;margin-bottom:16px;overflow:hidden}
+.endpoint-head{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;user-select:none}
+.endpoint-head:hover{background:#f8f9fa}
+.method{font-size:11px;font-weight:800;letter-spacing:.05em;padding:3px 8px;border-radius:4px;min-width:60px;text-align:center;flex-shrink:0}
+.GET{background:#dbeafe;color:#1d4ed8}
+.POST{background:#dcfce7;color:#15803d}
+.PATCH{background:#fef3c7;color:#92400e}
+.DELETE{background:#fee2e2;color:#b91c1c}
+.endpoint-path{font-family:'Fira Code',monospace;font-size:13px;color:#212529;font-weight:600}
+.endpoint-desc{font-size:12px;color:#6c757d;margin-left:auto}
+.endpoint-body{padding:0 18px 18px;border-top:1px solid #f1f3f5;display:none}
+.endpoint.open .endpoint-body{display:block}
+/* PERMISSION BADGE */
+.permission{display:inline-flex;align-items:center;gap:5px;background:#f0f4ff;color:#3b5bdb;border:1px solid #bac8ff;border-radius:4px;padding:2px 8px;font-size:11px;font-family:'Fira Code',monospace;margin:10px 0}
+/* TABLES */
+table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+th{background:#f8f9fa;font-weight:600;text-align:left;padding:7px 10px;border:1px solid #e9ecef;color:#495057}
+td{padding:7px 10px;border:1px solid #e9ecef;color:#212529;vertical-align:top}
+td code{background:#f1f3f5;padding:1px 5px;border-radius:3px;font-size:12px;font-family:'Fira Code',monospace;color:#e03e4a}
+.req{color:#dc3545;font-size:10px;font-weight:700}
+.opt{color:#6c757d;font-size:10px}
+/* CODE BLOCKS */
+pre{background:#0d1117;color:#e6edf3;padding:14px;border-radius:8px;font-size:12px;font-family:'Fira Code',monospace;overflow-x:auto;margin:8px 0;line-height:1.6}
+pre .k{color:#ff7b72}
+pre .s{color:#a5d6ff}
+pre .n{color:#ffa657}
+pre .c{color:#8b949e;font-style:italic}
+/* RULE BOXES */
+.rules{background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:0 6px 6px 0;margin:10px 0;font-size:13px}
+.rules strong{color:#92400e;display:block;margin-bottom:4px}
+.rules ul{padding-left:16px;color:#78350f}
+.rules li{margin:2px 0}
+.info-box{background:#eff6ff;border-left:4px solid #3b82f6;padding:10px 14px;border-radius:0 6px 6px 0;margin:10px 0;font-size:13px;color:#1e40af}
+.flow-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:10px 0;font-family:'Fira Code',monospace;font-size:13px;color:#166534;line-height:2}
+/* SECTION LABELS */
+.sect-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6c757d;margin:14px 0 6px}
+/* FLOW DIAGRAM */
+.flow-diagram{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:12px 0;font-size:12px}
+.flow-box-sm{background:#fff;border:2px solid #e9ecef;border-radius:6px;padding:6px 10px;text-align:center;font-weight:600}
+.flow-arrow{color:#9ca3af;font-size:16px}
+.flow-sale .flow-box-sm{border-color:#3b82f6;color:#1d4ed8}
+.flow-pur .flow-box-sm{border-color:#10b981;color:#065f46}
+/* HEADER REQUIRED NOTE */
+.header-note{background:#212529;color:#c9d1d9;border-radius:8px;padding:14px;font-size:12px;font-family:'Fira Code',monospace;margin:12px 0}
+.header-note span{color:#f59e0b}
+/* SCROLLBAR */
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div id="sidebar-header">
+    <h1>Financial Module API</h1>
+    <p>European Union — BRD v2.0</p>
+  </div>
+
+  <div class="nav-section">Getting Started</div>
+  <a class="nav-item" href="#overview">Overview & Auth</a>
+  <a class="nav-item" href="#flow">Document Flow</a>
+
+  <div class="nav-section">File Management</div>
+  <a class="nav-item" href="#files">File Upload</a>
+
+  <div class="nav-section">Party Setup</div>
+  <a class="nav-item" href="#vendors">Vendors</a>
+  <a class="nav-item" href="#site-vendors">Site ↔ Vendor Links</a>
+  <a class="nav-item" href="#site-contractors">Site ↔ Contractor Links</a>
+
+  <div class="nav-section">Document Chain</div>
+  <a class="nav-item" href="#pos">Purchase Orders (POs)</a>
+  <a class="nav-item" href="#jmcs">JMCs</a>
+  <a class="nav-item" href="#reports">Reports</a>
+  <a class="nav-item" href="#invoices">Invoices</a>
+  <a class="nav-item" href="#book-payments">Book Payments</a>
+  <a class="nav-item" href="#bank-transfers">Bank Transfers</a>
+  <a class="nav-item" href="#payment-advices">Payment Advices</a>
+  <a class="nav-item" href="#notes">Debit / Credit Notes</a>
+
+  <div class="nav-section">Tax Registers</div>
+  <a class="nav-item" href="#gst">GST Module</a>
+  <a class="nav-item" href="#tds">TDS Module</a>
+
+  <div class="nav-section">Summaries</div>
+  <a class="nav-item" href="#billing">Billing & Site Closing</a>
+  <a class="nav-item" href="#dashboard">Dashboard Universal View</a>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main id="content">
+
+<h1 class="page-title">Financial & Billing Module — API Documentation</h1>
+<p class="page-sub">Complete reference for the European Union backend. For frontend integration. Based on BRD v2.0 (03 May 2026).</p>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="overview">
+  <div class="module-header">
+    <div class="module-icon" style="background:#e0f2fe">🔐</div>
+    <h2>Overview & Authentication <small>Required on every request</small></h2>
+  </div>
+
+  <p style="font-size:14px;color:#495057;margin-bottom:12px"><strong>Base URL (dev):</strong> <code style="background:#f1f3f5;padding:2px 6px;border-radius:3px">http://localhost:3333/api/v1</code></p>
+
+  <div class="sect-label">Step 1 — Login to get your token</div>
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/auth/sign-in</span>
+      <span class="endpoint-desc">Get access token</span>
+    </div>
+    <div class="endpoint-body">
+      <p style="font-size:13px;margin:10px 0">Public endpoint — no auth headers needed. Call this first to get your <code>accessToken</code>.</p>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Example</th></tr>
+        <tr><td>email</td><td>string</td><td><span class="req">required</span></td><td><code>"akhil.sachan@coditas.com"</code></td></tr>
+        <tr><td>password</td><td>string</td><td><span class="req">required</span></td><td><code>"Admin@123"</code></td></tr>
+      </table>
+      <div class="sect-label">Response 201</div>
+      <pre><span class="c">// Use accessToken in all subsequent requests</span>
+{
+  <span class="s">"accessToken"</span>: <span class="s">"eyJhbGci..."</span>,
+  <span class="s">"refreshToken"</span>: <span class="s">"eyJhbGci..."</span>,
+  <span class="s">"roles"</span>: [<span class="s">"ADMIN"</span>],
+  <span class="s">"activeRole"</span>: <span class="s">"ADMIN"</span>,
+  <span class="s">"email"</span>: <span class="s">"akhil.sachan@coditas.com"</span>,
+  <span class="s">"expiresIn"</span>: <span class="s">"28d"</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="sect-label">Step 2 — Required headers on ALL financial API calls</div>
+  <div class="header-note">
+    <span>Authorization</span>: Bearer &lt;accessToken&gt;<br>
+    <span>X-Active-Role</span>: ADMIN  <span style="color:#8b949e;font-size:11px">← current user's active role</span><br>
+    <span>X-Correlation-Id</span>: &lt;any-uuid&gt;  <span style="color:#8b949e;font-size:11px">← unique per request for tracing</span><br>
+    <span>X-Source-Type</span>: WEB<br>
+    <span>X-Client-Type</span>: WEB<br>
+    <span>Content-Type</span>: application/json  <span style="color:#8b949e;font-size:11px">← for POST/PATCH</span>
+  </div>
+
+  <div class="info-box">⚠️ <strong>Missing any header → 400 Bad Request.</strong> Missing Authorization → 401 Unauthorized. Missing permission for the action → 403 Forbidden.</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="flow">
+  <div class="module-header">
+    <div class="module-icon" style="background:#f0fdf4">📊</div>
+    <h2>Document Flow <small>BRD §3 — The chain every financial action follows</small></h2>
+  </div>
+
+  <p style="font-size:13px;margin-bottom:12px;color:#495057">Every financial document follows a strict parent→child chain. <strong>A child cannot exist without an approved parent.</strong></p>
+
+  <div class="sect-label">SALE Side (Contractor pays us)</div>
+  <div class="flow-diagram flow-sale">
+    <div class="flow-box-sm">PO<br><small style="font-weight:400;color:#6c757d">Purchase Order</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">JMC<br><small style="font-weight:400;color:#6c757d">Job Measurement</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Report<br><small style="font-weight:400;color:#6c757d">Auto-approved</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Invoice<br><small style="font-weight:400;color:#6c757d">Admin approval</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Bank Transfer<br><small style="font-weight:400;color:#6c757d">Multiple partials OK</small></div>
+  </div>
+
+  <div class="sect-label">PURCHASE Side (We pay vendor)</div>
+  <div class="flow-diagram flow-pur">
+    <div class="flow-box-sm">PO</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">JMC</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Report<br><small style="font-weight:400;color:#6c757d">Required first</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Invoice</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Book Payment<br><small style="font-weight:400;color:#6c757d">Multiple OK</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm">Bank Transfer<br><small style="font-weight:400;color:#6c757d">1:1 with BP</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box-sm" style="border-color:#10b981">Payment Advice<br><small style="font-weight:400;color:#6c757d">Auto-generated</small></div>
+  </div>
+
+  <div class="rules" style="margin-top:14px">
+    <strong>🔑 Key constraints</strong>
+    <ul>
+      <li>Each step requires the previous to be <strong>APPROVED</strong> before the next can be created</li>
+      <li><strong>1 JMC = 1 Report = 1 Invoice</strong> — duplicates rejected</li>
+      <li>Σ Invoices per PO cannot exceed PO totalAmount</li>
+      <li>PURCHASE Bank Transfer amount must exactly equal Book Payment amount</li>
+      <li>SALE Bank Transfer allows multiple partials (Σ ≤ Invoice total)</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="files">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fef9c3">📎</div>
+    <h2>File Upload <small>Required before creating any financial document</small></h2>
+  </div>
+  <div class="info-box">All financial documents require an attachment (fileKey + fileName). Upload the file first, get back the keys, then include them in the document create body. Supports PDF, JPEG, PNG — max 10 MB per file.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/files/financial-upload</span>
+      <span class="endpoint-desc">Upload one financial document attachment</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 Any authenticated user</div>
+      <p style="font-size:13px;margin:8px 0">Upload a single PDF or image to S3. Returns the S3 key and original filename. Use these values in the <code>fileKey</code> and <code>fileName</code> fields of any financial document create call.</p>
+      <div class="sect-label">Request — multipart/form-data</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Rules</th></tr>
+        <tr><td>financialFile</td><td>File (binary)</td><td><span class="req">required</span></td><td>PDF, JPEG, PNG only. Max 10 MB.</td></tr>
+      </table>
+      <div class="sect-label">Response 201</div>
+      <pre>{
+  <span class="s">"fileKey"</span>: <span class="s">"financial-files/1778120857117_po-doc.pdf"</span>,
+  <span class="s">"fileName"</span>: <span class="s">"po-doc.pdf"</span>
+}</pre>
+      <div class="sect-label">Error Cases</div>
+      <table><tr><th>Status</th><th>Reason</th></tr>
+        <tr><td>400</td><td>No file provided / invalid file type (e.g. .txt, .csv) / file exceeds 10 MB</td></tr>
+        <tr><td>401</td><td>Missing or invalid authorization token</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/files?key=&lt;fileKey&gt;</span>
+      <span class="endpoint-desc">Get presigned download URL</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 Any authenticated user</div>
+      <p style="font-size:13px;margin:8px 0">Exchange a stored S3 key for a time-limited presigned URL to download/preview the file in the browser.</p>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Required</th></tr>
+        <tr><td>key</td><td>string</td><td><span class="req">required</span> — the fileKey returned from /files/financial-upload</td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"url"</span>: <span class="s">"https://s3.amazonaws.com/bucket/financial-files/...?X-Amz-Signature=..."</span>,
+  <span class="s">"key"</span>: <span class="s">"financial-files/1778120857117_po-doc.pdf"</span>
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="vendors">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fce7f3">🏭</div>
+    <h2>Vendors <small>BRD §2 — PURCHASE side parties</small></h2>
+  </div>
+  <div class="info-box">Vendors are the companies we hire and pay (PURCHASE side). Each vendor is either <strong>FREELANCER</strong> (no GST) or <strong>GST_REGISTERED</strong> (must have a GST number). Vendors must be linked to a site before any financial document can be created for them.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/vendors</span>
+      <span class="endpoint-desc">Create a vendor</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>name</td><td>string</td><td><span class="req">required</span></td><td>2–255 chars, must be unique</td></tr>
+        <tr><td>email</td><td>string (email)</td><td><span class="req">required</span></td><td>Must be unique</td></tr>
+        <tr><td>contactNumber</td><td>string</td><td><span class="req">required</span></td><td>10–15 digits</td></tr>
+        <tr><td>vendorType</td><td>FREELANCER | GST_REGISTERED</td><td><span class="req">required</span></td><td>BRD §2 confirmed-12</td></tr>
+        <tr><td>gstNumber</td><td>string</td><td><span class="req">required if GST_REGISTERED</span></td><td>Format: 22AAAAA0000A1Z5. Must NOT be set for FREELANCER.</td></tr>
+        <tr><td>panNumber</td><td>string</td><td><span class="opt">optional</span></td><td>For TDS reference</td></tr>
+        <tr><td>city</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>state</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>pincode</td><td>string</td><td><span class="req">required</span></td><td>6 digits</td></tr>
+        <tr><td>bankName, accountNumber, ifscCode, accountHolderName</td><td>string</td><td><span class="opt">optional</span></td><td>For payment release</td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>GST_REGISTERED vendor MUST have gstNumber — 400 if missing</li>
+        <li>FREELANCER vendor must NOT have gstNumber — 400 if provided</li>
+      </ul></div>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Vendor has been created successfully."</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/vendors</span>
+      <span class="endpoint-desc">List all vendors with filters</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.view</div>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td>search</td><td>string</td><td>—</td><td>Filter by vendor name</td></tr>
+        <tr><td>vendorType</td><td>FREELANCER | GST_REGISTERED</td><td>—</td><td>Filter by type</td></tr>
+        <tr><td>city</td><td>string[]</td><td>—</td><td>Multi-select filter</td></tr>
+        <tr><td>state</td><td>string[]</td><td>—</td><td>Multi-select filter</td></tr>
+        <tr><td>isActive</td><td>boolean</td><td>—</td><td>Filter by active status</td></tr>
+        <tr><td>page</td><td>number</td><td>1</td><td></td></tr>
+        <tr><td>pageSize</td><td>number</td><td>10</td><td>Max 1000</td></tr>
+        <tr><td>sortField</td><td>string</td><td>createdAt</td><td></td></tr>
+        <tr><td>sortOrder</td><td>ASC | DESC</td><td>DESC</td><td></td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"records"</span>: [{
+    <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+    <span class="s">"name"</span>: <span class="s">"XYZ Suppliers"</span>,
+    <span class="s">"vendorType"</span>: <span class="s">"GST_REGISTERED"</span>,
+    <span class="s">"gstNumber"</span>: <span class="s">"22AAAAA0000A1Z5"</span>,
+    <span class="s">"city"</span>: <span class="s">"Pune"</span>,
+    <span class="s">"isActive"</span>: <span class="k">true</span>,
+    <span class="s">"stats"</span>: { <span class="s">"totalSites"</span>: 2, <span class="s">"totalPos"</span>: 4, <span class="s">"totalPaidAmount"</span>: 500000 }
+  }],
+  <span class="s">"totalRecords"</span>: 1,
+  <span class="s">"overallStats"</span>: { <span class="s">"totalVendors"</span>: 5, <span class="s">"activeVendors"</span>: 4 }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/vendors/:id</span>
+      <span class="endpoint-desc">Get vendor by ID</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.view</div>
+      <div class="sect-label">Response 200</div>
+      <pre><span class="c">// Full vendor object with createdByUser and updatedByUser details</span>
+{ <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"..."</span>, ... }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method PATCH">PATCH</span>
+      <span class="endpoint-path">/vendors/:id</span>
+      <span class="endpoint-desc">Update vendor (all fields optional)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.update</div>
+      <p style="font-size:13px;margin:8px 0">All fields are optional — send only what changed. GST type rules still apply: if changing vendorType, gstNumber must match.</p>
+      <div class="sect-label">Response 200/201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Vendor has been updated successfully."</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/vendors/:id</span>
+      <span class="endpoint-desc">Soft-delete a vendor</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.delete</div>
+      <div class="rules"><strong>⚠️ Will be rejected (400) if:</strong><ul>
+        <li>Vendor is linked to any active site</li>
+        <li>Vendor has active Purchase Orders or Invoices</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/vendors</span>
+      <span class="endpoint-desc">Bulk delete vendors</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.delete</div>
+      <div class="sect-label">Request Body</div>
+      <pre>{ <span class="s">"vendorIds"</span>: [<span class="s">"uuid1"</span>, <span class="s">"uuid2"</span>] }</pre>
+      <div class="sect-label">Response</div>
+      <pre>{ <span class="s">"successCount"</span>: 1, <span class="s">"failureCount"</span>: 1, <span class="s">"results"</span>: [...] }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/vendors/:id/restore</span>
+      <span class="endpoint-desc">Restore a soft-deleted vendor</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.update</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="site-vendors">
+  <div class="module-header">
+    <div class="module-icon" style="background:#e0f2fe">🔗</div>
+    <h2>Site ↔ Vendor Links <small>BRD §2 — Associate vendors with a site</small></h2>
+  </div>
+  <div class="info-box">Before creating any PURCHASE-side financial document (PO, JMC, Invoice, etc.) for a vendor at a site, that vendor must be linked to the site. One vendor can be linked to multiple sites.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/sites/:siteId/vendors</span>
+      <span class="endpoint-desc">List all vendors linked to a site</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.view</div>
+      <div class="sect-label">Response 200</div>
+      <pre><span class="c">// Array of vendor objects</span>
+[{ <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"XYZ Suppliers"</span>, <span class="s">"vendorType"</span>: <span class="s">"GST_REGISTERED"</span>, ... }]</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/sites/:siteId/vendors</span>
+      <span class="endpoint-desc">Link vendors to a site</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.create</div>
+      <div class="sect-label">Request Body</div>
+      <pre>{ <span class="s">"vendorIds"</span>: [<span class="s">"vendor-uuid-1"</span>, <span class="s">"vendor-uuid-2"</span>] }</pre>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Vendors linked to site"</span>, <span class="s">"addedCount"</span>: 2, <span class="s">"skippedCount"</span>: 0 }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/sites/:siteId/vendors</span>
+      <span class="endpoint-desc">Unlink vendors from a site</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.vendors.delete</div>
+      <div class="sect-label">Request Body</div>
+      <pre>{ <span class="s">"vendorIds"</span>: [<span class="s">"vendor-uuid-1"</span>] }</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="site-contractors">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fef3c7">🏗️</div>
+    <h2>Site ↔ Contractor Links <small>BRD §2 — Existing API reference</small></h2>
+  </div>
+  <div class="info-box">Contractors are the SALE-side parties (they give us work). Contractor-site links are set when creating or updating the site via the Sites module. The following read endpoint is available.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/sites/:siteId/contractors</span>
+      <span class="endpoint-desc">List contractors linked to a site</span>
+    </div>
+    <div class="endpoint-body">
+      <p style="font-size:13px;margin:8px 0">Returns all contractors associated with the site. Used to populate the contractor dropdown when creating a SALE-side PO.</p>
+      <div class="sect-label">Response 200</div>
+      <pre>[{ <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"ABC Contractors"</span>, <span class="s">"gstNumber"</span>: <span class="s">"..."</span>, ... }]</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="pos">
+  <div class="module-header">
+    <div class="module-icon" style="background:#ede9fe">📋</div>
+    <h2>Purchase Orders (POs) <small>BRD §4.1 — Step 1 in the document chain</small></h2>
+  </div>
+  <div class="info-box"><strong>What is a PO?</strong> A Purchase Order establishes the maximum financial ceiling for a contractor (SALE) or vendor (PURCHASE) at a site. All subsequent invoices for that party must not exceed this PO total. Requires admin approval before a JMC can be created.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/purchase-orders</span>
+      <span class="endpoint-desc">Create a PO (SALE or PURCHASE)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td><td>Site this PO belongs to</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td><span class="req">required</span></td><td>SALE=contractor pays us, PURCHASE=we pay vendor</td></tr>
+        <tr><td>contractorId</td><td>uuid</td><td><span class="req">required if SALE</span></td><td>Must be linked to the site</td></tr>
+        <tr><td>vendorId</td><td>uuid</td><td><span class="req">required if PURCHASE</span></td><td>Must be linked to the site</td></tr>
+        <tr><td>poNumber</td><td>string</td><td><span class="req">required</span></td><td>Unique within (site, partyType)</td></tr>
+        <tr><td>poDate</td><td>ISO date string</td><td><span class="req">required</span></td><td>e.g. "2026-04-01"</td></tr>
+        <tr><td>taxableAmount</td><td>number</td><td><span class="req">required</span></td><td>Pre-GST amount</td></tr>
+        <tr><td>gstAmount</td><td>number</td><td><span class="opt">optional</span></td><td>Default 0</td></tr>
+        <tr><td>totalAmount</td><td>number</td><td><span class="req">required</span></td><td>Must equal taxableAmount + gstAmount exactly</td></tr>
+        <tr><td>fileKey</td><td>string</td><td><span class="req">required</span></td><td>S3 key from /files/financial-upload</td></tr>
+        <tr><td>fileName</td><td>string</td><td><span class="req">required</span></td><td>Original file name</td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>totalAmount must exactly equal taxableAmount + gstAmount — rejected otherwise</li>
+        <li>Only one of contractorId/vendorId is set, must match partyType</li>
+        <li>Creates in PENDING state — a JMC cannot be created until this PO is APPROVED</li>
+        <li>Multiple POs allowed for the same contractor/vendor on the same site</li>
+      </ul></div>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Purchase order created successfully"</span>, <span class="s">"id"</span>: <span class="s">"uuid"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/purchase-orders</span>
+      <span class="endpoint-desc">List POs with filters</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.view</div>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td>Filter by site</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td>Filter by side</td></tr>
+        <tr><td>contractorId</td><td>uuid</td><td>Filter by contractor</td></tr>
+        <tr><td>vendorId</td><td>uuid</td><td>Filter by vendor</td></tr>
+        <tr><td>approvalStatus</td><td>PENDING | APPROVED | REJECTED</td><td>Filter by status</td></tr>
+        <tr><td>search</td><td>string</td><td>Search by PO number</td></tr>
+        <tr><td>page, pageSize, sortField, sortOrder</td><td></td><td>Pagination</td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"records"</span>: [{
+    <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"poNumber"</span>: <span class="s">"PO/2526/001"</span>,
+    <span class="s">"partyType"</span>: <span class="s">"SALE"</span>, <span class="s">"approvalStatus"</span>: <span class="s">"APPROVED"</span>,
+    <span class="s">"totalAmount"</span>: 118000, <span class="s">"invoicedTotal"</span>: 59000,
+    <span class="s">"paidTotal"</span>: 59000, <span class="s">"isLocked"</span>: <span class="k">true</span>,
+    <span class="s">"contractor"</span>: { <span class="s">"id"</span>: <span class="s">"..."</span>, <span class="s">"name"</span>: <span class="s">"ABC Ltd"</span> }
+  }],
+  <span class="s">"totalRecords"</span>: 1
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/purchase-orders/:id</span>
+      <span class="endpoint-desc">Get PO detail</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.view</div>
+      <p style="font-size:13px;margin:8px 0">Returns full PO with contractor/vendor/site relations and the denormalized rollup columns: <code>invoicedTotal</code>, <code>bookedTotal</code>, <code>paidTotal</code>, <code>lastInvoiceAt</code>, <code>lastPaymentAt</code>.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method PATCH">PATCH</span>
+      <span class="endpoint-path">/purchase-orders/:id</span>
+      <span class="endpoint-desc">Update PO (PENDING state only)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.update</div>
+      <div class="rules"><strong>⚠️ Rules</strong><ul>
+        <li>Can only edit while approvalStatus = PENDING and isLocked = false</li>
+        <li>Cannot change siteId, partyType, contractorId, or vendorId after creation</li>
+        <li>If changing amounts, all three (taxable, gst, total) must remain consistent</li>
+      </ul></div>
+      <div class="sect-label">Request Body (all fields optional)</div>
+      <pre>{ <span class="s">"poNumber"</span>: <span class="s">"PO/2526/001-revised"</span>, <span class="s">"remarks"</span>: <span class="s">"Updated note"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/purchase-orders/:id/approve</span>
+      <span class="endpoint-desc">Approve a PO (Admin only)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.approve</div>
+      <p style="font-size:13px;margin:8px 0">Once approved, the PO is locked and a JMC can be created against it. Approval is required for every PO.</p>
+      <div class="sect-label">Request Body (optional)</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"Verified against contract"</span> }</pre>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Purchase order approved"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/purchase-orders/:id/reject</span>
+      <span class="endpoint-desc">Reject a PO (Admin only)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.approve</div>
+      <div class="sect-label">Request Body</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"Amount exceeds budget allocation"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/purchase-orders/:id/unlock-request</span>
+      <span class="endpoint-desc">Request admin to unlock an approved PO for editing</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.update</div>
+      <p style="font-size:13px;margin:8px 0">Use this when an approved (locked) PO needs correction. Once the admin grants the unlock, the PO returns to PENDING and can be edited, then re-approved.</p>
+      <div class="sect-label">Request Body</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"Need to correct the PO amount"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/purchase-orders/:id/unlock-grant</span>
+      <span class="endpoint-desc">Admin grants unlock — PO returns to PENDING</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.unlock</div>
+      <p style="font-size:13px;margin:8px 0">Admin-only. After this, the PO is in PENDING state, isLocked=false, and the user can edit it. Must be re-approved after editing.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="jmcs">
+  <div class="module-header">
+    <div class="module-icon" style="background:#d1fae5">📐</div>
+    <h2>JMCs — Job Measurement Certificates <small>BRD §4.2 — Step 2</small></h2>
+  </div>
+  <div class="info-box"><strong>What is a JMC?</strong> A JMC certifies how much work has been completed against a specific PO. It is the foundation for all subsequent billing. Multiple JMCs can exist per PO, but each JMC leads to exactly one Invoice. Requires admin approval.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/jmcs</span>
+      <span class="endpoint-desc">Create a JMC against an APPROVED PO</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>poId</td><td>uuid</td><td><span class="req">required</span></td><td>Must reference an APPROVED PO</td></tr>
+        <tr><td>jmcNumber</td><td>string</td><td><span class="req">required</span></td><td>Unique within the PO</td></tr>
+        <tr><td>jmcDate</td><td>ISO date string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>fileKey</td><td>string</td><td><span class="req">required</span></td><td>S3 key from file upload</td></tr>
+        <tr><td>fileName</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>Parent PO must be APPROVED — 400 if not</li>
+        <li>Multiple JMCs allowed per PO</li>
+        <li>JMC inherits siteId, partyType, contractorId/vendorId from its PO (no need to repeat)</li>
+        <li>Creates in PENDING state</li>
+      </ul></div>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"JMC created successfully"</span>, <span class="s">"id"</span>: <span class="s">"uuid"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/jmcs</span>
+      <span class="endpoint-desc">List JMCs</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.view</div>
+      <div class="sect-label">Key Query Params</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>poId</td><td>uuid</td><td>Filter by parent PO (common use)</td></tr>
+        <tr><td>siteId</td><td>uuid</td><td>Filter by site</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td>Filter by side</td></tr>
+        <tr><td>approvalStatus</td><td>PENDING | APPROVED | REJECTED</td><td></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/jmcs/:id/approve</span>
+      <span class="endpoint-desc">Approve JMC — enables Report + Invoice creation</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.approve</div>
+      <p style="font-size:13px;margin:8px 0">Once approved, both the Report section and Invoice section are enabled simultaneously. For PURCHASE: Report must be created first before Invoice.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/jmcs/:id/reject</span>
+      <span class="endpoint-desc">Reject JMC</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.approve</div>
+      <div class="sect-label">Request Body</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"Measurement not verified"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/jmcs/:id/unlock-request</span>
+      <span class="endpoint-desc">Request unlock on approved JMC</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.update</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"Incorrect JMC date"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/jmcs/:id/unlock-grant</span>
+      <span class="endpoint-desc">Admin grants unlock</span>
+    </div>
+    <div class="endpoint-body"><div class="permission">🔒 financials.jmcs.unlock</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="reports">
+  <div class="module-header">
+    <div class="module-icon" style="background:#f0fdf4">📄</div>
+    <h2>Reports <small>BRD §4.3 — Step 3, auto-approved</small></h2>
+  </div>
+  <div class="info-box"><strong>What is a Report?</strong> Documents work completion for a specific JMC. <strong>Auto-approved</strong> — no admin action needed. For PURCHASE side, a Report MUST exist before an Invoice can be created. 1 JMC = 1 Report.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-reports</span>
+      <span class="endpoint-desc">Create a Report (auto-approved)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.site-reports.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th></tr>
+        <tr><td>jmcId</td><td>uuid</td><td><span class="req">required</span> — must be APPROVED JMC</td></tr>
+        <tr><td>reportNumber</td><td>string</td><td><span class="req">required</span></td></tr>
+        <tr><td>reportDate</td><td>ISO date string</td><td><span class="req">required</span></td></tr>
+        <tr><td>fileKey</td><td>string</td><td><span class="req">required</span></td></tr>
+        <tr><td>fileName</td><td>string</td><td><span class="req">required</span></td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>JMC must be APPROVED — 400 if not</li>
+        <li>1 JMC = 1 Report — 409 if a report already exists for this JMC</li>
+        <li>Automatically set to APPROVED (no admin action needed)</li>
+      </ul></div>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Report created successfully"</span>, <span class="s">"id"</span>: <span class="s">"uuid"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/site-reports</span>
+      <span class="endpoint-desc">List reports</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.site-reports.view</div>
+      <p style="font-size:13px;margin:8px 0">Key filter: <code>jmcId</code> — to check if a report exists for a JMC before enabling the Invoice section in UI.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="invoices">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fef9c3">🧾</div>
+    <h2>Invoices <small>BRD §4.4 — Step 4, requires admin approval</small></h2>
+  </div>
+  <div class="info-box"><strong>What is an Invoice?</strong> The billing document raised once work is certified. 1 JMC = 1 Invoice. For PURCHASE: Report must exist first. On approval, GST and TDS register entries are automatically projected. SALE approval enables Bank Transfer; PURCHASE approval enables Book Payment.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-invoices</span>
+      <span class="endpoint-desc">Create an invoice</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>jmcId</td><td>uuid</td><td><span class="req">required</span></td><td>Must be APPROVED JMC</td></tr>
+        <tr><td>invoiceNumber</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>invoiceDate</td><td>ISO date string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>taxableAmount</td><td>number</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>gstAmount</td><td>number</td><td><span class="opt">optional</span></td><td>Default 0. Entered manually (BRD confirmed-10)</td></tr>
+        <tr><td>tdsAmount</td><td>number</td><td><span class="opt">optional</span></td><td>Default 0. Entered manually (BRD confirmed-9)</td></tr>
+        <tr><td>totalAmount</td><td>number</td><td><span class="req">required</span></td><td>Must equal taxableAmount + gstAmount</td></tr>
+        <tr><td>fileKey</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>fileName</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>JMC must be APPROVED — 400 if not</li>
+        <li>PURCHASE: Report must exist for this JMC first — 400 if not</li>
+        <li>1 JMC = 1 Invoice — 409 if already exists</li>
+        <li>totalAmount must equal taxableAmount + gstAmount</li>
+        <li>Creates in PENDING state</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/site-invoices</span>
+      <span class="endpoint-desc">List invoices</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.view</div>
+      <div class="sect-label">Key Query Params</div>
+      <table><tr><th>Param</th><th>Description</th></tr>
+        <tr><td>jmcId</td><td>Get invoice for a specific JMC</td></tr>
+        <tr><td>poId</td><td>All invoices under a PO</td></tr>
+        <tr><td>siteId</td><td>All invoices for a site</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td></tr>
+        <tr><td>approvalStatus</td><td>Filter by approval state</td></tr>
+      </table>
+      <div class="sect-label">Key Response Fields</div>
+      <pre>{
+  <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"invoiceNumber"</span>: <span class="s">"INV/001"</span>,
+  <span class="s">"totalAmount"</span>: 59000, <span class="s">"gstAmount"</span>: 9000, <span class="s">"tdsAmount"</span>: 1000,
+  <span class="s">"approvalStatus"</span>: <span class="s">"APPROVED"</span>, <span class="s">"isLocked"</span>: <span class="k">true</span>,
+  <span class="s">"bookedTotal"</span>: 29000, <span class="s">"paidTotal"</span>: 29000,
+  <span class="s">"fileKey"</span>: <span class="s">"financial-files/..."</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-invoices/:id/approve</span>
+      <span class="endpoint-desc">Approve invoice — triggers GST/TDS projection</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.approve</div>
+      <div class="info-box">On approval: (1) PO ceiling is checked — total invoiced across all JMCs must not exceed PO amount. (2) GST register entry is auto-created. (3) TDS register entry is auto-created. (4) PO rollup (invoicedTotal) is updated atomically.</div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-invoices/:id/reject</span>
+      <span class="endpoint-desc">Reject invoice</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.approve</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"Invoice amount mismatch"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-invoices/:id/unlock-request</span>
+      <span class="endpoint-desc">Request unlock on approved invoice</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.update</div>
+      <pre>{ <span class="s">"reason"</span>: <span class="s">"..."</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-invoices/:id/unlock-grant</span>
+      <span class="endpoint-desc">Admin grants unlock — invoice back to PENDING</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.unlock</div>
+      <div class="rules"><strong>Note</strong><ul><li>On unlock-grant, the PO rollup (invoicedTotal) is reversed. The invoice must be re-approved after editing, which will re-run the ceiling check.</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="book-payments">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fce7f3">📒</div>
+    <h2>Book Payments <small>BRD §4.5 — PURCHASE side only, Step 5</small></h2>
+  </div>
+  <div class="info-box"><strong>What is a Book Payment?</strong> An internal draft record of a payment to be made against a PURCHASE invoice. Multiple book payments allowed per invoice (partial payments). Total of all book payments cannot exceed invoice total. Auto-approved. Each book payment maps 1:1 to exactly one bank transfer.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/book-payments</span>
+      <span class="endpoint-desc">Create a book payment (auto-approved)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.book-payments.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>invoiceId</td><td>uuid</td><td><span class="req">required</span></td><td>Must be APPROVED PURCHASE invoice</td></tr>
+        <tr><td>bookingDate</td><td>ISO date string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>taxableAmount</td><td>number</td><td><span class="req">required</span></td><td>Pre-GST work amount (informational)</td></tr>
+        <tr><td>gstAmount</td><td>number</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>tdsDeductionAmount</td><td>number</td><td><span class="req">required</span></td><td>TDS deducted from payment</td></tr>
+        <tr><td>paymentTotalAmount</td><td>number</td><td><span class="req">required</span></td><td>Actual transfer amount (= taxable + gst - tds)</td></tr>
+        <tr><td>paymentHoldReason</td><td>string</td><td><span class="opt">optional</span></td><td>If payment is on hold</td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>Invoice must be APPROVED — 400 if not</li>
+        <li>Σ all book payments for this invoice cannot exceed invoice.totalAmount — 400 if exceeded</li>
+        <li>Auto-approved immediately on creation</li>
+      </ul></div>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Book payment created successfully."</span>, <span class="s">"id"</span>: <span class="s">"uuid"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/book-payments</span>
+      <span class="endpoint-desc">List book payments</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.book-payments.view</div>
+      <p style="font-size:13px;margin:8px 0">Key filter: <code>invoiceId</code> — to list all book payments for a specific invoice.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/book-payments/:id</span>
+      <span class="endpoint-desc">Delete a book payment</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.book-payments.delete</div>
+      <div class="rules"><strong>⚠️ Will be rejected (400) if:</strong><ul>
+        <li>A bank transfer already exists for this book payment (1:1 constraint)</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="bank-transfers">
+  <div class="module-header">
+    <div class="module-icon" style="background:#e0f2fe">💳</div>
+    <h2>Bank Transfers / UTR <small>BRD §4.6 — Final payment step</small></h2>
+  </div>
+  <div class="info-box">Records the actual bank transaction. <strong>PURCHASE:</strong> Links to a Book Payment, amount must match exactly, auto-generates a Payment Advice. <strong>SALE:</strong> Links directly to Invoice, multiple partial transfers allowed (Σ ≤ invoice total). Both sides auto-approved.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/bank-transfers</span>
+      <span class="endpoint-desc">Record a bank transfer</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.bank-transfers.create</div>
+      <div class="sect-label">Request Body — PURCHASE side</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>partyType</td><td>"PURCHASE"</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>bookPaymentId</td><td>uuid</td><td><span class="req">required</span></td><td>The Book Payment this pays off</td></tr>
+        <tr><td>utrNumber</td><td>string</td><td><span class="req">required</span></td><td>Bank transaction reference number</td></tr>
+        <tr><td>transferDate</td><td>ISO date string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>transferAmount</td><td>number</td><td><span class="req">required</span></td><td>Must exactly equal bookPayment.paymentTotalAmount</td></tr>
+        <tr><td>proofFileKey</td><td>string</td><td><span class="opt">optional</span></td><td>Bank transfer screenshot/receipt</td></tr>
+        <tr><td>proofFileName</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="sect-label">Request Body — SALE side</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>partyType</td><td>"SALE"</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>invoiceId</td><td>uuid</td><td><span class="req">required</span></td><td>APPROVED SALE invoice</td></tr>
+        <tr><td>utrNumber</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>transferDate</td><td>ISO date string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>transferAmount</td><td>number</td><td><span class="req">required</span></td><td>Partial OK — Σ of all transfers must not exceed invoice.totalAmount</td></tr>
+        <tr><td>proofFileKey, proofFileName</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="rules"><strong>⚠️ Business rules</strong><ul>
+        <li>PURCHASE: transferAmount must EXACTLY equal bookPayment.paymentTotalAmount — 400 if not</li>
+        <li>PURCHASE: 1 Book Payment = 1 Bank Transfer — 409 if already has one</li>
+        <li>SALE: multiple transfers allowed; Σ cannot exceed invoice.totalAmount — 400 if exceeded</li>
+        <li>PURCHASE: automatically creates a Payment Advice (EE/TA/{FY}/{seq}) in the same transaction</li>
+      </ul></div>
+      <div class="sect-label">Response 201</div>
+      <pre><span class="c">// PURCHASE side includes paymentAdviceId</span>
+{
+  <span class="s">"message"</span>: <span class="s">"Bank transfer created successfully."</span>,
+  <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+  <span class="s">"paymentAdviceId"</span>: <span class="s">"uuid"</span>,        <span class="c">// PURCHASE only</span>
+  <span class="s">"paymentAdviceRef"</span>: <span class="s">"EE/TA/2627/001"</span>  <span class="c">// PURCHASE only</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/bank-transfers</span>
+      <span class="endpoint-desc">List bank transfers</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.bank-transfers.view</div>
+      <p style="font-size:13px;margin:8px 0">Key filters: <code>invoiceId</code> (SALE), <code>bookPaymentId</code> (PURCHASE), <code>siteId</code>, <code>partyType</code>, <code>financialYear</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="payment-advices">
+  <div class="module-header">
+    <div class="module-icon" style="background:#f0fdf4">📬</div>
+    <h2>Payment Advices <small>BRD §4.7 — Auto-generated, PURCHASE only</small></h2>
+  </div>
+  <div class="info-box">Auto-generated when a PURCHASE Bank Transfer is created. Reference format: <code>EE/TA/{FY}/{seq}</code> (e.g. EE/TA/2627/001). Sequence is monotonic globally per financial year. Can be emailed to vendor via manual trigger. Never generated on SALE side.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/payment-advices</span>
+      <span class="endpoint-desc">List payment advices</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.payment-advices.view</div>
+      <div class="sect-label">Key Query Params</div>
+      <table><tr><th>Param</th><th>Description</th></tr>
+        <tr><td>vendorId</td><td>All advices for a vendor</td></tr>
+        <tr><td>siteId</td><td>All advices for a site</td></tr>
+        <tr><td>financialYear</td><td>e.g. "2627" for FY 2026-27</td></tr>
+      </table>
+      <div class="sect-label">Key Response Fields</div>
+      <pre>{
+  <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+  <span class="s">"referenceNumber"</span>: <span class="s">"EE/TA/2627/001"</span>,
+  <span class="s">"financialYear"</span>: <span class="s">"2627"</span>,
+  <span class="s">"sequenceNumber"</span>: 1,
+  <span class="s">"approvalStatus"</span>: <span class="s">"APPROVED"</span>,
+  <span class="s">"generatedAt"</span>: <span class="s">"2026-04-16T..."</span>,
+  <span class="s">"pdfKey"</span>: <span class="k">null</span>  <span class="c">// PDF template TBD — set when generated</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/payment-advices/:id</span>
+      <span class="endpoint-desc">Get single payment advice</span>
+    </div>
+    <div class="endpoint-body"><div class="permission">🔒 financials.payment-advices.view</div></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/payment-advices/:id/email</span>
+      <span class="endpoint-desc">Manually email the payment advice to vendor</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.payment-advices.email</div>
+      <p style="font-size:13px;margin:8px 0">BRD §4.7 — the email is a manual trigger. User configures To, CC, subject, body, and attachments at send time.</p>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>to</td><td>string[]</td><td><span class="req">required</span></td><td>At least one recipient email</td></tr>
+        <tr><td>cc</td><td>string[]</td><td><span class="opt">optional</span></td><td></td></tr>
+        <tr><td>subject</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>body</td><td>string (HTML)</td><td><span class="req">required</span></td><td>Raw HTML email body</td></tr>
+        <tr><td>attachmentKeys</td><td>string[]</td><td><span class="opt">optional</span></td><td>S3 keys of additional attachments</td></tr>
+      </table>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Payment advice email sent successfully."</span> }</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="notes">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fef3c7">📝</div>
+    <h2>Debit / Credit Notes <small>BRD §4.8 — Standalone adjustments</small></h2>
+  </div>
+  <div class="info-box"><strong>Debit Note</strong> = adjustment on SALE (Contractor) side. <strong>Credit Note</strong> = adjustment on PURCHASE (Vendor) side. Both are standalone — no parent document required, no approval needed, auto-approved. Use <code>noteSide</code> to differentiate.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/notes</span>
+      <span class="endpoint-desc">Create debit or credit note</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.notes.create</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td>noteSide</td><td>SALE | PURCHASE</td><td><span class="req">required</span></td><td>SALE=Debit Note, PURCHASE=Credit Note</td></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>contractorId</td><td>uuid</td><td><span class="req">required if SALE</span></td><td></td></tr>
+        <tr><td>vendorId</td><td>uuid</td><td><span class="req">required if PURCHASE</span></td><td></td></tr>
+        <tr><td>amount</td><td>number</td><td><span class="req">required</span></td><td>Adjustment amount</td></tr>
+        <tr><td>noteDate</td><td>ISO date string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>fileKey</td><td>string</td><td><span class="req">required</span></td><td>Supporting attachment</td></tr>
+        <tr><td>fileName</td><td>string</td><td><span class="req">required</span></td><td></td></tr>
+        <tr><td>remarks</td><td>string</td><td><span class="opt">optional</span></td><td></td></tr>
+      </table>
+      <div class="sect-label">Response 201</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Debit note created successfully."</span>, <span class="s">"id"</span>: <span class="s">"uuid"</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/notes</span>
+      <span class="endpoint-desc">List notes</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.notes.view</div>
+      <div class="sect-label">Key Query Params</div>
+      <table><tr><th>Param</th><th>Required</th><th>Description</th></tr>
+        <tr><td>noteSide</td><td><span class="req">required</span></td><td>SALE (debit notes) or PURCHASE (credit notes)</td></tr>
+        <tr><td>siteId</td><td><span class="opt">optional</span></td><td>Filter by site</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="gst">
+  <div class="module-header">
+    <div class="module-icon" style="background:#ffe4e6">🧮</div>
+    <h2>GST Module <small>BRD §5 — Tax register</small></h2>
+  </div>
+  <div class="info-box">GST register entries are <strong>automatically created</strong> when an invoice is approved. PURCHASE side (GST-3B / Input Tax) supports verification and payment release. SALE side (GST-1 / Output Tax) is tracked only — no verification or payment release needed.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/gst/register</span>
+      <span class="endpoint-desc">List GST register entries</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.gst.view</div>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td>Filter by site</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td>Filter by side</td></tr>
+        <tr><td>month</td><td>YYYY-MM</td><td>Filter by invoice month</td></tr>
+        <tr><td>financialYear</td><td>e.g. "2627"</td><td>Filter by FY</td></tr>
+        <tr><td>vendorId</td><td>uuid</td><td>Filter by vendor</td></tr>
+        <tr><td>isVerified</td><td>boolean</td><td>Filter by verification status</td></tr>
+      </table>
+      <div class="sect-label">Key Response Fields</div>
+      <pre>{
+  <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"gstType"</span>: <span class="s">"GST-3B"</span>,
+  <span class="s">"partyType"</span>: <span class="s">"PURCHASE"</span>, <span class="s">"invoiceMonth"</span>: <span class="s">"2026-04"</span>,
+  <span class="s">"taxableAmount"</span>: 50000, <span class="s">"gstAmount"</span>: 9000,
+  <span class="s">"isVerified"</span>: <span class="k">false</span>, <span class="s">"gstPaymentId"</span>: <span class="k">null</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/gst/register/:id/verify</span>
+      <span class="endpoint-desc">Verify a GST entry (PURCHASE only)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.gst.verify</div>
+      <div class="rules"><strong>⚠️ Rules</strong><ul>
+        <li>Only PURCHASE (GST-3B) entries can be verified — 400 for SALE</li>
+        <li>Records verifiedAt timestamp</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/gst/register/:id/revert</span>
+      <span class="endpoint-desc">Revert verification (blocked after payment release)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.gst.revert</div>
+      <div class="rules"><strong>⚠️ Rules</strong><ul>
+        <li>Allowed only if GST payment has NOT been released for this entry</li>
+        <li>400 if gstPaymentId is set (payment already released)</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/gst/payments</span>
+      <span class="endpoint-desc">Release monthly GST payment</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.gst.release-payment</div>
+      <p style="font-size:13px;margin:8px 0">BRD §5.2 — Releases GST for all verified+unpaid entries for the specified vendor and month in a single atomic transaction. Cannot be done in parts. Net amount is computed server-side.</p>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td></tr>
+        <tr><td>vendorId</td><td>uuid</td><td><span class="req">required</span></td></tr>
+        <tr><td>paymentMonth</td><td>YYYY-MM</td><td><span class="req">required</span></td></tr>
+        <tr><td>utrNumber</td><td>string</td><td><span class="req">required</span></td></tr>
+        <tr><td>paymentDate</td><td>ISO date string</td><td><span class="req">required</span></td></tr>
+        <tr><td>fileKey, fileName, remarks</td><td>string</td><td><span class="opt">optional</span></td></tr>
+      </table>
+      <div class="sect-label">Response 201</div>
+      <pre>{
+  <span class="s">"message"</span>: <span class="s">"GST payment released successfully."</span>,
+  <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+  <span class="s">"referenceNumber"</span>: <span class="s">"EE/TA/2627/001"</span>,
+  <span class="s">"netAmount"</span>: 9000,
+  <span class="s">"entriesCount"</span>: 1
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/gst/summary</span>
+      <span class="endpoint-desc">GST summary per BRD §5.3</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.gst.view</div>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Required</th></tr>
+        <tr><td>siteId</td><td><span class="req">required</span></td></tr>
+        <tr><td>financialYear</td><td><span class="opt">optional</span> — defaults to current FY</td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"summary"</span>: [{
+    <span class="s">"partyType"</span>: <span class="s">"PURCHASE"</span>, <span class="s">"gstType"</span>: <span class="s">"GST-3B"</span>,
+    <span class="s">"totalTaxable"</span>: 50000, <span class="s">"totalGst"</span>: 9000,
+    <span class="s">"verifiedCount"</span>: 1, <span class="s">"unverifiedCount"</span>: 0,
+    <span class="s">"paidGst"</span>: 9000, <span class="s">"pendingGst"</span>: 0
+  }]
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="tds">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fff7ed">🏦</div>
+    <h2>TDS Module <small>BRD §6 — Both SALE and PURCHASE</small></h2>
+  </div>
+  <div class="info-box">TDS register entries auto-created when any invoice (SALE or PURCHASE) with tdsAmount > 0 is approved. Same verify/revert pattern as GST. Monthly payment release per (partyType, contractor/vendor). No TDS Payment Advice generated.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/tds/register</span>
+      <span class="endpoint-desc">List TDS register entries</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.tds.view</div>
+      <div class="sect-label">Query Params (same shape as GST register)</div>
+      <p style="font-size:13px">Key fields: <code>siteId</code>, <code>partyType</code>, <code>contractorId</code>, <code>vendorId</code>, <code>invoiceMonth</code>, <code>isVerified</code></p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/tds/register/:id/verify</span>
+      <span class="endpoint-desc">Verify a TDS entry (both sides)</span>
+    </div>
+    <div class="endpoint-body"><div class="permission">🔒 financials.tds.verify</div></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/tds/register/:id/revert</span>
+      <span class="endpoint-desc">Revert TDS verification</span>
+    </div>
+    <div class="endpoint-body"><div class="permission">🔒 financials.tds.revert</div></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/tds/payments</span>
+      <span class="endpoint-desc">Release monthly TDS payment</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.tds.release-payment</div>
+      <div class="sect-label">Request Body</div>
+      <table><tr><th>Field</th><th>Type</th><th>Required</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td><span class="req">required</span></td></tr>
+        <tr><td>contractorId</td><td>uuid</td><td><span class="req">required if SALE</span></td></tr>
+        <tr><td>vendorId</td><td>uuid</td><td><span class="req">required if PURCHASE</span></td></tr>
+        <tr><td>paymentMonth</td><td>YYYY-MM</td><td><span class="req">required</span></td></tr>
+        <tr><td>utrNumber</td><td>string</td><td><span class="req">required</span></td></tr>
+        <tr><td>paymentDate</td><td>ISO date string</td><td><span class="req">required</span></td></tr>
+        <tr><td>fileKey, fileName, remarks</td><td>string</td><td><span class="opt">optional</span></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/tds/payments</span>
+      <span class="endpoint-desc">List TDS payments</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.tds.view</div>
+      <p style="font-size:13px;margin:8px 0">Key filters: <code>siteId</code>, <code>partyType</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="billing">
+  <div class="module-header">
+    <div class="module-icon" style="background:#f0fdf4">💰</div>
+    <h2>Billing & Site Closing <small>BRD §8 & §9</small></h2>
+  </div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/billing/po-summary</span>
+      <span class="endpoint-desc">PO-wise financial summary (BRD §8)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.billing.view</div>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Required</th></tr>
+        <tr><td>poId</td><td><span class="req">required</span></td></tr>
+      </table>
+      <div class="sect-label">Response 200 — All BRD §8 fields</div>
+      <pre>{
+  <span class="s">"poId"</span>: <span class="s">"uuid"</span>, <span class="s">"poNumber"</span>: <span class="s">"PO/001"</span>,
+  <span class="s">"poTotal"</span>: 118000,
+  <span class="s">"invoicedTotal"</span>: 59000,      <span class="c">// Invoice Raised Amount</span>
+  <span class="s">"uninvoiced"</span>: 59000,          <span class="c">// Uninvoiced Work (certified but no invoice)</span>
+  <span class="s">"pendingBilling"</span>: 59000,      <span class="c">// PO amount minus invoiced</span>
+  <span class="s">"bookedTotal"</span>: 29000,         <span class="c">// Payment Drafts (Book Payments)</span>
+  <span class="s">"paidTotal"</span>: 29000,           <span class="c">// Actual Paid (Bank Transfers)</span>
+  <span class="s">"gstCut"</span>: 9000,              <span class="c">// GST deposited to Govt</span>
+  <span class="s">"tdsCut"</span>: 1000               <span class="c">// TDS deposited to Govt</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/billing/site-summary</span>
+      <span class="endpoint-desc">Site-level summary aggregated across all POs</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.billing.view</div>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Required</th></tr>
+        <tr><td>siteId</td><td><span class="req">required</span></td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"summaryByPartyType"</span>: [
+    {
+      <span class="s">"partyType"</span>: <span class="s">"SALE"</span>,
+      <span class="s">"totalPOAmount"</span>: 236000, <span class="s">"totalInvoiced"</span>: 118000,
+      <span class="s">"totalPaid"</span>: 118000, <span class="s">"uninvoiced"</span>: 118000
+    },
+    { <span class="s">"partyType"</span>: <span class="s">"PURCHASE"</span>, ... }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/billing/site-closing-readiness</span>
+      <span class="endpoint-desc">Check if site can be closed (BRD §9)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.billing.view</div>
+      <p style="font-size:13px;margin:8px 0">Call this before attempting PATCH /sites/:id/status with status=completed. Returns per-condition pass/fail so UI can guide user on what's still missing.</p>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Required</th></tr>
+        <tr><td>siteId</td><td><span class="req">required</span></td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"canClose"</span>: <span class="k">false</span>,
+  <span class="s">"conditions"</span>: [
+    { <span class="s">"id"</span>: <span class="s">"every-party-has-approved-po"</span>, <span class="s">"pass"</span>: <span class="k">true</span>, <span class="s">"detail"</span>: <span class="s">"All parties have approved POs"</span> },
+    { <span class="s">"id"</span>: <span class="s">"invoice-not-exceeding-po"</span>, <span class="s">"pass"</span>: <span class="k">true</span>, <span class="s">"detail"</span>: <span class="s">"..."</span> },
+    { <span class="s">"id"</span>: <span class="s">"sale-fully-paid"</span>, <span class="s">"pass"</span>: <span class="k">true</span>, <span class="s">"detail"</span>: <span class="s">"..."</span> },
+    { <span class="s">"id"</span>: <span class="s">"purchase-fully-paid"</span>, <span class="s">"pass"</span>: <span class="k">false</span>, <span class="s">"detail"</span>: <span class="s">"Invoice INV/001 has 30000 unpaid"</span> },
+    { <span class="s">"id"</span>: <span class="s">"no-pending-or-rejected-docs"</span>, <span class="s">"pass"</span>: <span class="k">true</span>, <span class="s">"detail"</span>: <span class="s">"..."</span> },
+    { <span class="s">"id"</span>: <span class="s">"gst-tds-settled"</span>, <span class="s">"pass"</span>: <span class="k">true</span>, <span class="s">"detail"</span>: <span class="s">"..."</span> }
+  ]
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="dashboard">
+  <div class="module-header">
+    <div class="module-icon" style="background:#ede9fe">🌐</div>
+    <h2>Dashboard — Universal View <small>BRD §10 — Cross-site financial view</small></h2>
+  </div>
+  <div class="info-box">BRD §10: All roles except Employee and Driver have access to the Universal View. These endpoints are gated by the <code>financials.universal-view</code> permission. Use for cross-site financial monitoring and pending approvals.</div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/dashboard/financial-approvals</span>
+      <span class="endpoint-desc">Pending PO / JMC / Invoice approvals across sites</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.universal-view</div>
+      <p style="font-size:13px;margin:8px 0">Shows all documents waiting for admin approval. Use filters to scope to a specific site or party type.</p>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Type</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td>Scope to one site</td></tr>
+        <tr><td>companyId</td><td>uuid</td><td>Scope to one company</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td>Filter by side</td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"summary"</span>: {
+    <span class="s">"totalPending"</span>: 5, <span class="s">"pendingPOs"</span>: 2,
+    <span class="s">"pendingJMCs"</span>: 2, <span class="s">"pendingInvoices"</span>: 1
+  },
+  <span class="s">"pendingItems"</span>: [{
+    <span class="s">"documentType"</span>: <span class="s">"PO"</span>,
+    <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+    <span class="s">"documentNumber"</span>: <span class="s">"PO/2526/001"</span>,
+    <span class="s">"siteName"</span>: <span class="s">"Site A"</span>,
+    <span class="s">"partyType"</span>: <span class="s">"PURCHASE"</span>,
+    <span class="s">"partyName"</span>: <span class="s">"XYZ Vendor"</span>,
+    <span class="s">"totalAmount"</span>: 118000,
+    <span class="s">"daysPending"</span>: 3
+  }]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/dashboard/financial-summary</span>
+      <span class="endpoint-desc">Cross-site financial rollup (PO totals, invoiced, paid)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.universal-view</div>
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>Scope to one site</td></tr>
+        <tr><td>companyId</td><td>Scope to one company</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td></tr>
+        <tr><td>fromDate, toDate</td><td>Date range filter (ISO date strings)</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section style="margin-top:48px;padding:24px;background:#f8f9fa;border-radius:12px;border:1px solid #e9ecef">
+  <h3 style="font-size:16px;margin-bottom:12px">Common Error Response Shape</h3>
+  <pre style="background:#0d1117;color:#e6edf3;padding:16px;border-radius:8px;font-family:'Fira Code',monospace;font-size:12px">{
+  <span class="s">"error"</span>: {
+    <span class="s">"code"</span>: 400,
+    <span class="s">"timestamp"</span>: <span class="s">"7/5/2026"</span>,
+    <span class="s">"path"</span>: <span class="s">"/api/v1/purchase-orders"</span>,
+    <span class="s">"method"</span>: <span class="s">"POST"</span>,
+    <span class="s">"message"</span>: <span class="s">"Total amount must equal taxable amount + GST amount."</span>
+    <span class="c">// or array: ["siteId must be a UUID", "poNumber should not be empty"]</span>
+  }
+}</pre>
+  <table style="margin-top:12px;font-size:13px"><tr><th>Status</th><th>Meaning</th></tr>
+    <tr><td>400</td><td>Validation error / business rule violated (check message)</td></tr>
+    <tr><td>401</td><td>No token / expired token</td></tr>
+    <tr><td>403</td><td>Missing permission for this action</td></tr>
+    <tr><td>404</td><td>Document not found</td></tr>
+    <tr><td>409</td><td>Conflict (duplicate number / 1:1 constraint violated)</td></tr>
+    <tr><td>500</td><td>Server error — report to backend team</td></tr>
+  </table>
+</section>
+
+<p style="margin-top:32px;font-size:12px;color:#adb5bd;text-align:center">European Union — Financial Module API Documentation · Auto-generated from BRD v2.0 · 2026-05-07</p>
+
+</main>
+
+<script>
+function toggle(head) {
+  head.parentElement.classList.toggle('open');
+}
+// Open all endpoints in section by default when clicking nav
+document.querySelectorAll('.nav-item').forEach(a => {
+  a.addEventListener('click', function(e) {
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      target.querySelectorAll('.endpoint:first-of-type').forEach(ep => ep.classList.add('open'));
+    }
+  });
+});
+</script>
+</body>
+</html>

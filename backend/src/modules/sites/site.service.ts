@@ -15,6 +15,7 @@ import {
   SiteEntityFields,
   SiteStatus,
 } from './constants/site.constants';
+import { BillingService } from 'src/modules/billing/billing.service';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import {
   SortOrder,
@@ -46,6 +47,7 @@ export class SiteService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
+    private readonly billingService: BillingService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -503,6 +505,20 @@ export class SiteService {
 
     // Validate status transition
     this.validateStatusTransition(site.status, updateStatusDto.status);
+
+    // If transitioning to COMPLETED, check financial clearance (BRD §9)
+    if (updateStatusDto.status === SiteStatus.COMPLETED) {
+      const readiness = await this.billingService.getSiteClosingReadiness({ siteId: id });
+      if (!readiness.canClose) {
+        const failedConditions = readiness.conditions
+          .filter((c) => !c.pass)
+          .map((c) => `${c.id}: ${c.detail.join(', ') || 'not met'}`)
+          .join('; ');
+        throw new BadRequestException(
+          `${SITE_ERRORS.SITE_NOT_READY_FOR_CLOSING} Failed conditions: ${failedConditions}`,
+        );
+      }
+    }
 
     return await this.dataSource.transaction(async (entityManager) => {
       // Update site status

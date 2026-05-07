@@ -1,5 +1,6 @@
 import { Controller, Get, Query, Request, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { DashboardService } from './dashboard.service';
 import { GetDashboardDto } from './dto/dashboard.dto';
 
@@ -179,6 +180,49 @@ export class DashboardController {
   async getPayrollStatus(@Request() req: any) {
     this.assertAdminAccess(req);
     return await this.dashboardService.getPayrollStatus();
+  }
+
+  // ==================== Financial Dashboard (BRD §10 Universal View) ====================
+
+  @Get('financial-approvals')
+  @RequiredPermission('financials.universal-view')
+  @ApiOperation({
+    summary: 'Get pending financial approvals across sites (PO/JMC/Invoice)',
+    description:
+      'Returns a list of pending financial document approvals for the Universal View dashboard. ' +
+      'Gated by the financials.universal-view permission per BRD §10 — accessible to all roles ' +
+      'except Employee and Driver (configurable via role-permission mapping).',
+  })
+  async getFinancialApprovals(
+    @Query('siteId') siteId?: string,
+    @Query('companyId') companyId?: string,
+    @Query('partyType') partyType?: string,
+  ) {
+    return await this.dashboardService.getFinancialApprovals({ siteId, companyId, partyType });
+  }
+
+  @Get('financial-summary')
+  @RequiredPermission('financials.universal-view')
+  @ApiOperation({
+    summary: 'Get cross-site financial summary (PO totals, invoiced, paid)',
+    description:
+      'Returns aggregated financial data across sites for the Universal View dashboard. ' +
+      'Gated by the financials.universal-view permission per BRD §10.',
+  })
+  async getFinancialSummary(
+    @Query('siteId') siteId?: string,
+    @Query('companyId') companyId?: string,
+    @Query('partyType') partyType?: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
+  ) {
+    return await this.dashboardService.getFinancialSummary({
+      siteId,
+      companyId,
+      partyType,
+      fromDate,
+      toDate,
+    });
   }
 
   // ==================== Helpers ====================

@@ -26,6 +26,16 @@ import {
   FIELD_NAMES,
 } from '../common/file-upload/constants/files.constants';
 
+/**
+ * Site Documents Controller - Repurposed for non-financial documents only.
+ * 
+ * Financial documents (PO, INVOICE) have been moved to dedicated modules:
+ * - /purchase-orders, /site-invoices, /bank-transfers, etc.
+ * 
+ * This controller now handles miscellaneous site documents like:
+ * - Contracts, work orders, completion certificates
+ * - Photos, inspection reports, etc.
+ */
 @ApiTags('Site Documents')
 @ApiBearerAuth('JWT-auth')
 @Controller('site-documents')
@@ -39,7 +49,7 @@ export class SiteDocumentController {
   @ApiOperation({
     summary: 'Create a new site document',
     description:
-      'Creates a new site document with file upload. Supports uploading a single document file along with document metadata.',
+      'Creates a new non-financial site document with file upload. For financial documents (PO, Invoice), use the dedicated financial modules instead.',
   })
   async create(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
@@ -54,11 +64,11 @@ export class SiteDocumentController {
   @Post('bulk')
   @UseInterceptors(
     FileFieldsInterceptor([
-      { name: FIELD_NAMES.SITE_DOC_PO, maxCount: 1 },
-      { name: FIELD_NAMES.SITE_DOC_INVOICE, maxCount: 1 },
       { name: FIELD_NAMES.SITE_DOC_CONTRACT, maxCount: 1 },
       { name: FIELD_NAMES.SITE_DOC_WORK_ORDER, maxCount: 1 },
       { name: FIELD_NAMES.SITE_DOC_COMPLETION_CERTIFICATE, maxCount: 1 },
+      { name: FIELD_NAMES.SITE_DOC_PHOTO, maxCount: 1 },
+      { name: FIELD_NAMES.SITE_DOC_INSPECTION_REPORT, maxCount: 1 },
       { name: FIELD_NAMES.SITE_DOC_OTHER, maxCount: 1 },
     ]),
   )
@@ -67,7 +77,7 @@ export class SiteDocumentController {
   @ApiOperation({
     summary: 'Bulk create site documents',
     description:
-      'Creates multiple site documents at once with different document types (PO, Invoice, Contract, Work Order, Completion Certificate, Other). Each document type can have its own file upload.',
+      'Creates multiple non-financial site documents at once with different document types (Contract, Work Order, Completion Certificate, Photo, Inspection Report, Other). Each document type can have its own file upload. NOTE: PO and Invoice document types are NOT supported here - use dedicated financial modules.',
   })
   async bulkCreate(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
@@ -86,7 +96,7 @@ export class SiteDocumentController {
   @ApiOperation({
     summary: 'Get all site documents',
     description:
-      'Retrieves a list of all site documents with optional filtering, pagination, and sorting based on query parameters.',
+      'Retrieves a list of all non-financial site documents with optional filtering, pagination, and sorting based on query parameters.',
   })
   async findAll(@Query() query: GetSiteDocumentDto) {
     return await this.siteDocumentService.findAll(query);
@@ -96,7 +106,7 @@ export class SiteDocumentController {
   @ApiOperation({
     summary: 'Get documents by site ID',
     description:
-      'Retrieves all documents associated with a specific site, with optional filtering and pagination.',
+      'Retrieves all non-financial documents associated with a specific site, with optional filtering and pagination.',
   })
   async getDocumentsBySite(
     @Param('siteId', ParseUUIDPipe) siteId: string,
@@ -109,13 +119,26 @@ export class SiteDocumentController {
   @ApiOperation({
     summary: 'Get documents by contractor ID',
     description:
-      'Retrieves all documents associated with a specific contractor, with optional filtering and pagination.',
+      'Retrieves all non-financial documents associated with a specific contractor, with optional filtering and pagination.',
   })
   async getDocumentsByContractor(
     @Param('contractorId', ParseUUIDPipe) contractorId: string,
     @Query() query: GetSiteDocumentDto,
   ) {
     return await this.siteDocumentService.getDocumentsByContractor(contractorId, query);
+  }
+
+  @Get('vendor/:vendorId')
+  @ApiOperation({
+    summary: 'Get documents by vendor ID',
+    description:
+      'Retrieves all non-financial documents associated with a specific vendor, with optional filtering and pagination.',
+  })
+  async getDocumentsByVendor(
+    @Param('vendorId', ParseUUIDPipe) vendorId: string,
+    @Query() query: GetSiteDocumentDto,
+  ) {
+    return await this.siteDocumentService.getDocumentsByVendor(vendorId, query);
   }
 
   @Get(':id')
@@ -135,7 +158,7 @@ export class SiteDocumentController {
   @ApiOperation({
     summary: 'Update a site document',
     description:
-      'Updates the details of an existing site document. Optionally allows updating the document file. Only provided fields will be updated.',
+      'Updates the details of an existing non-financial site document. Optionally allows updating the document file. Only provided fields will be updated.',
   })
   async update(
     @Param('id', ParseUUIDPipe) id: string,

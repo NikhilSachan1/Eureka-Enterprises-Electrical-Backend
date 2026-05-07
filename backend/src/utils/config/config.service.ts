@@ -55,6 +55,25 @@ import { DsrEditHistoryEntity } from 'src/modules/daily-status-reports/entities/
 import { DsrFileEntity } from 'src/modules/daily-status-reports/entities/dsr-file.entity';
 import { FnfEntity } from 'src/modules/fnf/entities/fnf.entity';
 import { OrgFileNodeEntity } from 'src/modules/org-files/entities/org-file-node.entity';
+// Financial module entities (Phase 2-4)
+import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { SiteVendorEntity } from 'src/modules/site-vendors/entities/site-vendor.entity';
+import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
+import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
+import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
+import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
+import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
+import { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
+import { PaymentAdviceEntity } from 'src/modules/payment-advices/entities/payment-advice.entity';
+import { PaymentAdviceSequenceEntity } from 'src/modules/payment-advices/entities/payment-advice-sequence.entity';
+import { PaymentAdviceEmailLogEntity } from 'src/modules/payment-advices/entities/payment-advice-email-log.entity';
+import { DebitNoteEntity } from 'src/modules/debit-credit-notes/entities/debit-note.entity';
+import { CreditNoteEntity } from 'src/modules/debit-credit-notes/entities/credit-note.entity';
+import { GstRegisterEntryEntity } from 'src/modules/gst/entities/gst-register-entry.entity';
+import { GstPaymentAdviceSequenceEntity } from 'src/modules/gst/entities/gst-payment-advice-sequence.entity';
+import { GstPaymentEntity } from 'src/modules/gst/entities/gst-payment.entity';
+import { TdsRegisterEntryEntity } from 'src/modules/tds/entities/tds-register-entry.entity';
+import { TdsPaymentEntity } from 'src/modules/tds/entities/tds-payment.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -144,6 +163,25 @@ export class ConfigService {
         DsrFileEntity,
         FnfEntity,
         OrgFileNodeEntity,
+        // Financial module entities (Phase 2-4)
+        VendorEntity,
+        SiteVendorEntity,
+        PurchaseOrderEntity,
+        JmcEntity,
+        SiteReportEntity,
+        SiteInvoiceEntity,
+        BookPaymentEntity,
+        BankTransferEntity,
+        PaymentAdviceEntity,
+        PaymentAdviceSequenceEntity,
+        PaymentAdviceEmailLogEntity,
+        DebitNoteEntity,
+        CreditNoteEntity,
+        GstRegisterEntryEntity,
+        GstPaymentAdviceSequenceEntity,
+        GstPaymentEntity,
+        TdsRegisterEntryEntity,
+        TdsPaymentEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

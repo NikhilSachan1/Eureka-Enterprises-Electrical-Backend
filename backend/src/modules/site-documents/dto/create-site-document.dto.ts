@@ -19,6 +19,15 @@ export function parseMultipartOptionalNumber(value: unknown): number | undefined
   return Number.isNaN(n) ? undefined : n;
 }
 
+/**
+ * Create Site Document DTO - Repurposed for non-financial documents only.
+ * 
+ * Financial fields (direction, gstAmount, totalAmount, paymentStatus, paymentDate,
+ * paymentReference, dueDate) have been removed.
+ * 
+ * For financial documents, use dedicated modules:
+ * - purchase-orders, site-invoices, bank-transfers, etc.
+ */
 export class CreateSiteDocumentDto {
   @ApiPropertyOptional({
     description: 'Document file to upload',
@@ -32,29 +41,28 @@ export class CreateSiteDocumentDto {
   @IsNotEmpty()
   siteId: string;
 
-  @ApiPropertyOptional({ description: 'Contractor ID (optional for site-level documents)' })
+  @ApiPropertyOptional({ description: 'Contractor ID (optional)' })
   @IsUUID()
   @IsOptional()
   contractorId?: string;
 
-  @ApiProperty({ description: 'Document type (PO, INVOICE, CONTRACT, etc.)', example: 'PO' })
+  @ApiPropertyOptional({ description: 'Vendor ID (optional)' })
+  @IsUUID()
+  @IsOptional()
+  vendorId?: string;
+
+  @ApiProperty({
+    description: 'Document type (CONTRACT, WORK_ORDER, COMPLETION_CERTIFICATE, PHOTO, INSPECTION_REPORT, OTHER). PO and INVOICE are NOT allowed.',
+    example: 'CONTRACT',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
   documentType: string;
 
   @ApiPropertyOptional({
-    description: 'Document direction: PAYABLE (expense) or RECEIVABLE (income)',
-    example: 'PAYABLE',
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(20)
-  direction?: string;
-
-  @ApiPropertyOptional({
-    description: 'Document number (optional for informal docs)',
-    example: 'PO-2026-001',
+    description: 'Document number (optional for informal docs like photos)',
+    example: 'CONTRACT-2026-001',
   })
   @IsString()
   @IsOptional()
@@ -67,7 +75,7 @@ export class CreateSiteDocumentDto {
   documentDate: string;
 
   @ApiPropertyOptional({
-    description: 'Base amount (optional for non-financial docs)',
+    description: 'Informational amount (for rough quote reference only, not for financial calculations)',
     example: 10000.0,
   })
   @Transform(({ value }) => parseMultipartOptionalNumber(value))
@@ -76,47 +84,11 @@ export class CreateSiteDocumentDto {
   @Min(0)
   amount?: number;
 
-  @ApiPropertyOptional({ description: 'GST amount', example: 1800.0 })
-  @Transform(({ value }) => parseMultipartOptionalNumber(value))
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  gstAmount?: number;
-
-  @ApiPropertyOptional({ description: 'Total amount (auto-calculated if not provided)' })
-  @Transform(({ value }) => parseMultipartOptionalNumber(value))
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  totalAmount?: number;
-
   @ApiPropertyOptional({ description: 'Document status', example: 'DRAFT' })
   @IsString()
   @IsOptional()
   @MaxLength(20)
   status?: string;
-
-  @ApiPropertyOptional({ description: 'Payment status', example: 'PENDING' })
-  @IsString()
-  @IsOptional()
-  @MaxLength(20)
-  paymentStatus?: string;
-
-  @ApiPropertyOptional({ description: 'Payment date', example: '2026-02-15' })
-  @IsDateString()
-  @IsOptional()
-  paymentDate?: string;
-
-  @ApiPropertyOptional({ description: 'Payment reference/transaction ID' })
-  @IsString()
-  @IsOptional()
-  @MaxLength(255)
-  paymentReference?: string;
-
-  @ApiPropertyOptional({ description: 'Payment due date', example: '2026-02-28' })
-  @IsDateString()
-  @IsOptional()
-  dueDate?: string;
 
   @ApiPropertyOptional({ description: 'Remarks/notes' })
   @IsString()

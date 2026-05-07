@@ -104,7 +104,7 @@ export const getFinancialOverviewQuery = (
           WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PENDING' THEN sd."totalAmount" 
           ELSE 0 
         END), 0) as "pendingPayables"
-      FROM site_documents sd
+      FROM site_documents_financial sd
       INNER JOIN sites s ON sd."siteId" = s.id
       WHERE ${conditions.join(' AND ')}
     `,
@@ -132,7 +132,7 @@ export const getDashboardAlertsQuery = (companyId?: string) => {
           AND s."endDate" BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
           AND s.status = 'ONGOING'
           ${siteFilter}) as "upcomingDeadlines",
-        (SELECT COUNT(*) FROM site_documents sd 
+        (SELECT COUNT(*) FROM site_documents_financial sd 
           INNER JOIN sites s ON sd."siteId" = s.id
           WHERE sd."deletedAt" IS NULL 
           AND s."deletedAt" IS NULL
@@ -140,7 +140,7 @@ export const getDashboardAlertsQuery = (companyId?: string) => {
           AND sd."paymentStatus" != 'PAID'
           AND sd."dueDate" < CURRENT_DATE
           ${siteFilter}) as "overdueInvoices",
-        (SELECT COUNT(*) FROM site_documents sd 
+        (SELECT COUNT(*) FROM site_documents_financial sd 
           INNER JOIN sites s ON sd."siteId" = s.id
           WHERE sd."deletedAt" IS NULL 
           AND s."deletedAt" IS NULL
@@ -261,7 +261,7 @@ export const getSiteProfitabilityQuery = (
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "paidContractorExpenses",
           COUNT(sd.id) as "totalDocuments",
           COUNT(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'INVOICE' THEN 1 END) as "totalInvoicedCount"
-        FROM site_documents sd, site_info
+        FROM site_documents_financial sd, site_info
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
       ),
       -- Employee expenses: directly linked via siteId OR via allocation during expense date
@@ -413,7 +413,7 @@ export const getSiteExpensesByCategoryQuery = (
         sd."documentType" as category,
         COALESCE(SUM(sd."totalAmount"), 0)::numeric as amount,
         COUNT(sd.id)::int as count
-      FROM site_documents sd
+      FROM site_documents_financial sd
       CROSS JOIN site_info
       WHERE sd."siteId" = $1
         AND sd."deletedAt" IS NULL
@@ -615,7 +615,7 @@ export const getSiteExpensesByContractorQuery = (
         COALESCE(SUM(sd."totalAmount"), 0)::numeric as amount,
         COALESCE(SUM(CASE WHEN sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0)::numeric as "paidAmount",
         COALESCE(SUM(CASE WHEN sd."paymentStatus" != 'PAID' THEN sd."totalAmount" ELSE 0 END), 0)::numeric as "pendingAmount"
-      FROM site_documents sd
+      FROM site_documents_financial sd
       INNER JOIN contractors c ON sd."contractorId" = c.id
       CROSS JOIN site_info
       WHERE sd."siteId" = $1
@@ -705,7 +705,7 @@ export const getSiteMonthlyTrendQuery = (
         SELECT 
           DATE_TRUNC('month', sd."documentDate")::date as month_start,
           COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' THEN sd."totalAmount" ELSE 0 END), 0) as revenue
-        FROM site_documents sd
+        FROM site_documents_financial sd
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL
         GROUP BY DATE_TRUNC('month', sd."documentDate")
       ),
@@ -714,7 +714,7 @@ export const getSiteMonthlyTrendQuery = (
         SELECT 
           DATE_TRUNC('month', sd."documentDate")::date as month_start,
           COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' THEN sd."totalAmount" ELSE 0 END), 0) as contractor_expenses
-        FROM site_documents sd
+        FROM site_documents_financial sd
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL
         GROUP BY DATE_TRUNC('month', sd."documentDate")
       ),
@@ -1011,7 +1011,7 @@ export const getAllSitesProfitabilityQuery = (
           
         FROM sites s
         LEFT JOIN companies c ON s."companyId" = c.id
-        LEFT JOIN site_documents sd ON sd."siteId" = s.id AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
+        LEFT JOIN site_documents_financial sd ON sd."siteId" = s.id AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
         WHERE ${conditions.join(' AND ')}
         GROUP BY s.id, s.name, c.name, s.status, s."createdAt", s."startDate", s."endDate"
       )
@@ -1120,7 +1120,7 @@ export const getInvoiceAgingQuery = (
           WHEN sd."dueDate" >= CURRENT_DATE - INTERVAL '90 days' THEN '61-90'
           ELSE '90+'
         END as bucket
-      FROM site_documents sd
+      FROM site_documents_financial sd
       INNER JOIN sites s ON sd."siteId" = s.id
       LEFT JOIN contractors c ON sd."contractorId" = c.id
       WHERE ${conditions.join(' AND ')}
@@ -1174,7 +1174,7 @@ export const getInvoiceAgingSummaryQuery = (
             ELSE 4
           END as bucket_order,
           sd."totalAmount"
-        FROM site_documents sd
+        FROM site_documents_financial sd
         INNER JOIN sites s ON sd."siteId" = s.id
         WHERE ${conditions.join(' AND ')}
       )
@@ -1222,7 +1222,7 @@ export const getContractorAnalyticsQuery = (contractorId: string) => {
         -- Financial metrics from site_documents
         COALESCE((
           SELECT SUM(sd."totalAmount")
-          FROM site_documents sd
+          FROM site_documents_financial sd
           WHERE sd."contractorId" = c.id
             AND sd."deletedAt" IS NULL
             AND sd.direction = 'PAYABLE'
@@ -1230,7 +1230,7 @@ export const getContractorAnalyticsQuery = (contractorId: string) => {
         
         COALESCE((
           SELECT SUM(sd."totalAmount")
-          FROM site_documents sd
+          FROM site_documents_financial sd
           WHERE sd."contractorId" = c.id
             AND sd."deletedAt" IS NULL
             AND sd.direction = 'PAYABLE'
@@ -1263,7 +1263,7 @@ export const getContractorSitesQuery = (contractorId: string) => {
         COALESCE(SUM(CASE WHEN sd.direction = 'PAYABLE' AND sd."paymentStatus" = 'PAID' THEN sd."totalAmount" ELSE 0 END), 0) as "paidAmount"
       FROM site_contractors sc
       INNER JOIN sites s ON sc."siteId" = s.id
-      LEFT JOIN site_documents sd ON sd."siteId" = s.id AND sd."contractorId" = $1 AND sd."deletedAt" IS NULL
+      LEFT JOIN site_documents_financial sd ON sd."siteId" = s.id AND sd."contractorId" = $1 AND sd."deletedAt" IS NULL
       WHERE sc."contractorId" = $1 AND s."deletedAt" IS NULL
       GROUP BY s.id, s.name, s.status, s."startDate", s."endDate"
       ORDER BY s."startDate" DESC
@@ -1314,12 +1314,12 @@ export const getAllContractorsAnalyticsQuery = (
         COUNT(DISTINCT CASE WHEN s.status = 'ONGOING' THEN sc."siteId" END) as "ongoingSites",
         COALESCE((
           SELECT SUM(sd."totalAmount")
-          FROM site_documents sd
+          FROM site_documents_financial sd
           WHERE sd."contractorId" = c.id AND sd."deletedAt" IS NULL AND sd.direction = 'PAYABLE'
         ), 0) as "totalContractValue",
         COALESCE((
           SELECT SUM(sd."totalAmount")
-          FROM site_documents sd
+          FROM site_documents_financial sd
           WHERE sd."contractorId" = c.id AND sd."deletedAt" IS NULL AND sd.direction = 'PAYABLE' AND sd."paymentStatus" != 'PAID'
         ), 0) as "pendingPayment"
       FROM contractors c
@@ -1662,17 +1662,17 @@ export const getSiteHealthDataQuery = (siteId: string) => {
         -- Payment collection metrics
         COALESCE((
           SELECT SUM(sd."totalAmount")
-          FROM site_documents sd
+          FROM site_documents_financial sd
           WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL AND sd.direction = 'RECEIVABLE'
         ), 0) as "totalReceivable",
         COALESCE((
           SELECT SUM(sd."totalAmount")
-          FROM site_documents sd
+          FROM site_documents_financial sd
           WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL AND sd.direction = 'RECEIVABLE' AND sd."paymentStatus" = 'PAID'
         ), 0) as "collectedAmount",
         
         -- Document count
-        (SELECT COUNT(*) FROM site_documents sd WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL) as "totalDocuments",
+        (SELECT COUNT(*) FROM site_documents_financial sd WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL) as "totalDocuments",
         
         -- Daily status report metrics
         (SELECT COUNT(DISTINCT dsr."reportDate") 
@@ -1796,7 +1796,7 @@ export const getSiteTimelineQuery = (
             CASE WHEN sd."documentNumber" IS NOT NULL THEN ' #' || sd."documentNumber" ELSE '' END ||
             CASE WHEN sd."totalAmount" > 0 THEN ' - Amount: ₹' || sd."totalAmount" ELSE '' END,
           NULL
-        FROM site_documents sd
+        FROM site_documents_financial sd
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL
       )
       SELECT * FROM timeline_events

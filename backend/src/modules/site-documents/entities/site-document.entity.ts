@@ -2,20 +2,26 @@ import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
-import {
-  SiteDocumentStatus,
-  SiteDocumentPaymentStatus,
-} from '../constants/site-document.constants';
+import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { SiteDocumentStatus } from '../constants/site-document.constants';
 
+/**
+ * Site Document Entity - Repurposed for non-financial documents only.
+ * 
+ * Financial documents (PO, INVOICE) have been moved to dedicated modules:
+ * - purchase_orders, site_invoices, bank_transfers, etc.
+ * 
+ * This entity now handles miscellaneous site documents like:
+ * - Contracts, work orders, completion certificates
+ * - Photos, inspection reports, etc.
+ */
 @Entity('site_documents')
 @Index('IDX_SITE_DOCUMENT_SITE', ['siteId'])
 @Index('IDX_SITE_DOCUMENT_CONTRACTOR', ['contractorId'])
+@Index('IDX_SITE_DOCUMENT_VENDOR', ['vendorId'])
 @Index('IDX_SITE_DOCUMENT_TYPE', ['documentType'])
-@Index('IDX_SITE_DOCUMENT_DIRECTION', ['direction'])
 @Index('IDX_SITE_DOCUMENT_STATUS', ['status'])
-@Index('IDX_SITE_DOCUMENT_PAYMENT_STATUS', ['paymentStatus'])
 @Index('IDX_SITE_DOCUMENT_NUMBER', ['documentNumber'])
-@Index('IDX_SITE_DOCUMENT_DUE_DATE', ['dueDate'])
 export class SiteDocumentEntity extends BaseEntity {
   // Site reference
   @Column({ type: 'uuid' })
@@ -25,68 +31,52 @@ export class SiteDocumentEntity extends BaseEntity {
   @JoinColumn({ name: 'siteId' })
   site: SiteEntity;
 
-  // Contractor reference (nullable for site-level documents)
+  // Contractor reference (nullable for site-level documents or vendor documents)
   @Column({ type: 'uuid', nullable: true })
-  contractorId: string;
+  contractorId: string | null;
 
-  @ManyToOne(() => ContractorEntity)
+  @ManyToOne(() => ContractorEntity, { nullable: true })
   @JoinColumn({ name: 'contractorId' })
-  contractor: ContractorEntity;
+  contractor: ContractorEntity | null;
 
-  // Document type (PO, INVOICE, CONTRACT, etc.) - config driven
+  // Vendor reference (nullable - for vendor-related non-financial documents)
+  @Column({ type: 'uuid', nullable: true })
+  vendorId: string | null;
+
+  @ManyToOne(() => VendorEntity, { nullable: true })
+  @JoinColumn({ name: 'vendorId' })
+  vendor: VendorEntity | null;
+
+  // Document type (CONTRACT, WORK_ORDER, COMPLETION_CERTIFICATE, PHOTO, etc.)
+  // PO and INVOICE are no longer allowed - use dedicated financial modules
   @Column({ type: 'varchar', length: 50 })
   documentType: string;
 
-  // Document direction for profitability (PAYABLE = expense, RECEIVABLE = income)
-  // Nullable for non-financial documents (completion certificates, photos, etc.)
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  direction: string;
-
-  // Document number (PO number, Invoice number, etc.) - optional for informal docs
+  // Document number (optional for informal docs like photos)
   @Column({ type: 'varchar', length: 100, nullable: true })
-  documentNumber: string;
+  documentNumber: string | null;
 
   // Document date
   @Column({ type: 'date' })
   documentDate: Date;
 
-  // Amount details
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  amount: number;
-
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  gstAmount: number;
-
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  totalAmount: number;
+  // Amount - kept for informational "rough quote" purposes only (nullable)
+  // Not used for financial calculations - those are in dedicated modules
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  amount: number | null;
 
   // File details
   @Column({ type: 'varchar', length: 500, nullable: true })
-  fileUrl: string;
+  fileUrl: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  fileName: string;
+  fileName: string | null;
 
-  // Document status - config driven
+  // Document status - simplified: DRAFT | APPROVED | REJECTED
   @Column({ type: 'varchar', length: 20, default: SiteDocumentStatus.DRAFT })
   status: string;
 
-  // Payment status - config driven
-  @Column({ type: 'varchar', length: 20, default: SiteDocumentPaymentStatus.PENDING })
-  paymentStatus: string;
-
-  // Payment details
-  @Column({ type: 'date', nullable: true })
-  paymentDate: Date;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  paymentReference: string;
-
-  // Due date for payment
-  @Column({ type: 'date', nullable: true })
-  dueDate: Date;
-
   // Remarks/notes
   @Column({ type: 'text', nullable: true })
-  remarks: string;
+  remarks: string | null;
 }

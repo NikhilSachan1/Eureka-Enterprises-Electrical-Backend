@@ -12,6 +12,7 @@ import { ExpenseCronService } from './crons/expense.cron.service';
 import { CelebrationCronService } from './crons/celebration.cron.service';
 import { SalaryStructureCronService } from './crons/salary-structure.cron.service';
 import { ConfigSettingCronService } from './crons/config-setting.cron.service';
+import { FinancialCronService } from './crons/financial.cron.service';
 import { CronOrchestratorService } from './crons/cron-orchestrator.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { UsersModule } from '../users/user.module';
@@ -50,6 +51,7 @@ import { CronLogModule } from '../cron-logs/cron-log.module';
     CelebrationCronService,
     SalaryStructureCronService,
     ConfigSettingCronService,
+    FinancialCronService,
     // Orchestrator (manages grouped crons)
     CronOrchestratorService,
   ],
@@ -67,6 +69,7 @@ import { CronLogModule } from '../cron-logs/cron-log.module';
     CelebrationCronService,
     SalaryStructureCronService,
     ConfigSettingCronService,
+    FinancialCronService,
     CronOrchestratorService,
   ],
 })

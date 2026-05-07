@@ -22,21 +22,48 @@ export const getSiteStatsByContractorQuery = `
 `;
 
 /**
- * Get document/financial statistics grouped by contractor
- * Returns: contractorId, totalDocuments, totalInvoices, totalQuotations, totalAmountBilled, pendingPayments
+ * Get document/financial statistics grouped by contractor.
+ *
+ * site_documents previously held financial figures (totalAmount, paymentStatus,
+ * documentType IN PO/INVOICE) but those columns were dropped by migration
+ * 1835000000000-repurpose-site-documents-drop-financial-fields. Financial data
+ * now lives in the dedicated tables — site_invoices for invoiced amounts,
+ * purchase_orders for PO totals — so this query sources from there. The
+ * remaining site_documents joins cover ONLY non-financial documents
+ * (contracts, completion certificates, photos, etc.).
  */
 export const getDocumentStatsByContractorQuery = `
-  SELECT 
-    sd."contractorId",
-    COUNT(*) as "totalDocuments",
-    COUNT(*) FILTER (WHERE sd."documentType" = 'INVOICE') as "totalInvoices",
-    COUNT(*) FILTER (WHERE sd."documentType" = 'QUOTATION') as "totalQuotations",
-    COALESCE(SUM(sd."totalAmount"), 0) as "totalAmountBilled",
-    COUNT(*) FILTER (WHERE sd."paymentStatus" = 'PENDING') as "pendingPayments"
-  FROM site_documents sd
-  WHERE sd."contractorId" = ANY($1)
-    AND sd."deletedAt" IS NULL
-  GROUP BY sd."contractorId"
+  WITH inv AS (
+    SELECT "contractorId",
+           COUNT(*)::int AS "totalInvoices",
+           COALESCE(SUM("totalAmount"), 0) AS "totalAmountBilled",
+           COUNT(*) FILTER (
+             WHERE "approvalStatus" = 'APPROVED'
+               AND "paidTotal" < "totalAmount"
+           )::int AS "pendingPayments"
+      FROM site_invoices
+     WHERE "contractorId" = ANY($1)
+       AND "deletedAt" IS NULL
+     GROUP BY "contractorId"
+  ),
+  docs AS (
+    SELECT "contractorId", COUNT(*)::int AS "totalDocuments"
+      FROM site_documents
+     WHERE "contractorId" = ANY($1)
+       AND "deletedAt" IS NULL
+     GROUP BY "contractorId"
+  )
+  SELECT
+    c.id AS "contractorId",
+    COALESCE(docs."totalDocuments", 0) AS "totalDocuments",
+    COALESCE(inv."totalInvoices", 0) AS "totalInvoices",
+    0::int AS "totalQuotations",
+    COALESCE(inv."totalAmountBilled", 0) AS "totalAmountBilled",
+    COALESCE(inv."pendingPayments", 0) AS "pendingPayments"
+  FROM contractors c
+  LEFT JOIN inv  ON inv."contractorId"  = c.id
+  LEFT JOIN docs ON docs."contractorId" = c.id
+  WHERE c.id = ANY($1)
 `;
 
 /**

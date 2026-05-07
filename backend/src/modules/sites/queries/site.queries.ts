@@ -84,20 +84,24 @@ export const getSiteHealthScoresQuery = (siteIds: string[]) => {
             ELSE 0 
           END) as days_delayed,
           
-          -- Payment metrics
+          -- Payment metrics sourced from the dedicated financial tables.
+          -- site_documents no longer carries financial columns (direction,
+          -- totalAmount, paymentStatus were dropped by migration 1835000000000).
+          -- total_receivable = sum of SALE-side approved invoices
           COALESCE((
-            SELECT SUM(sd."totalAmount")
-            FROM site_documents sd
-            WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL AND sd.direction = 'RECEIVABLE'
+            SELECT SUM(si."totalAmount")
+            FROM site_invoices si
+            WHERE si."siteId" = s.id AND si."deletedAt" IS NULL AND si."partyType" = 'SALE'
+              AND si."approvalStatus" = 'APPROVED'
           ), 0) as total_receivable,
+          -- collected_amount = sum of SALE-side bank transfers (what's actually been received)
           COALESCE((
-            SELECT SUM(sd."totalAmount")
-            FROM site_documents sd
-            WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL 
-            AND sd.direction = 'RECEIVABLE' AND sd."paymentStatus" = 'PAID'
+            SELECT SUM(bt."transferAmount")
+            FROM bank_transfers bt
+            WHERE bt."siteId" = s.id AND bt."deletedAt" IS NULL AND bt."partyType" = 'SALE'
           ), 0) as collected_amount,
-          
-          -- Document count
+
+          -- Document count (non-financial site docs only)
           COALESCE((SELECT COUNT(*) FROM site_documents sd WHERE sd."siteId" = s.id AND sd."deletedAt" IS NULL), 0) as total_documents,
           
           -- Daily reporting metrics
