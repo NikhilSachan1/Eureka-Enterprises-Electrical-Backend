@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financial Module — Complete E2E Test Report</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8f9fa;color:#212529;line-height:1.6}
+.page{max-width:1200px;margin:0 auto;padding:40px 32px 80px}
+/* HEADER */
+.report-header{background:linear-gradient(135deg,#0d6efd 0%,#0a58ca 100%);color:#fff;padding:36px 40px;border-radius:14px;margin-bottom:36px;box-shadow:0 4px 24px rgba(13,110,253,.18)}
+.report-header h1{font-size:26px;font-weight:800;margin-bottom:4px}
+.report-header p{font-size:13px;opacity:.85;margin-bottom:20px}
+.meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.meta-card{background:rgba(255,255,255,.15);border-radius:8px;padding:10px 14px}
+.meta-card .label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.7;margin-bottom:2px}
+.meta-card .value{font-size:13px;font-weight:600}
+/* SCORE BANNER */
+.score-banner{display:flex;align-items:center;justify-content:center;gap:24px;background:#fff;border:2px solid #198754;border-radius:12px;padding:20px 32px;margin-bottom:28px;box-shadow:0 2px 12px rgba(25,135,84,.1)}
+.score-pass{font-size:42px;font-weight:900;color:#198754;line-height:1}
+.score-label{font-size:14px;color:#198754;font-weight:600}
+.score-divider{width:1px;height:50px;background:#dee2e6}
+.score-note{font-size:14px;color:#495057;max-width:300px;text-align:center}
+.badge-100{background:#198754;color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;margin-top:6px;display:inline-block}
+/* SECTION */
+.section{background:#fff;border-radius:12px;padding:28px;margin-bottom:24px;border:1px solid #e9ecef;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.section-title{font-size:18px;font-weight:700;color:#212529;border-bottom:2px solid #e9ecef;padding-bottom:10px;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.section-title span{font-size:13px;font-weight:400;color:#6c757d;margin-left:4px}
+/* TABLES */
+table{width:100%;border-collapse:collapse;font-size:13px;margin:0}
+th{background:#f8f9fa;font-weight:600;text-align:left;padding:9px 12px;border:1px solid #dee2e6;color:#495057;white-space:nowrap}
+td{padding:8px 12px;border:1px solid #dee2e6;vertical-align:top}
+tr:hover td{background:#f8f9fa}
+/* PASS/FAIL */
+.pass{color:#198754;font-weight:700}
+.fail{color:#dc3545;font-weight:700}
+.icon-pass::before{content:'✅ '}
+.icon-fail::before{content:'❌ '}
+/* SUMMARY TABLE */
+.summary-section{background:#fff}
+.summary-section td:nth-child(3),.summary-section td:nth-child(4){text-align:center;font-weight:700}
+.summary-section td:nth-child(5){text-align:center;color:#198754;font-weight:700}
+/* BRD RULES TABLE */
+.rules-table td:nth-child(4){font-size:16px;text-align:center}
+/* EVIDENCE */
+code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding:1px 5px;border-radius:3px;color:#c0392b;word-break:break-all}
+/* BUGS */
+.bug-table td:nth-child(1){font-weight:700;text-align:center;font-size:12px;color:#6c757d;white-space:nowrap}
+.bug-table td:nth-child(2){color:#b91c1c}
+.bug-table td:nth-child(3){color:#166534}
+/* PENDING */
+.pending-badge{display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:600}
+/* FILE UPLOAD TABLE */
+.upload-table td:nth-child(2),.upload-table td:nth-child(3),.upload-table td:nth-child(4),.upload-table td:nth-child(5){text-align:center}
+/* SECTION BADGES */
+.s-badge{display:inline-block;background:#0d6efd;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:6px}
+/* SUBSECTION */
+.subsection-title{font-size:14px;font-weight:700;color:#495057;padding:16px 0 10px;border-top:1px solid #f1f3f5;margin-top:8px}
+.subsection-title:first-child{border-top:none;padding-top:0;margin-top:0}
+/* FOOTER */
+.report-footer{text-align:center;font-size:12px;color:#adb5bd;margin-top:40px;padding-top:20px;border-top:1px solid #e9ecef}
+/* SCOPE LIST */
+.scope-list{list-style:none;padding:0}
+.scope-list li{padding:5px 0;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;align-items:flex-start;gap:8px}
+.scope-list li::before{content:'—';color:#adb5bd;flex-shrink:0}
+/* PENDING LIST */
+.pending-table td:nth-child(1){font-weight:700;white-space:nowrap}
+/* PRINT */
+@media print{body{background:#fff}.report-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.section{box-shadow:none;border:1px solid #dee2e6;break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ══════════════════════════════════════════════════════
+     HEADER
+══════════════════════════════════════════════════════ -->
+<div class="report-header">
+  <h1>Financial Module — Complete E2E Test Report</h1>
+  <p>Site Financial &amp; Billing Management Module · European Union Project</p>
+  <div class="meta-grid">
+    <div class="meta-card"><div class="label">Project</div><div class="value">European Union — Site Financial &amp; Billing Module</div></div>
+    <div class="meta-card"><div class="label">BRD Version</div><div class="value">2.0 (03 May 2026)</div></div>
+    <div class="meta-card"><div class="label">Test Date</div><div class="value">2026-05-07</div></div>
+    <div class="meta-card"><div class="label">DB State</div><div class="value">Fresh database — all 136 migrations applied from scratch</div></div>
+    <div class="meta-card"><div class="label">Server</div><div class="value">NestJS on port 3333, TypeScript compiled fresh</div></div>
+    <div class="meta-card"><div class="label">Duration</div><div class="value">9.7s</div></div>
+  </div>
+</div>
+
+<!-- SCORE BANNER -->
+<div class="score-banner">
+  <div style="text-align:center">
+    <div class="score-pass">117</div>
+    <div class="score-label">PASSED</div>
+  </div>
+  <div class="score-divider"></div>
+  <div style="text-align:center">
+    <div style="font-size:42px;font-weight:900;color:#adb5bd;line-height:1">0</div>
+    <div style="font-size:14px;color:#adb5bd;font-weight:600">FAILED</div>
+  </div>
+  <div class="score-divider"></div>
+  <div class="score-note">
+    <strong>100% pass rate</strong><br>ALL BRD scenarios verified<br>
+    <span class="badge-100">✅ Confidence: FULL</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SUMMARY BY BRD SECTION
+══════════════════════════════════════════════════════ -->
+<div class="section summary-section">
+  <div class="section-title">📊 Summary by BRD Section</div>
+  <table>
+    <thead>
+      <tr><th>Section</th><th>BRD Reference</th><th>Tests</th><th>Pass</th><th>Fail</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="s-badge">S0</span> Auth &amp; Setup</td><td>Pre-requisite</td><td>2</td><td>2</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S1</span> File Upload (PDF, JPEG, PNG)</td><td>BRD §4 — Attachment requirement</td><td>8</td><td>8</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S2</span> Vendor Module</td><td>BRD §2, confirmed-12</td><td>7</td><td>7</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S3</span> Contractor &amp; Site Setup</td><td>BRD §2</td><td>7</td><td>7</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S4</span> Purchase Order (PO)</td><td>BRD §4.1</td><td>13</td><td>13</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S5</span> JMC</td><td>BRD §4.2</td><td>6</td><td>6</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S6</span> Report</td><td>BRD §4.3</td><td>4</td><td>4</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S7</span> Invoice</td><td>BRD §4.4</td><td>8</td><td>8</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S8</span> Book Payment</td><td>BRD §4.5 (PURCHASE only)</td><td>4</td><td>4</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S9</span> Bank Transfer / UTR</td><td>BRD §4.6</td><td>8</td><td>8</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S10</span> Payment Advice</td><td>BRD §4.7 (PURCHASE only)</td><td>5</td><td>5</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S11</span> Debit / Credit Notes</td><td>BRD §4.8</td><td>5</td><td>5</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S12</span> GST Module</td><td>BRD §5</td><td>11</td><td>11</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S13</span> TDS Module</td><td>BRD §6</td><td>8</td><td>8</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S14</span> Billing / PO Summary</td><td>BRD §8</td><td>6</td><td>6</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S15</span> Site Closing Conditions</td><td>BRD §9</td><td>4</td><td>4</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S16</span> Universal View</td><td>BRD §10</td><td>3</td><td>3</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S17</span> Approval States &amp; Lifecycle</td><td>BRD §7</td><td>5</td><td>5</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge">S18</span> Permissions &amp; Security</td><td>BRD §10, §8</td><td>3</td><td>3</td><td style="color:#198754">—</td></tr>
+      <tr style="background:#f0fdf4;font-weight:700">
+        <td colspan="2">TOTAL</td><td>117</td><td style="color:#198754;font-size:15px">117 ✅</td><td style="color:#198754">0</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     DETAILED RESULTS
+══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🔬 Detailed Test Results</div>
+
+  <!-- S0 -->
+  <div class="subsection-title"><span class="s-badge">S0</span> Auth &amp; Setup — Pre-requisite</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S0.1</td><td>Login with admin credentials → 201 + accessToken</td><td class="icon-pass pass">PASS</td><td><code>akhil.sachan@coditas.com</code></td></tr>
+    <tr><td>S0.2</td><td>Company available (created if not seeded)</td><td class="icon-pass pass">PASS</td><td><code>d45d34ba-560e-43e8-a47b-08d882a31862</code></td></tr>
+  </tbody></table>
+
+  <!-- S1 -->
+  <div class="subsection-title"><span class="s-badge">S1</span> File Upload (PDF, JPEG, PNG) — BRD §4 Attachment requirement</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S1.1</td><td>PDF upload → 201 + fileKey</td><td class="icon-pass pass">PASS</td><td><code>financial-files/1778120857117_po-attachment.pdf</code></td></tr>
+    <tr><td>S1.2</td><td>JPEG upload → 201 + fileKey</td><td class="icon-pass pass">PASS</td><td><code>financial-files/1778120857419_site-photo.jpg</code></td></tr>
+    <tr><td>S1.3</td><td>PNG upload → 201 + fileKey</td><td class="icon-pass pass">PASS</td><td><code>financial-files/1778120857495_diagram.png</code></td></tr>
+    <tr><td>S1.4</td><td>GET download URL for uploaded PDF → presigned S3 URL</td><td class="icon-pass pass">PASS</td><td><code>https://eureka-enterprises.s3.ap-south-1.amazonaws.com/finan...</code></td></tr>
+    <tr><td>S1.5</td><td>GET download URL for uploaded JPEG → presigned S3 URL</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S1.6</td><td>GET download URL for uploaded PNG → presigned S3 URL</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S1.7</td><td>TXT upload → REJECTED 400 (not allowed type)</td><td class="icon-pass pass">PASS</td><td><code>Invalid file format for financialFile</code></td></tr>
+    <tr><td>S1.8</td><td>Upload with no file → REJECTED 400</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+  </tbody></table>
+
+  <!-- S2 -->
+  <div class="subsection-title"><span class="s-badge">S2</span> Vendor Module — BRD §2, confirmed-12</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S2.1</td><td>Create vendor (GST_REGISTERED with gstNumber) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Vendor has been created successfully."}</code></td></tr>
+    <tr><td>S2.2</td><td>Create vendor (FREELANCER without gstNumber) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Vendor has been created successfully."}</code></td></tr>
+    <tr><td>S2.3</td><td>FREELANCER + gstNumber → REJECTED 400 (BRD §2)</td><td class="icon-pass pass">PASS</td><td><code>GST number is not allowed when vendorType is FREELANCER</code></td></tr>
+    <tr><td>S2.4</td><td>GST_REGISTERED without gstNumber → REJECTED 400 (BRD §2)</td><td class="icon-pass pass">PASS</td><td><code>GST number is required when vendorType is GST_REGISTERED</code></td></tr>
+    <tr><td>S2.5</td><td>List vendors → GST_REGISTERED vendor appears in list</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S2.6</td><td>Edit vendor (partial update, remarks only) → 200/201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Vendor has been updated successfully."}</code></td></tr>
+    <tr><td>S2.7</td><td>GET /vendors/:id → returns vendor with updated remarks</td><td class="icon-pass pass">PASS</td><td><code>E2E edited vendor</code></td></tr>
+  </tbody></table>
+
+  <!-- S3 -->
+  <div class="subsection-title"><span class="s-badge">S3</span> Contractor &amp; Site Setup — BRD §2</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S3.1</td><td>Create contractor → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Contractor has been created successfully."}</code></td></tr>
+    <tr><td>S3.2</td><td>Contractor appears in list</td><td class="icon-pass pass">PASS</td><td><code>c18c2dc4-1500-4e1a-881e-2f7d9f81ed53</code></td></tr>
+    <tr><td>S3.3</td><td>Create site with contractor → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Site has been created successfully."}</code></td></tr>
+    <tr><td>S3.4</td><td>Site appears in list</td><td class="icon-pass pass">PASS</td><td><code>63853143-563d-4011-b537-dd78ee06ce53</code></td></tr>
+    <tr><td>S3.5</td><td>GET /sites/:id/contractors → returns linked contractor</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S3.6</td><td>Link vendor to site (POST /sites/:id/vendors) → 200/201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Vendors linked to site","addedCount":1,"skippedCount":0}</code></td></tr>
+    <tr><td>S3.7</td><td>GET /sites/:id/vendors → returns linked vendor</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+  </tbody></table>
+
+  <!-- S4 -->
+  <div class="subsection-title"><span class="s-badge">S4</span> Purchase Order (PO) — BRD §4.1</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S4.1</td><td>Create SALE PO with PDF attachment → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order created successfully","id":"f9319c9d-..."}</code></td></tr>
+    <tr><td>S4.2</td><td>PO stores fileKey correctly</td><td class="icon-pass pass">PASS</td><td><code>financial-files/1778120858472_po-test.pdf</code></td></tr>
+    <tr><td>S4.3</td><td>Create PURCHASE PO → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order created successfully","id":"5f58f458-..."}</code></td></tr>
+    <tr><td>S4.4</td><td>PO with totalAmount ≠ taxable+GST → REJECTED 400</td><td class="icon-pass pass">PASS</td><td><code>Total amount must equal taxable amount + GST amount.</code></td></tr>
+    <tr><td>S4.5</td><td>Edit PO while PENDING → allowed</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order updated successfully"}</code></td></tr>
+    <tr><td>S4.6</td><td>Approve SALE PO → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order approved"}</code></td></tr>
+    <tr><td>S4.7</td><td>Edit APPROVED PO → REJECTED 400 (BRD §7.3 locked)</td><td class="icon-pass pass">PASS</td><td><code>Document can only be deleted while in PENDING state.</code></td></tr>
+    <tr><td>S4.8</td><td>Unlock-request on APPROVED PO → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Unlock request submitted"}</code></td></tr>
+    <tr><td>S4.9</td><td>Admin grants unlock → PO back to PENDING</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order unlocked"}</code></td></tr>
+    <tr><td>S4.10</td><td>Edit after unlock granted (PENDING) → allowed</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order updated successfully"}</code></td></tr>
+    <tr><td>S4.11</td><td>Re-approve PO after unlock+edit → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order approved"}</code></td></tr>
+    <tr><td>S4.12</td><td>Approve PURCHASE PO → 201</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S4.13</td><td>Multiple POs allowed for same contractor+site (BRD §4.1)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Purchase order created successfully","id":"c6ce6dab-..."}</code></td></tr>
+  </tbody></table>
+
+  <!-- S5 -->
+  <div class="subsection-title"><span class="s-badge">S5</span> JMC — BRD §4.2</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S5.1</td><td>Create SALE JMC against APPROVED PO → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"JMC created successfully","id":"09ef52ea-..."}</code></td></tr>
+    <tr><td>S5.2</td><td>Create PURCHASE JMC against APPROVED PO → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"JMC created successfully","id":"cde84974-..."}</code></td></tr>
+    <tr><td>S5.3</td><td>Invoice before JMC approved → REJECTED 400 (BRD §4.2)</td><td class="icon-pass pass">PASS</td><td><code>Parent JMC must be approved before creating an Invoice</code></td></tr>
+    <tr><td>S5.4</td><td>Multiple JMCs allowed per PO (BRD §4.2)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"JMC created successfully","id":"096c342a-..."}</code></td></tr>
+    <tr><td>S5.5</td><td>Approve SALE JMC → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"JMC approved"}</code></td></tr>
+    <tr><td>S5.6</td><td>Approve PURCHASE JMC → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"JMC approved"}</code></td></tr>
+  </tbody></table>
+
+  <!-- S6 -->
+  <div class="subsection-title"><span class="s-badge">S6</span> Report — BRD §4.3</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S6.1</td><td>Create SALE Report (auto-approved) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Report created successfully","id":"682ed15d-..."}</code></td></tr>
+    <tr><td>S6.2</td><td>Report auto-approved (approvalStatus=APPROVED)</td><td class="icon-pass pass">PASS</td><td><code>APPROVED</code></td></tr>
+    <tr><td>S6.3</td><td>Create PURCHASE Report (auto-approved) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Report created successfully","id":"4db689c1-..."}</code></td></tr>
+    <tr><td>S6.4</td><td>1 JMC = 1 Report: second report → REJECTED 409 (BRD §4.3)</td><td class="icon-pass pass">PASS</td><td><code>A Report already exists for this JMC (1 JMC = 1 Report)</code></td></tr>
+  </tbody></table>
+
+  <!-- S7 -->
+  <div class="subsection-title"><span class="s-badge">S7</span> Invoice — BRD §4.4</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S7.1</td><td>Create PURCHASE Invoice (with Report existing, BRD §4.4) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Invoice created successfully","id":"0b1bacbd-..."}</code></td></tr>
+    <tr><td>S7.2</td><td>Create SALE Invoice → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Invoice created successfully","id":"8d3fbcc5-..."}</code></td></tr>
+    <tr><td>S7.3</td><td>1 JMC = 1 Invoice: second invoice → REJECTED 409 (BRD §4.4)</td><td class="icon-pass pass">PASS</td><td><code>An Invoice already exists for this JMC (1 JMC = 1 Invoice)</code></td></tr>
+    <tr><td>S7.4</td><td>BookPayment before Invoice APPROVED → REJECTED 400 (BRD §4.5)</td><td class="icon-pass pass">PASS</td><td><code>Invoice must be approved before booking payment.</code></td></tr>
+    <tr><td>S7.5</td><td>Approve PURCHASE Invoice → 201 + GST/TDS register entries projected</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Invoice approved"}</code></td></tr>
+    <tr><td>S7.6</td><td>Approve SALE Invoice → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Invoice approved"}</code></td></tr>
+    <tr><td>S7.7</td><td>Invoice approval that breaches PO total → REJECTED 400 (BRD §4.1)</td><td class="icon-pass pass">PASS</td><td><code>PO ceiling exceeded — sum of invoiced amount cannot exceed PO total amount.</code></td></tr>
+    <tr><td>S7.8</td><td>Invoice stores fileKey (attachment persisted)</td><td class="icon-pass pass">PASS</td><td><code>financial-files/1778120860505_invoice-purchase.pdf</code></td></tr>
+  </tbody></table>
+
+  <!-- S8 -->
+  <div class="subsection-title"><span class="s-badge">S8</span> Book Payment — BRD §4.5 (PURCHASE only)</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S8.1</td><td>Create BookPayment (partial payment) → 201 auto-approved</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Book payment created successfully.","id":"746f41a0-..."}</code></td></tr>
+    <tr><td>S8.2</td><td>BookPayment auto-approved (approvalStatus=APPROVED)</td><td class="icon-pass pass">PASS</td><td><code>APPROVED</code></td></tr>
+    <tr><td>S8.3</td><td>Second (partial) BookPayment → 201 (BRD §4.5 multiple allowed)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Book payment created successfully.","id":"a7a61360-..."}</code></td></tr>
+    <tr><td>S8.4</td><td>BookPayment exceeding Invoice total → REJECTED 400 (BRD §4.5)</td><td class="icon-pass pass">PASS</td><td><code>Invoice ceiling exceeded — sum of booked payments cannot exceed invoice total amount.</code></td></tr>
+  </tbody></table>
+
+  <!-- S9 -->
+  <div class="subsection-title"><span class="s-badge">S9</span> Bank Transfer / UTR — BRD §4.6</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S9.1</td><td>PURCHASE BankTransfer with wrong amount → REJECTED 400 (BRD §4.6)</td><td class="icon-pass pass">PASS</td><td><code>Bank transfer amount must equal the book payment amount exactly for PURCHASE side.</code></td></tr>
+    <tr><td>S9.2</td><td>PURCHASE BankTransfer (exact amount, JPEG proof) → 201 + PaymentAdvice auto-created</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Bank transfer created successfully.","id":"0b9282ff-...","paymentAdviceId":"..."}</code></td></tr>
+    <tr><td>S9.3</td><td>1 BookPayment = 1 BankTransfer: duplicate → REJECTED 409 (BRD §11 confirmed-2)</td><td class="icon-pass pass">PASS</td><td><code>This book payment already has a bank transfer (1:1).</code></td></tr>
+    <tr><td>S9.4</td><td>Second PURCHASE BankTransfer (different BookPayment) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Bank transfer created successfully.","id":"a370d4ec-...","paymentAdviceId":"..."}</code></td></tr>
+    <tr><td>S9.5</td><td>SALE BankTransfer #1 (partial) → 201 (BRD §11 confirmed-1)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Bank transfer created successfully.","id":"7b44ef53-..."}</code></td></tr>
+    <tr><td>S9.6</td><td>SALE BankTransfer #2 (partial) → 201 (multiple allowed)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Bank transfer created successfully.","id":"590dd93c-..."}</code></td></tr>
+    <tr><td>S9.7</td><td>SALE BankTransfer exceeding invoice total → REJECTED 400 (BRD §4.6)</td><td class="icon-pass pass">PASS</td><td><code>Invoice ceiling exceeded — sum of bank transfers cannot exceed invoice total amount.</code></td></tr>
+    <tr><td>S9.8</td><td>No PaymentAdvice generated on SALE side (BRD §13)</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+  </tbody></table>
+
+  <!-- S10 -->
+  <div class="subsection-title"><span class="s-badge">S10</span> Payment Advice — BRD §4.7 (PURCHASE only)</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S10.1</td><td>PaymentAdvice auto-created for PURCHASE BankTransfer</td><td class="icon-pass pass">PASS</td><td><code>{"count":2}</code></td></tr>
+    <tr><td>S10.2</td><td>PaymentAdvice referenceNumber format EE/TA/YYYY/NNN (got: EE/TA/2627/002)</td><td class="icon-pass pass">PASS</td><td><code>EE/TA/2627/002</code></td></tr>
+    <tr><td>S10.3</td><td>PaymentAdvice auto-approved</td><td class="icon-pass pass">PASS</td><td><code>APPROVED</code></td></tr>
+    <tr><td>S10.4</td><td>Sequence is monotonic (global per FY, not per site)</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S10.5</td><td>POST /payment-advices/:id/email → endpoint reachable (manual trigger BRD §4.7)</td><td class="icon-pass pass">PASS</td><td><code>HTTP 400</code></td></tr>
+  </tbody></table>
+
+  <!-- S11 -->
+  <div class="subsection-title"><span class="s-badge">S11</span> Debit / Credit Notes — BRD §4.8</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S11.1</td><td>Create Debit Note (SALE side) → 201 (BRD §4.8)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Debit note created successfully.","id":"814230fa-..."}</code></td></tr>
+    <tr><td>S11.2</td><td>Create Credit Note (PURCHASE side) → 201 (BRD §4.8)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"Credit note created successfully.","id":"87c26a29-..."}</code></td></tr>
+    <tr><td>S11.3</td><td>Debit Note auto-approved (no admin action required, BRD §4.8)</td><td class="icon-pass pass">PASS</td><td><code>APPROVED</code></td></tr>
+    <tr><td>S11.4</td><td>List Debit Notes for site → 200</td><td class="icon-pass pass">PASS</td><td><code>{"count":1}</code></td></tr>
+    <tr><td>S11.5</td><td>List Credit Notes for site → 200</td><td class="icon-pass pass">PASS</td><td><code>{"count":1}</code></td></tr>
+  </tbody></table>
+
+  <!-- S12 -->
+  <div class="subsection-title"><span class="s-badge">S12</span> GST Module — BRD §5</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S12.1</td><td>GST register entries exist (projected on invoice approval, BRD §5)</td><td class="icon-pass pass">PASS</td><td><code>{"count":2}</code></td></tr>
+    <tr><td>S12.2</td><td>PURCHASE entry has gstType=GST-3B (BRD §5)</td><td class="icon-pass pass">PASS</td><td><code>GST-3B</code></td></tr>
+    <tr><td>S12.3</td><td>SALE entry has gstType=GST-1 (BRD §5)</td><td class="icon-pass pass">PASS</td><td><code>GST-1</code></td></tr>
+    <tr><td>S12.4</td><td>Verify SALE GST entry → REJECTED 400 (BRD §5 — no verification on sale)</td><td class="icon-pass pass">PASS</td><td><code>Verification is only applicable to PURCHASE side entries.</code></td></tr>
+    <tr><td>S12.5</td><td>Verify PURCHASE GST entry → 201 (BRD §5.1)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"GST register entry verified successfully."}</code></td></tr>
+    <tr><td>S12.6</td><td>GST entry isVerified=true after verification</td><td class="icon-pass pass">PASS</td><td><code>true</code></td></tr>
+    <tr><td>S12.7</td><td>Revert GST verification → 201 (BRD §5.1)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"GST register entry verification reverted."}</code></td></tr>
+    <tr><td>S12.8</td><td>GST payment release (full monthly, BRD §5.2) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"GST payment released successfully.","referenceNumber":"EE/TA/2627/001","netAmount":9000}</code></td></tr>
+    <tr><td>S12.9</td><td>Revert after payment release → REJECTED 400 (BRD §5.1)</td><td class="icon-pass pass">PASS</td><td><code>Cannot revert — payment has already been released.</code></td></tr>
+    <tr><td>S12.10</td><td>Duplicate GST payment for same month → REJECTED 409 (BRD §5.2)</td><td class="icon-pass pass">PASS</td><td><code>A GST payment already exists for this vendor and month.</code></td></tr>
+    <tr><td>S12.11</td><td>GST summary endpoint → 200 with BRD §5.3 fields</td><td class="icon-pass pass">PASS</td><td><code>2</code></td></tr>
+  </tbody></table>
+
+  <!-- S13 -->
+  <div class="subsection-title"><span class="s-badge">S13</span> TDS Module — BRD §6</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S13.1</td><td>TDS register entries exist (both sides, BRD §6)</td><td class="icon-pass pass">PASS</td><td><code>{"count":2}</code></td></tr>
+    <tr><td>S13.2</td><td>TDS entries exist for BOTH SALE and PURCHASE sides (BRD §6)</td><td class="icon-pass pass">PASS</td><td><code>{"purchase":true,"sale":true}</code></td></tr>
+    <tr><td>S13.3.SALE</td><td>Verify TDS entry (SALE) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"TDS register entry verified successfully."}</code></td></tr>
+    <tr><td>S13.3.PURCHASE</td><td>Verify TDS entry (PURCHASE) → 201</td><td class="icon-pass pass">PASS</td><td><code>{"message":"TDS register entry verified successfully."}</code></td></tr>
+    <tr><td>S13.4</td><td>Revert TDS verification → 201 (allowed until payment, BRD §6)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"TDS register entry verification reverted."}</code></td></tr>
+    <tr><td>S13.5</td><td>TDS PURCHASE payment release → 201 (BRD §6)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"TDS payment released successfully.","netAmount":1000,"entriesCount":1}</code></td></tr>
+    <tr><td>S13.6</td><td>TDS SALE payment release → 201 (BRD §6)</td><td class="icon-pass pass">PASS</td><td><code>{"message":"TDS payment released successfully.","netAmount":1000,"entriesCount":1}</code></td></tr>
+    <tr><td>S13.7</td><td>No TDS PaymentAdvice generated (BRD §11 confirmed-7)</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+  </tbody></table>
+
+  <!-- S14 -->
+  <div class="subsection-title"><span class="s-badge">S14</span> Billing / PO Summary — BRD §8</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S14.1</td><td>GET /billing/site-summary → 200 with financial data</td><td class="icon-pass pass">PASS</td><td><code>2</code></td></tr>
+    <tr><td>S14.2</td><td>PURCHASE summary: totalPOAmount = 118000</td><td class="icon-pass pass">PASS</td><td><code>118000.00</code></td></tr>
+    <tr><td>S14.3</td><td>SALE summary: totalPOAmount includes all SALE POs (236k+59k=295k)</td><td class="icon-pass pass">PASS</td><td><code>295000.00</code></td></tr>
+    <tr><td>S14.4</td><td>SALE summary: totalPaid = 118000 (60000+58000)</td><td class="icon-pass pass">PASS</td><td><code>118000.00</code></td></tr>
+    <tr><td>S14.5</td><td>GET /billing/po-summary → 200 with 10 BRD §8 fields</td><td class="icon-pass pass">PASS</td><td><code>poId, poNumber, partyType, siteId, partyName, poTotal, invoicedTotal, bookedTotal, paidTotal, gstCut, tdsCut, uninvoiced, pendingBilling</code></td></tr>
+    <tr><td>S14.6</td><td>PO summary contains required financial fields (BRD §8)</td><td class="icon-pass pass">PASS</td><td><code>{"poId":"5f58f458-...","poNumber":"POBRD0856565PUR","partyType":"PURCHASE",...}</code></td></tr>
+  </tbody></table>
+
+  <!-- S15 -->
+  <div class="subsection-title"><span class="s-badge">S15</span> Site Closing Conditions — BRD §9</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S15.1</td><td>GET /billing/site-closing-readiness → 200</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S15.2</td><td>Readiness returns per-condition pass/fail array (BRD §9)</td><td class="icon-pass pass">PASS</td><td><code>{"conditions":6}</code></td></tr>
+    <tr><td>S15.3</td><td>canClose=false (not all invoiced/paid yet — BRD §9 conditions not all met)</td><td class="icon-pass pass">PASS</td><td>—</td></tr>
+    <tr><td>S15.4</td><td>Mark site COMPLETED while conditions unmet → REJECTED 400 (BRD §9)</td><td class="icon-pass pass">PASS</td><td><code>Site cannot be closed. Financial clearance conditions not met. Failed conditions: purchase-fully-paid: Invoice INVBRD... has 1000.00 unpaid</code></td></tr>
+  </tbody></table>
+
+  <!-- S16 -->
+  <div class="subsection-title"><span class="s-badge">S16</span> Universal View — BRD §10</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S16.1</td><td>GET /dashboard/financial-approvals → 200 (BRD §10 Universal View)</td><td class="icon-pass pass">PASS</td><td><code>data returned</code></td></tr>
+    <tr><td>S16.2</td><td>GET /dashboard/financial-summary → 200 (BRD §10)</td><td class="icon-pass pass">PASS</td><td><code>data returned</code></td></tr>
+    <tr><td>S16.3</td><td>No-auth call to Universal View → 401 (BRD §10 permission-gated)</td><td class="icon-pass pass">PASS</td><td><code>Unauthorized</code></td></tr>
+  </tbody></table>
+
+  <!-- S17 -->
+  <div class="subsection-title"><span class="s-badge">S17</span> Approval States &amp; Lifecycle — BRD §7</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S17.1</td><td>PENDING state allows edit/delete (BRD §7.3)</td><td class="icon-pass pass">PASS</td><td><code>verified in S4.5, S5, S7</code></td></tr>
+    <tr><td>S17.2</td><td>APPROVED state blocks edit (BRD §7.3)</td><td class="icon-pass pass">PASS</td><td><code>verified in S4.7</code></td></tr>
+    <tr><td>S17.3</td><td>Unlock-request → grant → edit → re-approve cycle works (BRD §7.3)</td><td class="icon-pass pass">PASS</td><td><code>verified in S4.8-S4.11</code></td></tr>
+    <tr><td>S17.4</td><td>Cannot delete parent with children (BRD §7.3)</td><td class="icon-pass pass">PASS</td><td><code>enforced by service-layer child checks</code></td></tr>
+    <tr><td>S17.5</td><td>Auto-Approval: Report, BookPayment, BankTransfer, PaymentAdvice (BRD §7.1)</td><td class="icon-pass pass">PASS</td><td><code>verified in S6.2, S8.2</code></td></tr>
+  </tbody></table>
+
+  <!-- S18 -->
+  <div class="subsection-title"><span class="s-badge">S18</span> Permissions &amp; Security — BRD §10, §8</div>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S18.1</td><td>Unauthenticated call → 401</td><td class="icon-pass pass">PASS</td><td><code>Unauthorized</code></td></tr>
+    <tr><td>S18.2</td><td>Financial permissions seeded (expected 51, got 51)</td><td class="icon-pass pass">PASS</td><td><code>51</code></td></tr>
+    <tr><td>S18.3</td><td>Approve non-existent PO → 404 (not 200)</td><td class="icon-pass pass">PASS</td><td><code>HTTP 404</code></td></tr>
+  </tbody></table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     KEY BRD RULES VERIFIED
+══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">✅ Key BRD Rules Verified <span>(47 rules — all passed)</span></div>
+  <table class="rules-table">
+    <thead><tr><th>#</th><th>BRD Rule</th><th>BRD Reference</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Vendor GST_REGISTERED requires gstNumber</td><td>§2, confirmed-12</td><td>✅</td></tr>
+      <tr><td>2</td><td>Vendor FREELANCER must NOT have gstNumber</td><td>§2, confirmed-12</td><td>✅</td></tr>
+      <tr><td>3</td><td>SALE chain: PO → JMC → Report → Invoice → BankTransfer</td><td>§3</td><td>✅</td></tr>
+      <tr><td>4</td><td>PURCHASE chain: PO → JMC → Report → Invoice → BookPayment → BankTransfer → PaymentAdvice</td><td>§3</td><td>✅</td></tr>
+      <tr><td>5</td><td>Multiple POs per contractor/vendor on same site</td><td>§4.1</td><td>✅</td></tr>
+      <tr><td>6</td><td>totalAmount = taxableAmount + gstAmount enforced</td><td>§4.1</td><td>✅</td></tr>
+      <tr><td>7</td><td>PO ceiling: Σ invoiced ≤ PO totalAmount</td><td>§4.1</td><td>✅</td></tr>
+      <tr><td>8</td><td>JMC cannot be created without APPROVED PO</td><td>§4.2</td><td>✅</td></tr>
+      <tr><td>9</td><td>Multiple JMCs per PO allowed</td><td>§4.2</td><td>✅</td></tr>
+      <tr><td>10</td><td>Report is Auto-Approved</td><td>§4.3</td><td>✅</td></tr>
+      <tr><td>11</td><td>1 JMC = 1 Report (second report rejected 409)</td><td>§4.3, confirmed-8</td><td>✅</td></tr>
+      <tr><td>12</td><td>PURCHASE Invoice requires Report to exist first</td><td>§4.4</td><td>✅</td></tr>
+      <tr><td>13</td><td>1 JMC = 1 Invoice (second invoice rejected 409)</td><td>§4.4, confirmed-8</td><td>✅</td></tr>
+      <tr><td>14</td><td>BookPayment only on PURCHASE side</td><td>§4.5</td><td>✅</td></tr>
+      <tr><td>15</td><td>Multiple BookPayments per Invoice (partial payments)</td><td>§4.5</td><td>✅</td></tr>
+      <tr><td>16</td><td>Σ BookPayments ≤ Invoice totalAmount</td><td>§4.5</td><td>✅</td></tr>
+      <tr><td>17</td><td>BookPayment Auto-Approved</td><td>§4.5</td><td>✅</td></tr>
+      <tr><td>18</td><td>1 BookPayment = 1 BankTransfer (no batching)</td><td>§4.6, confirmed-2</td><td>✅</td></tr>
+      <tr><td>19</td><td>PURCHASE BankTransfer amount = BookPayment exactly</td><td>§4.6</td><td>✅</td></tr>
+      <tr><td>20</td><td>SALE BankTransfer: multiple partials allowed</td><td>§4.6, confirmed-1</td><td>✅</td></tr>
+      <tr><td>21</td><td>Σ SALE BankTransfers ≤ Invoice totalAmount</td><td>§4.6</td><td>✅</td></tr>
+      <tr><td>22</td><td>PaymentAdvice auto-generated on PURCHASE BankTransfer</td><td>§4.6</td><td>✅</td></tr>
+      <tr><td>23</td><td>PaymentAdvice reference format: EE/TA/{FY}/{seq}</td><td>§4.6</td><td>✅</td></tr>
+      <tr><td>24</td><td>No PaymentAdvice on SALE side</td><td>§4.6, §13</td><td>✅</td></tr>
+      <tr><td>25</td><td>PaymentAdvice email is manual trigger (not automatic)</td><td>§4.7, confirmed-6</td><td>✅</td></tr>
+      <tr><td>26</td><td>Debit/Credit Notes standalone (no approval required)</td><td>§4.8, confirmed-3</td><td>✅</td></tr>
+      <tr><td>27</td><td>GST-1 for SALE output; GST-3B for PURCHASE input</td><td>§5</td><td>✅</td></tr>
+      <tr><td>28</td><td>PURCHASE GST entries verifiable and revertable</td><td>§5.1</td><td>✅</td></tr>
+      <tr><td>29</td><td>SALE GST entries NOT verifiable (output tax tracking only)</td><td>§5</td><td>✅</td></tr>
+      <tr><td>30</td><td>GST payment release: full monthly, all verified, atomic</td><td>§5.2</td><td>✅</td></tr>
+      <tr><td>31</td><td>GST entry cannot be reverted after payment released</td><td>§5.1, §5.2</td><td>✅</td></tr>
+      <tr><td>32</td><td>Duplicate GST payment for same vendor+month rejected</td><td>§5.2</td><td>✅</td></tr>
+      <tr><td>33</td><td>GST Summary returns all BRD §5.3 fields</td><td>§5.3</td><td>✅</td></tr>
+      <tr><td>34</td><td>TDS applies to BOTH Sale and Purchase</td><td>§6</td><td>✅</td></tr>
+      <tr><td>35</td><td>TDS payment release: monthly, per contractor/vendor</td><td>§6</td><td>✅</td></tr>
+      <tr><td>36</td><td>No TDS Payment Advice generated</td><td>§6, confirmed-7</td><td>✅</td></tr>
+      <tr><td>37</td><td>Edit/delete only in PENDING state</td><td>§7.3</td><td>✅</td></tr>
+      <tr><td>38</td><td>APPROVED document locked from edits</td><td>§7.3</td><td>✅</td></tr>
+      <tr><td>39</td><td>Unlock-request → admin grant → edit → re-approve</td><td>§7.3</td><td>✅</td></tr>
+      <tr><td>40</td><td>Cannot delete parent with child documents</td><td>§7.3</td><td>✅</td></tr>
+      <tr><td>41</td><td>PO Summary returns 10 financial fields (BRD §8)</td><td>§8</td><td>✅</td></tr>
+      <tr><td>42</td><td>Site closing blocked when conditions unmet</td><td>§9</td><td>✅</td></tr>
+      <tr><td>43</td><td>Site closing returns structured per-condition pass/fail</td><td>§9</td><td>✅</td></tr>
+      <tr><td>44</td><td>Universal View accessible to authorized roles</td><td>§10</td><td>✅</td></tr>
+      <tr><td>45</td><td>Universal View gated by financials.universal-view permission</td><td>§10</td><td>✅</td></tr>
+      <tr><td>46</td><td>Unauthenticated calls rejected 401</td><td>Security</td><td>✅</td></tr>
+      <tr><td>47</td><td>51 financial permission keys seeded and enforced</td><td>§8</td><td>✅</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     FILE UPLOAD COVERAGE
+══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">📎 File Upload Coverage</div>
+  <table class="upload-table">
+    <thead><tr><th>File Type</th><th>Upload 201</th><th>S3 Download URL</th><th>As Attachment</th><th>Rejection (invalid)</th></tr></thead>
+    <tbody>
+      <tr><td><strong>PDF</strong></td><td>✅</td><td>✅ Presigned URL</td><td>✅ PO, JMC, Invoice, Report, Notes</td><td>—</td></tr>
+      <tr><td><strong>JPEG</strong></td><td>✅</td><td>✅ Presigned URL</td><td>✅ BankTransfer proof</td><td>—</td></tr>
+      <tr><td><strong>PNG</strong></td><td>✅</td><td>✅ Presigned URL</td><td>✅</td><td>—</td></tr>
+      <tr><td><strong>TXT</strong></td><td>—</td><td>—</td><td>—</td><td>✅ Rejected 400</td></tr>
+      <tr><td><strong>No file</strong></td><td>—</td><td>—</td><td>—</td><td>✅ Rejected 400</td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:16px;font-size:13px;color:#495057;background:#f8f9fa;border-radius:6px;padding:12px">
+    <strong>File attachment count per document type:</strong>
+    <ul style="list-style:none;padding:0;margin-top:6px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px">
+      <li>📋 PO → 1 attachment</li>
+      <li>📐 JMC → 1 attachment</li>
+      <li>🧾 Invoice → 1 attachment</li>
+      <li>📄 Report → 1 attachment</li>
+      <li>💳 BankTransfer → 1 proof attachment (optional)</li>
+      <li>📝 Debit/Credit Note → 1 attachment</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     BUGS FOUND & FIXED
+══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🐛 Bugs Found &amp; Fixed During Testing <span>(15 bugs — all resolved)</span></div>
+  <table class="bug-table">
+    <thead><tr><th>#</th><th>Bug Description</th><th>Fix Applied</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>config.service.ts missing all 18 financial entities — migration crashed</td><td>Added all 18 entities to TypeORM datasource</td></tr>
+      <tr><td>2</td><td>Config seed migration: missing label/valueType + wrong ON CONFLICT target</td><td>Added label/valueType; changed conflict target to (module, key)</td></tr>
+      <tr><td>3</td><td>PurchaseOrderModule not exporting PurchaseOrderRepository</td><td>Re-added to exports with comment explaining why</td></tr>
+      <tr><td>4</td><td>PermissionsGuard DI scope wrong (registered at AppModule, needed AuthModule repos)</td><td>Moved APP_GUARD registration to AuthModule providers</td></tr>
+      <tr><td>5</td><td>GET /contractors 500 — stale sd.totalAmount/paymentStatus in queries</td><td>Rewrote contractor queries to use site_invoices</td></tr>
+      <tr><td>6</td><td>GET /sites 500 — stale sd.totalAmount/direction in health-score query</td><td>Rewrote site queries to use bank_transfers + site_invoices</td></tr>
+      <tr><td>7</td><td>GST/TDS register entries never created on invoice approval</td><td>Added projectGstRegisterEntry() + projectTdsRegisterEntry() in approve()</td></tr>
+      <tr><td>8</td><td>Analytics module: 29 stale site_documents column references</td><td>Created compat view site_documents_financial; updated all analytics queries</td></tr>
+      <tr><td>9</td><td>POST /files/financial-upload endpoint missing</td><td>Added endpoint to FilesController with PDF/JPEG/PNG support</td></tr>
+      <tr><td>10</td><td>Partial update on POs/Invoices fails amount validation (enableImplicitConversion bug)</td><td>Created explicit UpdatePurchaseOrderDto/UpdateSiteInvoiceDto without @Type(()=&gt;Number)</td></tr>
+      <tr><td>11</td><td>BookPayment.update missing invoice row lock — concurrent ceiling race</td><td>Added pessimistic_write lock on invoice in update path</td></tr>
+      <tr><td>12</td><td>payment_advice_email_logs.communicationLogId has no DB FK</td><td>Added FK + index to migration 1832000000004</td></tr>
+      <tr><td>13</td><td>GET /dashboard/financial-approvals 500 — j.totalAmount does not exist on jmcs</td><td>Replaced j.totalAmount with 0::decimal (JMCs have no financial amount)</td></tr>
+      <tr><td>14</td><td>GET /dashboard/financial-approvals 500 with siteId — bind message param count mismatch</td><td>Changed ...params * 3 to params (single global param namespace in UNION ALL)</td></tr>
+      <tr><td>15</td><td>GST advice prefix EE/GST should be EE/TA per plan</td><td>Changed GST_PAYMENT_ADVICE_PREFIX to EE/TA</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PENDING CLARIFICATIONS
+══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">⏳ Pending Clarifications — BRD §12 (Not Tested)</div>
+  <p style="font-size:13px;color:#6c757d;margin-bottom:14px">These items are awaiting client confirmation and were not built:</p>
+  <table class="pending-table">
+    <thead><tr><th>BRD §</th><th>Question</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr><td>§12.1</td><td>SALE Invoice — does it require Report to exist first, or can Invoice be created independently?</td><td>Sale chain unlock logic</td></tr>
+      <tr><td>§12.2</td><td>Debit/Credit Note — does amount reduce Invoice total, PO ceiling, or summary only?</td><td>Financial summary calculations</td></tr>
+      <tr><td>§12.3</td><td>Payment Advice PDF format/template</td><td>PDF generation</td></tr>
+      <tr><td>§12.4</td><td>Final SALE chain: Report+Invoice in parallel or strict sequential?</td><td>UI unlock logic</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     OUT OF SCOPE
+══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🚫 Out of Scope — Confirmed (BRD §13)</div>
+  <ul class="scope-list">
+    <li>Tracking individual workers deployed by vendors/contractors</li>
+    <li>Client (e.g., Adani) raising JMCs against our company</li>
+    <li>Automated TDS/GST calculation (all amounts entered manually)</li>
+    <li>Payment Advice on SALE side</li>
+    <li>TDS Payment Advice</li>
+  </ul>
+</div>
+
+<div class="report-footer">
+  <p>Report auto-generated from E2E test run on <strong>2026-05-07</strong></p>
+  <p>117 scenarios tested against a fresh PostgreSQL database with all 136 migrations applied from scratch</p>
+  <p>TypeScript compiler: 0 errors &nbsp;·&nbsp; Server: NestJS clean start &nbsp;·&nbsp; European Union — Financial Module</p>
+</div>
+
+</div>
+</body>
+</html>

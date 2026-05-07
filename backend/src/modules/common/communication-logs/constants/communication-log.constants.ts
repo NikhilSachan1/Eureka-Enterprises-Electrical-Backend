@@ -70,6 +70,9 @@ export enum CommunicationCategory {
   // System Alerts
   CRON_FAILURE = 'CRON_FAILURE',
 
+  // Financials
+  PAYMENT_ADVICE = 'PAYMENT_ADVICE',
+
   // General
   OTHER = 'OTHER',
 }

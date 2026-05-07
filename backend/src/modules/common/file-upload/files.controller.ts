@@ -1,6 +1,18 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Request,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiOperation, ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FilesService } from './files.service';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FILE_UPLOAD_FOLDER_NAMES, FIELD_NAMES } from './constants/files.constants';
+import { validateFileUploads } from './validators/files.validator';
 
 @ApiTags('Files')
 @Controller('files')
@@ -16,5 +28,62 @@ export class FilesController {
   })
   async getDownloadFileUrl(@Query('key') key: string) {
     return await this.filesService.getDownloadFileUrl(key);
+  }
+
+  /**
+   * Generic upload endpoint for financial-module document attachments.
+   *
+   * Every financial document (PO, JMC, Invoice, Report, BankTransfer proof,
+   * Debit/Credit Note) requires exactly one attachment. Call this endpoint
+   * first; receive { fileKey, fileName }; include both values in the
+   * financial document create/update body.
+   *
+   * Supported: PDF, JPEG, PNG (≤ 10 MB).
+   */
+  @Post('financial-upload')
+  @UseInterceptors(FileInterceptor(FIELD_NAMES.FINANCIAL_FILE))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['financialFile'],
+      properties: {
+        financialFile: {
+          type: 'string',
+          format: 'binary',
+          description: 'PDF or image for a financial document (max 10 MB)',
+        },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload a financial document attachment',
+    description:
+      'Uploads one PDF/image to S3. Returns { fileKey, fileName }. Use the returned values ' +
+      'in the fileKey/fileName fields of any financial document create body ' +
+      '(PO, JMC, Invoice, Report, BankTransfer, DebitNote, CreditNote).',
+  })
+  async uploadFinancialFile(
+    @Request() req: { user: { id: string } },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException(
+        'No file uploaded. Provide a PDF or image in the "financialFile" field.',
+      );
+    }
+
+    const [validated] = validateFileUploads(
+      [file],
+      FILE_UPLOAD_FOLDER_NAMES.FINANCIAL_FILES,
+    );
+
+    const fileKey = await this.filesService.uploadFile(
+      validated.fileStream,
+      validated.key,
+      validated.mimetype,
+    );
+
+    return { fileKey, fileName: file.originalname };
   }
 }

@@ -113,6 +113,11 @@ export const CRON_SCHEDULES = {
   // Every 10 minutes
   EVERY_10_MINUTES: '*/10 * * * *',
 
+  // Every 5 minutes — used by the financial materialized-view refresh cron.
+  // Plan §3.4 hardening #9 + §7.5 — keep mv_site_financial_summary and
+  // mv_universal_financial_view current for the dashboard.
+  EVERY_5_MINUTES: '*/5 * * * *',
+
   // March 15 at 9:00 AM IST (for FY reminders)
   MARCH_15_9AM_IST: '30 3 15 3 *',
 };
@@ -164,6 +169,9 @@ export const CRON_NAMES = {
 
   // Config
   CONFIG_SETTING_ACTIVATION: 'ConfigSettingActivation',
+
+  // Financials
+  REFRESH_FINANCIAL_MATERIALIZED_VIEWS: 'RefreshFinancialMaterializedViews',
 };
 
 /**

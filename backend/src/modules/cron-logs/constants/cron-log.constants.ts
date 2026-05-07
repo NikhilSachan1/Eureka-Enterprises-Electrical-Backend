@@ -18,6 +18,7 @@ export enum CronJobType {
   CLEANUP = 'CLEANUP',
   NOTIFICATION = 'NOTIFICATION',
   SALARY_STRUCTURE = 'SALARY_STRUCTURE',
+  FINANCIAL = 'FINANCIAL',
 }
 
 export enum CronTriggerType {

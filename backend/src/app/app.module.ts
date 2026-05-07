@@ -60,6 +60,20 @@ import { DsrModule } from 'src/modules/daily-status-reports/dsr.module';
 import { VehicleLogsModule } from 'src/modules/vehicle-logs/vehicle-logs.module';
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module';
 import { OrgFilesModule } from 'src/modules/org-files/org-files.module';
+// Financial modules (Phase 2-4)
+import { VendorModule } from 'src/modules/vendors/vendor.module';
+import { SiteVendorModule } from 'src/modules/site-vendors/site-vendor.module';
+import { PurchaseOrderModule } from 'src/modules/purchase-orders/purchase-order.module';
+import { JmcModule } from 'src/modules/jmc/jmc.module';
+import { SiteReportModule } from 'src/modules/site-reports/site-report.module';
+import { SiteInvoiceModule } from 'src/modules/site-invoices/site-invoice.module';
+import { BookPaymentModule } from 'src/modules/book-payments/book-payment.module';
+import { BankTransferModule } from 'src/modules/bank-transfers/bank-transfer.module';
+import { PaymentAdviceModule } from 'src/modules/payment-advices/payment-advice.module';
+import { NoteModule } from 'src/modules/debit-credit-notes/note.module';
+import { GstModule } from 'src/modules/gst/gst.module';
+import { TdsModule } from 'src/modules/tds/tds.module';
+import { BillingModule } from 'src/modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -114,6 +128,20 @@ import { OrgFilesModule } from 'src/modules/org-files/org-files.module';
     VehicleLogsModule,
     AnalyticsModule,
     OrgFilesModule,
+    // Financial modules (Phase 2-4)
+    VendorModule,
+    SiteVendorModule,
+    PurchaseOrderModule,
+    JmcModule,
+    SiteReportModule,
+    SiteInvoiceModule,
+    BookPaymentModule,
+    BankTransferModule,
+    PaymentAdviceModule,
+    NoteModule,
+    GstModule,
+    TdsModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [
