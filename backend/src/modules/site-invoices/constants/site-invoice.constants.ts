@@ -1,5 +1,6 @@
 export const INVOICE_ERRORS = {
   NOT_FOUND: 'Invoice not found',
+  ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK: 'Only APPROVED locked invoices can request unlock.',
   JMC_NOT_FOUND: 'Parent JMC not found',
   JMC_NOT_APPROVED: 'Parent JMC must be approved before creating an Invoice',
   REPORT_REQUIRED_FOR_PURCHASE:

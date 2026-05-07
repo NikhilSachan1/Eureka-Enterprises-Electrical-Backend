@@ -55,8 +55,8 @@ export class DashboardService {
   // ==================== Mobile Dashboard ====================
 
   async getMobileDashboard(userId: string): Promise<MobileDashboardResponse> {
-    const today = new Date();
-    const todayStr = this.formatDate(today);
+    const todayStr = this.dateTimeService.getTodayString();
+    const today = this.dateTimeService.toDate(todayStr);
     const financialYear = this.utilityService.getFinancialYear(today);
 
     // Fetch all 7 sections in parallel
@@ -312,13 +312,14 @@ export class DashboardService {
   }
 
   async getBirthdays(): Promise<BirthdayData> {
-    const today = new Date();
+    const todayStr = this.dateTimeService.getTodayString();
+    const today = this.dateTimeService.toDate(todayStr);
     const weekEnd = new Date(today);
     weekEnd.setDate(today.getDate() + 7);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     const { query, params } = queries.getBirthdaysQuery(
-      this.formatDate(today),
+      todayStr,
       this.formatDate(weekEnd),
       this.formatDate(monthEnd),
     );
@@ -361,13 +362,14 @@ export class DashboardService {
   }
 
   async getAnniversaries(): Promise<AnniversaryData> {
-    const today = new Date();
+    const todayStr = this.dateTimeService.getTodayString();
+    const today = this.dateTimeService.toDate(todayStr);
     const weekEnd = new Date(today);
     weekEnd.setDate(today.getDate() + 7);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     const { query, params } = queries.getAnniversariesQuery(
-      this.formatDate(today),
+      todayStr,
       this.formatDate(weekEnd),
       this.formatDate(monthEnd),
     );
@@ -1579,6 +1581,307 @@ export class DashboardService {
         activeEmployees: empCount[0]?.c || 0,
       },
       lastGeneratedAt: counts[0]?.lastGeneratedAt || null,
+    };
+  }
+
+  // ==================== NEW: Financial Dashboard (BRD §10) ====================
+
+  /**
+   * Get pending financial approvals across all sites (PO/JMC/Invoice)
+   * For the Universal View dashboard
+   */
+  async getFinancialApprovals(filters?: {
+    siteId?: string;
+    companyId?: string;
+    partyType?: string;
+  }): Promise<{
+    summary: {
+      totalPending: number;
+      pendingPOs: number;
+      pendingJMCs: number;
+      pendingInvoices: number;
+    };
+    pendingItems: Array<{
+      documentType: string;
+      id: string;
+      documentNumber: string;
+      siteId: string;
+      siteName: string;
+      partyType: string;
+      partyName: string;
+      totalAmount: number;
+      createdAt: string;
+      daysPending: number;
+    }>;
+  }> {
+    let whereClause = `WHERE d."approvalStatus" = 'PENDING' AND d."deletedAt" IS NULL`;
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters?.siteId) {
+      whereClause += ` AND d."siteId" = $${paramIndex++}`;
+      params.push(filters.siteId);
+    }
+
+    if (filters?.companyId) {
+      whereClause += ` AND s."companyId" = $${paramIndex++}`;
+      params.push(filters.companyId);
+    }
+
+    if (filters?.partyType) {
+      whereClause += ` AND d."partyType" = $${paramIndex++}`;
+      params.push(filters.partyType);
+    }
+
+    const query = `
+      WITH pending_docs AS (
+        SELECT 'PO' as "documentType", po.id, po."poNumber" as "documentNumber", 
+               po."siteId", po."partyType", po."totalAmount", po."createdAt",
+               po."contractorId", po."vendorId"
+        FROM purchase_orders po
+        JOIN sites s ON s.id = po."siteId"
+        ${whereClause.replace(/d\./g, 'po.')}
+        
+        UNION ALL
+        
+        SELECT 'JMC' as "documentType", j.id, j."jmcNumber" as "documentNumber",
+               j."siteId", j."partyType",
+               -- JMCs carry no financial amount; 0 used for UI display consistency
+               0::decimal as "totalAmount",
+               j."createdAt",
+               j."contractorId", j."vendorId"
+        FROM jmcs j
+        JOIN sites s ON s.id = j."siteId"
+        ${whereClause.replace(/d\./g, 'j.')}
+        
+        UNION ALL
+        
+        SELECT 'INVOICE' as "documentType", i.id, i."invoiceNumber" as "documentNumber",
+               i."siteId", i."partyType", i."totalAmount", i."createdAt",
+               i."contractorId", i."vendorId"
+        FROM site_invoices i
+        JOIN sites s ON s.id = i."siteId"
+        ${whereClause.replace(/d\./g, 'i.')}
+      )
+      SELECT 
+        pd."documentType",
+        pd.id,
+        pd."documentNumber",
+        pd."siteId",
+        s.name as "siteName",
+        pd."partyType",
+        COALESCE(c.name, v.name) as "partyName",
+        pd."totalAmount"::numeric,
+        pd."createdAt"::text,
+        EXTRACT(DAY FROM NOW() - pd."createdAt")::int as "daysPending"
+      FROM pending_docs pd
+      JOIN sites s ON s.id = pd."siteId"
+      LEFT JOIN contractors c ON c.id = pd."contractorId"
+      LEFT JOIN vendors v ON v.id = pd."vendorId"
+      ORDER BY pd."createdAt" ASC
+      LIMIT 100
+    `;
+
+    // The UNION ALL query shares a single global parameter namespace in
+    // Postgres — $1 in the PO subquery and $1 in the JMC/Invoice subquery
+    // all refer to params[0]. Pass params once; spreading 3× causes the
+    // "bind message supplies N params but prepared statement requires 1" error.
+    const items = await this.dataSource.query(query, params);
+
+    // Get summary counts
+    const summaryQuery = `
+      SELECT 
+        (SELECT COUNT(*) FROM purchase_orders WHERE "approvalStatus" = 'PENDING' AND "deletedAt" IS NULL)::int as "pendingPOs",
+        (SELECT COUNT(*) FROM jmcs WHERE "approvalStatus" = 'PENDING' AND "deletedAt" IS NULL)::int as "pendingJMCs",
+        (SELECT COUNT(*) FROM site_invoices WHERE "approvalStatus" = 'PENDING' AND "deletedAt" IS NULL)::int as "pendingInvoices"
+    `;
+
+    const summary = await this.dataSource.query(summaryQuery);
+
+    return {
+      summary: {
+        totalPending:
+          (summary[0]?.pendingPOs || 0) +
+          (summary[0]?.pendingJMCs || 0) +
+          (summary[0]?.pendingInvoices || 0),
+        pendingPOs: summary[0]?.pendingPOs || 0,
+        pendingJMCs: summary[0]?.pendingJMCs || 0,
+        pendingInvoices: summary[0]?.pendingInvoices || 0,
+      },
+      pendingItems: items.map((item: any) => ({
+        documentType: item.documentType,
+        id: item.id,
+        documentNumber: item.documentNumber,
+        siteId: item.siteId,
+        siteName: item.siteName,
+        partyType: item.partyType,
+        partyName: item.partyName,
+        totalAmount: Number(item.totalAmount),
+        createdAt: item.createdAt,
+        daysPending: item.daysPending,
+      })),
+    };
+  }
+
+  /**
+   * Get cross-site financial summary (PO totals, invoiced, paid, etc.)
+   * For the Universal View dashboard (BRD §10)
+   */
+  async getFinancialSummary(filters?: {
+    siteId?: string;
+    companyId?: string;
+    partyType?: string;
+    fromDate?: string;
+    toDate?: string;
+  }): Promise<{
+    totals: {
+      totalPOValue: number;
+      invoicedTotal: number;
+      bookedTotal: number;
+      paidTotal: number;
+      uninvoiced: number;
+      pendingPayment: number;
+    };
+    bySite: Array<{
+      siteId: string;
+      siteName: string;
+      companyId: string;
+      companyName: string;
+      poCount: number;
+      totalPOValue: number;
+      invoicedTotal: number;
+      bookedTotal: number;
+      paidTotal: number;
+      uninvoiced: number;
+    }>;
+    byPartyType: {
+      SALE: { poCount: number; totalValue: number; invoiced: number; paid: number };
+      PURCHASE: { poCount: number; totalValue: number; invoiced: number; paid: number };
+    };
+  }> {
+    let whereClause = `WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'APPROVED'`;
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters?.siteId) {
+      whereClause += ` AND po."siteId" = $${paramIndex++}`;
+      params.push(filters.siteId);
+    }
+
+    if (filters?.companyId) {
+      whereClause += ` AND s."companyId" = $${paramIndex++}`;
+      params.push(filters.companyId);
+    }
+
+    if (filters?.partyType) {
+      whereClause += ` AND po."partyType" = $${paramIndex++}`;
+      params.push(filters.partyType);
+    }
+
+    if (filters?.fromDate) {
+      whereClause += ` AND po."poDate" >= $${paramIndex++}`;
+      params.push(filters.fromDate);
+    }
+
+    if (filters?.toDate) {
+      whereClause += ` AND po."poDate" <= $${paramIndex++}`;
+      params.push(filters.toDate);
+    }
+
+    // Get totals
+    const totalsQuery = `
+      SELECT 
+        COALESCE(SUM(po."totalAmount"), 0)::numeric as "totalPOValue",
+        COALESCE(SUM(po."invoicedTotal"), 0)::numeric as "invoicedTotal",
+        COALESCE(SUM(po."bookedTotal"), 0)::numeric as "bookedTotal",
+        COALESCE(SUM(po."paidTotal"), 0)::numeric as "paidTotal",
+        COALESCE(SUM(po."totalAmount" - po."invoicedTotal"), 0)::numeric as "uninvoiced",
+        COALESCE(SUM(po."invoicedTotal" - po."paidTotal"), 0)::numeric as "pendingPayment"
+      FROM purchase_orders po
+      JOIN sites s ON s.id = po."siteId"
+      ${whereClause}
+    `;
+
+    const totals = await this.dataSource.query(totalsQuery, params);
+
+    // Get by site
+    const bySiteQuery = `
+      SELECT 
+        po."siteId",
+        s.name as "siteName",
+        s."companyId",
+        c.name as "companyName",
+        COUNT(po.id)::int as "poCount",
+        COALESCE(SUM(po."totalAmount"), 0)::numeric as "totalPOValue",
+        COALESCE(SUM(po."invoicedTotal"), 0)::numeric as "invoicedTotal",
+        COALESCE(SUM(po."bookedTotal"), 0)::numeric as "bookedTotal",
+        COALESCE(SUM(po."paidTotal"), 0)::numeric as "paidTotal",
+        COALESCE(SUM(po."totalAmount" - po."invoicedTotal"), 0)::numeric as "uninvoiced"
+      FROM purchase_orders po
+      JOIN sites s ON s.id = po."siteId"
+      JOIN companies c ON c.id = s."companyId"
+      ${whereClause}
+      GROUP BY po."siteId", s.name, s."companyId", c.name
+      ORDER BY "totalPOValue" DESC
+      LIMIT 50
+    `;
+
+    const bySite = await this.dataSource.query(bySiteQuery, params);
+
+    // Get by party type
+    const byPartyTypeQuery = `
+      SELECT 
+        po."partyType",
+        COUNT(po.id)::int as "poCount",
+        COALESCE(SUM(po."totalAmount"), 0)::numeric as "totalValue",
+        COALESCE(SUM(po."invoicedTotal"), 0)::numeric as "invoiced",
+        COALESCE(SUM(po."paidTotal"), 0)::numeric as "paid"
+      FROM purchase_orders po
+      JOIN sites s ON s.id = po."siteId"
+      ${whereClause}
+      GROUP BY po."partyType"
+    `;
+
+    const byPartyType = await this.dataSource.query(byPartyTypeQuery, params);
+
+    const saleStats = byPartyType.find((p: any) => p.partyType === 'SALE') || {};
+    const purchaseStats = byPartyType.find((p: any) => p.partyType === 'PURCHASE') || {};
+
+    return {
+      totals: {
+        totalPOValue: Number(totals[0]?.totalPOValue) || 0,
+        invoicedTotal: Number(totals[0]?.invoicedTotal) || 0,
+        bookedTotal: Number(totals[0]?.bookedTotal) || 0,
+        paidTotal: Number(totals[0]?.paidTotal) || 0,
+        uninvoiced: Number(totals[0]?.uninvoiced) || 0,
+        pendingPayment: Number(totals[0]?.pendingPayment) || 0,
+      },
+      bySite: bySite.map((site: any) => ({
+        siteId: site.siteId,
+        siteName: site.siteName,
+        companyId: site.companyId,
+        companyName: site.companyName,
+        poCount: site.poCount,
+        totalPOValue: Number(site.totalPOValue),
+        invoicedTotal: Number(site.invoicedTotal),
+        bookedTotal: Number(site.bookedTotal),
+        paidTotal: Number(site.paidTotal),
+        uninvoiced: Number(site.uninvoiced),
+      })),
+      byPartyType: {
+        SALE: {
+          poCount: saleStats.poCount || 0,
+          totalValue: Number(saleStats.totalValue) || 0,
+          invoiced: Number(saleStats.invoiced) || 0,
+          paid: Number(saleStats.paid) || 0,
+        },
+        PURCHASE: {
+          poCount: purchaseStats.poCount || 0,
+          totalValue: Number(purchaseStats.totalValue) || 0,
+          invoiced: Number(purchaseStats.invoiced) || 0,
+          paid: Number(purchaseStats.paid) || 0,
+        },
+      },
     };
   }
 }

@@ -20,9 +20,12 @@ export const VENDOR_ERRORS = {
     'Vendor has pending financial documents (POs, JMCs, Invoices, Book Payments). Settle them before deleting.',
   VENDOR_HAS_ACTIVE_ASSOCIATIONS:
     'Cannot delete vendor. Resolve the following before deleting: {issues}',
+  DELETE_FAILED: 'Failed to delete vendor',
 };
 
 export const VENDOR_RESPONSES = {
+  BULK_DELETE_COMPLETED: (successCount: number, failureCount: number) =>
+    `Bulk delete completed: ${successCount} succeeded, ${failureCount} failed`,
   CREATED: 'Vendor created successfully',
   UPDATED: 'Vendor updated successfully',
   DELETED: 'Vendor deleted successfully',

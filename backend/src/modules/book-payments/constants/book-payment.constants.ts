@@ -1,5 +1,6 @@
 export const BOOK_PAYMENT_ERRORS = {
   NOT_FOUND: 'Book payment not found.',
+  CANNOT_UPDATE_HAS_TRANSFER: 'Cannot update book payment — a bank transfer exists.',
   INVOICE_NOT_FOUND: 'Invoice not found.',
   INVOICE_NOT_APPROVED: 'Invoice must be approved before booking payment.',
   INVOICE_NOT_PURCHASE: 'Book payments can only be created for PURCHASE side invoices.',

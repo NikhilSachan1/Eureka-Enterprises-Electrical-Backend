@@ -1,5 +1,6 @@
 export const JMC_ERRORS = {
   NOT_FOUND: 'JMC not found',
+  ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK: 'Only APPROVED locked JMCs can request unlock.',
   PO_NOT_FOUND: 'Parent PO not found',
   PO_NOT_APPROVED: 'Parent PO must be approved before creating a JMC',
   JMC_NUMBER_EXISTS: 'JMC number already exists under this PO',

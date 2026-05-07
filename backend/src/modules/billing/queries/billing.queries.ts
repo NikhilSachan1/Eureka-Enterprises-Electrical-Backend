@@ -114,6 +114,43 @@ export const BILLING_QUERIES = {
   `,
 
   /**
+   * Check if any PO has been invoiced beyond its total amount.
+   */
+  INVOICE_OVER_PO: `
+    SELECT po.id, po."poNumber", po."totalAmount" as "poTotal", po."invoicedTotal"
+    FROM purchase_orders po
+    WHERE po."siteId" = $1
+      AND po."invoicedTotal" > po."totalAmount"
+      AND po."deletedAt" IS NULL
+  `,
+
+  /**
+   * Approved SALE invoices that have not been fully paid.
+   */
+  UNPAID_SALE_INVOICES: `
+    SELECT inv.id, inv."invoiceNumber", (inv."totalAmount" - inv."paidTotal") as "unpaid"
+    FROM site_invoices inv
+    WHERE inv."siteId" = $1
+      AND inv."partyType" = 'SALE'
+      AND inv."approvalStatus" = 'APPROVED'
+      AND inv."paidTotal" < inv."totalAmount"
+      AND inv."deletedAt" IS NULL
+  `,
+
+  /**
+   * Approved PURCHASE invoices that have not been fully paid.
+   */
+  UNPAID_PURCHASE_INVOICES: `
+    SELECT inv.id, inv."invoiceNumber", (inv."totalAmount" - inv."paidTotal") as "unpaid"
+    FROM site_invoices inv
+    WHERE inv."siteId" = $1
+      AND inv."partyType" = 'PURCHASE'
+      AND inv."approvalStatus" = 'APPROVED'
+      AND inv."paidTotal" < inv."totalAmount"
+      AND inv."deletedAt" IS NULL
+  `,
+
+  /**
    * Check if all invoices are fully paid (sum of bank transfers = invoice total).
    */
   UNPAID_INVOICES: `

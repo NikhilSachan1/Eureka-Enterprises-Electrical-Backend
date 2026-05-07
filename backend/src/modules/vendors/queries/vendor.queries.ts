@@ -39,6 +39,29 @@ export const getFinancialStatsByVendorQuery = `
 `;
 
 /**
+ * Check if a vendor has any active site associations (for delete validation).
+ * Returns 1 row if found, 0 rows if safe to delete.
+ */
+export const checkVendorHasSitesQuery = `
+  SELECT 1 FROM site_vendors sv
+  INNER JOIN sites s ON s.id = sv."siteId" AND s."deletedAt" IS NULL
+  WHERE sv."vendorId" = $1
+  LIMIT 1
+`;
+
+/**
+ * Check if a vendor has any active purchase orders (for delete validation).
+ * Returns 1 row if found, 0 rows if safe to delete.
+ */
+export const checkVendorHasPurchaseOrdersQuery = `
+  SELECT 1 FROM purchase_orders
+  WHERE "vendorId" = $1
+    AND "partyType" = 'PURCHASE'
+    AND "deletedAt" IS NULL
+  LIMIT 1
+`;
+
+/**
  * Get overall vendor statistics
  */
 export const getOverallVendorStatsQuery = `
