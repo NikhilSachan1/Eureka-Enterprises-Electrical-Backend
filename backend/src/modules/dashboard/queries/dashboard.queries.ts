@@ -2,6 +2,10 @@ import { UserStatus } from '../../users/constants/user.constants';
 import { AttendanceStatus, ApprovalStatus } from '../../attendance/constants/attendance.constants';
 import { ApprovalStatus as LeaveApprovalStatus } from '../../leave-applications/constants/leave-application.constants';
 import { PayrollStatus } from '../../payroll/constants/payroll.constants';
+import {
+  CONFIGURATION_MODULES,
+  CONFIGURATION_KEYS,
+} from 'src/utils/master-constants/master-constants';
 
 // ==================== Overview Queries ====================
 
@@ -178,18 +182,18 @@ export const getAnniversariesQuery = (today: string, weekEnd: string, monthEnd: 
 
 export const getHolidaysQuery = () => ({
   query: `
-    SELECT 
+    SELECT
       cs.value as "holidays"
     FROM configurations c
     JOIN config_settings cs ON cs."configId" = c.id
-    WHERE c.module = 'attendance'
-      AND c.key = 'holidayCalendar'
+    WHERE c.module = $1
+      AND c.key = $2
       AND cs."isActive" = true
       AND cs."deletedAt" IS NULL
       AND c."deletedAt" IS NULL
     LIMIT 1
   `,
-  params: [],
+  params: [CONFIGURATION_MODULES.LEAVE, CONFIGURATION_KEYS.HOLIDAY_CALENDAR],
 });
 
 // ==================== Attendance Trend Query ====================
