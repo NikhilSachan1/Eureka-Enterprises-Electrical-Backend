@@ -110,17 +110,22 @@ export class DashboardService {
     const holidays = result[0].holidays;
 
     // holidays can be an array of objects or the value itself containing a holidays key
-    const holidayList: Array<{ date: string; name: string; type?: string }> = Array.isArray(
-      holidays,
-    )
-      ? holidays
-      : holidays?.holidays || [];
+    const holidayList: Array<{
+      date: string;
+      title?: string;
+      name?: string;
+      type?: string;
+      icon?: string | null;
+      isOptional?: boolean;
+    }> = Array.isArray(holidays) ? holidays : holidays?.holidays || [];
 
     return holidayList
       .map((h) => ({
         date: h.date,
-        name: h.name,
+        name: h.title ?? h.name ?? '',
         type: h.type,
+        icon: h.icon ?? null,
+        isOptional: h.isOptional ?? false,
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
@@ -141,6 +146,8 @@ export class DashboardService {
           date: holiday.date,
           name: holiday.name,
           type: holiday.type,
+          icon: holiday.icon ?? null,
+          isOptional: holiday.isOptional ?? false,
           daysUntil,
         };
       }
@@ -425,23 +432,29 @@ export class DashboardService {
     const monthList: Holiday[] = [];
 
     if (result[0]?.holidays) {
-      const holidays = result[0].holidays as Array<{ date: string; name: string; type?: string }>;
+      const rawValue = result[0].holidays;
+      const holidays = (Array.isArray(rawValue) ? rawValue : rawValue?.holidays || []) as Array<{
+        date: string;
+        title?: string;
+        name?: string;
+        type?: string;
+      }>;
+
+      const todayStr = this.dateTimeService.getTodayString();
 
       for (const holiday of holidays) {
         const holidayDate = new Date(holiday.date);
-        const todayStr = this.formatDate(today);
         const holidayStr = this.formatDate(holidayDate);
 
-        if (holidayDate < today && holidayStr !== todayStr) continue;
-        if (holidayDate > monthEnd) continue;
+        if (holidayStr < todayStr) continue;
 
         const daysUntil = Math.ceil(
-          (holidayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+          (holidayDate.getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24),
         );
 
         const item: Holiday = {
           date: holiday.date,
-          name: holiday.name,
+          name: holiday.title ?? holiday.name ?? '',
           type: holiday.type,
           daysUntil,
         };
@@ -450,11 +463,13 @@ export class DashboardService {
           todayList.push(item);
         }
 
-        if (daysUntil <= 14 && daysUntil >= 0) {
+        if (daysUntil <= 14) {
           upcomingList.push(item);
         }
 
-        monthList.push(item);
+        if (holidayStr <= this.formatDate(monthEnd)) {
+          monthList.push(item);
+        }
       }
     }
 

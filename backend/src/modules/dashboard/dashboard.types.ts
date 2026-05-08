@@ -461,6 +461,8 @@ export interface MobileFestivalBanner {
   date: string;
   name: string;
   type?: string;
+  icon?: string | null;
+  isOptional?: boolean;
   daysUntil: number;
 }
 
@@ -468,6 +470,8 @@ export interface MobileHoliday {
   date: string;
   name: string;
   type?: string;
+  icon?: string | null;
+  isOptional?: boolean;
 }
 
 export interface MobileAnnouncement {
