@@ -38,6 +38,20 @@ export class PurchaseOrderController {
     return await this.poService.create(dto, createdBy);
   }
 
+  @Get('dropdown')
+  @RequiredPermission('financials.purchase-orders.view')
+  @ApiOperation({
+    summary: 'PO dropdown for JMC creation',
+    description:
+      'Returns all POs for a site+partyType with eligibility flags. ' +
+      'Eligible items can be selected; ineligible items should be disabled in the UI ' +
+      'and the reason displayed as a tooltip. ' +
+      'Used to populate the PO dropdown when creating a JMC.',
+  })
+  async getDropdown(@Query('siteId') siteId: string, @Query('partyType') partyType: string) {
+    return await this.poService.getDropdown(siteId, partyType);
+  }
+
   @Get()
   @RequiredPermission('financials.purchase-orders.view')
   @ApiOperation({ summary: 'List POs' })

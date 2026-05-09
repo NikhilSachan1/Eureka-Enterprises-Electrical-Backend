@@ -119,6 +119,12 @@ pre .c{color:#8b949e;font-style:italic}
   <div class="nav-section">Summaries</div>
   <a class="nav-item" href="#billing">Billing & Site Closing</a>
   <a class="nav-item" href="#dashboard">Dashboard Universal View</a>
+
+  <div class="nav-section">UI Dropdown APIs</div>
+  <a class="nav-item" href="#dropdown-pos">PO Dropdown</a>
+  <a class="nav-item" href="#dropdown-jmcs">JMC Dropdown</a>
+  <a class="nav-item" href="#dropdown-invoices">Invoice Dropdown</a>
+  <a class="nav-item" href="#dropdown-bps">Book Payment Dropdown</a>
 </nav>
 
 <!-- MAIN CONTENT -->
@@ -1538,6 +1544,142 @@ pre .c{color:#8b949e;font-style:italic}
     <tr><td>409</td><td>Conflict (duplicate number / 1:1 constraint violated)</td></tr>
     <tr><td>500</td><td>Server error — report to backend team</td></tr>
   </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="dropdown-pos">
+  <div class="module-header">
+    <div class="module-icon" style="background:#ede9fe">🔽</div>
+    <h2>UI Dropdown APIs <small>Eligibility-aware — for building smart dropdowns</small></h2>
+  </div>
+  <div class="info-box" style="background:#f5f3ff;border-left-color:#7c3aed;color:#4c1d95">
+    <strong>Why these exist:</strong> When the frontend shows a dropdown (e.g. "Select PO" when creating a JMC), some options should be <strong>disabled</strong> with a tooltip explaining why. These endpoints return every item with <code>eligible: true|false</code> and a human-readable <code>reason</code>, so the UI can immediately render enabled/disabled states without making extra API calls.<br><br>
+    <strong>Response shape (same for all 4 endpoints):</strong>
+    <pre style="margin-top:8px;background:#0d1117;color:#e6edf3;padding:10px;border-radius:6px;font-size:12px">{ "records": [
+  { "id": "uuid", "label": "PO/001 — ABC Contractors", "eligible": true,  "reason": null, "meta": { ... } },
+  { "id": "uuid", "label": "PO/002 — XYZ Ltd",         "eligible": false, "reason": "PO is pending admin approval", "meta": { ... } }
+]}</pre>
+  </div>
+
+  <div class="endpoint open" id="dropdown-pos">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/purchase-orders/dropdown</span>
+      <span class="endpoint-desc">PO dropdown — for JMC creation</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.view</div>
+      <p style="font-size:13px;margin:8px 0">Populate the <strong>"Select PO"</strong> dropdown when creating a JMC. Returns all POs for the site+partyType. A PO must be APPROVED before a JMC can be created against it.</p>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td><td>The site to list POs for</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td><span class="req">required</span></td><td>Which side of the chain</td></tr>
+      </table>
+      <div class="sect-label">Eligibility Logic</div>
+      <table><tr><th>Condition</th><th>eligible</th><th>reason</th></tr>
+        <tr><td>approvalStatus = APPROVED</td><td>✅ true</td><td>null</td></tr>
+        <tr><td>approvalStatus = PENDING</td><td>❌ false</td><td>"PO is pending admin approval"</td></tr>
+        <tr><td>approvalStatus = REJECTED</td><td>❌ false</td><td>"PO was rejected"</td></tr>
+      </table>
+      <div class="sect-label">meta fields</div>
+      <pre>{ "poNumber": "PO/001", "partyType": "SALE", "partyName": "ABC Ltd",
+  "totalAmount": 118000, "invoicedTotal": 59000, "remaining": 59000,
+  "approvalStatus": "APPROVED" }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint open" id="dropdown-jmcs">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/jmcs/dropdown</span>
+      <span class="endpoint-desc">JMC dropdown — for Report or Invoice creation</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.view</div>
+      <p style="font-size:13px;margin:8px 0">Use <code>forDocument=report</code> when building the JMC picker for Report creation. Use <code>forDocument=invoice</code> when building the JMC picker for Invoice creation. The eligibility checks differ per use case.</p>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td><td>The site</td></tr>
+        <tr><td>partyType</td><td>SALE | PURCHASE</td><td><span class="req">required</span></td><td>Which side</td></tr>
+        <tr><td>forDocument</td><td>report | invoice</td><td><span class="req">required</span></td><td>Determines which eligibility rules apply</td></tr>
+      </table>
+      <div class="sect-label">Eligibility Logic — forDocument=report</div>
+      <table><tr><th>Condition</th><th>eligible</th><th>reason</th></tr>
+        <tr><td>JMC APPROVED + no existing Report</td><td>✅ true</td><td>null</td></tr>
+        <tr><td>JMC PENDING</td><td>❌ false</td><td>"JMC is pending admin approval"</td></tr>
+        <tr><td>Report already exists for this JMC</td><td>❌ false</td><td>"Report already exists for this JMC"</td></tr>
+      </table>
+      <div class="sect-label">Eligibility Logic — forDocument=invoice</div>
+      <table><tr><th>Condition</th><th>eligible</th><th>reason</th></tr>
+        <tr><td>JMC APPROVED + no Invoice + (SALE or Report exists)</td><td>✅ true</td><td>null</td></tr>
+        <tr><td>JMC PENDING</td><td>❌ false</td><td>"JMC is pending admin approval"</td></tr>
+        <tr><td>Invoice already exists</td><td>❌ false</td><td>"Invoice already exists for this JMC"</td></tr>
+        <tr><td>PURCHASE + no Report yet</td><td>❌ false</td><td>"Report must be created first (PURCHASE side)"</td></tr>
+      </table>
+      <div class="sect-label">meta fields</div>
+      <pre>{ "jmcNumber": "JMC/001", "jmcDate": "2026-04-10", "partyType": "PURCHASE",
+  "partyName": "XYZ Vendor", "approvalStatus": "APPROVED",
+  "hasReport": true, "hasInvoice": false }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint open" id="dropdown-invoices">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/site-invoices/dropdown</span>
+      <span class="endpoint-desc">Invoice dropdown — for Book Payment or SALE Bank Transfer creation</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.view</div>
+      <p style="font-size:13px;margin:8px 0">Use <code>forDocument=book-payment</code> to list PURCHASE invoices for Book Payment creation. Use <code>forDocument=bank-transfer</code> to list SALE invoices for SALE Bank Transfer creation. Each returns only the relevant partyType automatically — frontend doesn't need to specify it.</p>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+        <tr><td>siteId</td><td>uuid</td><td><span class="req">required</span></td><td>The site</td></tr>
+        <tr><td>forDocument</td><td>book-payment | bank-transfer</td><td><span class="req">required</span></td><td>Determines side (PURCHASE or SALE) and eligibility rules</td></tr>
+      </table>
+      <div class="sect-label">Eligibility — forDocument=book-payment (PURCHASE invoices)</div>
+      <table><tr><th>Condition</th><th>eligible</th><th>reason</th></tr>
+        <tr><td>APPROVED + bookedTotal &lt; totalAmount</td><td>✅ true</td><td>null</td></tr>
+        <tr><td>PENDING</td><td>❌ false</td><td>"Invoice is pending admin approval"</td></tr>
+        <tr><td>bookedTotal ≥ totalAmount</td><td>❌ false</td><td>"Invoice fully booked — no remaining amount"</td></tr>
+      </table>
+      <div class="sect-label">Eligibility — forDocument=bank-transfer (SALE invoices)</div>
+      <table><tr><th>Condition</th><th>eligible</th><th>reason</th></tr>
+        <tr><td>APPROVED + paidTotal &lt; totalAmount</td><td>✅ true</td><td>null</td></tr>
+        <tr><td>PENDING</td><td>❌ false</td><td>"Invoice is pending admin approval"</td></tr>
+        <tr><td>paidTotal ≥ totalAmount</td><td>❌ false</td><td>"Invoice fully paid"</td></tr>
+      </table>
+      <div class="sect-label">meta fields</div>
+      <pre>{ "invoiceNumber": "INV/001", "partyType": "PURCHASE", "partyName": "XYZ Vendor",
+  "totalAmount": 59000, "bookedTotal": 29000, "paidTotal": 29000,
+  "remaining": 30000, "approvalStatus": "APPROVED" }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint open" id="dropdown-bps">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/book-payments/dropdown</span>
+      <span class="endpoint-desc">Book Payment dropdown — for PURCHASE Bank Transfer creation</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.book-payments.view</div>
+      <p style="font-size:13px;margin:8px 0">Populate the <strong>"Select Book Payment"</strong> dropdown when creating a PURCHASE Bank Transfer. Returns all Book Payments for a given invoice. A Book Payment is eligible only if it doesn't already have a Bank Transfer (1 BookPayment = 1 BankTransfer rule).</p>
+      <div class="sect-label">Query Parameters</div>
+      <table><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+        <tr><td>invoiceId</td><td>uuid</td><td><span class="req">required</span></td><td>The PURCHASE invoice to list Book Payments for</td></tr>
+      </table>
+      <div class="sect-label">Eligibility Logic</div>
+      <table><tr><th>Condition</th><th>eligible</th><th>reason</th></tr>
+        <tr><td>hasTransfer = false</td><td>✅ true</td><td>null</td></tr>
+        <tr><td>hasTransfer = true</td><td>❌ false</td><td>"Bank transfer already created for this book payment (1:1 rule)"</td></tr>
+      </table>
+      <div class="sect-label">meta fields</div>
+      <pre>{ "paymentTotalAmount": 58000, "taxableAmount": 50000, "gstAmount": 9000,
+  "tdsDeductionAmount": 1000, "bookingDate": "2026-04-15",
+  "hasTransfer": false, "approvalStatus": "APPROVED" }</pre>
+    </div>
+  </div>
 </section>
 
 <p style="margin-top:32px;font-size:12px;color:#adb5bd;text-align:center">European Union — Financial Module API Documentation · Auto-generated from BRD v2.0 · 2026-05-07</p>

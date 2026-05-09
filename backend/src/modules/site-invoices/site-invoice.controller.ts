@@ -14,7 +14,11 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { SiteInvoiceService } from './site-invoice.service';
 import { CreateSiteInvoiceDto, UpdateSiteInvoiceDto, GetSiteInvoiceDto } from './dto';
-import { ApproveDto, RejectDto, UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
+import {
+  ApproveDto,
+  RejectDto,
+  UnlockRequestDto,
+} from 'src/modules/purchase-orders/dto/approval.dto';
 
 @ApiTags('Site Invoices')
 @ApiBearerAuth('JWT-auth')
@@ -30,6 +34,22 @@ export class SiteInvoiceController {
     @Body() dto: CreateSiteInvoiceDto,
   ) {
     return await this.invoiceService.create(dto, createdBy);
+  }
+
+  @Get('dropdown')
+  @RequiredPermission('financials.invoices.view')
+  @ApiOperation({
+    summary: 'Invoice dropdown for Book Payment or Bank Transfer (SALE) creation',
+    description:
+      'forDocument=book-payment  → returns PURCHASE invoices eligible for a new Book Payment.\n' +
+      'forDocument=bank-transfer → returns SALE invoices eligible for a new Bank Transfer.\n' +
+      'Ineligible items are included with eligible=false and a human-readable reason.',
+  })
+  async getDropdown(
+    @Query('siteId') siteId: string,
+    @Query('forDocument') forDocument: 'book-payment' | 'bank-transfer',
+  ) {
+    return await this.invoiceService.getDropdown(siteId, forDocument);
   }
 
   @Get()

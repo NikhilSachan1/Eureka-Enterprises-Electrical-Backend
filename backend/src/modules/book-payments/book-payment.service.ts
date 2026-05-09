@@ -1,16 +1,8 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DataSource, IsNull, ILike } from 'typeorm';
 import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
-import {
-  CreateBookPaymentDto,
-  UpdateBookPaymentDto,
-  GetBookPaymentDto,
-} from './dto';
+import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
@@ -18,10 +10,7 @@ import {
   PartyType,
   FinancialApprovalStatus,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class BookPaymentService {
@@ -62,10 +51,7 @@ export class BookPaymentService {
       );
 
       // Ceiling check: sum of booked + new ≤ invoice total
-      const existingBooked = await this.bookPaymentRepository.sumByInvoice(
-        dto.invoiceId,
-        em,
-      );
+      const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
       const newTotal = existingBooked + dto.paymentTotalAmount;
       if (newTotal > Number(invoice.totalAmount)) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
@@ -95,10 +81,12 @@ export class BookPaymentService {
       );
 
       // Update invoice bookedTotal + PO bookedTotal
-      await em.getRepository(SiteInvoiceEntity).update(
-        { id: invoice.id },
-        { bookedTotal: () => `"bookedTotal" + ${dto.paymentTotalAmount}` },
-      );
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update(
+          { id: invoice.id },
+          { bookedTotal: () => `"bookedTotal" + ${dto.paymentTotalAmount}` },
+        );
 
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
@@ -165,9 +153,9 @@ export class BookPaymentService {
       // UpdateBookPaymentDto omits @Type(() => Number); absent fields stay
       // undefined under enableImplicitConversion so ?? fallback is safe.
       const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
-      const newGst     = dto.gstAmount ?? Number(bp.gstAmount);
-      const newTds     = dto.tdsDeductionAmount ?? Number(bp.tdsDeductionAmount);
-      const newTotal   = dto.paymentTotalAmount ?? Number(bp.paymentTotalAmount);
+      const newGst = dto.gstAmount ?? Number(bp.gstAmount);
+      const newTds = dto.tdsDeductionAmount ?? Number(bp.tdsDeductionAmount);
+      const newTotal = dto.paymentTotalAmount ?? Number(bp.paymentTotalAmount);
       this.validateAmounts(newTaxable, newGst, newTds, newTotal);
 
       // Re-check ceiling if amount changed.
@@ -185,10 +173,7 @@ export class BookPaymentService {
           .getOne();
         if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
 
-        const existingBooked = await this.bookPaymentRepository.sumByInvoice(
-          bp.invoiceId,
-          em,
-        );
+        const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - Number(bp.paymentTotalAmount) + newTotal;
         if (adjustedBooked > Number(invoice.totalAmount)) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
@@ -197,10 +182,9 @@ export class BookPaymentService {
         // Adjust rollups
         const delta = newTotal - Number(bp.paymentTotalAmount);
         if (delta !== 0) {
-          await em.getRepository(SiteInvoiceEntity).update(
-            { id: bp.invoiceId },
-            { bookedTotal: () => `"bookedTotal" + ${delta}` },
-          );
+          await em
+            .getRepository(SiteInvoiceEntity)
+            .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" + ${delta}` });
           await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: delta }, em);
         }
       }
@@ -229,10 +213,12 @@ export class BookPaymentService {
       }
 
       // Reverse rollups
-      await em.getRepository(SiteInvoiceEntity).update(
-        { id: bp.invoiceId },
-        { bookedTotal: () => `"bookedTotal" - ${bp.paymentTotalAmount}` },
-      );
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update(
+          { id: bp.invoiceId },
+          { bookedTotal: () => `"bookedTotal" - ${bp.paymentTotalAmount}` },
+        );
       await this.purchaseOrderService.adjustRollups(
         bp.poId,
         { bookedTotal: -Number(bp.paymentTotalAmount) },
@@ -246,12 +232,7 @@ export class BookPaymentService {
     });
   }
 
-  private validateAmounts(
-    taxable: number,
-    gst: number,
-    tds: number,
-    total: number,
-  ): void {
+  private validateAmounts(taxable: number, gst: number, tds: number, total: number): void {
     const expected = Number((taxable + gst - tds).toFixed(2));
     const got = Number(total.toFixed(2));
     if (expected !== got) {
@@ -282,5 +263,61 @@ export class BookPaymentService {
     em: import('typeorm').EntityManager,
   ): Promise<void> {
     await this.bookPaymentRepository.update({ id }, { hasTransfer }, em);
+  }
+
+  /**
+   * Dropdown endpoint — returns Book Payments for an Invoice with eligibility
+   * flags for PURCHASE Bank Transfer creation.
+   *
+   * A Book Payment is eligible when it does NOT yet have a Bank Transfer
+   * (1 BookPayment = 1 BankTransfer, BRD §11 confirmed-2).
+   */
+  async getDropdown(invoiceId: string) {
+    const rows = await this.dataSource.query(
+      `
+      SELECT
+        bp.id,
+        bp."paymentTotalAmount",
+        bp."taxableAmount",
+        bp."gstAmount",
+        bp."tdsDeductionAmount",
+        bp."bookingDate",
+        bp."hasTransfer",
+        bp."approvalStatus",
+        -- eligibility: only one bank transfer per book payment
+        CASE
+          WHEN bp."hasTransfer" = true THEN false
+          ELSE true
+        END AS eligible,
+        CASE
+          WHEN bp."hasTransfer" = true
+            THEN 'Bank transfer already created for this book payment (1:1 rule)'
+          ELSE NULL
+        END AS reason
+      FROM book_payments bp
+      WHERE bp."invoiceId" = $1
+        AND bp."deletedAt" IS NULL
+      ORDER BY bp."createdAt" DESC
+      `,
+      [invoiceId],
+    );
+
+    return {
+      records: rows.map((r: any) => ({
+        id: r.id,
+        label: `₹${Number(r.paymentTotalAmount).toLocaleString('en-IN')} — ${r.bookingDate}`,
+        eligible: r.eligible,
+        reason: r.reason ?? null,
+        meta: {
+          paymentTotalAmount: Number(r.paymentTotalAmount),
+          taxableAmount: Number(r.taxableAmount),
+          gstAmount: Number(r.gstAmount),
+          tdsDeductionAmount: Number(r.tdsDeductionAmount),
+          bookingDate: r.bookingDate,
+          hasTransfer: r.hasTransfer,
+          approvalStatus: r.approvalStatus,
+        },
+      })),
+    };
   }
 }

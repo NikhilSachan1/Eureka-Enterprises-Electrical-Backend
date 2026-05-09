@@ -92,7 +92,7 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
 <!-- SCORE BANNER -->
 <div class="score-banner">
   <div style="text-align:center">
-    <div class="score-pass">117</div>
+    <div class="score-pass">157</div>
     <div class="score-label">PASSED</div>
   </div>
   <div class="score-divider"></div>
@@ -102,8 +102,8 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
   </div>
   <div class="score-divider"></div>
   <div class="score-note">
-    <strong>100% pass rate</strong><br>ALL BRD scenarios verified<br>
-    <span class="badge-100">✅ Confidence: FULL</span>
+    <strong>100% pass rate</strong><br>117 BRD + 40 Dropdown APIs<br>
+    <span class="badge-100">✅ Confidence: FULL — 157/157</span>
   </div>
 </div>
 
@@ -136,8 +136,9 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
       <tr><td><span class="s-badge">S16</span> Universal View</td><td>BRD §10</td><td>3</td><td>3</td><td style="color:#198754">—</td></tr>
       <tr><td><span class="s-badge">S17</span> Approval States &amp; Lifecycle</td><td>BRD §7</td><td>5</td><td>5</td><td style="color:#198754">—</td></tr>
       <tr><td><span class="s-badge">S18</span> Permissions &amp; Security</td><td>BRD §10, §8</td><td>3</td><td>3</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge" style="background:#7c3aed">S19</span> Dropdown APIs (UI eligibility)</td><td>New Feature</td><td>40</td><td>40</td><td style="color:#198754">—</td></tr>
       <tr style="background:#f0fdf4;font-weight:700">
-        <td colspan="2">TOTAL</td><td>117</td><td style="color:#198754;font-size:15px">117 ✅</td><td style="color:#198754">0</td>
+        <td colspan="2">TOTAL</td><td>157</td><td style="color:#198754;font-size:15px">157 ✅</td><td style="color:#198754">0</td>
       </tr>
     </tbody>
   </table>
@@ -359,6 +360,54 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
     <tr><td>S18.1</td><td>Unauthenticated call → 401</td><td class="icon-pass pass">PASS</td><td><code>Unauthorized</code></td></tr>
     <tr><td>S18.2</td><td>Financial permissions seeded (expected 51, got 51)</td><td class="icon-pass pass">PASS</td><td><code>51</code></td></tr>
     <tr><td>S18.3</td><td>Approve non-existent PO → 404 (not 200)</td><td class="icon-pass pass">PASS</td><td><code>HTTP 404</code></td></tr>
+  </tbody></table>
+
+  <!-- S19 -->
+  <div class="subsection-title"><span class="s-badge" style="background:#7c3aed">S19</span> Dropdown APIs — UI Eligibility (New Feature)</div>
+  <p style="font-size:13px;margin:8px 0 12px;color:#4c1d95;background:#f5f3ff;border-left:4px solid #7c3aed;padding:8px 12px;border-radius:0 6px 6px 0">
+    <strong>What these APIs do:</strong> Return items (POs, JMCs, Invoices, Book Payments) with <code>eligible: true/false</code> and a <code>reason</code> so the UI can disable ineligible dropdown items and show a tooltip. 4 endpoints, 40 tests, all passed.
+  </p>
+  <table><thead><tr><th>ID</th><th>Test Scenario</th><th>Result</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>S19.1</td><td>GET /purchase-orders/dropdown → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns records array</code></td></tr>
+    <tr><td>S19.2</td><td>PO dropdown: each record has id, label, eligible, reason, meta</td><td class="icon-pass pass">PASS</td><td><code>All fields present</code></td></tr>
+    <tr><td>S19.3</td><td>PO dropdown: eligible is boolean</td><td class="icon-pass pass">PASS</td><td><code>typeof eligible === 'boolean'</code></td></tr>
+    <tr><td>S19.4</td><td>PO dropdown: meta has totalAmount, invoicedTotal, remaining</td><td class="icon-pass pass">PASS</td><td><code>All meta fields present</code></td></tr>
+    <tr><td>S19.5</td><td>PO dropdown: APPROVED POs → eligible=true</td><td class="icon-pass pass">PASS</td><td><code>Verified on live data</code></td></tr>
+    <tr><td>S19.6</td><td>PO dropdown: PENDING POs → eligible=false + reason</td><td class="icon-pass pass">PASS</td><td><code>"PO is pending admin approval"</code></td></tr>
+    <tr><td>S19.7</td><td>PURCHASE PO dropdown → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns PURCHASE side POs</code></td></tr>
+    <tr><td>S19.8</td><td>GET /jmcs/dropdown?forDocument=report → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns records</code></td></tr>
+    <tr><td>S19.9</td><td>JMC (report) dropdown: each record has eligible + reason + meta</td><td class="icon-pass pass">PASS</td><td><code>All fields present</code></td></tr>
+    <tr><td>S19.10</td><td>JMC (report): meta has hasReport field</td><td class="icon-pass pass">PASS</td><td><code>hasReport: true/false</code></td></tr>
+    <tr><td>S19.11</td><td>JMC (report): JMCs with existing Report → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Report already exists for this JMC"</code></td></tr>
+    <tr><td>S19.12</td><td>JMC (report): reason says "Report already exists"</td><td class="icon-pass pass">PASS</td><td><code>Exact message verified</code></td></tr>
+    <tr><td>S19.13</td><td>JMC (report): APPROVED JMCs without Report → eligible=true</td><td class="icon-pass pass">PASS</td><td><code>Verified on live data</code></td></tr>
+    <tr><td>S19.14</td><td>GET /jmcs/dropdown?forDocument=invoice → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns records</code></td></tr>
+    <tr><td>S19.15</td><td>JMC (invoice): meta has hasInvoice field</td><td class="icon-pass pass">PASS</td><td><code>hasInvoice: true/false</code></td></tr>
+    <tr><td>S19.16</td><td>JMC (invoice): JMCs with existing Invoice → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Invoice already exists for this JMC"</code></td></tr>
+    <tr><td>S19.17</td><td>JMC (invoice): PURCHASE JMC without Report → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Report must be created first (PURCHASE side)"</code></td></tr>
+    <tr><td>S19.18</td><td>JMC (invoice): PENDING JMCs → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"JMC is pending admin approval"</code></td></tr>
+    <tr><td>S19.19</td><td>SALE JMC (invoice) dropdown → 200</td><td class="icon-pass pass">PASS</td><td><code>No report requirement on SALE</code></td></tr>
+    <tr><td>S19.20</td><td>GET /site-invoices/dropdown?forDocument=book-payment → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns PURCHASE invoices</code></td></tr>
+    <tr><td>S19.21</td><td>Invoice (book-payment): returns PURCHASE invoices only</td><td class="icon-pass pass">PASS</td><td><code>All partyType=PURCHASE</code></td></tr>
+    <tr><td>S19.22</td><td>Invoice (book-payment): meta has bookedTotal + remaining</td><td class="icon-pass pass">PASS</td><td><code>Both fields present</code></td></tr>
+    <tr><td>S19.23</td><td>Invoice (book-payment): fully booked → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Invoice fully booked — no remaining amount"</code></td></tr>
+    <tr><td>S19.24</td><td>Invoice (book-payment): PENDING → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Invoice is pending admin approval"</code></td></tr>
+    <tr><td>S19.25</td><td>Invoice (book-payment): APPROVED with room → eligible=true</td><td class="icon-pass pass">PASS</td><td><code>Verified on live data</code></td></tr>
+    <tr><td>S19.26</td><td>GET /site-invoices/dropdown?forDocument=bank-transfer → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns SALE invoices</code></td></tr>
+    <tr><td>S19.27</td><td>Invoice (bank-transfer): returns SALE invoices only</td><td class="icon-pass pass">PASS</td><td><code>All partyType=SALE</code></td></tr>
+    <tr><td>S19.28</td><td>Invoice (bank-transfer): meta has paidTotal + remaining</td><td class="icon-pass pass">PASS</td><td><code>Both fields present</code></td></tr>
+    <tr><td>S19.29</td><td>Invoice (bank-transfer): fully paid → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Invoice fully paid"</code></td></tr>
+    <tr><td>S19.30</td><td>GET /book-payments/dropdown?invoiceId=... → 200</td><td class="icon-pass pass">PASS</td><td><code>Returns BPs for invoice</code></td></tr>
+    <tr><td>S19.31</td><td>BP dropdown: each record has eligible + reason + meta</td><td class="icon-pass pass">PASS</td><td><code>All fields present</code></td></tr>
+    <tr><td>S19.32</td><td>BP dropdown: meta has hasTransfer + paymentTotalAmount</td><td class="icon-pass pass">PASS</td><td><code>Both fields present</code></td></tr>
+    <tr><td>S19.33</td><td>BP dropdown: BPs with BankTransfer → eligible=false</td><td class="icon-pass pass">PASS</td><td><code>"Bank transfer already created (1:1 rule)"</code></td></tr>
+    <tr><td>S19.34</td><td>BP dropdown: BPs without BankTransfer → eligible=true</td><td class="icon-pass pass">PASS</td><td><code>Verified on live data</code></td></tr>
+    <tr><td>S19.35</td><td>Edge: missing siteId param → 200 empty list (no crash)</td><td class="icon-pass pass">PASS</td><td><code>Graceful handling</code></td></tr>
+    <tr><td>S19.36</td><td>Edge: invalid forDocument value → 200 (no crash)</td><td class="icon-pass pass">PASS</td><td><code>Server handles gracefully</code></td></tr>
+    <tr><td>S19.37</td><td>Edge: non-existent siteId → 200 empty list</td><td class="icon-pass pass">PASS</td><td><code>records: []</code></td></tr>
+    <tr><td>S19.38</td><td>Edge: no auth → 401</td><td class="icon-pass pass">PASS</td><td><code>Unauthorized</code></td></tr>
+    <tr><td>S19.39</td><td>Response shape consistent across all 4 endpoints</td><td class="icon-pass pass">PASS</td><td><code>Same shape across all</code></td></tr>
+    <tr><td>S19.40</td><td>Label format human-readable: "PONumber — PartyName"</td><td class="icon-pass pass">PASS</td><td><code>e.g. "POBRD001 — ABC Contractors"</code></td></tr>
   </tbody></table>
 </div>
 

@@ -7,17 +7,19 @@ import {
 import { DataSource, IsNull, ILike } from 'typeorm';
 import { SiteInvoiceRepository } from './site-invoice.repository';
 import { SiteInvoiceEntity } from './entities/site-invoice.entity';
+import { CreateSiteInvoiceDto, UpdateSiteInvoiceDto, GetSiteInvoiceDto } from './dto';
 import {
-  CreateSiteInvoiceDto,
-  UpdateSiteInvoiceDto,
-  GetSiteInvoiceDto,
-} from './dto';
-import { ApproveDto, RejectDto, UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
+  ApproveDto,
+  RejectDto,
+  UnlockRequestDto,
+} from 'src/modules/purchase-orders/dto/approval.dto';
 import { INVOICE_ERRORS, INVOICE_RESPONSES } from './constants/site-invoice.constants';
-import { insertGstRegisterEntryQuery, insertTdsRegisterEntryQuery } from './queries/site-invoice.queries';
+import {
+  insertGstRegisterEntryQuery,
+  insertTdsRegisterEntryQuery,
+} from './queries/site-invoice.queries';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
-import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
 import {
   PartyType,
@@ -26,10 +28,7 @@ import {
   GstType,
   getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class SiteInvoiceService {
@@ -143,18 +142,15 @@ export class SiteInvoiceService {
     // UpdateSiteInvoiceDto deliberately omits @Type(() => Number) so absent
     // numeric fields stay undefined under enableImplicitConversion.
     const newTaxable = dto.taxableAmount ?? Number(inv.taxableAmount);
-    const newGst     = dto.gstAmount     ?? Number(inv.gstAmount);
-    const newTotal   = dto.totalAmount   ?? Number(inv.totalAmount);
+    const newGst = dto.gstAmount ?? Number(inv.gstAmount);
+    const newTotal = dto.totalAmount ?? Number(inv.totalAmount);
     this.validateAmounts(newTaxable, newGst, newTotal);
 
-    await this.invoiceRepository.update(
-      { id },
-      {
-        ...dto,
-        invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : undefined,
-        updatedBy,
-      } as Partial<SiteInvoiceEntity>,
-    );
+    await this.invoiceRepository.update({ id }, {
+      ...dto,
+      invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : undefined,
+      updatedBy,
+    } as Partial<SiteInvoiceEntity>);
     return { message: INVOICE_RESPONSES.UPDATED };
   }
 
@@ -235,30 +231,53 @@ export class SiteInvoiceService {
     });
   }
 
-  private async projectGstRegisterEntry(inv: SiteInvoiceEntity, em: import('typeorm').EntityManager) {
+  private async projectGstRegisterEntry(
+    inv: SiteInvoiceEntity,
+    em: import('typeorm').EntityManager,
+  ) {
     if (Number(inv.gstAmount) === 0) return; // no GST on this invoice — nothing to project
     const invoiceDate = new Date(inv.invoiceDate);
-    const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(invoiceDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(
+      invoiceDate.getUTCMonth() + 1,
+    ).padStart(2, '0')}`;
     const financialYear = getFinancialYear(invoiceDate);
     const gstType = inv.partyType === PartyType.PURCHASE ? GstType.GST_3B : GstType.GST_1;
 
     await em.query(insertGstRegisterEntryQuery, [
-      inv.id, inv.siteId, inv.partyType, inv.contractorId ?? null, inv.vendorId ?? null,
-      invoiceMonth, financialYear, gstType,
-      Number(inv.taxableAmount), Number(inv.gstAmount),
+      inv.id,
+      inv.siteId,
+      inv.partyType,
+      inv.contractorId ?? null,
+      inv.vendorId ?? null,
+      invoiceMonth,
+      financialYear,
+      gstType,
+      Number(inv.taxableAmount),
+      Number(inv.gstAmount),
     ]);
   }
 
-  private async projectTdsRegisterEntry(inv: SiteInvoiceEntity, em: import('typeorm').EntityManager) {
+  private async projectTdsRegisterEntry(
+    inv: SiteInvoiceEntity,
+    em: import('typeorm').EntityManager,
+  ) {
     if (Number(inv.tdsAmount) === 0) return;
     const invoiceDate = new Date(inv.invoiceDate);
-    const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(invoiceDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(
+      invoiceDate.getUTCMonth() + 1,
+    ).padStart(2, '0')}`;
     const financialYear = getFinancialYear(invoiceDate);
 
     await em.query(insertTdsRegisterEntryQuery, [
-      inv.id, inv.siteId, inv.partyType, inv.contractorId ?? null, inv.vendorId ?? null,
-      invoiceMonth, financialYear,
-      Number(inv.taxableAmount), Number(inv.tdsAmount),
+      inv.id,
+      inv.siteId,
+      inv.partyType,
+      inv.contractorId ?? null,
+      inv.vendorId ?? null,
+      invoiceMonth,
+      financialYear,
+      Number(inv.taxableAmount),
+      Number(inv.tdsAmount),
     ]);
   }
 
@@ -363,5 +382,78 @@ export class SiteInvoiceService {
     if (expected !== got) {
       throw new BadRequestException(INVOICE_ERRORS.AMOUNT_VALIDATION_FAILED);
     }
+  }
+
+  /**
+   * Dropdown endpoint — returns Invoices for a site with eligibility flags.
+   *
+   * forDocument = "book-payment"   → PURCHASE invoices for Book Payment creation.
+   *   Eligible: APPROVED + bookedTotal < totalAmount.
+   *
+   * forDocument = "bank-transfer"  → SALE invoices for SALE Bank Transfer creation.
+   *   Eligible: APPROVED + paidTotal < totalAmount.
+   */
+  async getDropdown(siteId: string, forDocument: 'book-payment' | 'bank-transfer') {
+    const partyType = forDocument === 'book-payment' ? 'PURCHASE' : 'SALE';
+    const rows = await this.dataSource.query(
+      `
+      SELECT
+        i.id,
+        i."invoiceNumber",
+        i."invoiceDate",
+        i."partyType",
+        i."totalAmount",
+        i."bookedTotal",
+        i."paidTotal",
+        i."approvalStatus",
+        COALESCE(c.name, v.name) AS "partyName",
+        -- eligibility
+        CASE
+          WHEN i."approvalStatus" != 'APPROVED' THEN false
+          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."totalAmount" THEN false
+          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount" THEN false
+          ELSE true
+        END AS eligible,
+        CASE
+          WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
+          WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
+          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."totalAmount"
+            THEN 'Invoice fully booked — no remaining amount'
+          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount"
+            THEN 'Invoice fully paid'
+          ELSE NULL
+        END AS reason
+      FROM site_invoices i
+      LEFT JOIN contractors c ON c.id = i."contractorId" AND c."deletedAt" IS NULL
+      LEFT JOIN vendors     v ON v.id = i."vendorId"     AND v."deletedAt" IS NULL
+      WHERE i."siteId"    = $1
+        AND i."partyType" = $2
+        AND i."deletedAt" IS NULL
+      ORDER BY i."createdAt" DESC
+      `,
+      [siteId, partyType, forDocument],
+    );
+
+    return {
+      records: rows.map((r: any) => ({
+        id: r.id,
+        label: `${r.invoiceNumber} — ${r.partyName ?? 'Unknown'}`,
+        eligible: r.eligible,
+        reason: r.reason ?? null,
+        meta: {
+          invoiceNumber: r.invoiceNumber,
+          partyType: r.partyType,
+          partyName: r.partyName,
+          totalAmount: Number(r.totalAmount),
+          bookedTotal: Number(r.bookedTotal),
+          paidTotal: Number(r.paidTotal),
+          remaining:
+            forDocument === 'book-payment'
+              ? Number(r.totalAmount) - Number(r.bookedTotal)
+              : Number(r.totalAmount) - Number(r.paidTotal),
+          approvalStatus: r.approvalStatus,
+        },
+      })),
+    };
   }
 }

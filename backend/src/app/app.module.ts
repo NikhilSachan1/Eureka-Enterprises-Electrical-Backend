@@ -1,6 +1,8 @@
 import { UsersModule } from 'src/modules/users/user.module';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { Module, Scope } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -77,6 +79,15 @@ import { BillingModule } from 'src/modules/billing/billing.module';
 
 @Module({
   imports: [
+    // Serve the docs folder as static files so anyone can browse
+    // the API documentation and test report without any auth.
+    //   http://<server>/docs/api-documentation.html
+    //   http://<server>/docs/e2e-test-report.html
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', '..', 'docs'),
+      serveRoot: '/docs',
+      serveStaticOptions: { index: false },
+    }),
     UsersModule,
     AuthModule,
     AppConfigModule,
