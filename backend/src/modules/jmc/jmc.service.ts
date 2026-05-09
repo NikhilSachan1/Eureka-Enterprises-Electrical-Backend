@@ -8,7 +8,11 @@ import { DataSource, IsNull, ILike } from 'typeorm';
 import { JmcRepository } from './jmc.repository';
 import { JmcEntity } from './entities/jmc.entity';
 import { CreateJmcDto, UpdateJmcDto, GetJmcDto } from './dto';
-import { ApproveDto, RejectDto, UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
+import {
+  ApproveDto,
+  RejectDto,
+  UnlockRequestDto,
+} from 'src/modules/purchase-orders/dto/approval.dto';
 import { JMC_ERRORS, JMC_RESPONSES } from './constants/jmc.constants';
 import { checkJmcHasChildrenQuery } from './queries/jmc.queries';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
@@ -16,10 +20,7 @@ import {
   FinancialApprovalStatus,
   FINANCIAL_ERRORS,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class JmcService {
@@ -116,14 +117,11 @@ export class JmcService {
       if (dup && dup.id !== id) throw new ConflictException(JMC_ERRORS.JMC_NUMBER_EXISTS);
     }
 
-    await this.jmcRepository.update(
-      { id },
-      {
-        ...dto,
-        jmcDate: dto.jmcDate ? new Date(dto.jmcDate) : undefined,
-        updatedBy,
-      } as Partial<JmcEntity>,
-    );
+    await this.jmcRepository.update({ id }, {
+      ...dto,
+      jmcDate: dto.jmcDate ? new Date(dto.jmcDate) : undefined,
+      updatedBy,
+    } as Partial<JmcEntity>);
     return { message: JMC_RESPONSES.UPDATED };
   }
 
@@ -238,5 +236,84 @@ export class JmcService {
     if (jmc.isLocked) {
       throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
     }
+  }
+
+  /**
+   * Dropdown endpoint — returns JMCs for a site+partyType with eligibility
+   * flags so the frontend can disable ineligible items.
+   *
+   * forDocument = "report"  → used when creating a Report
+   * forDocument = "invoice" → used when creating an Invoice
+   *
+   * Report eligibility:
+   *   APPROVED AND no existing Report for this JMC.
+   *
+   * Invoice eligibility:
+   *   APPROVED AND no existing Invoice AND
+   *   (PURCHASE → Report must exist first).
+   */
+  async getDropdown(siteId: string, partyType: string, forDocument: 'report' | 'invoice') {
+    const rows = await this.dataSource.query(
+      `
+      SELECT
+        j.id,
+        j."jmcNumber",
+        j."jmcDate",
+        j."partyType",
+        j."approvalStatus",
+        j."poId",
+        COALESCE(c.name, v.name) AS "partyName",
+        -- sub-checks
+        (SELECT COUNT(*)::int FROM site_reports   sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) AS "reportCount",
+        (SELECT COUNT(*)::int FROM site_invoices   si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) AS "invoiceCount",
+        -- eligibility computed per forDocument
+        CASE
+          WHEN j."approvalStatus" != 'APPROVED' THEN false
+          WHEN $3 = 'report'  AND (SELECT COUNT(*) FROM site_reports  sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) > 0 THEN false
+          WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0 THEN false
+          WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
+               AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0 THEN false
+          ELSE true
+        END AS eligible,
+        CASE
+          WHEN j."approvalStatus" = 'PENDING'  THEN 'JMC is pending admin approval'
+          WHEN j."approvalStatus" = 'REJECTED' THEN 'JMC was rejected'
+          WHEN $3 = 'report'  AND (SELECT COUNT(*) FROM site_reports  sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) > 0
+            THEN 'Report already exists for this JMC'
+          WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0
+            THEN 'Invoice already exists for this JMC'
+          WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
+               AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0
+            THEN 'Report must be created first (PURCHASE side)'
+          ELSE NULL
+        END AS reason
+      FROM jmcs j
+      LEFT JOIN contractors c ON c.id = j."contractorId" AND c."deletedAt" IS NULL
+      LEFT JOIN vendors     v ON v.id = j."vendorId"     AND v."deletedAt" IS NULL
+      WHERE j."siteId"    = $1
+        AND j."partyType" = $2
+        AND j."deletedAt" IS NULL
+      ORDER BY j."createdAt" DESC
+      `,
+      [siteId, partyType, forDocument],
+    );
+
+    return {
+      records: rows.map((r: any) => ({
+        id: r.id,
+        label: `${r.jmcNumber} — ${r.partyName ?? 'Unknown'}`,
+        eligible: r.eligible,
+        reason: r.reason ?? null,
+        meta: {
+          jmcNumber: r.jmcNumber,
+          jmcDate: r.jmcDate,
+          partyType: r.partyType,
+          partyName: r.partyName,
+          approvalStatus: r.approvalStatus,
+          hasReport: Number(r.reportCount) > 0,
+          hasInvoice: Number(r.invoiceCount) > 0,
+        },
+      })),
+    };
   }
 }

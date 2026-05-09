@@ -7,9 +7,9 @@
 | **Test Date** | 2026-05-07 |
 | **DB State** | Fresh database — all 136 migrations applied from scratch |
 | **Server** | NestJS on port 3333, TypeScript compiled fresh |
-| **Overall Result** | **117 passed / 0 failed** |
-| **Duration** | 9.7s |
-| **Confidence** | ✅ 100% pass rate — ALL BRD scenarios verified |
+| **Overall Result** | **157 passed / 0 failed** (117 BRD + 40 Dropdown APIs) |
+| **Duration** | 9.7s (BRD) + 1.2s (Dropdown) |
+| **Confidence** | ✅ 100% pass rate — ALL BRD scenarios + Dropdown APIs verified |
 
 ---
 
@@ -36,6 +36,7 @@
 | **S16** Universal View | BRD §10 | 3 | 3 | — |
 | **S17** Approval States & Lifecycle | BRD §7 | 5 | 5 | — |
 | **S18** Permissions & Security | BRD §10, §8 | 3 | 3 | — |
+| **S19** Dropdown APIs (UI eligibility) | New Feature | 40 | 40 | — |
 
 ---
 
@@ -252,6 +253,53 @@
 | S18.1 | Unauthenticated call → 401 | ✅ PASS | Unauthorized |
 | S18.2 | Financial permissions seeded (expected 51, got 51) | ✅ PASS | 51 |
 | S18.3 | Approve non-existent PO → 404 (not 200) | ✅ PASS | HTTP 404 |
+
+### S19: Dropdown APIs — UI Eligibility (New Feature)
+
+> **What these APIs do:** Return items (POs, JMCs, Invoices, Book Payments) with `eligible: true/false` and a `reason` so the UI can disable ineligible dropdown items and show a tooltip explaining why.
+
+| ID | Test Scenario | Result | Evidence |
+|---|---|---|---|
+| S19.1 | GET /purchase-orders/dropdown → 200 | ✅ PASS | Returns records array |
+| S19.2 | PO dropdown: each record has id, label, eligible, reason, meta | ✅ PASS | All fields present |
+| S19.3 | PO dropdown: eligible is boolean | ✅ PASS | `typeof eligible === 'boolean'` |
+| S19.4 | PO dropdown: meta has totalAmount, invoicedTotal, remaining | ✅ PASS | All meta fields present |
+| S19.5 | PO dropdown: APPROVED POs → eligible=true | ✅ PASS | Verified on live data |
+| S19.6 | PO dropdown: PENDING POs → eligible=false + reason | ✅ PASS | `"PO is pending admin approval"` |
+| S19.7 | PURCHASE PO dropdown → 200 | ✅ PASS | Returns PURCHASE side POs |
+| S19.8 | GET /jmcs/dropdown?forDocument=report → 200 | ✅ PASS | Returns records |
+| S19.9 | JMC (report) dropdown: each record has eligible + reason + meta | ✅ PASS | All fields present |
+| S19.10 | JMC (report) dropdown: meta has hasReport field | ✅ PASS | `hasReport: true/false` |
+| S19.11 | JMC (report): JMCs with existing Report → eligible=false | ✅ PASS | `"Report already exists for this JMC"` |
+| S19.12 | JMC (report): reason says "Report already exists" | ✅ PASS | Exact message verified |
+| S19.13 | JMC (report): APPROVED JMCs without Report → eligible=true | ✅ PASS | Verified on live data |
+| S19.14 | GET /jmcs/dropdown?forDocument=invoice → 200 | ✅ PASS | Returns records |
+| S19.15 | JMC (invoice) dropdown: meta has hasInvoice field | ✅ PASS | `hasInvoice: true/false` |
+| S19.16 | JMC (invoice): JMCs with existing Invoice → eligible=false | ✅ PASS | `"Invoice already exists for this JMC"` |
+| S19.17 | JMC (invoice): PURCHASE JMC without Report → eligible=false | ✅ PASS | `"Report must be created first (PURCHASE side)"` |
+| S19.18 | JMC (invoice): PENDING JMCs → eligible=false | ✅ PASS | `"JMC is pending admin approval"` |
+| S19.19 | SALE JMC (invoice) dropdown → 200 | ✅ PASS | No report requirement on SALE |
+| S19.20 | GET /site-invoices/dropdown?forDocument=book-payment → 200 | ✅ PASS | Returns PURCHASE invoices |
+| S19.21 | Invoice (book-payment): returns PURCHASE invoices only | ✅ PASS | All partyType=PURCHASE |
+| S19.22 | Invoice (book-payment): meta has bookedTotal + remaining | ✅ PASS | Both fields present |
+| S19.23 | Invoice (book-payment): fully booked → eligible=false | ✅ PASS | `"Invoice fully booked — no remaining amount"` |
+| S19.24 | Invoice (book-payment): PENDING → eligible=false | ✅ PASS | `"Invoice is pending admin approval"` |
+| S19.25 | Invoice (book-payment): APPROVED with room → eligible=true | ✅ PASS | Verified on live data |
+| S19.26 | GET /site-invoices/dropdown?forDocument=bank-transfer → 200 | ✅ PASS | Returns SALE invoices |
+| S19.27 | Invoice (bank-transfer): returns SALE invoices only | ✅ PASS | All partyType=SALE |
+| S19.28 | Invoice (bank-transfer): meta has paidTotal + remaining | ✅ PASS | Both fields present |
+| S19.29 | Invoice (bank-transfer): fully paid → eligible=false | ✅ PASS | `"Invoice fully paid"` |
+| S19.30 | GET /book-payments/dropdown?invoiceId=... → 200 | ✅ PASS | Returns BPs for invoice |
+| S19.31 | BP dropdown: each record has eligible + reason + meta | ✅ PASS | All fields present |
+| S19.32 | BP dropdown: meta has hasTransfer + paymentTotalAmount | ✅ PASS | Both fields present |
+| S19.33 | BP dropdown: BPs with BankTransfer → eligible=false | ✅ PASS | `"Bank transfer already created (1:1 rule)"` |
+| S19.34 | BP dropdown: BPs without BankTransfer → eligible=true | ✅ PASS | Verified on live data |
+| S19.35 | Edge: missing siteId param → 200 empty list (no crash) | ✅ PASS | Graceful handling |
+| S19.36 | Edge: invalid forDocument value → 200 (no crash) | ✅ PASS | Server handles gracefully |
+| S19.37 | Edge: non-existent siteId → 200 empty list | ✅ PASS | `records: []` |
+| S19.38 | Edge: no auth → 401 | ✅ PASS | `Unauthorized` |
+| S19.39 | Response shape consistent: id, label, eligible, reason, meta on all 4 endpoints | ✅ PASS | Same shape across all |
+| S19.40 | Label format human-readable: `"PONumber — PartyName"` | ✅ PASS | e.g. `"POBRD001 — ABC Contractors"` |
 
 ---
 

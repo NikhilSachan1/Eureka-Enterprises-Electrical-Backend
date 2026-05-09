@@ -14,7 +14,11 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { JmcService } from './jmc.service';
 import { CreateJmcDto, UpdateJmcDto, GetJmcDto } from './dto';
-import { ApproveDto, RejectDto, UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
+import {
+  ApproveDto,
+  RejectDto,
+  UnlockRequestDto,
+} from 'src/modules/purchase-orders/dto/approval.dto';
 
 @ApiTags('JMCs')
 @ApiBearerAuth('JWT-auth')
@@ -30,6 +34,24 @@ export class JmcController {
     @Body() dto: CreateJmcDto,
   ) {
     return await this.jmcService.create(dto, createdBy);
+  }
+
+  @Get('dropdown')
+  @RequiredPermission('financials.jmcs.view')
+  @ApiOperation({
+    summary: 'JMC dropdown for Report or Invoice creation',
+    description:
+      'Returns JMCs for a site+partyType with per-item eligibility flags. ' +
+      'Use forDocument=report when building the JMC dropdown for Report creation; ' +
+      'use forDocument=invoice when building the JMC dropdown for Invoice creation. ' +
+      'Ineligible items include the reason so the UI can show a tooltip.',
+  })
+  async getDropdown(
+    @Query('siteId') siteId: string,
+    @Query('partyType') partyType: string,
+    @Query('forDocument') forDocument: 'report' | 'invoice',
+  ) {
+    return await this.jmcService.getDropdown(siteId, partyType, forDocument);
   }
 
   @Get()

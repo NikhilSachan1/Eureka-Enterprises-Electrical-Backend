@@ -27,10 +27,7 @@ import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteContractorEntity } from 'src/modules/sites/entities/site-contractor.entity';
 import { SiteVendorEntity } from 'src/modules/site-vendors/entities/site-vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class PurchaseOrderService {
@@ -143,18 +140,15 @@ export class PurchaseOrderService {
     // numeric fields stay undefined (not 0) under the global ValidationPipe's
     // enableImplicitConversion. The ?? fallback below is therefore safe.
     const newTaxable = dto.taxableAmount ?? Number(po.taxableAmount);
-    const newGst     = dto.gstAmount     ?? Number(po.gstAmount);
-    const newTotal   = dto.totalAmount   ?? Number(po.totalAmount);
+    const newGst = dto.gstAmount ?? Number(po.gstAmount);
+    const newTotal = dto.totalAmount ?? Number(po.totalAmount);
     this.validateAmounts(newTaxable, newGst, newTotal);
 
-    await this.poRepository.update(
-      { id },
-      {
-        ...dto,
-        poDate: dto.poDate ? new Date(dto.poDate) : undefined,
-        updatedBy,
-      } as Partial<PurchaseOrderEntity>,
-    );
+    await this.poRepository.update({ id }, {
+      ...dto,
+      poDate: dto.poDate ? new Date(dto.poDate) : undefined,
+      updatedBy,
+    } as Partial<PurchaseOrderEntity>);
 
     return { message: PO_RESPONSES.UPDATED };
   }
@@ -322,11 +316,7 @@ export class PurchaseOrderService {
     return po;
   }
 
-  private validatePartyShape(
-    partyType: PartyType,
-    contractorId?: string,
-    vendorId?: string,
-  ): void {
+  private validatePartyShape(partyType: PartyType, contractorId?: string, vendorId?: string): void {
     if (partyType === PartyType.SALE) {
       if (!contractorId || vendorId) {
         throw new BadRequestException(FINANCIAL_ERRORS.PARTY_INVALID);
@@ -391,5 +381,66 @@ export class PurchaseOrderService {
     if (po.isLocked) {
       throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
     }
+  }
+
+  /**
+   * Dropdown endpoint — returns POs for a site+partyType with eligibility
+   * flags so the frontend can disable ineligible items and show a reason.
+   *
+   * Used when creating a JMC. A PO is eligible when it is APPROVED.
+   * We intentionally do NOT check the PO ceiling here — a JMC itself does
+   * not consume any financial amount; the ceiling fires at Invoice approval.
+   */
+  async getDropdown(siteId: string, partyType: string) {
+    const rows = await this.dataSource.query(
+      `
+      SELECT
+        po.id,
+        po."poNumber",
+        po."partyType",
+        po."totalAmount",
+        po."invoicedTotal",
+        po."approvalStatus",
+        po."isLocked",
+        COALESCE(c.name, v.name)   AS "partyName",
+        COALESCE(c.id, v.id)       AS "partyId",
+        -- eligibility
+        CASE
+          WHEN po."approvalStatus" = 'APPROVED' THEN true
+          ELSE false
+        END AS eligible,
+        CASE
+          WHEN po."approvalStatus" = 'PENDING'  THEN 'PO is pending admin approval'
+          WHEN po."approvalStatus" = 'REJECTED' THEN 'PO was rejected'
+          ELSE NULL
+        END AS reason
+      FROM purchase_orders po
+      LEFT JOIN contractors c ON c.id = po."contractorId" AND c."deletedAt" IS NULL
+      LEFT JOIN vendors     v ON v.id = po."vendorId"     AND v."deletedAt" IS NULL
+      WHERE po."siteId"    = $1
+        AND po."partyType" = $2
+        AND po."deletedAt" IS NULL
+      ORDER BY po."createdAt" DESC
+      `,
+      [siteId, partyType],
+    );
+
+    return {
+      records: rows.map((r: any) => ({
+        id: r.id,
+        label: `${r.poNumber} — ${r.partyName ?? 'Unknown'}`,
+        eligible: r.eligible,
+        reason: r.reason ?? null,
+        meta: {
+          poNumber: r.poNumber,
+          partyType: r.partyType,
+          partyName: r.partyName,
+          totalAmount: Number(r.totalAmount),
+          invoicedTotal: Number(r.invoicedTotal),
+          remaining: Number(r.totalAmount) - Number(r.invoicedTotal),
+          approvalStatus: r.approvalStatus,
+        },
+      })),
+    };
   }
 }
