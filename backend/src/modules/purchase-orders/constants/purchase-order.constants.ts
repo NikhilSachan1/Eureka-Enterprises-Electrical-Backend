@@ -7,12 +7,10 @@ export const PO_ERRORS = {
   VENDOR_NOT_FOUND_FOR_PURCHASE:
     'Vendor not found or not linked to this site. Purchase-side PO requires a valid vendor.',
   SITE_NOT_FOUND: 'Site not found',
-  CANNOT_DELETE_HAS_JMCS:
-    'Cannot delete PO — JMCs exist against it. Delete JMCs first.',
+  CANNOT_DELETE_HAS_JMCS: 'Cannot delete PO — JMCs exist against it. Delete JMCs first.',
   REJECT_REASON_REQUIRED: 'Rejection reason is required.',
   UNLOCK_REASON_REQUIRED: 'Unlock reason is required.',
-  ONLY_APPROVED_LOCKED_CAN_UNLOCK:
-    'Only APPROVED locked POs can request unlock.',
+  ONLY_APPROVED_LOCKED_CAN_UNLOCK: 'Only APPROVED locked POs can request unlock.',
 };
 
 export const PO_RESPONSES = {
@@ -23,6 +21,7 @@ export const PO_RESPONSES = {
   REJECTED: 'Purchase order rejected',
   UNLOCK_REQUESTED: 'Unlock request submitted',
   UNLOCK_GRANTED: 'Purchase order unlocked',
+  UNLOCK_REJECTED: 'Unlock request rejected — document remains locked',
 };
 
 export enum PoEntityFields {

@@ -125,4 +125,14 @@ export class JmcController {
   ) {
     return await this.jmcService.grantUnlock(id, grantedBy);
   }
+
+  @Post(':id/unlock-reject')
+  @RequiredPermission('financials.jmcs.unlock')
+  @ApiOperation({ summary: 'Reject unlock request — admin (JMC stays locked)' })
+  async rejectUnlock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: rejectedBy } }: { user: { id: string } },
+  ) {
+    return await this.jmcService.rejectUnlock(id, rejectedBy);
+  }
 }

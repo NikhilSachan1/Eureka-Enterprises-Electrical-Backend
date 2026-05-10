@@ -16,6 +16,7 @@ export const JMC_RESPONSES = {
   REJECTED: 'JMC rejected',
   UNLOCK_REQUESTED: 'Unlock request submitted',
   UNLOCK_GRANTED: 'JMC unlocked',
+  UNLOCK_REJECTED: 'Unlock request rejected — JMC remains locked',
 };
 
 export enum JmcEntityFields {

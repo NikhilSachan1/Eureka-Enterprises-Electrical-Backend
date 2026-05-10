@@ -129,4 +129,14 @@ export class PurchaseOrderController {
   ) {
     return await this.poService.grantUnlock(id, grantedBy);
   }
+
+  @Post(':id/unlock-reject')
+  @RequiredPermission('financials.purchase-orders.unlock')
+  @ApiOperation({ summary: 'Reject unlock request — admin (document stays locked)' })
+  async rejectUnlock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: rejectedBy } }: { user: { id: string } },
+  ) {
+    return await this.poService.rejectUnlock(id, rejectedBy);
+  }
 }

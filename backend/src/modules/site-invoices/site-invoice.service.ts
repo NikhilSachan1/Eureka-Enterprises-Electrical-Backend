@@ -300,6 +300,9 @@ export class SiteInvoiceService {
 
   async reject(id: string, dto: RejectDto, rejectedBy: string) {
     const inv = await this.findActiveById(id);
+    if (inv.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_REJECT_APPROVED);
+    }
     if (inv.approvalStatus === FinancialApprovalStatus.REJECTED) {
       throw new ConflictException(FINANCIAL_ERRORS.ALREADY_REJECTED);
     }
@@ -315,6 +318,23 @@ export class SiteInvoiceService {
       },
     );
     return { message: INVOICE_RESPONSES.REJECTED };
+  }
+
+  async rejectUnlock(id: string, rejectedBy: string) {
+    const inv = await this.findActiveById(id);
+    if (!inv.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_REJECT_NO_REQUEST);
+    }
+    await this.invoiceRepository.update(
+      { id },
+      {
+        unlockRequestedAt: null,
+        unlockRequestedBy: null,
+        unlockReason: null,
+        updatedBy: rejectedBy,
+      },
+    );
+    return { message: INVOICE_RESPONSES.UNLOCK_REJECTED };
   }
 
   async requestUnlock(id: string, dto: UnlockRequestDto, requestedBy: string) {
