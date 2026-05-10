@@ -15,6 +15,7 @@ import {
 } from 'src/modules/purchase-orders/dto/approval.dto';
 import { JMC_ERRORS, JMC_RESPONSES } from './constants/jmc.constants';
 import { checkJmcHasChildrenQuery } from './queries/jmc.queries';
+import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import {
   FinancialApprovalStatus,
@@ -100,10 +101,25 @@ export class JmcService {
   async findById(id: string) {
     const jmc = await this.jmcRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['po', 'site', 'contractor', 'vendor'],
+      relations: [
+        'po',
+        'site',
+        'contractor',
+        'vendor',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
+        'unlockRequestedByUser',
+      ],
     });
     if (!jmc) throw new NotFoundException(JMC_ERRORS.NOT_FOUND);
-    return jmc;
+    return {
+      ...jmc,
+      createdByUser: formatUser(jmc.createdByUser),
+      updatedByUser: formatUser(jmc.updatedByUser),
+      approvalByUser: formatUser(jmc.approvalByUser),
+      unlockRequestedByUser: formatUser(jmc.unlockRequestedByUser),
+    };
   }
 
   async update(id: string, dto: UpdateJmcDto, updatedBy: string) {

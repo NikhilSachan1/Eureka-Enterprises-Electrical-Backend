@@ -3,6 +3,7 @@ import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { UserEntity } from 'src/modules/users/entities/user.entity';
 import {
   FinancialApprovalStatus,
   PartyType,
@@ -74,6 +75,10 @@ export class PurchaseOrderEntity extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   approvalBy: string | null;
 
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'approvalBy' })
+  approvalByUser: UserEntity | null;
+
   @Column({ type: 'timestamp', nullable: true })
   approvalAt: Date | null;
 
@@ -89,6 +94,10 @@ export class PurchaseOrderEntity extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   unlockRequestedBy: string | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'unlockRequestedBy' })
+  unlockRequestedByUser: UserEntity | null;
 
   @Column({ type: 'text', nullable: true })
   unlockReason: string | null;
