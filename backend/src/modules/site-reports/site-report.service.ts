@@ -82,12 +82,28 @@ export class SiteReportService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['jmc', 'site', 'contractor', 'vendor'],
+        relations: [
+          'jmc',
+          'site',
+          'contractor',
+          'vendor',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
+        ],
       }),
       this.reportRepository.count({ where }),
     ]);
 
-    return { records, totalRecords };
+    return {
+      records: records.map((r) => ({
+        ...r,
+        createdByUser: formatUser(r.createdByUser),
+        updatedByUser: formatUser(r.updatedByUser),
+        approvalByUser: formatUser(r.approvalByUser),
+      })),
+      totalRecords,
+    };
   }
 
   async findById(id: string) {

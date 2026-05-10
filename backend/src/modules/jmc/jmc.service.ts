@@ -90,12 +90,30 @@ export class JmcService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['po', 'site', 'contractor', 'vendor'],
+        relations: [
+          'po',
+          'site',
+          'contractor',
+          'vendor',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
+          'unlockRequestedByUser',
+        ],
       }),
       this.jmcRepository.count({ where }),
     ]);
 
-    return { records, totalRecords };
+    return {
+      records: records.map((jmc) => ({
+        ...jmc,
+        createdByUser: formatUser(jmc.createdByUser),
+        updatedByUser: formatUser(jmc.updatedByUser),
+        approvalByUser: formatUser(jmc.approvalByUser),
+        unlockRequestedByUser: formatUser(jmc.unlockRequestedByUser),
+      })),
+      totalRecords,
+    };
   }
 
   async findById(id: string) {
