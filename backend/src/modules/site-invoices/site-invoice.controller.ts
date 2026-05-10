@@ -121,4 +121,14 @@ export class SiteInvoiceController {
   ) {
     return await this.invoiceService.grantUnlock(id, grantedBy);
   }
+
+  @Post(':id/unlock-reject')
+  @RequiredPermission('financials.invoices.unlock')
+  @ApiOperation({ summary: 'Reject unlock request — admin (invoice stays locked)' })
+  async rejectUnlock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: rejectedBy } }: { user: { id: string } },
+  ) {
+    return await this.invoiceService.rejectUnlock(id, rejectedBy);
+  }
 }

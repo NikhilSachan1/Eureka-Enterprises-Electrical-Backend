@@ -8,8 +8,7 @@ export const INVOICE_ERRORS = {
   INVOICE_ALREADY_EXISTS_FOR_JMC: 'An Invoice already exists for this JMC (1 JMC = 1 Invoice)',
   INVOICE_NUMBER_EXISTS: 'Invoice number already exists',
   AMOUNT_VALIDATION_FAILED: 'Total amount must equal taxable + GST amount',
-  CANNOT_DELETE_HAS_CHILDREN:
-    'Cannot delete invoice — payments / book payments exist against it.',
+  CANNOT_DELETE_HAS_CHILDREN: 'Cannot delete invoice — payments / book payments exist against it.',
 };
 
 export const INVOICE_RESPONSES = {
@@ -20,4 +19,5 @@ export const INVOICE_RESPONSES = {
   REJECTED: 'Invoice rejected',
   UNLOCK_REQUESTED: 'Unlock request submitted',
   UNLOCK_GRANTED: 'Invoice unlocked',
+  UNLOCK_REJECTED: 'Unlock request rejected — invoice remains locked',
 };

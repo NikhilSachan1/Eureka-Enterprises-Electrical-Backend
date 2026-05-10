@@ -211,6 +211,9 @@ export class PurchaseOrderService {
 
   async reject(id: string, dto: RejectDto, rejectedBy: string) {
     const po = await this.findActiveById(id);
+    if (po.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_REJECT_APPROVED);
+    }
     if (po.approvalStatus === FinancialApprovalStatus.REJECTED) {
       throw new ConflictException(FINANCIAL_ERRORS.ALREADY_REJECTED);
     }
@@ -227,6 +230,23 @@ export class PurchaseOrderService {
       },
     );
     return { message: PO_RESPONSES.REJECTED };
+  }
+
+  async rejectUnlock(id: string, rejectedBy: string) {
+    const po = await this.findActiveById(id);
+    if (!po.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_REJECT_NO_REQUEST);
+    }
+    await this.poRepository.update(
+      { id },
+      {
+        unlockRequestedAt: null,
+        unlockRequestedBy: null,
+        unlockReason: null,
+        updatedBy: rejectedBy,
+      },
+    );
+    return { message: PO_RESPONSES.UNLOCK_REJECTED };
   }
 
   async requestUnlock(id: string, dto: UnlockRequestDto, requestedBy: string) {

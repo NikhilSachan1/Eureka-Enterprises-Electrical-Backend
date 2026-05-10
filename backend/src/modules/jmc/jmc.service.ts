@@ -181,6 +181,9 @@ export class JmcService {
 
   async reject(id: string, dto: RejectDto, rejectedBy: string) {
     const jmc = await this.findActiveById(id);
+    if (jmc.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_REJECT_APPROVED);
+    }
     if (jmc.approvalStatus === FinancialApprovalStatus.REJECTED) {
       throw new ConflictException(FINANCIAL_ERRORS.ALREADY_REJECTED);
     }
@@ -196,6 +199,23 @@ export class JmcService {
       },
     );
     return { message: JMC_RESPONSES.REJECTED };
+  }
+
+  async rejectUnlock(id: string, rejectedBy: string) {
+    const jmc = await this.findActiveById(id);
+    if (!jmc.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_REJECT_NO_REQUEST);
+    }
+    await this.jmcRepository.update(
+      { id },
+      {
+        unlockRequestedAt: null,
+        unlockRequestedBy: null,
+        unlockReason: null,
+        updatedBy: rejectedBy,
+      },
+    );
+    return { message: JMC_RESPONSES.UNLOCK_REJECTED };
   }
 
   async requestUnlock(id: string, dto: UnlockRequestDto, requestedBy: string) {

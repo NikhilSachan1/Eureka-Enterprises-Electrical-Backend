@@ -30,26 +30,24 @@ export enum GstType {
 export const FINANCIAL_ERRORS = {
   PARTY_INVALID:
     'partyType must be SALE (with contractorId) or PURCHASE (with vendorId), exactly one set.',
-  PARENT_NOT_APPROVED:
-    'Parent document must be approved before this child can be created.',
+  PARENT_NOT_APPROVED: 'Parent document must be approved before this child can be created.',
   PARENT_NOT_FOUND: 'Parent document not found.',
   PO_CEILING_EXCEEDED:
     'PO ceiling exceeded — sum of invoiced amount cannot exceed PO total amount.',
   INVOICE_CEILING_EXCEEDED:
     'Invoice ceiling exceeded — sum of payments cannot exceed invoice total amount.',
-  BOOK_PAYMENT_AMOUNT_MISMATCH:
-    'Bank transfer amount must equal the book payment amount exactly.',
+  BOOK_PAYMENT_AMOUNT_MISMATCH: 'Bank transfer amount must equal the book payment amount exactly.',
   ALREADY_APPROVED: 'Document is already approved.',
   ALREADY_REJECTED: 'Document is already rejected.',
-  CANNOT_EDIT_LOCKED:
-    'Document is locked. Request unlock from admin to make changes.',
+  CANNOT_EDIT_LOCKED: 'Document is locked. Request unlock from admin to make changes.',
   CANNOT_DELETE_HAS_CHILDREN:
     'Cannot delete document — child documents exist. Delete children first.',
-  CANNOT_DELETE_NOT_PENDING:
-    'Document can only be deleted while in PENDING state.',
+  CANNOT_DELETE_NOT_PENDING: 'Document can only be deleted while in PENDING state.',
   UNLOCK_NOT_REQUESTED: 'No unlock request pending on this document.',
-  AMOUNT_VALIDATION_FAILED:
-    'Total amount must equal taxable amount + GST amount.',
+  CANNOT_REJECT_APPROVED:
+    'Document is already approved and cannot be rejected. If changes are needed, the document must be unlocked, updated, and re-submitted for approval.',
+  UNLOCK_REJECT_NO_REQUEST: 'No pending unlock request found on this document.',
+  AMOUNT_VALIDATION_FAILED: 'Total amount must equal taxable amount + GST amount.',
 };
 
 /**
