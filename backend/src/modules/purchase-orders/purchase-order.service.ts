@@ -104,12 +104,29 @@ export class PurchaseOrderService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['contractor', 'vendor', 'site'],
+        relations: [
+          'contractor',
+          'vendor',
+          'site',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
+          'unlockRequestedByUser',
+        ],
       }),
       this.poRepository.count({ where }),
     ]);
 
-    return { records, totalRecords };
+    return {
+      records: records.map((po) => ({
+        ...po,
+        createdByUser: formatUser(po.createdByUser),
+        updatedByUser: formatUser(po.updatedByUser),
+        approvalByUser: formatUser(po.approvalByUser),
+        unlockRequestedByUser: formatUser(po.unlockRequestedByUser),
+      })),
+      totalRecords,
+    };
   }
 
   async findById(id: string) {

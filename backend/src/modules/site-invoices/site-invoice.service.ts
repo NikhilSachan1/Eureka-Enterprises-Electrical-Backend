@@ -119,12 +119,31 @@ export class SiteInvoiceService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['jmc', 'report', 'site', 'contractor', 'vendor'],
+        relations: [
+          'jmc',
+          'report',
+          'site',
+          'contractor',
+          'vendor',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
+          'unlockRequestedByUser',
+        ],
       }),
       this.invoiceRepository.count({ where }),
     ]);
 
-    return { records, totalRecords };
+    return {
+      records: records.map((inv) => ({
+        ...inv,
+        createdByUser: formatUser(inv.createdByUser),
+        updatedByUser: formatUser(inv.updatedByUser),
+        approvalByUser: formatUser(inv.approvalByUser),
+        unlockRequestedByUser: formatUser(inv.unlockRequestedByUser),
+      })),
+      totalRecords,
+    };
   }
 
   async findById(id: string) {
