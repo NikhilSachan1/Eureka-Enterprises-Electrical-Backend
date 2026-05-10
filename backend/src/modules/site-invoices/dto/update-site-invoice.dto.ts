@@ -1,12 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  Min,
-  IsDateString,
-  MaxLength,
-} from 'class-validator';
+import { IsString, IsOptional, IsNumber, Min, IsDateString, MaxLength } from 'class-validator';
 
 /**
  * jmcId / reportId cannot change after creation.
@@ -38,11 +31,23 @@ export class UpdateSiteInvoiceDto {
   @IsOptional()
   gstAmount?: number;
 
+  @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  gstPercentage?: number;
+
   @ApiPropertyOptional({ description: 'TDS amount (manual entry)' })
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
   tdsAmount?: number;
+
+  @ApiPropertyOptional({ description: 'TDS percentage (informational only)', example: 2 })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  tdsPercentage?: number;
 
   @ApiPropertyOptional({ description: 'Total amount (= taxable + GST)' })
   @IsNumber({ maxDecimalPlaces: 2 })

@@ -1,12 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  Min,
-  IsDateString,
-  MaxLength,
-} from 'class-validator';
+import { IsString, IsOptional, IsNumber, Min, IsDateString, MaxLength } from 'class-validator';
 
 /**
  * partyType / siteId / contractorId / vendorId cannot change after creation.
@@ -40,6 +33,12 @@ export class UpdatePurchaseOrderDto {
   @Min(0)
   @IsOptional()
   gstAmount?: number;
+
+  @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  gstPercentage?: number;
 
   @ApiPropertyOptional({ description: 'Total amount (= taxable + GST)' })
   @IsNumber({ maxDecimalPlaces: 2 })

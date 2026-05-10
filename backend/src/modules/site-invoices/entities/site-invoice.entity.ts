@@ -70,8 +70,14 @@ export class SiteInvoiceEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   gstAmount: number;
 
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  gstPercentage: number | null;
+
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   tdsAmount: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  tdsPercentage: number | null;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   totalAmount: number;

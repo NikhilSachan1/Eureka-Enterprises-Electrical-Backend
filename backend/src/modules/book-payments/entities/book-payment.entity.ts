@@ -50,8 +50,14 @@ export class BookPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   gstAmount: number;
 
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  gstPercentage: number | null;
+
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   tdsDeductionAmount: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  tdsPercentage: number | null;
 
   // The actual payment amount = taxable + gst - tds (stored explicitly)
   @Column({ type: 'decimal', precision: 15, scale: 2 })

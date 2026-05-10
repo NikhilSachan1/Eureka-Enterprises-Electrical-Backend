@@ -46,12 +46,26 @@ export class CreateSiteInvoiceDto {
   @IsOptional()
   gstAmount?: number = 0;
 
+  @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  gstPercentage?: number;
+
   @ApiPropertyOptional({ description: 'TDS amount (manual entry)', default: 0 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
   tdsAmount?: number = 0;
+
+  @ApiPropertyOptional({ description: 'TDS percentage (informational only)', example: 2 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  tdsPercentage?: number;
 
   @ApiProperty({ description: 'Total amount (= taxable + GST)' })
   @Type(() => Number)
