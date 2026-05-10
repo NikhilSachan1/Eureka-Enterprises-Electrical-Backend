@@ -10,13 +10,9 @@ import { SiteReportEntity } from './entities/site-report.entity';
 import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dto';
 import { REPORT_ERRORS, REPORT_RESPONSES } from './constants/site-report.constants';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
-import {
-  FinancialApprovalStatus,
-} from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class SiteReportService {
@@ -97,22 +93,32 @@ export class SiteReportService {
   async findById(id: string) {
     const report = await this.reportRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['jmc', 'site', 'contractor', 'vendor'],
+      relations: [
+        'jmc',
+        'site',
+        'contractor',
+        'vendor',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
+      ],
     });
     if (!report) throw new NotFoundException(REPORT_ERRORS.NOT_FOUND);
-    return report;
+    return {
+      ...report,
+      createdByUser: formatUser(report.createdByUser),
+      updatedByUser: formatUser(report.updatedByUser),
+      approvalByUser: formatUser(report.approvalByUser),
+    };
   }
 
   async update(id: string, dto: UpdateSiteReportDto, updatedBy: string) {
     await this.findActiveById(id);
-    await this.reportRepository.update(
-      { id },
-      {
-        ...dto,
-        reportDate: dto.reportDate ? new Date(dto.reportDate) : undefined,
-        updatedBy,
-      } as Partial<SiteReportEntity>,
-    );
+    await this.reportRepository.update({ id }, {
+      ...dto,
+      reportDate: dto.reportDate ? new Date(dto.reportDate) : undefined,
+      updatedBy,
+    } as Partial<SiteReportEntity>);
     return { message: REPORT_RESPONSES.UPDATED };
   }
 

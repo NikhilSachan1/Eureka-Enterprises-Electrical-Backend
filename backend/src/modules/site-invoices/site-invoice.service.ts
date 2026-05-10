@@ -18,6 +18,7 @@ import {
   insertGstRegisterEntryQuery,
   insertTdsRegisterEntryQuery,
 } from './queries/site-invoice.queries';
+import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
@@ -129,10 +130,26 @@ export class SiteInvoiceService {
   async findById(id: string) {
     const invoice = await this.invoiceRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['jmc', 'report', 'site', 'contractor', 'vendor'],
+      relations: [
+        'jmc',
+        'report',
+        'site',
+        'contractor',
+        'vendor',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
+        'unlockRequestedByUser',
+      ],
     });
     if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
-    return invoice;
+    return {
+      ...invoice,
+      createdByUser: formatUser(invoice.createdByUser),
+      updatedByUser: formatUser(invoice.updatedByUser),
+      approvalByUser: formatUser(invoice.approvalByUser),
+      unlockRequestedByUser: formatUser(invoice.unlockRequestedByUser),
+    };
   }
 
   async update(id: string, dto: UpdateSiteInvoiceDto, updatedBy: string) {

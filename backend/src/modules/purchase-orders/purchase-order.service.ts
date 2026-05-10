@@ -17,6 +17,7 @@ import {
 } from './dto';
 import { PO_ERRORS, PO_RESPONSES } from './constants/purchase-order.constants';
 import { checkPoHasJmcsQuery } from './queries/purchase-order.queries';
+import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -114,10 +115,24 @@ export class PurchaseOrderService {
   async findById(id: string) {
     const po = await this.poRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['contractor', 'vendor', 'site', 'createdByUser', 'updatedByUser'],
+      relations: [
+        'contractor',
+        'vendor',
+        'site',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
+        'unlockRequestedByUser',
+      ],
     });
     if (!po) throw new NotFoundException(PO_ERRORS.NOT_FOUND);
-    return po;
+    return {
+      ...po,
+      createdByUser: formatUser(po.createdByUser),
+      updatedByUser: formatUser(po.updatedByUser),
+      approvalByUser: formatUser(po.approvalByUser),
+      unlockRequestedByUser: formatUser(po.unlockRequestedByUser),
+    };
   }
 
   async update(id: string, dto: UpdatePurchaseOrderDto, updatedBy: string) {
