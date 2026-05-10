@@ -125,6 +125,9 @@ pre .c{color:#8b949e;font-style:italic}
   <a class="nav-item" href="#dropdown-jmcs">JMC Dropdown</a>
   <a class="nav-item" href="#dropdown-invoices">Invoice Dropdown</a>
   <a class="nav-item" href="#dropdown-bps">Book Payment Dropdown</a>
+
+  <div class="nav-section">Site APIs</div>
+  <a class="nav-item" href="#site-overview">Site Overview</a>
 </nav>
 
 <!-- MAIN CONTENT -->
@@ -506,6 +509,58 @@ pre .c{color:#8b949e;font-style:italic}
       <pre>[{ <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"ABC Contractors"</span>, <span class="s">"gstNumber"</span>: <span class="s">"..."</span>, ... }]</pre>
     </div>
   </div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/sites/:id/overview</span>
+      <span class="endpoint-desc">Site overview — employees, contractors, vendors, work types in one call</span>
+    </div>
+    <div class="endpoint-body">
+      <p style="font-size:13px;margin:8px 0">Returns a unified snapshot of the site: site details (including <code>workTypes</code>), all allocated and deallocated employees split into two arrays, linked contractors, and linked vendors. All three data sets are fetched in parallel — single round trip.</p>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"site"</span>: {
+    <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"Site Alpha"</span>, <span class="s">"status"</span>: <span class="s">"ongoing"</span>,
+    <span class="s">"startDate"</span>: <span class="s">"2026-04-01"</span>, <span class="s">"endDate"</span>: null,
+    <span class="s">"managerName"</span>: <span class="s">"John Doe"</span>, <span class="s">"managerContact"</span>: <span class="s">"9000000000"</span>,
+    <span class="s">"workTypes"</span>: [<span class="s">"Civil"</span>, <span class="s">"Electrical"</span>],
+    <span class="s">"fullAddress"</span>: <span class="s">"..."</span>, <span class="s">"city"</span>: <span class="s">"Mumbai"</span>, <span class="s">"state"</span>: <span class="s">"Maharashtra"</span>,
+    <span class="s">"estimatedBudget"</span>: 5000000, <span class="s">"isActive"</span>: true,
+    <span class="s">"company"</span>: { <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"Eureka Enterprises Pvt Ltd"</span> }
+  },
+  <span class="s">"employees"</span>: {
+    <span class="s">"allocated"</span>: [{
+      <span class="s">"allocationId"</span>: <span class="s">"uuid"</span>, <span class="s">"userId"</span>: <span class="s">"uuid"</span>,
+      <span class="s">"employeeId"</span>: <span class="s">"EMP001"</span>, <span class="s">"firstName"</span>: <span class="s">"Akhil"</span>, <span class="s">"lastName"</span>: <span class="s">"Sachan"</span>,
+      <span class="s">"email"</span>: <span class="s">"akhil@coditas.com"</span>, <span class="s">"profilePicture"</span>: null,
+      <span class="s">"role"</span>: <span class="s">"Engineer"</span>, <span class="s">"allocationType"</span>: <span class="s">"full_time"</span>,
+      <span class="s">"dailyAllowance"</span>: 500, <span class="s">"allocatedAt"</span>: <span class="s">"2026-04-01"</span>,
+      <span class="s">"deallocatedAt"</span>: null, <span class="s">"remarks"</span>: null
+    }],
+    <span class="s">"deallocated"</span>: [<span class="v">/* same shape, deallocatedAt is non-null */</span>]
+  },
+  <span class="s">"contractors"</span>: [{
+    <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"ABC Contractors"</span>, <span class="s">"email"</span>: <span class="s">"abc@e.test"</span>,
+    <span class="s">"contactNumber"</span>: <span class="s">"9876543210"</span>, <span class="s">"gstNumber"</span>: <span class="s">"22ZZZZZ..."</span>,
+    <span class="s">"fullAddress"</span>: <span class="s">"Mumbai, Maharashtra"</span>, <span class="s">"city"</span>: <span class="s">"Mumbai"</span>,
+    <span class="s">"state"</span>: <span class="s">"Maharashtra"</span>, <span class="s">"isActive"</span>: true
+  }],
+  <span class="s">"vendors"</span>: [{
+    <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"name"</span>: <span class="s">"XYZ Vendors"</span>, <span class="s">"vendorType"</span>: <span class="s">"GST_REGISTERED"</span>,
+    <span class="s">"gstNumber"</span>: <span class="s">"22YYYYY..."</span>, <span class="s">"city"</span>: <span class="s">"Pune"</span>, <span class="s">"isActive"</span>: true
+  }]
+}</pre>
+      <div class="rules"><strong>Notes</strong><ul>
+        <li><code>employees.allocated</code> — currently active (isCurrentlyAllocated=true)</li>
+        <li><code>employees.deallocated</code> — previously allocated, now deallocated (deallocatedAt is set)</li>
+        <li><code>workTypes</code> — JSON array stored on the site; empty array if not configured</li>
+        <li>Only non-deleted contractors and vendors are included</li>
+      </ul></div>
+      <div class="sect-label">Error Responses</div>
+      <pre><span class="k">404</span> Site not found</pre>
+    </div>
+  </div>
 </section>
 
 <!-- ═══════════════════════════════════════════════ -->
@@ -632,12 +687,13 @@ pre .c{color:#8b949e;font-style:italic}
     <div class="endpoint-head" onclick="toggle(this)">
       <span class="method POST">POST</span>
       <span class="endpoint-path">/purchase-orders/:id/reject</span>
-      <span class="endpoint-desc">Reject a PO (Admin only)</span>
+      <span class="endpoint-desc">Reject a PO (Admin only — PENDING only)</span>
     </div>
     <div class="endpoint-body">
       <div class="permission">🔒 financials.purchase-orders.approve</div>
       <div class="sect-label">Request Body</div>
       <pre>{ <span class="s">"reason"</span>: <span class="s">"Amount exceeds budget allocation"</span> }</pre>
+      <div class="rules"><strong>Guard</strong><ul><li>Returns <code>400</code> if the PO is already <strong>APPROVED</strong>. An approved document cannot be rejected — use the unlock flow to make changes.</li></ul></div>
     </div>
   </div>
 
@@ -664,6 +720,23 @@ pre .c{color:#8b949e;font-style:italic}
     <div class="endpoint-body">
       <div class="permission">🔒 financials.purchase-orders.unlock</div>
       <p style="font-size:13px;margin:8px 0">Admin-only. After this, the PO is in PENDING state, isLocked=false, and the user can edit it. Must be re-approved after editing.</p>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/purchase-orders/:id/unlock-reject</span>
+      <span class="endpoint-desc">Admin rejects unlock request — PO stays locked</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.purchase-orders.unlock</div>
+      <p style="font-size:13px;margin:8px 0">Dismisses the pending unlock request without changing the PO state. <code>approvalStatus</code> remains <code>APPROVED</code>, <code>isLocked</code> remains <code>true</code>. The unlock request fields (<code>unlockRequestedAt</code>, <code>unlockRequestedBy</code>, <code>unlockReason</code>) are cleared. Returns 400 if no unlock request is pending.</p>
+      <div class="sect-label">Response 200</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Unlock request rejected — document remains locked"</span> }</pre>
+      <div class="sect-label">Error Responses</div>
+      <pre><span class="k">400</span> No pending unlock request found on this document.
+<span class="k">404</span> Purchase order not found</pre>
     </div>
   </div>
 </section>
@@ -738,12 +811,13 @@ pre .c{color:#8b949e;font-style:italic}
     <div class="endpoint-head" onclick="toggle(this)">
       <span class="method POST">POST</span>
       <span class="endpoint-path">/jmcs/:id/reject</span>
-      <span class="endpoint-desc">Reject JMC</span>
+      <span class="endpoint-desc">Reject JMC (PENDING only)</span>
     </div>
     <div class="endpoint-body">
       <div class="permission">🔒 financials.jmcs.approve</div>
       <div class="sect-label">Request Body</div>
       <pre>{ <span class="s">"reason"</span>: <span class="s">"Measurement not verified"</span> }</pre>
+      <div class="rules"><strong>Guard</strong><ul><li>Returns <code>400</code> if the JMC is already <strong>APPROVED</strong>.</li></ul></div>
     </div>
   </div>
 
@@ -766,6 +840,20 @@ pre .c{color:#8b949e;font-style:italic}
       <span class="endpoint-desc">Admin grants unlock</span>
     </div>
     <div class="endpoint-body"><div class="permission">🔒 financials.jmcs.unlock</div></div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/jmcs/:id/unlock-reject</span>
+      <span class="endpoint-desc">Admin rejects unlock request — JMC stays locked</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.jmcs.unlock</div>
+      <p style="font-size:13px;margin:8px 0">Dismisses the pending unlock request. JMC remains <code>APPROVED + isLocked=true</code>. Unlock request fields are cleared. Returns 400 if no unlock request is pending.</p>
+      <div class="sect-label">Response 200</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Unlock request rejected — JMC remains locked"</span> }</pre>
+    </div>
   </div>
 </section>
 
@@ -899,11 +987,12 @@ pre .c{color:#8b949e;font-style:italic}
     <div class="endpoint-head" onclick="toggle(this)">
       <span class="method POST">POST</span>
       <span class="endpoint-path">/site-invoices/:id/reject</span>
-      <span class="endpoint-desc">Reject invoice</span>
+      <span class="endpoint-desc">Reject invoice (PENDING only)</span>
     </div>
     <div class="endpoint-body">
       <div class="permission">🔒 financials.invoices.approve</div>
       <pre>{ <span class="s">"reason"</span>: <span class="s">"Invoice amount mismatch"</span> }</pre>
+      <div class="rules"><strong>Guard</strong><ul><li>Returns <code>400</code> if the invoice is already <strong>APPROVED</strong>.</li></ul></div>
     </div>
   </div>
 
@@ -928,6 +1017,20 @@ pre .c{color:#8b949e;font-style:italic}
     <div class="endpoint-body">
       <div class="permission">🔒 financials.invoices.unlock</div>
       <div class="rules"><strong>Note</strong><ul><li>On unlock-grant, the PO rollup (invoicedTotal) is reversed. The invoice must be re-approved after editing, which will re-run the ceiling check.</li></ul></div>
+    </div>
+  </div>
+
+  <div class="endpoint">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/site-invoices/:id/unlock-reject</span>
+      <span class="endpoint-desc">Admin rejects unlock request — invoice stays locked</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="permission">🔒 financials.invoices.unlock</div>
+      <p style="font-size:13px;margin:8px 0">Dismisses the pending unlock request. Invoice remains <code>APPROVED + isLocked=true</code>. PO rollup is NOT reversed (no state change). Returns 400 if no unlock request is pending.</p>
+      <div class="sect-label">Response 200</div>
+      <pre>{ <span class="s">"message"</span>: <span class="s">"Unlock request rejected — invoice remains locked"</span> }</pre>
     </div>
   </div>
 </section>

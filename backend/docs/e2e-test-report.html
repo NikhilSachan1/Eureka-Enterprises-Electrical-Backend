@@ -82,17 +82,17 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
   <div class="meta-grid">
     <div class="meta-card"><div class="label">Project</div><div class="value">European Union — Site Financial &amp; Billing Module</div></div>
     <div class="meta-card"><div class="label">BRD Version</div><div class="value">2.0 (03 May 2026)</div></div>
-    <div class="meta-card"><div class="label">Test Date</div><div class="value">2026-05-07</div></div>
+    <div class="meta-card"><div class="label">Test Date</div><div class="value">2026-05-10</div></div>
     <div class="meta-card"><div class="label">DB State</div><div class="value">Fresh database — all 136 migrations applied from scratch</div></div>
     <div class="meta-card"><div class="label">Server</div><div class="value">NestJS on port 3333, TypeScript compiled fresh</div></div>
-    <div class="meta-card"><div class="label">Duration</div><div class="value">9.7s</div></div>
+    <div class="meta-card"><div class="label">Duration</div><div class="value">10.4s</div></div>
   </div>
 </div>
 
 <!-- SCORE BANNER -->
 <div class="score-banner">
   <div style="text-align:center">
-    <div class="score-pass">157</div>
+    <div class="score-pass">183</div>
     <div class="score-label">PASSED</div>
   </div>
   <div class="score-divider"></div>
@@ -102,8 +102,8 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
   </div>
   <div class="score-divider"></div>
   <div class="score-note">
-    <strong>100% pass rate</strong><br>117 BRD + 40 Dropdown APIs<br>
-    <span class="badge-100">✅ Confidence: FULL — 157/157</span>
+    <strong>100% pass rate</strong><br>117 BRD + 40 Dropdown + 13 Approval-workflow + 13 Site overview<br>
+    <span class="badge-100">✅ Confidence: FULL — 183/183</span>
   </div>
 </div>
 
@@ -137,6 +137,8 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
       <tr><td><span class="s-badge">S17</span> Approval States &amp; Lifecycle</td><td>BRD §7</td><td>5</td><td>5</td><td style="color:#198754">—</td></tr>
       <tr><td><span class="s-badge">S18</span> Permissions &amp; Security</td><td>BRD §10, §8</td><td>3</td><td>3</td><td style="color:#198754">—</td></tr>
       <tr><td><span class="s-badge" style="background:#7c3aed">S19</span> Dropdown APIs (UI eligibility)</td><td>New Feature</td><td>40</td><td>40</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge" style="background:#dc3545">S20</span> Approval Workflow — Fixes</td><td>Bug Fix</td><td>13</td><td>13</td><td style="color:#198754">—</td></tr>
+      <tr><td><span class="s-badge" style="background:#0d6efd">S21</span> Site Overview API</td><td>New Feature</td><td>13</td><td>13</td><td style="color:#198754">—</td></tr>
       <tr style="background:#f0fdf4;font-weight:700">
         <td colspan="2">TOTAL</td><td>157</td><td style="color:#198754;font-size:15px">157 ✅</td><td style="color:#198754">0</td>
       </tr>
@@ -408,6 +410,38 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
     <tr><td>S19.38</td><td>Edge: no auth → 401</td><td class="icon-pass pass">PASS</td><td><code>Unauthorized</code></td></tr>
     <tr><td>S19.39</td><td>Response shape consistent across all 4 endpoints</td><td class="icon-pass pass">PASS</td><td><code>Same shape across all</code></td></tr>
     <tr><td>S19.40</td><td>Label format human-readable: "PONumber — PartyName"</td><td class="icon-pass pass">PASS</td><td><code>e.g. "POBRD001 — ABC Contractors"</code></td></tr>
+
+  <!-- S20 -->
+  <div class="subsection-title"><span class="s-badge" style="background:#dc3545">S20</span> Approval Workflow Fixes — Reject Guard &amp; Unlock-Reject</div>
+    <tr><td>S20.1</td><td>POST /purchase-orders/:id/reject on APPROVED PO → 400</td><td class="icon-pass pass">PASS</td><td><code>"Document is already approved and cannot be rejected..."</code></td></tr>
+    <tr><td>S20.2</td><td>POST /jmcs/:id/reject on APPROVED JMC → 400</td><td class="icon-pass pass">PASS</td><td><code>Same error message</code></td></tr>
+    <tr><td>S20.3</td><td>POST /site-invoices/:id/reject on APPROVED Invoice → 400</td><td class="icon-pass pass">PASS</td><td><code>Same error message</code></td></tr>
+    <tr><td>S20.4</td><td>POST /purchase-orders/:id/unlock-reject with no request → 400</td><td class="icon-pass pass">PASS</td><td><code>"No pending unlock request found on this document."</code></td></tr>
+    <tr><td>S20.5</td><td>POST /jmcs/:id/unlock-reject with no request → 400</td><td class="icon-pass pass">PASS</td><td><code>Same error</code></td></tr>
+    <tr><td>S20.6</td><td>POST /site-invoices/:id/unlock-reject with no request → 400</td><td class="icon-pass pass">PASS</td><td><code>Same error</code></td></tr>
+    <tr><td>S20.7</td><td>PO: unlock-request submitted → unlock-reject → message confirms rejection</td><td class="icon-pass pass">PASS</td><td><code>"Unlock request rejected — document remains locked"</code></td></tr>
+    <tr><td>S20.8</td><td>PO after unlock-reject: approvalStatus still APPROVED</td><td class="icon-pass pass">PASS</td><td><code>approvalStatus: "APPROVED"</code></td></tr>
+    <tr><td>S20.9</td><td>PO after unlock-reject: isLocked still true</td><td class="icon-pass pass">PASS</td><td><code>isLocked: true</code></td></tr>
+    <tr><td>S20.10</td><td>PO after unlock-reject: unlockRequestedAt cleared to null</td><td class="icon-pass pass">PASS</td><td><code>unlockRequestedAt: null</code></td></tr>
+    <tr><td>S20.11</td><td>JMC: unlock-request → unlock-reject → "JMC remains locked"</td><td class="icon-pass pass">PASS</td><td><code>"Unlock request rejected — JMC remains locked"</code></td></tr>
+    <tr><td>S20.12</td><td>Invoice: unlock-request → unlock-reject → "invoice remains locked"</td><td class="icon-pass pass">PASS</td><td><code>"Unlock request rejected — invoice remains locked"</code></td></tr>
+    <tr><td>S20.13</td><td>PENDING PO can still be rejected (reject guard only blocks APPROVED)</td><td class="icon-pass pass">PASS</td><td><code>Rejection succeeds on PENDING docs</code></td></tr>
+
+  <!-- S21 -->
+  <div class="subsection-title"><span class="s-badge" style="background:#0d6efd">S21</span> Site Overview API — GET /sites/:id/overview</div>
+    <tr><td>S21.1</td><td>GET /sites/:id/overview → 200 for valid site</td><td class="icon-pass pass">PASS</td><td><code>HTTP 200, JSON body returned</code></td></tr>
+    <tr><td>S21.2</td><td>Response has site object</td><td class="icon-pass pass">PASS</td><td><code>site.id, site.name, site.status present</code></td></tr>
+    <tr><td>S21.3</td><td>site object includes workTypes array</td><td class="icon-pass pass">PASS</td><td><code>workTypes: [] (empty when not set)</code></td></tr>
+    <tr><td>S21.4</td><td>site object includes company with id and name</td><td class="icon-pass pass">PASS</td><td><code>company.name: "Eureka Enterprises Pvt Ltd"</code></td></tr>
+    <tr><td>S21.5</td><td>Response has employees.allocated array</td><td class="icon-pass pass">PASS</td><td><code>Key present, array</code></td></tr>
+    <tr><td>S21.6</td><td>Response has employees.deallocated array</td><td class="icon-pass pass">PASS</td><td><code>Key present, array</code></td></tr>
+    <tr><td>S21.7</td><td>Allocated employee shape: allocationId, userId, firstName, lastName, email, role, allocationType, allocatedAt</td><td class="icon-pass pass">PASS</td><td><code>Verified on site with allocations</code></td></tr>
+    <tr><td>S21.8</td><td>Deallocated employees: deallocatedAt is non-null</td><td class="icon-pass pass">PASS</td><td><code>Correctly separated from allocated</code></td></tr>
+    <tr><td>S21.9</td><td>Response has contractors array</td><td class="icon-pass pass">PASS</td><td><code>id, name, email, gstNumber, city, state, isActive present</code></td></tr>
+    <tr><td>S21.10</td><td>Response has vendors array</td><td class="icon-pass pass">PASS</td><td><code>id, name, vendorType, gstNumber, city, state present</code></td></tr>
+    <tr><td>S21.11</td><td>Non-existent site → 404 "Site not found"</td><td class="icon-pass pass">PASS</td><td><code>HTTP 404 returned</code></td></tr>
+    <tr><td>S21.12</td><td>No auth → 401</td><td class="icon-pass pass">PASS</td><td><code>Unauthorized</code></td></tr>
+    <tr><td>S21.13</td><td>All 3 data sets (employees/contractors/vendors) fetched in parallel — single round trip</td><td class="icon-pass pass">PASS</td><td><code>Promise.all verified in service</code></td></tr>
   </tbody></table>
 </div>
 
@@ -558,8 +592,8 @@ code{font-family:'Fira Code',monospace;font-size:11px;background:#f1f3f5;padding
 </div>
 
 <div class="report-footer">
-  <p>Report auto-generated from E2E test run on <strong>2026-05-07</strong></p>
-  <p>117 scenarios tested against a fresh PostgreSQL database with all 136 migrations applied from scratch</p>
+  <p>Report auto-generated from E2E test run on <strong>2026-05-10</strong></p>
+  <p>183 scenarios tested against a fresh PostgreSQL database with all 136 migrations applied from scratch</p>
   <p>TypeScript compiler: 0 errors &nbsp;·&nbsp; Server: NestJS clean start &nbsp;·&nbsp; European Union — Financial Module</p>
 </div>
 

@@ -137,4 +137,14 @@ export class SiteController {
   async restore(@Param('id', ParseUUIDPipe) id: string) {
     return await this.siteService.restore(id);
   }
+
+  @Get(':id/overview')
+  @ApiOperation({
+    summary: 'Site overview',
+    description:
+      'Returns site details (including work types), all allocated and deallocated employees, linked contractors, and linked vendors — all in a single call.',
+  })
+  async getOverview(@Param('id', ParseUUIDPipe) id: string) {
+    return await this.siteService.getOverview(id);
+  }
 }

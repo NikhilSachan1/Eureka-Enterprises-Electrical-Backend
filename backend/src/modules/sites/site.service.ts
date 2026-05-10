@@ -649,6 +649,90 @@ export class SiteService {
     return await this.siteRepository.getContractorsBySiteId(siteId);
   }
 
+  async getOverview(siteId: string) {
+    const site = await this.siteRepository.findOne({
+      where: { id: siteId, deletedAt: IsNull() },
+      relations: ['company'],
+    });
+    if (!site) throw new NotFoundException(SITE_ERRORS.NOT_FOUND);
+
+    const [allocations, contractors, vendors] = await Promise.all([
+      // All employee allocations (both current and past)
+      this.dataSource.query(
+        `SELECT
+           sa.id, sa."userId", sa."allocationType", sa.role,
+           sa."dailyAllowance", sa."allocatedAt", sa."deallocatedAt",
+           sa."isCurrentlyAllocated", sa.remarks,
+           u."firstName", u."lastName", u.email, u."employeeId", u."profilePicture"
+         FROM site_allocations sa
+         JOIN users u ON u.id = sa."userId"
+         WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
+         ORDER BY sa."allocatedAt" DESC`,
+        [siteId],
+      ),
+      // Contractors linked to site
+      this.dataSource.query(
+        `SELECT c.id, c.name, c.email, c."contactNumber", c."gstNumber",
+                c."fullAddress", c.city, c.state, c."isActive"
+         FROM site_contractors sc
+         JOIN contractors c ON c.id = sc."contractorId" AND c."deletedAt" IS NULL
+         WHERE sc."siteId" = $1`,
+        [siteId],
+      ),
+      // Vendors linked to site
+      this.dataSource.query(
+        `SELECT v.id, v.name, v.email, v."contactNumber", v."vendorType",
+                v."gstNumber", v."fullAddress", v.city, v.state, v."isActive"
+         FROM site_vendors sv
+         JOIN vendors v ON v.id = sv."vendorId" AND v."deletedAt" IS NULL
+         WHERE sv."siteId" = $1`,
+        [siteId],
+      ),
+    ]);
+
+    const formatEmployee = (row: any) => ({
+      allocationId: row.id,
+      userId: row.userId,
+      employeeId: row.employeeId,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      email: row.email,
+      profilePicture: row.profilePicture,
+      role: row.role,
+      allocationType: row.allocationType,
+      dailyAllowance: row.dailyAllowance ? Number(row.dailyAllowance) : null,
+      allocatedAt: row.allocatedAt,
+      deallocatedAt: row.deallocatedAt,
+      remarks: row.remarks,
+    });
+
+    return {
+      site: {
+        id: site.id,
+        name: site.name,
+        status: site.status,
+        startDate: site.startDate,
+        endDate: site.endDate,
+        managerName: site.managerName,
+        managerContact: site.managerContact,
+        workTypes: site.workTypes ?? [],
+        fullAddress: site.fullAddress,
+        city: site.city,
+        state: site.state,
+        pincode: site.pincode,
+        estimatedBudget: site.estimatedBudget ? Number(site.estimatedBudget) : null,
+        isActive: site.isActive,
+        company: site.company ? { id: site.company.id, name: site.company.name } : null,
+      },
+      employees: {
+        allocated: allocations.filter((r: any) => r.isCurrentlyAllocated).map(formatEmployee),
+        deallocated: allocations.filter((r: any) => !r.isCurrentlyAllocated).map(formatEmployee),
+      },
+      contractors,
+      vendors,
+    };
+  }
+
   /**
    * Get status history timeline for a site
    */
