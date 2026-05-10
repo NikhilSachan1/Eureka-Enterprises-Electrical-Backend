@@ -1,11 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsDateString,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-} from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdateBookPaymentDto {
   @ApiPropertyOptional({ description: 'Booking date' })
@@ -25,11 +19,23 @@ export class UpdateBookPaymentDto {
   @IsOptional()
   gstAmount?: number;
 
+  @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  gstPercentage?: number;
+
   @ApiPropertyOptional({ description: 'TDS deduction amount' })
   @IsNumber()
   @Min(0)
   @IsOptional()
   tdsDeductionAmount?: number;
+
+  @ApiPropertyOptional({ description: 'TDS percentage (informational only)', example: 2 })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  tdsPercentage?: number;
 
   @ApiPropertyOptional({ description: 'Payment total amount (= taxable + gst - tds)' })
   @IsNumber()

@@ -64,6 +64,7 @@ export class PurchaseOrderService {
       poDate: new Date(dto.poDate),
       taxableAmount: dto.taxableAmount,
       gstAmount: dto.gstAmount ?? 0,
+      gstPercentage: dto.gstPercentage ?? null,
       totalAmount: dto.totalAmount,
       fileKey: dto.fileKey,
       fileName: dto.fileName,

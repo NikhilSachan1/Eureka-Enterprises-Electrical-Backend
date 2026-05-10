@@ -55,6 +55,13 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   gstAmount?: number = 0;
 
+  @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  gstPercentage?: number;
+
   @ApiProperty({ description: 'Total amount (= taxable + GST)', example: 118000 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
