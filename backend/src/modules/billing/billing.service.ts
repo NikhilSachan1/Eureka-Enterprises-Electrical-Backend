@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BILLING_QUERIES } from './queries/billing.queries';
-import { BILLING_ERRORS, CLOSING_CONDITION_IDS, CLOSING_CONDITION_DETAILS } from './constants/billing.constants';
 import {
-  GetPoSummaryDto,
-  GetSiteSummaryDto,
-  GetSiteClosingReadinessDto,
-} from './dto';
+  BILLING_ERRORS,
+  CLOSING_CONDITION_IDS,
+  CLOSING_CONDITION_DETAILS,
+} from './constants/billing.constants';
+import { GetPoSummaryDto, GetSiteSummaryDto, GetSiteClosingReadinessDto } from './dto';
 import { ClosingCondition, ClosingReadiness } from './billing.types';
 
 @Injectable()
@@ -18,7 +18,78 @@ export class BillingService {
     if (!result || result.length === 0) {
       throw new NotFoundException(BILLING_ERRORS.PO_NOT_FOUND);
     }
-    return result[0];
+    const r = result[0];
+    const gstInvoiced = Number(r.gstInvoiced);
+    const gstPaid = Number(r.gstPaid);
+    const tdsDeducted = Number(r.tdsDeducted);
+    const tdsPaid = Number(r.tdsPaid);
+
+    return {
+      // PO identity
+      poId: r.poId,
+      poNumber: r.poNumber,
+      poDate: r.poDate,
+      partyType: r.partyType,
+      siteId: r.siteId,
+      approvalStatus: r.approvalStatus,
+      isLocked: r.isLocked,
+      contractorId: r.contractorId,
+      vendorId: r.vendorId,
+      partyName: r.partyName,
+      partyEmail: r.partyEmail,
+      partyGstNumber: r.partyGstNumber,
+
+      // PO amounts
+      poTaxableAmount: Number(r.poTaxableAmount),
+      poGstAmount: Number(r.poGstAmount),
+      poGstPercentage: r.poGstPercentage ? Number(r.poGstPercentage) : null,
+      poTotal: Number(r.poTotal),
+
+      // Financial rollups
+      invoicedTotal: Number(r.invoicedTotal),
+      bookedTotal: Number(r.bookedTotal),
+      paidTotal: Number(r.paidTotal),
+      uninvoiced: Number(r.uninvoiced),
+      pendingPayment: Number(r.pendingPayment),
+
+      // Document counts
+      documents: {
+        jmc: {
+          total: r.jmcCount,
+          approved: r.jmcApprovedCount,
+          pending: r.jmcPendingCount,
+        },
+        report: {
+          total: r.reportCount,
+        },
+        invoice: {
+          total: r.invoiceCount,
+          approved: r.invoiceApprovedCount,
+          pending: r.invoicePendingCount,
+          rejected: r.invoiceRejectedCount,
+        },
+        bookPayment: {
+          total: r.bookPaymentCount,
+        },
+        bankTransfer: {
+          total: r.bankTransferCount,
+        },
+      },
+
+      // GST breakdown
+      gst: {
+        invoiced: gstInvoiced,
+        paid: gstPaid,
+        pending: Number((gstInvoiced - gstPaid).toFixed(2)),
+      },
+
+      // TDS breakdown
+      tds: {
+        deducted: tdsDeducted,
+        paid: tdsPaid,
+        pending: Number((tdsDeducted - tdsPaid).toFixed(2)),
+      },
+    };
   }
 
   async getSiteSummary(dto: GetSiteSummaryDto) {
@@ -46,7 +117,9 @@ export class BillingService {
     });
 
     // Condition 2: No invoice exceeds its PO total
-    const invoiceOverPo = await this.dataSource.query(BILLING_QUERIES.INVOICE_OVER_PO, [dto.siteId]);
+    const invoiceOverPo = await this.dataSource.query(BILLING_QUERIES.INVOICE_OVER_PO, [
+      dto.siteId,
+    ]);
     conditions.push({
       id: CLOSING_CONDITION_IDS.INVOICE_NOT_EXCEEDING_PO,
       pass: invoiceOverPo.length === 0,
@@ -56,7 +129,9 @@ export class BillingService {
     });
 
     // Condition 3: Sale invoices fully paid
-    const saleUnpaid = await this.dataSource.query(BILLING_QUERIES.UNPAID_SALE_INVOICES, [dto.siteId]);
+    const saleUnpaid = await this.dataSource.query(BILLING_QUERIES.UNPAID_SALE_INVOICES, [
+      dto.siteId,
+    ]);
     conditions.push({
       id: CLOSING_CONDITION_IDS.SALE_FULLY_PAID,
       pass: saleUnpaid.length === 0,
@@ -66,7 +141,9 @@ export class BillingService {
     });
 
     // Condition 4: Purchase invoices fully paid
-    const purchaseUnpaid = await this.dataSource.query(BILLING_QUERIES.UNPAID_PURCHASE_INVOICES, [dto.siteId]);
+    const purchaseUnpaid = await this.dataSource.query(BILLING_QUERIES.UNPAID_PURCHASE_INVOICES, [
+      dto.siteId,
+    ]);
     conditions.push({
       id: CLOSING_CONDITION_IDS.PURCHASE_FULLY_PAID,
       pass: purchaseUnpaid.length === 0,
@@ -76,7 +153,9 @@ export class BillingService {
     });
 
     // Condition 5: No pending or rejected documents
-    const pendingRejected = await this.dataSource.query(BILLING_QUERIES.PENDING_OR_REJECTED_DOCS, [dto.siteId]);
+    const pendingRejected = await this.dataSource.query(BILLING_QUERIES.PENDING_OR_REJECTED_DOCS, [
+      dto.siteId,
+    ]);
     conditions.push({
       id: CLOSING_CONDITION_IDS.NO_PENDING_OR_REJECTED_DOCS,
       pass: pendingRejected.length === 0,
@@ -84,7 +163,9 @@ export class BillingService {
     });
 
     // Condition 6: GST/TDS settled
-    const gstTdsStatus = await this.dataSource.query(BILLING_QUERIES.UNVERIFIED_GST_TDS, [dto.siteId]);
+    const gstTdsStatus = await this.dataSource.query(BILLING_QUERIES.UNVERIFIED_GST_TDS, [
+      dto.siteId,
+    ]);
     const gstTdsDetail: string[] = [];
     for (const row of gstTdsStatus) {
       if (Number(row.count) > 0) {
