@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DataSource, IsNull, ILike } from 'typeorm';
+import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
 import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
@@ -103,9 +103,12 @@ export class BookPaymentService {
   async findAll(query: GetBookPaymentDto) {
     const {
       invoiceId,
+      companyId,
       siteId,
       vendorId,
       poId,
+      dateFrom,
+      dateTo,
       search,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -115,9 +118,13 @@ export class BookPaymentService {
 
     const where: any = { deletedAt: IsNull() };
     if (invoiceId) where.invoiceId = invoiceId;
-    if (siteId) where.siteId = siteId;
-    if (vendorId) where.vendorId = vendorId;
+    if (companyId?.length) where.site = { companyId: In(companyId) };
+    if (siteId?.length) where.siteId = In(siteId);
+    if (vendorId?.length) where.vendorId = In(vendorId);
     if (poId) where.poId = poId;
+    if (dateFrom && dateTo) where.bookingDate = Between(dateFrom, dateTo);
+    else if (dateFrom) where.bookingDate = MoreThanOrEqual(dateFrom);
+    else if (dateTo) where.bookingDate = LessThanOrEqual(dateTo);
     if (search) where.remarks = ILike(`%${search}%`);
 
     const [records, totalRecords] = await Promise.all([

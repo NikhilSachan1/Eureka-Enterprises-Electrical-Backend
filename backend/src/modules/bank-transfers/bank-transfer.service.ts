@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike } from 'typeorm';
+import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
 import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
@@ -210,6 +210,7 @@ export class BankTransferService {
 
   async findAll(query: GetBankTransferDto) {
     const {
+      companyId,
       siteId,
       partyType,
       invoiceId,
@@ -217,6 +218,8 @@ export class BankTransferService {
       contractorId,
       vendorId,
       financialYear,
+      dateFrom,
+      dateTo,
       search,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -225,13 +228,17 @@ export class BankTransferService {
     } = query;
 
     const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
+    if (companyId?.length) where.site = { companyId: In(companyId) };
+    if (siteId?.length) where.siteId = In(siteId);
     if (partyType) where.partyType = partyType;
     if (invoiceId) where.invoiceId = invoiceId;
     if (bookPaymentId) where.bookPaymentId = bookPaymentId;
-    if (contractorId) where.contractorId = contractorId;
-    if (vendorId) where.vendorId = vendorId;
+    if (contractorId?.length) where.contractorId = In(contractorId);
+    if (vendorId?.length) where.vendorId = In(vendorId);
     if (financialYear) where.financialYear = financialYear;
+    if (dateFrom && dateTo) where.transferDate = Between(dateFrom, dateTo);
+    else if (dateFrom) where.transferDate = MoreThanOrEqual(dateFrom);
+    else if (dateTo) where.transferDate = LessThanOrEqual(dateTo);
     if (search) where.utrNumber = ILike(`%${search}%`);
 
     const [records, totalRecords] = await Promise.all([
