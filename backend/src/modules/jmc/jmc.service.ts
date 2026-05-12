@@ -4,7 +4,16 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Equal,
+} from 'typeorm';
 import { JmcRepository } from './jmc.repository';
 import { JmcEntity } from './entities/jmc.entity';
 import { CreateJmcDto, UpdateJmcDto, GetJmcDto } from './dto';
@@ -67,9 +76,15 @@ export class JmcService {
   async findAll(query: GetJmcDto) {
     const {
       poId,
+      companyId,
       siteId,
       partyType,
+      contractorId,
+      vendorId,
       approvalStatus,
+      isLocked,
+      dateFrom,
+      dateTo,
       search,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -79,9 +94,16 @@ export class JmcService {
 
     const where: any = { deletedAt: IsNull() };
     if (poId) where.poId = poId;
-    if (siteId) where.siteId = siteId;
+    if (companyId?.length) where.site = { companyId: In(companyId) };
+    if (siteId?.length) where.siteId = In(siteId);
     if (partyType) where.partyType = partyType;
-    if (approvalStatus) where.approvalStatus = approvalStatus;
+    if (contractorId?.length) where.contractorId = In(contractorId);
+    if (vendorId?.length) where.vendorId = In(vendorId);
+    if (approvalStatus?.length) where.approvalStatus = In(approvalStatus);
+    if (isLocked !== undefined) where.isLocked = Equal(isLocked === 'true');
+    if (dateFrom && dateTo) where.jmcDate = Between(dateFrom, dateTo);
+    else if (dateFrom) where.jmcDate = MoreThanOrEqual(dateFrom);
+    else if (dateTo) where.jmcDate = LessThanOrEqual(dateTo);
     if (search) where.jmcNumber = ILike(`%${search}%`);
 
     const [records, totalRecords] = await Promise.all([

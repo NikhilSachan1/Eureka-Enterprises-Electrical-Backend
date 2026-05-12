@@ -1,39 +1,80 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsEnum } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsOptional, IsString, IsArray, IsUUID, IsEnum, IsIn, IsDateString } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
   PartyType,
   FinancialApprovalStatus,
 } from 'src/modules/common/financials/financial.constants';
 
+function toArray(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  return Array.isArray(value) ? value : [value as string];
+}
+
 export class GetPurchaseOrderDto extends BaseGetDto {
-  @ApiPropertyOptional({ description: 'Filter by site ID' })
-  @IsUUID('4')
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more company IDs' })
+  @Transform(({ value }) => toArray(value))
   @IsOptional()
-  siteId?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  companyId?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more site IDs' })
+  @Transform(({ value }) => toArray(value))
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  siteId?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by party type', enum: PartyType })
   @IsEnum(PartyType)
   @IsOptional()
   partyType?: PartyType;
 
-  @ApiPropertyOptional({ description: 'Filter by contractor ID' })
-  @IsUUID('4')
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more contractor IDs' })
+  @Transform(({ value }) => toArray(value))
   @IsOptional()
-  contractorId?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  contractorId?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by vendor ID' })
-  @IsUUID('4')
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more vendor IDs' })
+  @Transform(({ value }) => toArray(value))
   @IsOptional()
-  vendorId?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  vendorId?: string[];
 
   @ApiPropertyOptional({
-    description: 'Filter by approval status',
+    type: [String],
+    description: 'Filter by one or more approval statuses',
     enum: FinancialApprovalStatus,
+    isArray: true,
   })
-  @IsEnum(FinancialApprovalStatus)
+  @Transform(({ value }) => toArray(value))
   @IsOptional()
-  approvalStatus?: FinancialApprovalStatus;
+  @IsArray()
+  @IsEnum(FinancialApprovalStatus, { each: true })
+  approvalStatus?: FinancialApprovalStatus[];
+
+  @ApiPropertyOptional({
+    description: 'Filter locked / unlocked documents',
+    enum: ['true', 'false'],
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  isLocked?: string;
+
+  @ApiPropertyOptional({ description: 'Date range start (ISO date string, inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Date range end (ISO date string, inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
 
   @ApiPropertyOptional({ description: 'Search PO number' })
   @IsString()

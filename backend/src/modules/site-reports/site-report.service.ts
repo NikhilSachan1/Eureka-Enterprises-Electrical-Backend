@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike } from 'typeorm';
+import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SiteReportRepository } from './site-report.repository';
 import { SiteReportEntity } from './entities/site-report.entity';
 import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dto';
@@ -61,8 +61,13 @@ export class SiteReportService {
   async findAll(query: GetSiteReportDto) {
     const {
       jmcId,
+      companyId,
       siteId,
       partyType,
+      contractorId,
+      vendorId,
+      dateFrom,
+      dateTo,
       search,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -72,8 +77,14 @@ export class SiteReportService {
 
     const where: any = { deletedAt: IsNull() };
     if (jmcId) where.jmcId = jmcId;
-    if (siteId) where.siteId = siteId;
+    if (companyId?.length) where.site = { companyId: In(companyId) };
+    if (siteId?.length) where.siteId = In(siteId);
     if (partyType) where.partyType = partyType;
+    if (contractorId?.length) where.contractorId = In(contractorId);
+    if (vendorId?.length) where.vendorId = In(vendorId);
+    if (dateFrom && dateTo) where.reportDate = Between(dateFrom, dateTo);
+    else if (dateFrom) where.reportDate = MoreThanOrEqual(dateFrom);
+    else if (dateTo) where.reportDate = LessThanOrEqual(dateTo);
     if (search) where.reportNumber = ILike(`%${search}%`);
 
     const [records, totalRecords] = await Promise.all([

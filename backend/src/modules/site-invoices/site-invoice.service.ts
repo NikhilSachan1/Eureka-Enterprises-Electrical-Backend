@@ -4,7 +4,16 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Equal,
+} from 'typeorm';
 import { SiteInvoiceRepository } from './site-invoice.repository';
 import { SiteInvoiceEntity } from './entities/site-invoice.entity';
 import { CreateSiteInvoiceDto, UpdateSiteInvoiceDto, GetSiteInvoiceDto } from './dto';
@@ -97,9 +106,15 @@ export class SiteInvoiceService {
     const {
       jmcId,
       poId,
+      companyId,
       siteId,
       partyType,
+      contractorId,
+      vendorId,
       approvalStatus,
+      isLocked,
+      dateFrom,
+      dateTo,
       search,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -110,9 +125,16 @@ export class SiteInvoiceService {
     const where: any = { deletedAt: IsNull() };
     if (jmcId) where.jmcId = jmcId;
     if (poId) where.poId = poId;
-    if (siteId) where.siteId = siteId;
+    if (companyId?.length) where.site = { companyId: In(companyId) };
+    if (siteId?.length) where.siteId = In(siteId);
     if (partyType) where.partyType = partyType;
-    if (approvalStatus) where.approvalStatus = approvalStatus;
+    if (contractorId?.length) where.contractorId = In(contractorId);
+    if (vendorId?.length) where.vendorId = In(vendorId);
+    if (approvalStatus?.length) where.approvalStatus = In(approvalStatus);
+    if (isLocked !== undefined) where.isLocked = Equal(isLocked === 'true');
+    if (dateFrom && dateTo) where.invoiceDate = Between(dateFrom, dateTo);
+    else if (dateFrom) where.invoiceDate = MoreThanOrEqual(dateFrom);
+    else if (dateTo) where.invoiceDate = LessThanOrEqual(dateTo);
     if (search) where.invoiceNumber = ILike(`%${search}%`);
 
     const [records, totalRecords] = await Promise.all([

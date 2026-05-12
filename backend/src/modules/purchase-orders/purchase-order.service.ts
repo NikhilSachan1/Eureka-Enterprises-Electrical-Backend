@@ -4,7 +4,16 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Equal,
+} from 'typeorm';
 import { PurchaseOrderRepository } from './purchase-order.repository';
 import { PurchaseOrderEntity } from './entities/purchase-order.entity';
 import {
@@ -79,11 +88,15 @@ export class PurchaseOrderService {
 
   async findAll(query: GetPurchaseOrderDto) {
     const {
+      companyId,
       siteId,
       partyType,
       contractorId,
       vendorId,
       approvalStatus,
+      isLocked,
+      dateFrom,
+      dateTo,
       search,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -92,11 +105,16 @@ export class PurchaseOrderService {
     } = query;
 
     const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
+    if (companyId?.length) where.site = { companyId: In(companyId) };
+    if (siteId?.length) where.siteId = In(siteId);
     if (partyType) where.partyType = partyType;
-    if (contractorId) where.contractorId = contractorId;
-    if (vendorId) where.vendorId = vendorId;
-    if (approvalStatus) where.approvalStatus = approvalStatus;
+    if (contractorId?.length) where.contractorId = In(contractorId);
+    if (vendorId?.length) where.vendorId = In(vendorId);
+    if (approvalStatus?.length) where.approvalStatus = In(approvalStatus);
+    if (isLocked !== undefined) where.isLocked = Equal(isLocked === 'true');
+    if (dateFrom && dateTo) where.poDate = Between(dateFrom, dateTo);
+    else if (dateFrom) where.poDate = MoreThanOrEqual(dateFrom);
+    else if (dateTo) where.poDate = LessThanOrEqual(dateTo);
     if (search) where.poNumber = ILike(`%${search}%`);
 
     const [records, totalRecords] = await Promise.all([
