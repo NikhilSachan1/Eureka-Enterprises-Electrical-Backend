@@ -6,11 +6,7 @@ import {
 } from '@nestjs/common';
 import { DataSource, IsNull } from 'typeorm';
 import { GstRepository } from './gst.repository';
-import {
-  GetGstRegisterDto,
-  CreateGstPaymentDto,
-  GetGstSummaryDto,
-} from './dto';
+import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
 import { GST_ERRORS, GST_RESPONSES } from './constants/gst.constants';
 import { GST_QUERIES } from './queries/gst.queries';
 import {
@@ -18,17 +14,14 @@ import {
   FinancialApprovalStatus,
   getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class GstService {
   constructor(
     private readonly gstRepository: GstRepository,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async findAllRegisterEntries(query: GetGstRegisterDto) {
     const {
@@ -60,7 +53,7 @@ export class GstService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'contractor', 'vendor'],
+        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
       }),
       this.gstRepository.countRegisterEntries({ where }),
     ]);
@@ -71,7 +64,7 @@ export class GstService {
   async findRegisterEntryById(id: string) {
     const entry = await this.gstRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'site', 'contractor', 'vendor'],
+      relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
     return entry;
@@ -172,10 +165,7 @@ export class GstService {
       }
 
       // Calculate net amount
-      const netAmount = entries.reduce(
-        (sum, e) => sum + Number(e.gstAmount),
-        0,
-      );
+      const netAmount = entries.reduce((sum, e) => sum + Number(e.gstAmount), 0);
 
       // Get financial year and allocate sequence
       const financialYear = getFinancialYear(dto.paymentDate);
@@ -248,7 +238,7 @@ export class GstService {
     return await this.gstRepository.findAllPayments({
       where,
       order: { createdAt: 'DESC' },
-      relations: ['site', 'vendor'],
+      relations: ['site', 'site.company', 'vendor'],
     });
   }
 }

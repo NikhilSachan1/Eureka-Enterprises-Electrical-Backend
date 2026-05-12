@@ -125,6 +125,7 @@ export class SiteInvoiceService {
           'jmc',
           'report',
           'site',
+          'site.company',
           'contractor',
           'vendor',
           'createdByUser',

@@ -93,6 +93,7 @@ export class JmcService {
         relations: [
           'po',
           'site',
+          'site.company',
           'contractor',
           'vendor',
           'createdByUser',
