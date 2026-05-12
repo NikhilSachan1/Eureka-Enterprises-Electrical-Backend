@@ -85,6 +85,7 @@ export class SiteReportService {
         relations: [
           'jmc',
           'site',
+          'site.company',
           'contractor',
           'vendor',
           'createdByUser',

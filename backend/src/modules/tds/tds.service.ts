@@ -6,20 +6,14 @@ import {
 } from '@nestjs/common';
 import { DataSource, IsNull } from 'typeorm';
 import { TdsRepository } from './tds.repository';
-import {
-  GetTdsRegisterDto,
-  CreateTdsPaymentDto,
-} from './dto';
+import { GetTdsRegisterDto, CreateTdsPaymentDto } from './dto';
 import { TDS_ERRORS, TDS_RESPONSES } from './constants/tds.constants';
 import {
   PartyType,
   FinancialApprovalStatus,
   getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class TdsService {
@@ -58,7 +52,7 @@ export class TdsService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'contractor', 'vendor'],
+        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
       }),
       this.tdsRepository.countRegisterEntries({ where }),
     ]);
@@ -69,7 +63,7 @@ export class TdsService {
   async findRegisterEntryById(id: string) {
     const entry = await this.tdsRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'site', 'contractor', 'vendor'],
+      relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
     });
     if (!entry) throw new NotFoundException(TDS_ERRORS.ENTRY_NOT_FOUND);
     return entry;
@@ -162,10 +156,7 @@ export class TdsService {
         existingWhere.vendorId = dto.vendorId;
       }
 
-      const existing = await this.tdsRepository.findOnePayment(
-        { where: existingWhere },
-        em,
-      );
+      const existing = await this.tdsRepository.findOnePayment({ where: existingWhere }, em);
       if (existing) {
         throw new ConflictException(TDS_ERRORS.PAYMENT_ALREADY_EXISTS);
       }
@@ -183,10 +174,7 @@ export class TdsService {
       }
 
       // Calculate net amount
-      const netAmount = entries.reduce(
-        (sum, e) => sum + Number(e.tdsAmount),
-        0,
-      );
+      const netAmount = entries.reduce((sum, e) => sum + Number(e.tdsAmount), 0);
 
       const financialYear = getFinancialYear(dto.paymentDate);
 
@@ -242,7 +230,7 @@ export class TdsService {
     return await this.tdsRepository.findAllPayments({
       where,
       order: { createdAt: 'DESC' },
-      relations: ['site', 'contractor', 'vendor'],
+      relations: ['site', 'site.company', 'contractor', 'vendor'],
     });
   }
 }

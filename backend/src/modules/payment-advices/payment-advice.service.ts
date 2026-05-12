@@ -1,28 +1,14 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { DataSource, IsNull, ILike, EntityManager } from 'typeorm';
 import { MailerService } from '@nestjs-modules/mailer';
 import { PaymentAdviceRepository } from './payment-advice.repository';
-import { PaymentAdviceEntity } from './entities/payment-advice.entity';
-import {
-  GetPaymentAdviceDto,
-  SendPaymentAdviceEmailDto,
-} from './dto';
+import { GetPaymentAdviceDto, SendPaymentAdviceEmailDto } from './dto';
 import {
   PAYMENT_ADVICE_ERRORS,
   PAYMENT_ADVICE_RESPONSES,
 } from './constants/payment-advice.constants';
-import {
-  FinancialApprovalStatus,
-} from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { CommunicationLogService } from 'src/modules/common/communication-logs/communication-log.service';
 import {
   CommunicationCategory,
@@ -99,7 +85,7 @@ export class PaymentAdviceService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['bankTransfer', 'site', 'vendor'],
+        relations: ['bankTransfer', 'site', 'site.company', 'vendor'],
       }),
       this.paymentAdviceRepository.count({ where }),
     ]);
@@ -110,7 +96,7 @@ export class PaymentAdviceService {
   async findById(id: string) {
     const advice = await this.paymentAdviceRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['bankTransfer', 'site', 'vendor'],
+      relations: ['bankTransfer', 'site', 'site.company', 'vendor'],
     });
     if (!advice) throw new NotFoundException(PAYMENT_ADVICE_ERRORS.NOT_FOUND);
     return advice;
@@ -120,11 +106,7 @@ export class PaymentAdviceService {
    * Send payment advice email (manual action per BRD §4.7).
    * Logs the send to payment_advice_email_logs and communication_logs.
    */
-  async sendEmail(
-    id: string,
-    dto: SendPaymentAdviceEmailDto,
-    sentBy: string,
-  ) {
+  async sendEmail(id: string, dto: SendPaymentAdviceEmailDto, sentBy: string) {
     const advice = await this.paymentAdviceRepository.findOne({
       where: { id, deletedAt: IsNull() },
       relations: ['bankTransfer', 'vendor', 'site'],
@@ -172,9 +154,7 @@ export class PaymentAdviceService {
         code: (error as { code?: string })?.code ?? 'UNKNOWN',
         details: { stack: error instanceof Error ? error.stack : undefined },
       };
-      this.logger.error(
-        `Payment-advice email failed for advice ${id}: ${errorInfo.message}`,
-      );
+      this.logger.error(`Payment-advice email failed for advice ${id}: ${errorInfo.message}`);
     }
 
     // Log via the existing communication_logs table — one log per recipient
@@ -224,7 +204,9 @@ export class PaymentAdviceService {
     });
 
     this.logger.log(
-      `Payment-advice email sent for advice ${id} to ${dto.to.length} recipient(s) in ${Date.now() - startedAt}ms`,
+      `Payment-advice email sent for advice ${id} to ${dto.to.length} recipient(s) in ${
+        Date.now() - startedAt
+      }ms`,
     );
 
     return { message: PAYMENT_ADVICE_RESPONSES.EMAIL_SENT };

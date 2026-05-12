@@ -7,11 +7,7 @@ import {
 import { DataSource, IsNull, ILike } from 'typeorm';
 import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
-import {
-  CreateBankTransferDto,
-  UpdateBankTransferDto,
-  GetBankTransferDto,
-} from './dto';
+import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
 import { BANK_TRANSFER_ERRORS, BANK_TRANSFER_RESPONSES } from './constants/bank-transfer.constants';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
@@ -22,10 +18,7 @@ import {
   FinancialApprovalStatus,
   getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 
 @Injectable()
@@ -36,7 +29,7 @@ export class BankTransferService {
     private readonly purchaseOrderService: PurchaseOrderService,
     private readonly paymentAdviceService: PaymentAdviceService,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   /**
    * Create a bank transfer. For PURCHASE side, auto-generates a payment advice.
@@ -111,10 +104,9 @@ export class BankTransferService {
       );
 
       // Update invoice paidTotal + PO paidTotal
-      await em.getRepository(SiteInvoiceEntity).update(
-        { id: invoice.id },
-        { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` },
-      );
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` });
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
         { paidTotal: dto.transferAmount, lastPaymentAt: new Date() },
@@ -145,7 +137,9 @@ export class BankTransferService {
       }
 
       // Exact amount match
-      if (Number(dto.transferAmount.toFixed(2)) !== Number(Number(bp.paymentTotalAmount).toFixed(2))) {
+      if (
+        Number(dto.transferAmount.toFixed(2)) !== Number(Number(bp.paymentTotalAmount).toFixed(2))
+      ) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.AMOUNT_MISMATCH_PURCHASE);
       }
 
@@ -183,10 +177,9 @@ export class BankTransferService {
         where: { id: bp.invoiceId, deletedAt: IsNull() },
       });
       if (invoice) {
-        await em.getRepository(SiteInvoiceEntity).update(
-          { id: invoice.id },
-          { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` },
-        );
+        await em
+          .getRepository(SiteInvoiceEntity)
+          .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` });
       }
 
       // Update PO paidTotal
@@ -247,7 +240,7 @@ export class BankTransferService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'bookPayment', 'site', 'contractor', 'vendor'],
+        relations: ['invoice', 'bookPayment', 'site', 'site.company', 'contractor', 'vendor'],
       }),
       this.bankTransferRepository.count({ where }),
     ]);
@@ -258,7 +251,7 @@ export class BankTransferService {
   async findById(id: string) {
     const bt = await this.bankTransferRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'bookPayment', 'site', 'contractor', 'vendor'],
+      relations: ['invoice', 'bookPayment', 'site', 'site.company', 'contractor', 'vendor'],
     });
     if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
     return bt;
@@ -302,10 +295,9 @@ export class BankTransferService {
         // Adjust rollups
         const delta = dto.transferAmount - Number(bt.transferAmount);
         if (delta !== 0) {
-          await em.getRepository(SiteInvoiceEntity).update(
-            { id: bt.invoiceId },
-            { paidTotal: () => `"paidTotal" + ${delta}` },
-          );
+          await em
+            .getRepository(SiteInvoiceEntity)
+            .update({ id: bt.invoiceId }, { paidTotal: () => `"paidTotal" + ${delta}` });
           await this.purchaseOrderService.adjustRollups(bt.poId, { paidTotal: delta }, em);
         }
       }
@@ -343,10 +335,9 @@ export class BankTransferService {
 
       // Reverse rollups
       if (bt.partyType === PartyType.SALE && bt.invoiceId) {
-        await em.getRepository(SiteInvoiceEntity).update(
-          { id: bt.invoiceId },
-          { paidTotal: () => `"paidTotal" - ${bt.transferAmount}` },
-        );
+        await em
+          .getRepository(SiteInvoiceEntity)
+          .update({ id: bt.invoiceId }, { paidTotal: () => `"paidTotal" - ${bt.transferAmount}` });
       } else if (bt.partyType === PartyType.PURCHASE && bt.bookPaymentId) {
         await this.bookPaymentService.markHasTransfer(bt.bookPaymentId, false, em);
         // Get invoice from book payment
@@ -354,10 +345,12 @@ export class BankTransferService {
           where: { id: bt.bookPaymentId },
         });
         if (bp) {
-          await em.getRepository(SiteInvoiceEntity).update(
-            { id: bp.invoiceId },
-            { paidTotal: () => `"paidTotal" - ${bt.transferAmount}` },
-          );
+          await em
+            .getRepository(SiteInvoiceEntity)
+            .update(
+              { id: bp.invoiceId },
+              { paidTotal: () => `"paidTotal" - ${bt.transferAmount}` },
+            );
         }
       }
 

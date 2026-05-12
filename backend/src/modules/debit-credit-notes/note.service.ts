@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IsNull, ILike } from 'typeorm';
 import { NoteRepository } from './note.repository';
 import { DebitNoteEntity } from './entities/debit-note.entity';
@@ -13,10 +9,7 @@ import {
   NoteSide,
   FinancialApprovalStatus,
 } from 'src/modules/common/financials/financial.constants';
-import {
-  DefaultPaginationValues,
-  SortOrder,
-} from 'src/utils/utility/constants/utility.constants';
+import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
 export class NoteService {
@@ -126,7 +119,7 @@ export class NoteService {
         order: { [params.sortField]: params.sortOrder as SortOrder },
         skip: (params.page - 1) * params.pageSize,
         take: params.pageSize,
-        relations: ['site', 'contractor'],
+        relations: ['site', 'site.company', 'contractor'],
       }),
       this.noteRepository.countDebitNotes({ where }),
     ]);
@@ -154,7 +147,7 @@ export class NoteService {
         order: { [params.sortField]: params.sortOrder as SortOrder },
         skip: (params.page - 1) * params.pageSize,
         take: params.pageSize,
-        relations: ['site', 'vendor'],
+        relations: ['site', 'site.company', 'vendor'],
       }),
       this.noteRepository.countCreditNotes({ where }),
     ]);
@@ -166,14 +159,14 @@ export class NoteService {
     if (noteSide === NoteSide.SALE) {
       const note = await this.noteRepository.findOneDebitNote({
         where: { id, deletedAt: IsNull() },
-        relations: ['site', 'contractor'],
+        relations: ['site', 'site.company', 'contractor'],
       });
       if (!note) throw new NotFoundException(NOTE_ERRORS.DEBIT_NOTE_NOT_FOUND);
       return note;
     } else {
       const note = await this.noteRepository.findOneCreditNote({
         where: { id, deletedAt: IsNull() },
-        relations: ['site', 'vendor'],
+        relations: ['site', 'site.company', 'vendor'],
       });
       if (!note) throw new NotFoundException(NOTE_ERRORS.CREDIT_NOTE_NOT_FOUND);
       return note;
@@ -187,14 +180,11 @@ export class NoteService {
       });
       if (!note) throw new NotFoundException(NOTE_ERRORS.DEBIT_NOTE_NOT_FOUND);
 
-      await this.noteRepository.updateDebitNote(
-        { id },
-        {
-          ...dto,
-          noteDate: dto.noteDate ? new Date(dto.noteDate) : undefined,
-          updatedBy,
-        } as Partial<DebitNoteEntity>,
-      );
+      await this.noteRepository.updateDebitNote({ id }, {
+        ...dto,
+        noteDate: dto.noteDate ? new Date(dto.noteDate) : undefined,
+        updatedBy,
+      } as Partial<DebitNoteEntity>);
       return { message: NOTE_RESPONSES.DEBIT_NOTE_UPDATED };
     } else {
       const note = await this.noteRepository.findOneCreditNote({
@@ -202,14 +192,11 @@ export class NoteService {
       });
       if (!note) throw new NotFoundException(NOTE_ERRORS.CREDIT_NOTE_NOT_FOUND);
 
-      await this.noteRepository.updateCreditNote(
-        { id },
-        {
-          ...dto,
-          noteDate: dto.noteDate ? new Date(dto.noteDate) : undefined,
-          updatedBy,
-        } as Partial<CreditNoteEntity>,
-      );
+      await this.noteRepository.updateCreditNote({ id }, {
+        ...dto,
+        noteDate: dto.noteDate ? new Date(dto.noteDate) : undefined,
+        updatedBy,
+      } as Partial<CreditNoteEntity>);
       return { message: NOTE_RESPONSES.CREDIT_NOTE_UPDATED };
     }
   }
