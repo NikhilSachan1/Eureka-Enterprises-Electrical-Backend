@@ -6,40 +6,107 @@
 
 export const BILLING_QUERIES = {
   /**
-   * PO-wise summary per BRD §8.
-   * Returns: poId, poNumber, partyType, contractorOrVendorName, poTotal,
-   * invoicedTotal, bookedTotal, paidTotal, gstCut, tdsCut, uninvoiced, pendingBilling
+   * PO-wise summary per BRD §8 — enhanced.
+   * Includes: PO details, document counts, financial rollups,
+   * GST breakdown (invoiced / paid / pending),
+   * TDS breakdown (deducted / paid / pending).
    */
   PO_SUMMARY: `
     SELECT
-      po.id as "poId",
+      -- PO identity
+      po.id                        AS "poId",
       po."poNumber",
+      po."poDate",
       po."partyType",
       po."siteId",
-      COALESCE(c.name, v.name) as "partyName",
-      po."totalAmount" as "poTotal",
+      po."approvalStatus",
+      po."isLocked",
+      po."taxableAmount"           AS "poTaxableAmount",
+      po."gstAmount"               AS "poGstAmount",
+      po."gstPercentage"           AS "poGstPercentage",
+      po."totalAmount"             AS "poTotal",
+      po."contractorId",
+      po."vendorId",
+      COALESCE(c.name, v.name)     AS "partyName",
+      COALESCE(c.email, v.email)   AS "partyEmail",
+      COALESCE(c."gstNumber", v."gstNumber") AS "partyGstNumber",
+
+      -- Financial rollups (maintained transactionally on PO)
       po."invoicedTotal",
       po."bookedTotal",
       po."paidTotal",
+      (po."totalAmount" - po."invoicedTotal") AS "uninvoiced",
+      (po."invoicedTotal" - po."paidTotal")   AS "pendingPayment",
+
+      -- Document counts
+      (SELECT COUNT(*)::int FROM jmcs j
+        WHERE j."poId" = po.id AND j."deletedAt" IS NULL)                          AS "jmcCount",
+      (SELECT COUNT(*)::int FROM jmcs j
+        WHERE j."poId" = po.id AND j."approvalStatus" = 'APPROVED' AND j."deletedAt" IS NULL) AS "jmcApprovedCount",
+      (SELECT COUNT(*)::int FROM jmcs j
+        WHERE j."poId" = po.id AND j."approvalStatus" = 'PENDING'  AND j."deletedAt" IS NULL) AS "jmcPendingCount",
+
+      (SELECT COUNT(*)::int FROM site_reports sr
+        JOIN jmcs j2 ON j2.id = sr."jmcId"
+        WHERE j2."poId" = po.id AND sr."deletedAt" IS NULL)                        AS "reportCount",
+
+      (SELECT COUNT(*)::int FROM site_invoices inv
+        WHERE inv."poId" = po.id AND inv."deletedAt" IS NULL)                      AS "invoiceCount",
+      (SELECT COUNT(*)::int FROM site_invoices inv
+        WHERE inv."poId" = po.id AND inv."approvalStatus" = 'APPROVED' AND inv."deletedAt" IS NULL) AS "invoiceApprovedCount",
+      (SELECT COUNT(*)::int FROM site_invoices inv
+        WHERE inv."poId" = po.id AND inv."approvalStatus" = 'PENDING'  AND inv."deletedAt" IS NULL) AS "invoicePendingCount",
+      (SELECT COUNT(*)::int FROM site_invoices inv
+        WHERE inv."poId" = po.id AND inv."approvalStatus" = 'REJECTED' AND inv."deletedAt" IS NULL) AS "invoiceRejectedCount",
+
+      (SELECT COUNT(*)::int FROM book_payments bp
+        JOIN site_invoices inv2 ON inv2.id = bp."invoiceId"
+        WHERE inv2."poId" = po.id AND bp."deletedAt" IS NULL)                      AS "bookPaymentCount",
+
+      (SELECT COUNT(*)::int FROM bank_transfers bt
+        LEFT JOIN site_invoices inv3 ON inv3.id = bt."invoiceId"
+        LEFT JOIN book_payments bp2  ON bp2.id  = bt."bookPaymentId"
+        LEFT JOIN site_invoices inv4 ON inv4.id = bp2."invoiceId"
+        WHERE COALESCE(inv3."poId", inv4."poId") = po.id AND bt."deletedAt" IS NULL) AS "bankTransferCount",
+
+      -- GST breakdown
       COALESCE((
         SELECT SUM(inv."gstAmount")
         FROM site_invoices inv
-        WHERE inv."poId" = po.id
-          AND inv."approvalStatus" = 'APPROVED'
-          AND inv."deletedAt" IS NULL
-      ), 0) as "gstCut",
+        WHERE inv."poId" = po.id AND inv."approvalStatus" = 'APPROVED' AND inv."deletedAt" IS NULL
+      ), 0) AS "gstInvoiced",
+
+      COALESCE((
+        SELECT SUM(gp."netAmount")
+        FROM gst_payments gp
+        WHERE gp."siteId" = po."siteId"
+          AND (po."partyType" = 'PURCHASE')
+          AND gp."vendorId" = po."vendorId"
+          AND gp."deletedAt" IS NULL
+      ), 0) AS "gstPaid",
+
+      -- TDS breakdown
       COALESCE((
         SELECT SUM(inv."tdsAmount")
         FROM site_invoices inv
-        WHERE inv."poId" = po.id
-          AND inv."approvalStatus" = 'APPROVED'
-          AND inv."deletedAt" IS NULL
-      ), 0) as "tdsCut",
-      (po."totalAmount" - po."invoicedTotal") as "uninvoiced",
-      (po."invoicedTotal" - po."paidTotal") as "pendingBilling"
+        WHERE inv."poId" = po.id AND inv."approvalStatus" = 'APPROVED' AND inv."deletedAt" IS NULL
+      ), 0) AS "tdsDeducted",
+
+      COALESCE((
+        SELECT SUM(tp."netAmount")
+        FROM tds_payments tp
+        WHERE tp."siteId" = po."siteId"
+          AND (
+            (po."partyType" = 'SALE'     AND tp."contractorId" = po."contractorId")
+            OR
+            (po."partyType" = 'PURCHASE' AND tp."vendorId"     = po."vendorId")
+          )
+          AND tp."deletedAt" IS NULL
+      ), 0) AS "tdsPaid"
+
     FROM purchase_orders po
-    LEFT JOIN contractors c ON po."contractorId" = c.id
-    LEFT JOIN vendors v ON po."vendorId" = v.id
+    LEFT JOIN contractors c ON po."contractorId" = c.id AND c."deletedAt" IS NULL
+    LEFT JOIN vendors     v ON po."vendorId"     = v.id AND v."deletedAt" IS NULL
     WHERE po.id = $1
       AND po."deletedAt" IS NULL
   `,
