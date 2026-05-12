@@ -145,6 +145,7 @@ export class SiteInvoiceService {
         take: pageSize,
         relations: [
           'jmc',
+          'jmc.po',
           'report',
           'site',
           'site.company',
@@ -176,8 +177,10 @@ export class SiteInvoiceService {
       where: { id, deletedAt: IsNull() },
       relations: [
         'jmc',
+        'jmc.po',
         'report',
         'site',
+        'site.company',
         'contractor',
         'vendor',
         'createdByUser',

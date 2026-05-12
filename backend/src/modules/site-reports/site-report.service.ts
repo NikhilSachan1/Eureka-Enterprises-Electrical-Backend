@@ -95,6 +95,7 @@ export class SiteReportService {
         take: pageSize,
         relations: [
           'jmc',
+          'jmc.po',
           'site',
           'site.company',
           'contractor',
@@ -123,7 +124,9 @@ export class SiteReportService {
       where: { id, deletedAt: IsNull() },
       relations: [
         'jmc',
+        'jmc.po',
         'site',
+        'site.company',
         'contractor',
         'vendor',
         'createdByUser',
