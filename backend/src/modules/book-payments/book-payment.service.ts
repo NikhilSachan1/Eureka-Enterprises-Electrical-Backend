@@ -133,7 +133,7 @@ export class BookPaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'site.company', 'vendor'],
+        relations: ['invoice', 'invoice.jmc', 'invoice.jmc.po', 'site', 'site.company', 'vendor'],
       }),
       this.bookPaymentRepository.count({ where }),
     ]);
@@ -144,7 +144,7 @@ export class BookPaymentService {
   async findById(id: string) {
     const bp = await this.bookPaymentRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'site', 'site.company', 'vendor'],
+      relations: ['invoice', 'invoice.jmc', 'invoice.jmc.po', 'site', 'site.company', 'vendor'],
     });
     if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
     return bp;

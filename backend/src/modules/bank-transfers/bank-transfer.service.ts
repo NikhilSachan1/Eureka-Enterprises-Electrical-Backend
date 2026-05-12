@@ -247,7 +247,19 @@ export class BankTransferService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'bookPayment', 'site', 'site.company', 'contractor', 'vendor'],
+        relations: [
+          'invoice',
+          'invoice.jmc',
+          'invoice.jmc.po',
+          'bookPayment',
+          'bookPayment.invoice',
+          'bookPayment.invoice.jmc',
+          'bookPayment.invoice.jmc.po',
+          'site',
+          'site.company',
+          'contractor',
+          'vendor',
+        ],
       }),
       this.bankTransferRepository.count({ where }),
     ]);
@@ -258,7 +270,19 @@ export class BankTransferService {
   async findById(id: string) {
     const bt = await this.bankTransferRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'bookPayment', 'site', 'site.company', 'contractor', 'vendor'],
+      relations: [
+        'invoice',
+        'invoice.jmc',
+        'invoice.jmc.po',
+        'bookPayment',
+        'bookPayment.invoice',
+        'bookPayment.invoice.jmc',
+        'bookPayment.invoice.jmc.po',
+        'site',
+        'site.company',
+        'contractor',
+        'vendor',
+      ],
     });
     if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
     return bt;
