@@ -16,13 +16,6 @@ export class CreateSiteInvoiceDto {
   @IsUUID('4')
   jmcId: string;
 
-  @ApiPropertyOptional({
-    description: 'Parent Report ID (required on PURCHASE side per BRD §4.4)',
-  })
-  @IsUUID('4')
-  @IsOptional()
-  reportId?: string;
-
   @ApiProperty({ description: 'Invoice Number' })
   @IsString()
   @IsNotEmpty()
