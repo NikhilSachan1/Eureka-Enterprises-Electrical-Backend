@@ -63,8 +63,8 @@ export class SiteInvoiceService {
     });
     if (dup) throw new ConflictException(INVOICE_ERRORS.INVOICE_ALREADY_EXISTS_FOR_JMC);
 
-    // Purchase side: Report must exist (BRD §4.3 confirmed for PURCHASE)
-    let resolvedReportId: string | null = dto.reportId ?? null;
+    // Auto-resolve reportId from JMC — PURCHASE side requires a report to exist first
+    let resolvedReportId: string | null = null;
     if (jmc.partyType === PartyType.PURCHASE) {
       const report = await this.dataSource
         .getRepository(SiteReportEntity)

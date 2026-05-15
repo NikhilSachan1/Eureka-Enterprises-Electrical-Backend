@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumber, Min, IsDateString, MaxLength } from 'class-validator';
 
 /**
- * jmcId / reportId cannot change after creation.
+ * jmcId cannot change after creation. reportId is auto-resolved from JMC.
  *
  * Numeric fields intentionally omit @Type(() => Number) to prevent the global
  * ValidationPipe's enableImplicitConversion from converting absent fields to 0.
