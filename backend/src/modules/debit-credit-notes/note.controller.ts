@@ -17,7 +17,7 @@ import { RequiredPermission } from 'src/modules/auth/decorators/required-permiss
 import { NoteSide } from 'src/modules/common/financials/financial.constants';
 
 @ApiTags('Debit/Credit Notes')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @Controller('notes')
 export class NoteController {
   constructor(private readonly noteService: NoteService) {}
@@ -27,10 +27,7 @@ export class NoteController {
   @ApiOperation({
     summary: 'Create a note (SALE: debit note, PURCHASE: credit note)',
   })
-  create(
-    @Body() dto: CreateNoteDto,
-    @GetUser('id') userId: string,
-  ) {
+  create(@Body() dto: CreateNoteDto, @GetUser('id') userId: string) {
     return this.noteService.create(dto, userId);
   }
 
@@ -46,10 +43,7 @@ export class NoteController {
   @Get(':id')
   @RequiredPermission('financials.notes.view')
   @ApiOperation({ summary: 'Get a single note by ID and side' })
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Query('noteSide') noteSide: NoteSide,
-  ) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Query('noteSide') noteSide: NoteSide) {
     return this.noteService.findById(id, noteSide);
   }
 

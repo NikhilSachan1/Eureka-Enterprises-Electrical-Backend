@@ -16,7 +16,7 @@ import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Book Payments')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @Controller('book-payments')
 export class BookPaymentController {
   constructor(private readonly bookPaymentService: BookPaymentService) {}

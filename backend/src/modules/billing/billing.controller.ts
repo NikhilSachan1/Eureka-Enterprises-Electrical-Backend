@@ -2,14 +2,10 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { BillingService } from './billing.service';
-import {
-  GetPoSummaryDto,
-  GetSiteSummaryDto,
-  GetSiteClosingReadinessDto,
-} from './dto';
+import { GetPoSummaryDto, GetSiteSummaryDto, GetSiteClosingReadinessDto } from './dto';
 
 @ApiTags('Billing')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @Controller('billing')
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}

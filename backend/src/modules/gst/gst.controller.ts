@@ -1,24 +1,12 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Query,
-  ParseUUIDPipe,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GstService } from './gst.service';
-import {
-  GetGstRegisterDto,
-  CreateGstPaymentDto,
-  GetGstSummaryDto,
-} from './dto';
+import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('GST')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @Controller('gst')
 export class GstController {
   constructor(private readonly gstService: GstService) {}
@@ -40,40 +28,30 @@ export class GstController {
   @Post('register/:id/verify')
   @RequiredPermission('financials.gst.verify')
   @ApiOperation({ summary: 'Verify a GST register entry (PURCHASE side only)' })
-  verifyEntry(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetUser('id') userId: string,
-  ) {
+  verifyEntry(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.gstService.verifyEntry(id, userId);
   }
 
   @Post('register/:id/revert')
   @RequiredPermission('financials.gst.revert')
-  @ApiOperation({ summary: 'Revert verification of a GST register entry (blocked if payment released)' })
-  revertEntry(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetUser('id') userId: string,
-  ) {
+  @ApiOperation({
+    summary: 'Revert verification of a GST register entry (blocked if payment released)',
+  })
+  revertEntry(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.gstService.revertEntry(id, userId);
   }
 
   @Post('payments')
   @RequiredPermission('financials.gst.release-payment')
   @ApiOperation({ summary: 'Release monthly GST payment (atomic across all verified entries)' })
-  releasePayment(
-    @Body() dto: CreateGstPaymentDto,
-    @GetUser('id') userId: string,
-  ) {
+  releasePayment(@Body() dto: CreateGstPaymentDto, @GetUser('id') userId: string) {
     return this.gstService.releasePayment(dto, userId);
   }
 
   @Get('payments')
   @RequiredPermission('financials.gst.view')
   @ApiOperation({ summary: 'List GST payments' })
-  findAllPayments(
-    @Query('siteId') siteId?: string,
-    @Query('vendorId') vendorId?: string,
-  ) {
+  findAllPayments(@Query('siteId') siteId?: string, @Query('vendorId') vendorId?: string) {
     return this.gstService.findAllPayments(siteId, vendorId);
   }
 

@@ -11,16 +11,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BankTransferService } from './bank-transfer.service';
-import {
-  CreateBankTransferDto,
-  UpdateBankTransferDto,
-  GetBankTransferDto,
-} from './dto';
+import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Bank Transfers')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 @Controller('bank-transfers')
 export class BankTransferController {
   constructor(private readonly bankTransferService: BankTransferService) {}
@@ -28,12 +24,10 @@ export class BankTransferController {
   @Post()
   @RequiredPermission('financials.bank-transfers.create')
   @ApiOperation({
-    summary: 'Create a bank transfer (SALE: links to invoice; PURCHASE: links to book payment, auto-generates payment advice)',
+    summary:
+      'Create a bank transfer (SALE: links to invoice; PURCHASE: links to book payment, auto-generates payment advice)',
   })
-  create(
-    @Body() dto: CreateBankTransferDto,
-    @GetUser('id') userId: string,
-  ) {
+  create(@Body() dto: CreateBankTransferDto, @GetUser('id') userId: string) {
     return this.bankTransferService.create(dto, userId);
   }
 
@@ -53,7 +47,9 @@ export class BankTransferController {
 
   @Patch(':id')
   @RequiredPermission('financials.bank-transfers.update')
-  @ApiOperation({ summary: 'Update a bank transfer (amount only editable for SALE side without payment advice)' })
+  @ApiOperation({
+    summary: 'Update a bank transfer (amount only editable for SALE side without payment advice)',
+  })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBankTransferDto,
@@ -65,10 +61,7 @@ export class BankTransferController {
   @Delete(':id')
   @RequiredPermission('financials.bank-transfers.delete')
   @ApiOperation({ summary: 'Delete a bank transfer (only if no payment advice exists)' })
-  remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetUser('id') userId: string,
-  ) {
+  remove(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bankTransferService.remove(id, userId);
   }
 }
