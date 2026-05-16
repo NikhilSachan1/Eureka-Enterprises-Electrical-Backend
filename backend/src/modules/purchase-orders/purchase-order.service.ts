@@ -156,6 +156,7 @@ export class PurchaseOrderService {
         'contractor',
         'vendor',
         'site',
+        'site.company',
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
