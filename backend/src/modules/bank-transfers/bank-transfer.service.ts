@@ -9,6 +9,7 @@ import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
 import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
 import { BANK_TRANSFER_ERRORS, BANK_TRANSFER_RESPONSES } from './constants/bank-transfer.constants';
+import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
@@ -259,12 +260,23 @@ export class BankTransferService {
           'site.company',
           'contractor',
           'vendor',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
         ],
       }),
       this.bankTransferRepository.count({ where }),
     ]);
 
-    return { records, totalRecords };
+    return {
+      records: records.map((bt) => ({
+        ...bt,
+        createdByUser: formatUser(bt.createdByUser),
+        updatedByUser: formatUser(bt.updatedByUser),
+        approvalByUser: formatUser(bt.approvalByUser),
+      })),
+      totalRecords,
+    };
   }
 
   async findById(id: string) {
@@ -282,10 +294,18 @@ export class BankTransferService {
         'site.company',
         'contractor',
         'vendor',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
       ],
     });
     if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
-    return bt;
+    return {
+      ...bt,
+      createdByUser: formatUser(bt.createdByUser),
+      updatedByUser: formatUser(bt.updatedByUser),
+      approvalByUser: formatUser(bt.approvalByUser),
+    };
   }
 
   async update(id: string, dto: UpdateBankTransferDto, updatedBy: string) {

@@ -3,6 +3,7 @@ import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
 
 /**
@@ -59,7 +60,7 @@ export class BookPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   tdsPercentage: number | null;
 
-  // The actual payment amount = taxable + gst - tds (stored explicitly)
+  // The actual payment amount = taxable - gst - tds (auto-calculated)
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   paymentTotalAmount: number;
 
@@ -75,6 +76,10 @@ export class BookPaymentEntity extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   approvalBy: string | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'approvalBy' })
+  approvalByUser: UserEntity | null;
 
   @Column({ type: 'timestamp', nullable: true })
   approvalAt: Date | null;
