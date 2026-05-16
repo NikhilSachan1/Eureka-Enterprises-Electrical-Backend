@@ -39,11 +39,6 @@ export class CreateBookPaymentDto {
   @IsOptional()
   tdsPercentage?: number;
 
-  @ApiProperty({ description: 'Payment total amount (= taxable + gst - tds)' })
-  @IsNumber()
-  @Min(0)
-  paymentTotalAmount: number;
-
   @ApiPropertyOptional({ description: 'Reason if payment is on hold' })
   @IsString()
   @IsOptional()

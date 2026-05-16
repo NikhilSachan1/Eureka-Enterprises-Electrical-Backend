@@ -5,14 +5,15 @@ import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payme
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
 
 /**
  * Bank Transfer — both SALE and PURCHASE sides (§5.1.8)
- * 
+ *
  * SALE: links directly to invoice (invoiceId set, bookPaymentId null)
  *       Σ transferAmount per invoice ≤ invoice.totalAmount
- * 
+ *
  * PURCHASE: links to book payment (bookPaymentId set, invoiceId null)
  *           1:1 with book payment, transferAmount = bookPayment.paymentTotalAmount
  *           Auto-generates a payment advice on creation
@@ -99,6 +100,10 @@ export class BankTransferEntity extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   approvalBy: string | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'approvalBy' })
+  approvalByUser: UserEntity | null;
 
   @Column({ type: 'timestamp', nullable: true })
   approvalAt: Date | null;

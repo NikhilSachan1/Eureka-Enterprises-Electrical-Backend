@@ -4,6 +4,7 @@ import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
 import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
+import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
 import {
@@ -43,16 +44,17 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_APPROVED);
       }
 
-      this.validateAmounts(
-        dto.taxableAmount,
-        dto.gstAmount ?? 0,
-        dto.tdsDeductionAmount ?? 0,
-        dto.paymentTotalAmount,
-      );
+      const gstAmount = dto.gstAmount ?? 0;
+      const tdsAmount = dto.tdsDeductionAmount ?? 0;
+      const paymentTotalAmount = this.computePaymentTotal(dto.taxableAmount, gstAmount, tdsAmount);
+
+      if (paymentTotalAmount < 0) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
+      }
 
       // Ceiling check: sum of booked + new ≤ invoice total
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      const newTotal = existingBooked + dto.paymentTotalAmount;
+      const newTotal = existingBooked + paymentTotalAmount;
       if (newTotal > Number(invoice.totalAmount)) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
@@ -66,11 +68,11 @@ export class BookPaymentService {
           poId: invoice.poId,
           bookingDate: new Date(dto.bookingDate),
           taxableAmount: dto.taxableAmount,
-          gstAmount: dto.gstAmount ?? 0,
+          gstAmount,
           gstPercentage: dto.gstPercentage ?? null,
-          tdsDeductionAmount: dto.tdsDeductionAmount ?? 0,
+          tdsDeductionAmount: tdsAmount,
           tdsPercentage: dto.tdsPercentage ?? null,
-          paymentTotalAmount: dto.paymentTotalAmount,
+          paymentTotalAmount,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
@@ -85,14 +87,11 @@ export class BookPaymentService {
       // Update invoice bookedTotal + PO bookedTotal
       await em
         .getRepository(SiteInvoiceEntity)
-        .update(
-          { id: invoice.id },
-          { bookedTotal: () => `"bookedTotal" + ${dto.paymentTotalAmount}` },
-        );
+        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${paymentTotalAmount}` });
 
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
-        { bookedTotal: dto.paymentTotalAmount },
+        { bookedTotal: paymentTotalAmount },
         em,
       );
 
@@ -133,21 +132,54 @@ export class BookPaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'invoice.jmc', 'invoice.jmc.po', 'site', 'site.company', 'vendor'],
+        relations: [
+          'invoice',
+          'invoice.jmc',
+          'invoice.jmc.po',
+          'site',
+          'site.company',
+          'vendor',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
+        ],
       }),
       this.bookPaymentRepository.count({ where }),
     ]);
 
-    return { records, totalRecords };
+    return {
+      records: records.map((bp) => ({
+        ...bp,
+        createdByUser: formatUser(bp.createdByUser),
+        updatedByUser: formatUser(bp.updatedByUser),
+        approvalByUser: formatUser(bp.approvalByUser),
+      })),
+      totalRecords,
+    };
   }
 
   async findById(id: string) {
     const bp = await this.bookPaymentRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'invoice.jmc', 'invoice.jmc.po', 'site', 'site.company', 'vendor'],
+      relations: [
+        'invoice',
+        'invoice.jmc',
+        'invoice.jmc.po',
+        'site',
+        'site.company',
+        'vendor',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
+      ],
     });
     if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
-    return bp;
+    return {
+      ...bp,
+      createdByUser: formatUser(bp.createdByUser),
+      updatedByUser: formatUser(bp.updatedByUser),
+      approvalByUser: formatUser(bp.approvalByUser),
+    };
   }
 
   async update(id: string, dto: UpdateBookPaymentDto, updatedBy: string) {
@@ -164,15 +196,19 @@ export class BookPaymentService {
       const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
       const newGst = dto.gstAmount ?? Number(bp.gstAmount);
       const newTds = dto.tdsDeductionAmount ?? Number(bp.tdsDeductionAmount);
-      const newTotal = dto.paymentTotalAmount ?? Number(bp.paymentTotalAmount);
-      this.validateAmounts(newTaxable, newGst, newTds, newTotal);
+      const newTotal = this.computePaymentTotal(newTaxable, newGst, newTds);
 
-      // Re-check ceiling if amount changed.
-      // Lock the invoice row alongside the BP row so two concurrent BP updates
-      // on the same invoice serialize their ceiling checks. Without the lock
-      // each update reads `existingBooked` independently and they could each
-      // pass the check while their combined effect breaches the invoice total.
-      if (dto.paymentTotalAmount !== undefined) {
+      if (newTotal < 0) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
+      }
+
+      // Re-check ceiling if any amount field changed.
+      const amountsChanged =
+        dto.taxableAmount !== undefined ||
+        dto.gstAmount !== undefined ||
+        dto.tdsDeductionAmount !== undefined;
+
+      if (amountsChanged) {
         const invoice = await em
           .getRepository(SiteInvoiceEntity)
           .createQueryBuilder('inv')
@@ -188,7 +224,6 @@ export class BookPaymentService {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        // Adjust rollups
         const delta = newTotal - Number(bp.paymentTotalAmount);
         if (delta !== 0) {
           await em
@@ -198,10 +233,15 @@ export class BookPaymentService {
         }
       }
 
+      const { taxableAmount, gstAmount, tdsDeductionAmount, ...restDto } = dto;
       await this.bookPaymentRepository.update(
         { id },
         {
-          ...dto,
+          ...restDto,
+          ...(taxableAmount !== undefined && { taxableAmount }),
+          ...(gstAmount !== undefined && { gstAmount }),
+          ...(tdsDeductionAmount !== undefined && { tdsDeductionAmount }),
+          ...(amountsChanged && { paymentTotalAmount: newTotal }),
           bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
           updatedBy,
         } as Partial<BookPaymentEntity>,
@@ -241,12 +281,8 @@ export class BookPaymentService {
     });
   }
 
-  private validateAmounts(taxable: number, gst: number, tds: number, total: number): void {
-    const expected = Number((taxable + gst - tds).toFixed(2));
-    const got = Number(total.toFixed(2));
-    if (expected !== got) {
-      throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
-    }
+  private computePaymentTotal(taxable: number, gst: number, tds: number): number {
+    return Number((taxable - gst - tds).toFixed(2));
   }
 
   // ── Service methods exposed for downstream modules (proper service-to-service communication) ────────────
