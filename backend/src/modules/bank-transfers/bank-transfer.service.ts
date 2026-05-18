@@ -345,21 +345,12 @@ export class BankTransferService {
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
 
-      // Check if payment advice exists — block delete if so
-      const adviceExists = await em.query(
-        `SELECT 1 FROM payment_advices WHERE "bankTransferId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [id],
-      );
-      if (adviceExists.length > 0 && dto.transferAmount !== undefined) {
-        throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_ADVICE_EXISTS);
-      }
-
-      // For PURCHASE side, amount is fixed (1:1 with book payment)
+      // PURCHASE side: amount is fixed (1:1 with book payment — must equal paymentTotalAmount)
       if (bt.partyType === PartyType.PURCHASE && dto.transferAmount !== undefined) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_PURCHASE);
       }
 
-      // For SALE side, re-check ceiling if amount changed
+      // SALE side: re-check ceiling if amount changed
       if (bt.partyType === PartyType.SALE && dto.transferAmount !== undefined) {
         const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
           where: { id: bt.invoiceId, deletedAt: IsNull() },
@@ -372,7 +363,6 @@ export class BankTransferService {
           throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        // Adjust rollups
         const delta = dto.transferAmount - Number(bt.transferAmount);
         if (delta !== 0) {
           await em
@@ -391,6 +381,46 @@ export class BankTransferService {
         } as Partial<BankTransferEntity>,
         em,
       );
+
+      // Regenerate PDF if any field shown on the advice changed
+      const pdfAffected =
+        dto.utrNumber !== undefined ||
+        dto.transferDate !== undefined ||
+        dto.transferAmount !== undefined;
+      if (pdfAffected && bt.partyType === PartyType.PURCHASE) {
+        const [vendor, site] = await Promise.all([
+          em.getRepository(VendorEntity).findOne({ where: { id: bt.vendorId } }),
+          em
+            .getRepository(SiteEntity)
+            .findOne({ where: { id: bt.siteId }, relations: ['company'] }),
+        ]);
+        const bp = bt.bookPaymentId
+          ? await em.getRepository(BookPaymentEntity).findOne({ where: { id: bt.bookPaymentId } })
+          : null;
+
+        this.paymentAdviceService.regeneratePdfAsync(id, {
+          referenceNumber: '', // overridden inside regeneratePdfAsync
+          generatedAt: new Date(),
+          financialYear: bt.financialYear,
+          vendorName: vendor?.name ?? 'Unknown',
+          vendorEmail: vendor?.email ?? '',
+          vendorGstNumber: vendor?.gstNumber ?? null,
+          vendorAddress: vendor?.fullAddress ?? null,
+          vendorBankName: vendor?.bankName ?? null,
+          vendorAccountNumber: vendor?.accountNumber ?? null,
+          vendorIfscCode: vendor?.ifscCode ?? null,
+          vendorAccountHolderName: vendor?.accountHolderName ?? null,
+          siteName: site?.name ?? 'Unknown',
+          companyName: (site as any)?.company?.name ?? 'Eureka Enterprises',
+          utrNumber: dto.utrNumber ?? bt.utrNumber,
+          transferDate: dto.transferDate ?? String(bt.transferDate).split('T')[0],
+          transferAmount: dto.transferAmount ?? Number(bt.transferAmount),
+          taxableAmount: bp ? Number(bp.taxableAmount) : 0,
+          gstAmount: bp ? Number(bp.gstAmount) : 0,
+          tdsDeductionAmount: bp ? Number(bp.tdsDeductionAmount) : 0,
+          paymentTotalAmount: bp ? Number(bp.paymentTotalAmount) : 0,
+        });
+      }
 
       return { message: BANK_TRANSFER_RESPONSES.UPDATED };
     });
