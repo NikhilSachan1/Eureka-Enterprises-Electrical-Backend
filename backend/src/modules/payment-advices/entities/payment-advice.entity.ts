@@ -20,7 +20,7 @@ export class PaymentAdviceEntity extends BaseEntity {
   @Column({ type: 'uuid' })
   bankTransferId: string;
 
-  @OneToOne(() => BankTransferEntity)
+  @OneToOne(() => BankTransferEntity, (bt) => bt.paymentAdvice)
   @JoinColumn({ name: 'bankTransferId' })
   bankTransfer: BankTransferEntity;
 

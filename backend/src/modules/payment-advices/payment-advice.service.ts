@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { DataSource, IsNull, ILike, EntityManager } from 'typeorm';
 import { MailerService } from '@nestjs-modules/mailer';
 import { PaymentAdviceRepository } from './payment-advice.repository';
+import { PaymentAdvicePdfService, PaymentAdvicePdfData } from './payment-advice-pdf.service';
+import { PaymentAdviceEntity } from './entities/payment-advice.entity';
 import { GetPaymentAdviceDto, SendPaymentAdviceEmailDto } from './dto';
 import {
   PAYMENT_ADVICE_ERRORS,
@@ -21,6 +23,7 @@ export class PaymentAdviceService {
 
   constructor(
     private readonly paymentAdviceRepository: PaymentAdviceRepository,
+    private readonly pdfService: PaymentAdvicePdfService,
     private readonly mailerService: MailerService,
     private readonly communicationLogService: CommunicationLogService,
     private readonly dataSource: DataSource,
@@ -37,11 +40,13 @@ export class PaymentAdviceService {
     financialYear: string,
     createdBy: string,
     em: EntityManager,
+    pdfData?: Omit<PaymentAdvicePdfData, 'referenceNumber' | 'generatedAt' | 'financialYear'>,
   ): Promise<{ id: string; referenceNumber: string }> {
     // Allocate sequence number (with advisory lock)
     const { sequenceNumber, referenceNumber } =
       await this.paymentAdviceRepository.allocateSequenceNumber(financialYear, em);
 
+    const generatedAt = new Date();
     const advice = await this.paymentAdviceRepository.create(
       {
         bankTransferId,
@@ -50,13 +55,29 @@ export class PaymentAdviceService {
         referenceNumber,
         financialYear,
         sequenceNumber,
-        generatedAt: new Date(),
+        generatedAt,
         pdfKey: null,
         approvalStatus: FinancialApprovalStatus.APPROVED,
         createdBy,
       },
       em,
     );
+
+    // Generate PDF asynchronously after transaction commits — don't block the response
+    if (pdfData) {
+      setImmediate(() => {
+        this.pdfService
+          .generate({ ...pdfData, referenceNumber, generatedAt, financialYear })
+          .then((pdfKey) =>
+            this.dataSource
+              .getRepository(PaymentAdviceEntity)
+              .update({ id: advice.id }, { pdfKey }),
+          )
+          .catch((err) =>
+            this.logger.error(`PDF generation failed for advice ${advice.id}: ${err}`),
+          );
+      });
+    }
 
     return { id: advice.id, referenceNumber: advice.referenceNumber };
   }
