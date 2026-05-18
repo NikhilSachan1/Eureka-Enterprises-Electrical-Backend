@@ -7,6 +7,7 @@ import { ContractorEntity } from 'src/modules/contractors/entities/contractor.en
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
+import { PaymentAdviceEntity } from 'src/modules/payment-advices/entities/payment-advice.entity';
 
 /**
  * Bank Transfer — both SALE and PURCHASE sides (§5.1.8)
@@ -107,4 +108,8 @@ export class BankTransferEntity extends BaseEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   approvalAt: Date | null;
+
+  // Inverse side of PaymentAdvice.bankTransfer (PURCHASE only)
+  @OneToOne(() => PaymentAdviceEntity, (pa) => pa.bankTransfer, { nullable: true, eager: false })
+  paymentAdvice: PaymentAdviceEntity | null;
 }

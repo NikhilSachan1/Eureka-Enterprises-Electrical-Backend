@@ -21,6 +21,8 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
+import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 
 @Injectable()
 export class BankTransferService {
@@ -190,6 +192,12 @@ export class BankTransferService {
         em,
       );
 
+      // Fetch vendor + site details for PDF (outside the critical path — failures logged, not fatal)
+      const [vendor, site] = await Promise.all([
+        em.getRepository(VendorEntity).findOne({ where: { id: bp.vendorId } }),
+        em.getRepository(SiteEntity).findOne({ where: { id: bp.siteId }, relations: ['company'] }),
+      ]);
+
       // Auto-generate payment advice (§5.1.9)
       const advice = await this.paymentAdviceService.createForBankTransfer(
         created.id,
@@ -198,6 +206,25 @@ export class BankTransferService {
         financialYear,
         createdBy,
         em,
+        {
+          vendorName: vendor?.name ?? 'Unknown',
+          vendorEmail: vendor?.email ?? '',
+          vendorGstNumber: vendor?.gstNumber ?? null,
+          vendorAddress: vendor?.fullAddress ?? null,
+          vendorBankName: vendor?.bankName ?? null,
+          vendorAccountNumber: vendor?.accountNumber ?? null,
+          vendorIfscCode: vendor?.ifscCode ?? null,
+          vendorAccountHolderName: vendor?.accountHolderName ?? null,
+          siteName: site?.name ?? 'Unknown',
+          companyName: (site as any)?.company?.name ?? 'Eureka Enterprises',
+          utrNumber: dto.utrNumber,
+          transferDate: dto.transferDate,
+          transferAmount: dto.transferAmount,
+          taxableAmount: Number(bp.taxableAmount),
+          gstAmount: Number(bp.gstAmount),
+          tdsDeductionAmount: Number(bp.tdsDeductionAmount),
+          paymentTotalAmount: Number(bp.paymentTotalAmount),
+        },
       );
 
       return {
@@ -260,6 +287,7 @@ export class BankTransferService {
           'site.company',
           'contractor',
           'vendor',
+          'paymentAdvice',
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
@@ -294,6 +322,7 @@ export class BankTransferService {
         'site.company',
         'contractor',
         'vendor',
+        'paymentAdvice',
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
@@ -375,14 +404,12 @@ export class BankTransferService {
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
 
-      // Check if payment advice exists
-      const adviceExists = await em.query(
-        `SELECT 1 FROM payment_advices WHERE "bankTransferId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [id],
+      // Cascade soft-delete payment advice if it exists
+      await em.query(
+        `UPDATE payment_advices SET "deletedAt" = NOW(), "deletedBy" = $2
+         WHERE "bankTransferId" = $1 AND "deletedAt" IS NULL`,
+        [id, deletedBy],
       );
-      if (adviceExists.length > 0) {
-        throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_DELETE_HAS_ADVICE);
-      }
 
       // Reverse rollups
       if (bt.partyType === PartyType.SALE && bt.invoiceId) {
