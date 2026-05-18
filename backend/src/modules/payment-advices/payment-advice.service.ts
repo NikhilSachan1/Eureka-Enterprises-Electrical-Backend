@@ -82,6 +82,36 @@ export class PaymentAdviceService {
     return { id: advice.id, referenceNumber: advice.referenceNumber };
   }
 
+  /**
+   * Regenerate the PDF for an existing payment advice (same reference number, updated content).
+   * Called when bank transfer is edited — async, does not block the response.
+   */
+  regeneratePdfAsync(bankTransferId: string, pdfData: PaymentAdvicePdfData): void {
+    setImmediate(async () => {
+      try {
+        const advice = await this.dataSource
+          .getRepository(PaymentAdviceEntity)
+          .findOne({ where: { bankTransferId, deletedAt: IsNull() } });
+        if (!advice) return;
+
+        const pdfKey = await this.pdfService.generate({
+          ...pdfData,
+          referenceNumber: advice.referenceNumber,
+          generatedAt: advice.generatedAt,
+          financialYear: advice.financialYear,
+        });
+
+        await this.dataSource
+          .getRepository(PaymentAdviceEntity)
+          .update({ id: advice.id }, { pdfKey });
+
+        this.logger.log(`PDF regenerated for advice ${advice.referenceNumber}`);
+      } catch (err) {
+        this.logger.error(`PDF regeneration failed for bankTransferId ${bankTransferId}: ${err}`);
+      }
+    });
+  }
+
   async findAll(query: GetPaymentAdviceDto) {
     const {
       siteId,
