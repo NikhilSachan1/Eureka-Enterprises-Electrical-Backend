@@ -40,7 +40,7 @@ export class OrgFilesController {
   @ApiOperation({ summary: 'Upload a file into a folder or root' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadFileDto })
-  @UseInterceptors(FileFieldsInterceptor([{ name: ORG_FILE_FIELD_NAME, maxCount: 1 }]))
+  @UseInterceptors(FileFieldsInterceptor([{ name: ORG_FILE_FIELD_NAME, maxCount: 20 }]))
   async uploadFile(
     @Body() dto: UploadFileDto,
     @Req() req: { user: { id: string }; files: any },
@@ -48,8 +48,25 @@ export class OrgFilesController {
     uploadedFiles: { orgFileKeys?: string[] },
   ) {
     const rawFiles: Express.Multer.File[] = req.files?.[ORG_FILE_FIELD_NAME] ?? [];
+    const storageKeys = uploadedFiles?.orgFileKeys ?? [];
+
+    // Multiple files — upload each and return all created nodes
+    if (rawFiles.length > 1) {
+      return this.orgFilesService.uploadFiles(
+        rawFiles.map((f, i) => ({
+          storageKey: storageKeys[i],
+          mimeType: f.mimetype ?? null,
+          size: f.size ?? null,
+          fileName: f.originalname ?? 'file',
+        })),
+        dto.parentId,
+        req.user.id,
+      );
+    }
+
+    // Single file (backward compatible)
     const rawFile = rawFiles[0];
-    const storageKey = uploadedFiles?.orgFileKeys?.[0];
+    const storageKey = storageKeys[0];
 
     return this.orgFilesService.uploadFile(
       {
