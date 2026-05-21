@@ -2,7 +2,7 @@ import { GetOrgFilesDto } from '../dto';
 import { ORG_FILE_SORT_FIELD_MAPPING } from '../constants/org-files.constants';
 
 export const buildListOrgFilesQuery = (filters: GetOrgFilesDto) => {
-  const { parentId, page, pageSize, sortField, sortOrder } = filters;
+  const { parentId, type, search, page, pageSize, sortField, sortOrder } = filters;
 
   const params: any[] = [];
   let paramIndex = 1;
@@ -13,8 +13,21 @@ export const buildListOrgFilesQuery = (filters: GetOrgFilesDto) => {
     whereConditions.push(`n."parentId" = $${paramIndex}`);
     params.push(parentId);
     paramIndex++;
-  } else {
+  } else if (!search) {
+    // Only restrict to root when no search — search scans all levels
     whereConditions.push(`n."parentId" IS NULL`);
+  }
+
+  if (type) {
+    whereConditions.push(`n."type" = $${paramIndex}`);
+    params.push(type);
+    paramIndex++;
+  }
+
+  if (search) {
+    whereConditions.push(`n."name" ILIKE $${paramIndex}`);
+    params.push(`%${search}%`);
+    paramIndex++;
   }
 
   const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
