@@ -78,6 +78,33 @@ export class OrgFilesService {
     return { message: ORG_FILE_RESPONSES.FILE_UPLOADED, data: node };
   }
 
+  async uploadFiles(
+    files: Array<{ storageKey: string; mimeType: string; size: number; fileName: string }>,
+    parentId: string | undefined,
+    userId: string,
+  ) {
+    if (parentId) {
+      await this.validateParentIsFolder(parentId);
+    }
+
+    const nodes = await Promise.all(
+      files.map((f) =>
+        this.orgFilesRepository.create({
+          name: f.fileName,
+          type: OrgFileNodeType.FILE,
+          parentId: parentId ?? null,
+          storageKey: f.storageKey,
+          mimeType: f.mimeType,
+          size: f.size,
+          createdBy: userId,
+          updatedBy: userId,
+        }),
+      ),
+    );
+
+    return { message: ORG_FILE_RESPONSES.FILE_UPLOADED, data: nodes };
+  }
+
   async rename(id: string, dto: RenameNodeDto, userId: string) {
     await this.findNodeOrFail(id);
 
