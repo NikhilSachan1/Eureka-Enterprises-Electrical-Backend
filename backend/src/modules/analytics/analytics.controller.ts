@@ -59,6 +59,22 @@ export class AnalyticsController {
   // ==================== SITE PROFITABILITY ====================
 
   /**
+   * Unified profitability endpoint — filter by siteId, companyId, contractorId, or none (all sites)
+   */
+  @Get('profitability')
+  @ApiOperation({
+    summary: 'Profitability — site / company / contractor level',
+    description:
+      'Returns profitability metrics. Pass siteId for site-level, companyId for company-level, contractorId for contractor-level, or no filter for all sites.',
+  })
+  async getProfitability(@Query() dto: GetSiteProfitabilityDto) {
+    if (dto.siteId) {
+      return await this.analyticsService.getSiteProfitability(dto.siteId, dto);
+    }
+    return await this.analyticsService.getAllSitesProfitability(dto);
+  }
+
+  /**
    * Get profitability comparison for all sites
    */
   @Get('sites/profitability')
