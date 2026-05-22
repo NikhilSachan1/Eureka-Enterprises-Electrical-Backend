@@ -832,6 +832,8 @@ export const getAllSitesProfitabilityQuery = (
   offset = 0,
   startDate?: string | null,
   endDate?: string | null,
+  siteId?: string,
+  contractorId?: string,
 ) => {
   const params: any[] = [];
   const conditions: string[] = ['s."deletedAt" IS NULL'];
@@ -839,6 +841,11 @@ export const getAllSitesProfitabilityQuery = (
   let dateFilterExp = '';
   let dateFilterFuel = '';
   let useSiteDates = false;
+
+  if (siteId) {
+    params.push(siteId);
+    conditions.push(`s.id = $${params.length}`);
+  }
 
   if (status) {
     params.push(status);
@@ -848,6 +855,13 @@ export const getAllSitesProfitabilityQuery = (
   if (companyId) {
     params.push(companyId);
     conditions.push(`s."companyId" = $${params.length}`);
+  }
+
+  if (contractorId) {
+    params.push(contractorId);
+    conditions.push(
+      `EXISTS (SELECT 1 FROM site_contractors sc WHERE sc."siteId" = s.id AND sc."contractorId" = $${params.length})`,
+    );
   }
 
   // Date filters
@@ -1046,9 +1060,19 @@ export const getAllSitesProfitabilityQuery = (
 /**
  * Get total count for all sites profitability (for pagination)
  */
-export const getAllSitesProfitabilityCountQuery = (status?: string, companyId?: string) => {
+export const getAllSitesProfitabilityCountQuery = (
+  status?: string,
+  companyId?: string,
+  siteId?: string,
+  contractorId?: string,
+) => {
   const params: any[] = [];
   const conditions: string[] = ['"deletedAt" IS NULL'];
+
+  if (siteId) {
+    params.push(siteId);
+    conditions.push(`id = $${params.length}`);
+  }
 
   if (status) {
     params.push(status);
@@ -1058,6 +1082,13 @@ export const getAllSitesProfitabilityCountQuery = (status?: string, companyId?: 
   if (companyId) {
     params.push(companyId);
     conditions.push(`"companyId" = $${params.length}`);
+  }
+
+  if (contractorId) {
+    params.push(contractorId);
+    conditions.push(
+      `EXISTS (SELECT 1 FROM site_contractors sc WHERE sc."siteId" = sites.id AND sc."contractorId" = $${params.length})`,
+    );
   }
 
   return {

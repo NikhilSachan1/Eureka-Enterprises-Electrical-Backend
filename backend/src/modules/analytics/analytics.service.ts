@@ -395,9 +395,18 @@ export class AnalyticsService {
           offset,
           dateRange.startDate,
           dateRange.endDate,
+          dto.siteId,
+          dto.contractorId,
         ),
       ),
-      this.executeQuery(queries.getAllSitesProfitabilityCountQuery(dto.status, dto.companyId)),
+      this.executeQuery(
+        queries.getAllSitesProfitabilityCountQuery(
+          dto.status,
+          dto.companyId,
+          dto.siteId,
+          dto.contractorId,
+        ),
+      ),
     ]);
 
     // Map results with expense breakdown

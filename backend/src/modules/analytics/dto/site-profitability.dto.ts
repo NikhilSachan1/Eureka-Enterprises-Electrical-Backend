@@ -9,6 +9,14 @@ import { BaseAnalyticsDto } from './base-analytics.dto';
  */
 export class GetSiteProfitabilityDto extends BaseAnalyticsDto {
   @ApiPropertyOptional({
+    description: 'Filter to a specific site',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsOptional()
+  @IsUUID()
+  siteId?: string;
+
+  @ApiPropertyOptional({
     description: 'Filter by site status (UPCOMING, ONGOING, COMPLETED, HOLD)',
     example: 'ONGOING',
   })
