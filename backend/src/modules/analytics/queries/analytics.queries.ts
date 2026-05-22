@@ -1788,15 +1788,14 @@ export const getSiteTimelineQuery = (
         -- Documents uploaded
         SELECT
           sd.id::text,
-          sd."createdAt"::date,
-          sd."createdAt"::time,
+          (sd."createdAt" AT TIME ZONE 'UTC')::date,
+          (sd."createdAt" AT TIME ZONE 'UTC')::time,
           'DOCUMENT_UPLOADED',
           sd."documentType" || ' Uploaded',
-          sd."documentType" || 
-            CASE WHEN sd."documentNumber" IS NOT NULL THEN ' #' || sd."documentNumber" ELSE '' END ||
-            CASE WHEN sd."totalAmount" > 0 THEN ' - Amount: ₹' || sd."totalAmount" ELSE '' END,
+          sd."documentType" ||
+            CASE WHEN sd."documentNumber" IS NOT NULL THEN ' #' || sd."documentNumber" ELSE '' END,
           NULL
-        FROM site_documents_financial sd
+        FROM site_documents sd
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL
       )
       SELECT * FROM timeline_events
