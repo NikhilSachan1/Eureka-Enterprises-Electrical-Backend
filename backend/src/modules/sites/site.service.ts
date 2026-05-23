@@ -144,7 +144,6 @@ export class SiteService {
       state,
       isActive,
       includeContractors,
-      includeCompany,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -187,8 +186,7 @@ export class SiteService {
       where.isActive = isActive;
     }
 
-    const relations: string[] = [];
-    if (includeCompany) relations.push('company');
+    const relations: string[] = ['company'];
     if (includeContractors) relations.push('siteContractors', 'siteContractors.contractor');
 
     let records = await this.siteRepository.findAll({
