@@ -338,6 +338,9 @@ export class SiteService {
               contractor: {
                 id: sc.contractor.id,
                 name: sc.contractor.name,
+                email: sc.contractor.email,
+                contactNumber: sc.contractor.contactNumber,
+                gstNumber: sc.contractor.gstNumber,
                 fullAddress: sc.contractor.fullAddress,
                 logo: sc.contractor.logo,
               },
@@ -537,15 +540,14 @@ export class SiteService {
         await this.siteRepository.addContractors(id, contractorIds, entityManager);
       }
 
-      // Update vendors if provided (replace all existing links)
+      // Update vendors if provided — remove all, then re-add
       if (vendorIds !== undefined) {
-        // Remove all then re-add — mirrors the contractor update pattern
-        // const existing = await this.dataSource.query(
-        //   `DELETE FROM site_vendors WHERE "siteId" = $1`,
-        //   [id],
-        // );
+        await entityManager.getRepository(SiteVendorEntity).delete({ siteId: id });
         if (vendorIds.length > 0) {
-          await this.siteVendorService.addVendorsToSite(id, vendorIds);
+          const rows = vendorIds.map((vId) =>
+            entityManager.getRepository(SiteVendorEntity).create({ siteId: id, vendorId: vId }),
+          );
+          await entityManager.getRepository(SiteVendorEntity).save(rows);
         }
       }
 
