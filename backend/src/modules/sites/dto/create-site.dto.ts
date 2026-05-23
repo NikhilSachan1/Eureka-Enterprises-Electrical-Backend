@@ -44,6 +44,15 @@ export class CreateSiteDto {
   @IsUUID('4', { each: true })
   contractorIds: string[];
 
+  @ApiPropertyOptional({
+    description: 'List of vendor IDs to link to this site',
+    example: ['uuid1', 'uuid2'],
+  })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  vendorIds?: string[];
+
   @ApiProperty({
     description: 'Site Manager Name',
     example: 'John Doe',

@@ -5,7 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { IsNull, Between, MoreThanOrEqual, LessThanOrEqual, FindOneOptions } from 'typeorm';
+import { IsNull, Between, MoreThanOrEqual, LessThanOrEqual, FindOneOptions, In } from 'typeorm';
 import { DsrRepository } from './dsr.repository';
 import { DailyStatusReportEntity, DsrFileEntity, DsrEditHistoryEntity } from './entities';
 import { CreateDsrDto, ForceCreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
@@ -279,7 +279,9 @@ export class DsrService {
     };
 
     if (siteId) where.siteId = siteId;
-    if (userId) where.userId = userId;
+    if (userId && userId.length > 0) {
+      where.userId = userId.length === 1 ? userId[0] : In(userId);
+    }
     if (status) where.status = status;
     if (weatherCondition) where.weatherCondition = weatherCondition;
 
@@ -311,7 +313,18 @@ export class DsrService {
     return this.utilityService.listResponse(
       records.map((record) => ({
         ...record,
-        site: record.site ? { id: record.site.id, name: record.site.name } : null,
+        site: record.site
+          ? {
+              id: record.site.id,
+              name: record.site.name,
+              status: record.site.status,
+              city: record.site.city,
+              state: record.site.state,
+              fullAddress: record.site.fullAddress,
+              startDate: record.site.startDate,
+              endDate: record.site.endDate,
+            }
+          : null,
         user: record.user
           ? {
               id: record.user.id,
@@ -383,7 +396,18 @@ export class DsrService {
     // Transform response to include all necessary information
     return {
       ...record,
-      site: record.site ? { id: record.site.id, name: record.site.name } : null,
+      site: record.site
+        ? {
+            id: record.site.id,
+            name: record.site.name,
+            status: record.site.status,
+            city: record.site.city,
+            state: record.site.state,
+            fullAddress: record.site.fullAddress,
+            startDate: record.site.startDate,
+            endDate: record.site.endDate,
+          }
+        : null,
       user: record.user
         ? {
             id: record.user.id,
@@ -616,7 +640,7 @@ export class DsrService {
 
   // Get DSRs by user
   async getDsrsByUser(userId: string, options?: Partial<GetDsrDto>) {
-    return this.findAll({ ...options, userId } as GetDsrDto);
+    return this.findAll({ ...options, userId: [userId] } as GetDsrDto);
   }
 
   // Get edit history for a DSR
@@ -639,7 +663,7 @@ export class DsrService {
     // Find all versions (both active and inactive) that share the same original ID
     const versions = await this.dsrRepository.findAll({
       where: [{ id: originalId }, { originalDsrId: originalId }],
-      relations: ['files', 'createdByUser', 'updatedByUser'],
+      relations: ['files', 'site', 'createdByUser', 'updatedByUser'],
       order: { versionNumber: 'DESC' },
     });
 
@@ -651,11 +675,23 @@ export class DsrService {
       editReason: version.editReason,
       createdAt: version.createdAt,
       updatedAt: version.updatedAt,
+      site: version.site
+        ? {
+            id: version.site.id,
+            name: version.site.name,
+            status: version.site.status,
+            city: version.site.city,
+            state: version.site.state,
+            fullAddress: version.site.fullAddress,
+          }
+        : null,
       createdBy: version.createdByUser
         ? {
             id: version.createdByUser.id,
             firstName: version.createdByUser.firstName,
             lastName: version.createdByUser.lastName,
+            email: version.createdByUser.email,
+            employeeId: version.createdByUser.employeeId,
           }
         : null,
       updatedBy: version.updatedByUser
@@ -663,6 +699,8 @@ export class DsrService {
             id: version.updatedByUser.id,
             firstName: version.updatedByUser.firstName,
             lastName: version.updatedByUser.lastName,
+            email: version.updatedByUser.email,
+            employeeId: version.updatedByUser.employeeId,
           }
         : null,
       // Include key fields for comparison

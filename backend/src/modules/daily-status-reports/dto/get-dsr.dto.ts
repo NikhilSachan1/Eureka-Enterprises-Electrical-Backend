@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsDateString, IsArray } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
@@ -9,10 +9,16 @@ export class GetDsrDto extends BaseGetDto {
   @IsOptional()
   siteId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by user ID' })
-  @IsUUID()
+  @ApiPropertyOptional({
+    description: 'Filter by one or more user IDs',
+    example: ['uuid1', 'uuid2'],
+    isArray: true,
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
   @IsOptional()
-  userId?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  userId?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by status' })
   @IsString()

@@ -16,6 +16,9 @@ import {
   SiteStatus,
 } from './constants/site.constants';
 import { BillingService } from 'src/modules/billing/billing.service';
+import { forwardRef, Inject } from '@nestjs/common';
+import { SiteVendorService } from '../site-vendors/site-vendor.service';
+import { SiteVendorEntity } from '../site-vendors/entities/site-vendor.entity';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import {
   SortOrder,
@@ -48,6 +51,8 @@ export class SiteService {
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
     private readonly billingService: BillingService,
+    @Inject(forwardRef(() => SiteVendorService))
+    private readonly siteVendorService: SiteVendorService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -84,7 +89,7 @@ export class SiteService {
 
     return await this.dataSource.transaction(async (entityManager) => {
       // Create site
-      const { contractorIds, startDate, endDate, ...siteData } = createDto;
+      const { contractorIds, vendorIds, startDate, endDate, ...siteData } = createDto;
       const site = await this.siteRepository.create(
         {
           ...siteData,
@@ -99,6 +104,14 @@ export class SiteService {
 
       // Add contractors
       await this.siteRepository.addContractors(site.id, contractorIds, entityManager);
+
+      // Add vendors if provided — inside same transaction
+      if (vendorIds && vendorIds.length > 0) {
+        const rows = vendorIds.map((vId) =>
+          entityManager.getRepository(SiteVendorEntity).create({ siteId: site.id, vendorId: vId }),
+        );
+        await entityManager.getRepository(SiteVendorEntity).save(rows);
+      }
 
       // Log initial status in history (fromStatus is null for new sites)
       await this.siteRepository.createStatusHistory(
@@ -201,14 +214,32 @@ export class SiteService {
     let healthScoreMap: Map<string, { healthScore: number; healthGrade: string }> = new Map();
     const allocationMap: Map<string, SiteAllocationInfo> = new Map();
 
+    const vendorsBySite = new Map<string, any[]>();
+
     if (siteIds.length > 0) {
       const healthQuery = getSiteHealthScoresQuery(siteIds);
       const allocationQuery = getAllocatedEmployeesBySitesQuery(siteIds);
+      const placeholders = siteIds.map((_, i) => `$${i + 1}`).join(',');
 
-      const [healthResults, allocationResults] = await Promise.all([
+      const [healthResults, allocationResults, vendorResults] = await Promise.all([
         this.dataSource.query(healthQuery.query, healthQuery.params),
         this.dataSource.query(allocationQuery.query, allocationQuery.params),
+        this.dataSource.query(
+          `SELECT sv."siteId", v.id, v.name, v.email, v."contactNumber",
+                  v."vendorType", v."gstNumber", v."isActive"
+           FROM site_vendors sv
+           JOIN vendors v ON v.id = sv."vendorId" AND v."deletedAt" IS NULL
+           WHERE sv."siteId" IN (${placeholders})`,
+          siteIds,
+        ),
       ]);
+
+      // Build vendors-by-site map
+      for (const row of vendorResults) {
+        const { siteId, ...vendor } = row;
+        if (!vendorsBySite.has(siteId)) vendorsBySite.set(siteId, []);
+        vendorsBySite.get(siteId)!.push(vendor);
+      }
 
       // Build health score map
       healthScoreMap = new Map(
@@ -313,6 +344,7 @@ export class SiteService {
             }),
           })),
         }),
+        vendors: vendorsBySite.get(site.id) ?? [],
       };
     });
 
@@ -369,17 +401,25 @@ export class SiteService {
         ]
       : [];
 
-    const site = await this.findOneOrFail({
-      where: { id },
-      relations,
-    });
+    const [site, siteVendors] = await Promise.all([
+      this.findOneOrFail({ where: { id }, relations }),
+      includeRelations
+        ? this.dataSource.query(
+            `SELECT v.id, v.name, v.email, v."contactNumber", v."vendorType",
+                    v."gstNumber", v."fullAddress", v.city, v.state, v."isActive"
+             FROM site_vendors sv
+             JOIN vendors v ON v.id = sv."vendorId" AND v."deletedAt" IS NULL
+             WHERE sv."siteId" = $1`,
+            [id],
+          )
+        : Promise.resolve([]),
+    ]);
 
     // Transform response with limited relation fields
     const { company, siteContractors, createdByUser, updatedByUser, ...siteData } = site;
 
     return {
       ...siteData,
-      // Company with limited fields
       ...(company && {
         company: {
           id: company.id,
@@ -388,7 +428,6 @@ export class SiteService {
           logo: company.logo,
         },
       }),
-      // Site contractors with limited contractor fields
       ...(siteContractors && {
         siteContractors: siteContractors.map((sc) => ({
           id: sc.id,
@@ -404,7 +443,7 @@ export class SiteService {
           }),
         })),
       }),
-      // Created by user with limited fields
+      vendors: siteVendors,
       ...(createdByUser && {
         createdByUser: {
           id: createdByUser.id,
@@ -415,7 +454,6 @@ export class SiteService {
           profilePicture: createdByUser.profilePicture,
         },
       }),
-      // Updated by user with limited fields
       ...(updatedByUser && {
         updatedByUser: {
           id: updatedByUser.id,
@@ -471,7 +509,13 @@ export class SiteService {
 
     return await this.dataSource.transaction(async (entityManager) => {
       // Update site
-      const { contractorIds, startDate: startDateStr, endDate: endDateStr, ...dtoData } = updateDto;
+      const {
+        contractorIds,
+        vendorIds,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        ...dtoData
+      } = updateDto;
       const updateData: Partial<SiteEntity> = {
         ...dtoData,
         fullAddress,
@@ -491,6 +535,18 @@ export class SiteService {
       if (updateDto.contractorIds) {
         await this.siteRepository.removeContractors(id, undefined, entityManager);
         await this.siteRepository.addContractors(id, contractorIds, entityManager);
+      }
+
+      // Update vendors if provided (replace all existing links)
+      if (vendorIds !== undefined) {
+        // Remove all then re-add — mirrors the contractor update pattern
+        // const existing = await this.dataSource.query(
+        //   `DELETE FROM site_vendors WHERE "siteId" = $1`,
+        //   [id],
+        // );
+        if (vendorIds.length > 0) {
+          await this.siteVendorService.addVendorsToSite(id, vendorIds);
+        }
       }
 
       return this.utilityService.getSuccessMessage(

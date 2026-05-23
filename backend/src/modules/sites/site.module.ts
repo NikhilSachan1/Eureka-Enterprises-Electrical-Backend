@@ -12,6 +12,8 @@ import { ContractorModule } from '../contractors/contractor.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { BillingModule } from '../billing/billing.module';
+import { forwardRef } from '@nestjs/common';
+import { SiteVendorModule } from '../site-vendors/site-vendor.module';
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { BillingModule } from '../billing/billing.module';
     ConfigurationsModule,
     ConfigSettingsModule,
     BillingModule,
+    forwardRef(() => SiteVendorModule),
   ],
   controllers: [SiteController],
   providers: [SiteService, SiteRepository],
