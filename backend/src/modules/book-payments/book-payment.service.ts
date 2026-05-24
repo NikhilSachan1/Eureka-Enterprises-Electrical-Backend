@@ -7,6 +7,8 @@ import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-pa
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
+import { getFinancialYear } from 'src/modules/common/financials/financial.constants';
+import { insertTdsRegisterEntryFromBookPaymentQuery } from 'src/modules/site-invoices/queries/site-invoice.queries';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -94,6 +96,27 @@ export class BookPaymentService {
         { bookedTotal: paymentTotalAmount },
         em,
       );
+
+      // Project TDS register entry if TDS was deducted
+      if (tdsAmount > 0) {
+        const bookingDate = new Date(dto.bookingDate);
+        const invoiceMonth = `${bookingDate.getUTCFullYear()}-${String(
+          bookingDate.getUTCMonth() + 1,
+        ).padStart(2, '0')}`;
+        const financialYear = getFinancialYear(bookingDate);
+        await em.query(insertTdsRegisterEntryFromBookPaymentQuery, [
+          invoice.id,
+          created.id,
+          invoice.siteId,
+          invoice.partyType,
+          invoice.contractorId ?? null,
+          invoice.vendorId ?? null,
+          invoiceMonth,
+          financialYear,
+          Number(dto.taxableAmount),
+          tdsAmount,
+        ]);
+      }
 
       return { message: BOOK_PAYMENT_RESPONSES.CREATED, id: created.id };
     });

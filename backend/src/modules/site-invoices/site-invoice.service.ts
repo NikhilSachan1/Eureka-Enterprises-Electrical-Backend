@@ -23,10 +23,7 @@ import {
   UnlockRequestDto,
 } from 'src/modules/purchase-orders/dto/approval.dto';
 import { INVOICE_ERRORS, INVOICE_RESPONSES } from './constants/site-invoice.constants';
-import {
-  insertGstRegisterEntryQuery,
-  insertTdsRegisterEntryQuery,
-} from './queries/site-invoice.queries';
+import { insertGstRegisterEntryQuery } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
@@ -297,7 +294,7 @@ export class SiteInvoiceService {
       // These are created atomically with the approval so they always exist
       // exactly when (and only when) the invoice is approved.
       await this.projectGstRegisterEntry(inv, em);
-      await this.projectTdsRegisterEntry(inv, em);
+      // TDS is now projected from book payments, not invoice approval
 
       return { message: INVOICE_RESPONSES.APPROVED };
     });
@@ -326,30 +323,6 @@ export class SiteInvoiceService {
       gstType,
       Number(inv.taxableAmount),
       Number(inv.gstAmount),
-    ]);
-  }
-
-  private async projectTdsRegisterEntry(
-    inv: SiteInvoiceEntity,
-    em: import('typeorm').EntityManager,
-  ) {
-    if (Number(inv.tdsAmount) === 0) return;
-    const invoiceDate = new Date(inv.invoiceDate);
-    const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(
-      invoiceDate.getUTCMonth() + 1,
-    ).padStart(2, '0')}`;
-    const financialYear = getFinancialYear(invoiceDate);
-
-    await em.query(insertTdsRegisterEntryQuery, [
-      inv.id,
-      inv.siteId,
-      inv.partyType,
-      inv.contractorId ?? null,
-      inv.vendorId ?? null,
-      invoiceMonth,
-      financialYear,
-      Number(inv.taxableAmount),
-      Number(inv.tdsAmount),
     ]);
   }
 

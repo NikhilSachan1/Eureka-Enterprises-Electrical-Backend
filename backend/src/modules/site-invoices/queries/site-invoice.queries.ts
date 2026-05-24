@@ -27,3 +27,12 @@ export const insertTdsRegisterEntryQuery = `
   VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, false, NOW(), NOW())
   ON CONFLICT DO NOTHING
 `;
+
+export const insertTdsRegisterEntryFromBookPaymentQuery = `
+  INSERT INTO tds_register_entries
+    (id, "invoiceId", "bookPaymentId", "siteId", "partyType", "contractorId", "vendorId",
+     "invoiceMonth", "financialYear", "taxableAmount", "tdsAmount",
+     "isVerified", "createdAt", "updatedAt")
+  VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, NOW(), NOW())
+  ON CONFLICT ("bookPaymentId", "financialYear") WHERE "bookPaymentId" IS NOT NULL DO NOTHING
+`;
