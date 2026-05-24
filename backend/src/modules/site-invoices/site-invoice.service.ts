@@ -116,6 +116,8 @@ export class SiteInvoiceService {
       dateFrom,
       dateTo,
       search,
+      poNumber,
+      jmcNumber,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -136,6 +138,12 @@ export class SiteInvoiceService {
     else if (dateFrom) where.invoiceDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.invoiceDate = LessThanOrEqual(dateTo);
     if (search) where.invoiceNumber = ILike(`%${search}%`);
+    if (jmcNumber || poNumber) {
+      const jmcCond: any = {};
+      if (jmcNumber) jmcCond.jmcNumber = ILike(`%${jmcNumber}%`);
+      if (poNumber) jmcCond.po = { poNumber: ILike(`%${poNumber}%`) };
+      where.jmc = jmcCond;
+    }
 
     const [records, totalRecords] = await Promise.all([
       this.invoiceRepository.findAll({

@@ -86,6 +86,7 @@ export class JmcService {
       dateFrom,
       dateTo,
       search,
+      poNumber,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -105,6 +106,7 @@ export class JmcService {
     else if (dateFrom) where.jmcDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.jmcDate = LessThanOrEqual(dateTo);
     if (search) where.jmcNumber = ILike(`%${search}%`);
+    if (poNumber) where.po = { poNumber: ILike(`%${poNumber}%`) };
 
     const [records, totalRecords] = await Promise.all([
       this.jmcRepository.findAll({
