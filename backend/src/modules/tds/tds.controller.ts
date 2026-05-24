@@ -6,6 +6,7 @@ import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 import { VerifyEntryDto } from 'src/modules/common/financials/verify.dto';
+import { RevertEntryDto } from 'src/modules/common/financials/revert.dto';
 
 @ApiTags('TDS')
 @ApiBearerAuth('JWT-auth')
@@ -43,8 +44,12 @@ export class TdsController {
   @ApiOperation({
     summary: 'Revert verification of a TDS register entry (blocked if payment released)',
   })
-  revertEntry(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
-    return this.tdsService.revertEntry(id, userId);
+  revertEntry(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser('id') userId: string,
+    @Body() dto: RevertEntryDto,
+  ) {
+    return this.tdsService.revertEntry(id, userId, dto.reason);
   }
 
   @Post('payments')

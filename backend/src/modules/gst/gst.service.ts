@@ -69,10 +69,21 @@ export class GstService {
   async findRegisterEntryById(id: string) {
     const entry = await this.gstRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
+      relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'verifiedByUser'],
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
-    return entry;
+    return {
+      ...entry,
+      verifiedByUser: entry.verifiedByUser
+        ? {
+            id: entry.verifiedByUser.id,
+            firstName: entry.verifiedByUser.firstName,
+            lastName: entry.verifiedByUser.lastName,
+            email: entry.verifiedByUser.email,
+            employeeId: entry.verifiedByUser.employeeId,
+          }
+        : null,
+    };
   }
 
   /**
@@ -114,7 +125,7 @@ export class GstService {
   /**
    * Revert verification of a GST register entry (blocked if payment released).
    */
-  async revertEntry(id: string, revertedBy: string) {
+  async revertEntry(id: string, revertedBy: string, reason: string) {
     const entry = await this.gstRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
     });
@@ -130,13 +141,13 @@ export class GstService {
       throw new BadRequestException(GST_ERRORS.CANNOT_REVERT_PAYMENT_RELEASED);
     }
 
-    // Pin to the row's partition for partition pruning.
     await this.gstRepository.updateRegisterEntry(
       { id, financialYear: entry.financialYear },
       {
         isVerified: false,
         verifiedAt: null,
         verifiedBy: null,
+        revertReason: reason,
         updatedBy: revertedBy,
       },
     );
