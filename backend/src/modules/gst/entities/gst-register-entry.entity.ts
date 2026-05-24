@@ -4,6 +4,7 @@ import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoi
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { UserEntity } from 'src/modules/users/entities/user.entity';
 
 /**
  * GST Register Entry — projected from invoices at approval time (§5.1.13)
@@ -76,6 +77,14 @@ export class GstRegisterEntryEntity extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   verifiedBy: string | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'verifiedBy' })
+  verifiedByUser: UserEntity | null;
+
+  // Revert reason (set when verification is reverted)
+  @Column({ type: 'text', nullable: true })
+  revertReason: string | null;
 
   // Optional document attached during verification
   @Column({ type: 'varchar', length: 500, nullable: true })
