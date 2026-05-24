@@ -82,6 +82,17 @@ export class TdsRegisterEntryEntity extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   verifiedBy: string | null;
 
+  // Optional document attached during verification
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  verifyFileKey: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  verifyFileName: string | null;
+
+  // Optional remarks during verification
+  @Column({ type: 'text', nullable: true })
+  verifyRemarks: string | null;
+
   // Set once entry is included in a TDS payment
   @Column({ type: 'uuid', nullable: true })
   tdsPaymentId: string | null;

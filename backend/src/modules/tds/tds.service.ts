@@ -77,7 +77,11 @@ export class TdsService {
   /**
    * Verify a TDS register entry (both sides).
    */
-  async verifyEntry(id: string, verifiedBy: string) {
+  async verifyEntry(
+    id: string,
+    verifiedBy: string,
+    dto?: { fileKey?: string; fileName?: string; remarks?: string },
+  ) {
     const entry = await this.tdsRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
     });
@@ -87,15 +91,15 @@ export class TdsService {
       throw new ConflictException(TDS_ERRORS.ALREADY_VERIFIED);
     }
 
-    // Pin the update to the row's partition.
-    // tds_register_entries is partitioned by RANGE (financialYear), so
-    // including financialYear in WHERE lets Postgres prune to one partition.
     await this.tdsRepository.updateRegisterEntry(
       { id, financialYear: entry.financialYear },
       {
         isVerified: true,
         verifiedAt: new Date(),
         verifiedBy,
+        verifyFileKey: dto?.fileKey ?? null,
+        verifyFileName: dto?.fileName ?? null,
+        verifyRemarks: dto?.remarks ?? null,
         updatedBy: verifiedBy,
       },
     );

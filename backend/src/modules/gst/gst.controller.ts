@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Query, ParseUUIDPipe } from '@nestj
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GstService } from './gst.service';
 import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
+import { VerifyEntryDto } from 'src/modules/common/financials/verify.dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
@@ -28,8 +29,12 @@ export class GstController {
   @Post('register/:id/verify')
   @RequiredPermission('financials.gst.verify')
   @ApiOperation({ summary: 'Verify a GST register entry (PURCHASE side only)' })
-  verifyEntry(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
-    return this.gstService.verifyEntry(id, userId);
+  verifyEntry(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser('id') userId: string,
+    @Body() dto: VerifyEntryDto,
+  ) {
+    return this.gstService.verifyEntry(id, userId, dto);
   }
 
   @Post('register/:id/revert')

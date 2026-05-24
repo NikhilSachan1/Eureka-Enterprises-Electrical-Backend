@@ -5,6 +5,7 @@ import { GetTdsRegisterDto, CreateTdsPaymentDto } from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
+import { VerifyEntryDto } from 'src/modules/common/financials/verify.dto';
 
 @ApiTags('TDS')
 @ApiBearerAuth('JWT-auth')
@@ -29,8 +30,12 @@ export class TdsController {
   @Post('register/:id/verify')
   @RequiredPermission('financials.tds.verify')
   @ApiOperation({ summary: 'Verify a TDS register entry' })
-  verifyEntry(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
-    return this.tdsService.verifyEntry(id, userId);
+  verifyEntry(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser('id') userId: string,
+    @Body() dto: VerifyEntryDto,
+  ) {
+    return this.tdsService.verifyEntry(id, userId, dto);
   }
 
   @Post('register/:id/revert')

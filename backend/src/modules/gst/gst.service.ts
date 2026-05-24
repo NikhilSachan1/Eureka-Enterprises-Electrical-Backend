@@ -78,7 +78,11 @@ export class GstService {
   /**
    * Verify a GST register entry (PURCHASE side only).
    */
-  async verifyEntry(id: string, verifiedBy: string) {
+  async verifyEntry(
+    id: string,
+    verifiedBy: string,
+    dto?: { fileKey?: string; fileName?: string; remarks?: string },
+  ) {
     const entry = await this.gstRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
     });
@@ -97,6 +101,9 @@ export class GstService {
         isVerified: true,
         verifiedAt: new Date(),
         verifiedBy,
+        verifyFileKey: dto?.fileKey ?? null,
+        verifyFileName: dto?.fileName ?? null,
+        verifyRemarks: dto?.remarks ?? null,
         updatedBy: verifiedBy,
       },
     );
