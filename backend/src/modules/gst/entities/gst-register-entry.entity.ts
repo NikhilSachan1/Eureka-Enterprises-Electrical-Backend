@@ -7,7 +7,7 @@ import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 
 /**
  * GST Register Entry — projected from invoices at approval time (§5.1.13)
- * 
+ *
  * Sale side: gstType = GST-1 (output tax), no verify flow
  * Purchase side: gstType = GST-3B (input tax), with verify/revert/release flow
  */
@@ -76,6 +76,17 @@ export class GstRegisterEntryEntity extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   verifiedBy: string | null;
+
+  // Optional document attached during verification
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  verifyFileKey: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  verifyFileName: string | null;
+
+  // Optional remarks during verification
+  @Column({ type: 'text', nullable: true })
+  verifyRemarks: string | null;
 
   // Set once entry is included in a released GST payment
   @Column({ type: 'uuid', nullable: true })
