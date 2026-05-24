@@ -1,16 +1,21 @@
 import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
+import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 
 /**
- * TDS Register Entry — projected from invoices at approval time (§5.1.15)
+ * TDS Register Entry — projected from book payments (PURCHASE) or invoice approval (SALE).
  * Applies to BOTH SALE and PURCHASE sides.
  */
 @Entity('tds_register_entries')
-@Index('IDX_TDS_REG_INVOICE', ['invoiceId'], { unique: true })
+@Index('IDX_TDS_REG_INVOICE', ['invoiceId'])
+@Index('IDX_TDS_REG_BOOK_PAYMENT', ['bookPaymentId', 'financialYear'], {
+  unique: true,
+  where: '"bookPaymentId" IS NOT NULL',
+})
 @Index('IDX_TDS_REG_SITE', ['siteId'])
 @Index('IDX_TDS_REG_PARTY_TYPE', ['partyType'])
 @Index('IDX_TDS_REG_MONTH', ['invoiceMonth'])
@@ -22,6 +27,13 @@ export class TdsRegisterEntryEntity extends BaseEntity {
   @ManyToOne(() => SiteInvoiceEntity)
   @JoinColumn({ name: 'invoiceId' })
   invoice: SiteInvoiceEntity;
+
+  @Column({ type: 'uuid', nullable: true })
+  bookPaymentId: string | null;
+
+  @ManyToOne(() => BookPaymentEntity, { nullable: true })
+  @JoinColumn({ name: 'bookPaymentId' })
+  bookPayment: BookPaymentEntity | null;
 
   @Column({ type: 'uuid' })
   siteId: string;
