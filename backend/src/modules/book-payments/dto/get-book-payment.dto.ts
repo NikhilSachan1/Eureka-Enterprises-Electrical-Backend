@@ -58,6 +58,18 @@ export class GetBookPaymentDto {
   @IsOptional()
   search?: string;
 
+  @ApiPropertyOptional({ description: 'Search by parent PO number (partial, case-insensitive)' })
+  @IsString()
+  @IsOptional()
+  poNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Search by parent invoice number (partial, case-insensitive)',
+  })
+  @IsString()
+  @IsOptional()
+  invoiceNumber?: string;
+
   @ApiPropertyOptional({ description: 'Sort field', default: 'createdAt' })
   @IsString()
   @IsOptional()

@@ -69,6 +69,8 @@ export class SiteReportService {
       dateFrom,
       dateTo,
       search,
+      poNumber,
+      jmcNumber,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -86,6 +88,12 @@ export class SiteReportService {
     else if (dateFrom) where.reportDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.reportDate = LessThanOrEqual(dateTo);
     if (search) where.reportNumber = ILike(`%${search}%`);
+    if (jmcNumber || poNumber) {
+      const jmcCond: any = {};
+      if (jmcNumber) jmcCond.jmcNumber = ILike(`%${jmcNumber}%`);
+      if (poNumber) jmcCond.po = { poNumber: ILike(`%${poNumber}%`) };
+      where.jmc = jmcCond;
+    }
 
     const [records, totalRecords] = await Promise.all([
       this.reportRepository.findAll({

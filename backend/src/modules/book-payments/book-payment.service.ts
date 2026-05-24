@@ -109,6 +109,8 @@ export class BookPaymentService {
       dateFrom,
       dateTo,
       search,
+      poNumber,
+      invoiceNumber,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -125,6 +127,12 @@ export class BookPaymentService {
     else if (dateFrom) where.bookingDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.bookingDate = LessThanOrEqual(dateTo);
     if (search) where.remarks = ILike(`%${search}%`);
+    if (invoiceNumber || poNumber) {
+      const invCond: any = {};
+      if (invoiceNumber) invCond.invoiceNumber = ILike(`%${invoiceNumber}%`);
+      if (poNumber) invCond.jmc = { po: { poNumber: ILike(`%${poNumber}%`) } };
+      where.invoice = invCond;
+    }
 
     const [records, totalRecords] = await Promise.all([
       this.bookPaymentRepository.findAll({

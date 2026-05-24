@@ -249,6 +249,8 @@ export class BankTransferService {
       dateFrom,
       dateTo,
       search,
+      poNumber,
+      invoiceNumber,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -268,6 +270,12 @@ export class BankTransferService {
     else if (dateFrom) where.transferDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.transferDate = LessThanOrEqual(dateTo);
     if (search) where.utrNumber = ILike(`%${search}%`);
+    if (invoiceNumber || poNumber) {
+      const invCond: any = {};
+      if (invoiceNumber) invCond.invoiceNumber = ILike(`%${invoiceNumber}%`);
+      if (poNumber) invCond.jmc = { po: { poNumber: ILike(`%${poNumber}%`) } };
+      where.invoice = invCond;
+    }
 
     const [records, totalRecords] = await Promise.all([
       this.bankTransferRepository.findAll({

@@ -85,4 +85,9 @@ export class GetJmcDto extends BaseGetDto {
   @IsString()
   @IsOptional()
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Search by parent PO number (partial, case-insensitive)' })
+  @IsString()
+  @IsOptional()
+  poNumber?: string;
 }

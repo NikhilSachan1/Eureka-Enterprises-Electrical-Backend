@@ -94,4 +94,14 @@ export class GetSiteInvoiceDto extends BaseGetDto {
   @IsString()
   @IsOptional()
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Search by parent PO number (partial, case-insensitive)' })
+  @IsString()
+  @IsOptional()
+  poNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Search by parent JMC number (partial, case-insensitive)' })
+  @IsString()
+  @IsOptional()
+  jmcNumber?: string;
 }
