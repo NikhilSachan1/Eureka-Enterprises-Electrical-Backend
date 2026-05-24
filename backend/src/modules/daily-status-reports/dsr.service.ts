@@ -663,7 +663,7 @@ export class DsrService {
     // Find all versions (both active and inactive) that share the same original ID
     const versions = await this.dsrRepository.findAll({
       where: [{ id: originalId }, { originalDsrId: originalId }],
-      relations: ['files', 'site', 'createdByUser', 'updatedByUser'],
+      relations: ['files', 'site', 'site.company', 'createdByUser', 'updatedByUser'],
       order: { versionNumber: 'DESC' },
     });
 
@@ -683,6 +683,13 @@ export class DsrService {
             city: version.site.city,
             state: version.site.state,
             fullAddress: version.site.fullAddress,
+            company: version.site.company
+              ? {
+                  id: version.site.company.id,
+                  name: version.site.company.name,
+                  logo: version.site.company.logo,
+                }
+              : null,
           }
         : null,
       createdBy: version.createdByUser
