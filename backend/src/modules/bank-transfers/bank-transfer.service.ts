@@ -23,6 +23,7 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+import { insertTdsRegisterEntryFromBankTransferQuery } from 'src/modules/site-invoices/queries/site-invoice.queries';
 
 @Injectable()
 export class BankTransferService {
@@ -82,6 +83,8 @@ export class BankTransferService {
 
       const financialYear = getFinancialYear(dto.transferDate);
 
+      const tdsDeducted = dto.tdsDeducted ?? 0;
+
       const created = await this.bankTransferRepository.create(
         {
           partyType: PartyType.SALE,
@@ -98,6 +101,8 @@ export class BankTransferService {
           proofFileKey: dto.proofFileKey ?? null,
           proofFileName: dto.proofFileName ?? null,
           remarks: dto.remarks ?? null,
+          tdsDeducted,
+          tdsPercentage: dto.tdsPercentage ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
           approvalBy: createdBy,
           approvalAt: new Date(),
@@ -115,6 +120,26 @@ export class BankTransferService {
         { paidTotal: dto.transferAmount, lastPaymentAt: new Date() },
         em,
       );
+
+      // Project TDS register entry if contractor deducted TDS
+      if (tdsDeducted > 0) {
+        const transferDate = new Date(dto.transferDate);
+        const invoiceMonth = `${transferDate.getUTCFullYear()}-${String(
+          transferDate.getUTCMonth() + 1,
+        ).padStart(2, '0')}`;
+        await em.query(insertTdsRegisterEntryFromBankTransferQuery, [
+          invoice.id,
+          created.id,
+          invoice.siteId,
+          PartyType.SALE,
+          invoice.contractorId ?? null,
+          null,
+          invoiceMonth,
+          financialYear,
+          Number(invoice.taxableAmount),
+          tdsDeducted,
+        ]);
+      }
 
       return { message: BANK_TRANSFER_RESPONSES.CREATED, id: created.id };
     });

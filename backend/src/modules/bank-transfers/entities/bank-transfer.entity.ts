@@ -95,6 +95,13 @@ export class BankTransferEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
 
+  // TDS deducted by contractor (SALE side only)
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  tdsDeducted: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  tdsPercentage: number | null;
+
   // Auto-approved (BRD §5.1.8)
   @Column({ type: 'varchar', length: 20, default: FinancialApprovalStatus.APPROVED })
   approvalStatus: string;

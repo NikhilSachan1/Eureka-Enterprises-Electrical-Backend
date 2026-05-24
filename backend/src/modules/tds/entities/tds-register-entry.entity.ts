@@ -3,6 +3,8 @@ import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+// Forward ref to avoid circular
+import type { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
@@ -16,6 +18,10 @@ import { UserEntity } from 'src/modules/users/entities/user.entity';
 @Index('IDX_TDS_REG_BOOK_PAYMENT', ['bookPaymentId', 'financialYear'], {
   unique: true,
   where: '"bookPaymentId" IS NOT NULL',
+})
+@Index('IDX_TDS_REG_BANK_TRANSFER', ['bankTransferId', 'financialYear'], {
+  unique: true,
+  where: '"bankTransferId" IS NOT NULL',
 })
 @Index('IDX_TDS_REG_SITE', ['siteId'])
 @Index('IDX_TDS_REG_PARTY_TYPE', ['partyType'])
@@ -35,6 +41,13 @@ export class TdsRegisterEntryEntity extends BaseEntity {
   @ManyToOne(() => BookPaymentEntity, { nullable: true })
   @JoinColumn({ name: 'bookPaymentId' })
   bookPayment: BookPaymentEntity | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  bankTransferId: string | null;
+
+  @ManyToOne('BankTransferEntity', { nullable: true })
+  @JoinColumn({ name: 'bankTransferId' })
+  bankTransfer: BankTransferEntity | null;
 
   @Column({ type: 'uuid' })
   siteId: string;

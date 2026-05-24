@@ -1,13 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsUUID,
-  IsDateString,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-  IsEnum,
-} from 'class-validator';
+import { IsUUID, IsDateString, IsNumber, IsOptional, IsString, Min, IsEnum } from 'class-validator';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 
 export class CreateBankTransferDto {
@@ -47,6 +39,24 @@ export class CreateBankTransferDto {
   @IsString()
   @IsOptional()
   proofFileName?: string;
+
+  @ApiPropertyOptional({
+    description: 'TDS deducted by contractor (SALE side only) — auto-creates TDS register entry',
+    example: 200,
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  tdsDeducted?: number;
+
+  @ApiPropertyOptional({
+    description: 'TDS percentage (informational, SALE side only)',
+    example: 2,
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  tdsPercentage?: number;
 
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()
