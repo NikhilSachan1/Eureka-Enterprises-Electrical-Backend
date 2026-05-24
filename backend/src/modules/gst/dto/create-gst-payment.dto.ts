@@ -1,23 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsUUID,
-  IsDateString,
-  IsString,
-  IsOptional,
-} from 'class-validator';
+import { IsUUID, IsDateString, IsString, IsOptional, IsArray, ArrayMinSize } from 'class-validator';
 
 export class CreateGstPaymentDto {
-  @ApiProperty({ description: 'Site ID' })
-  @IsUUID()
-  siteId: string;
-
-  @ApiProperty({ description: 'Vendor ID' })
-  @IsUUID()
-  vendorId: string;
-
-  @ApiProperty({ description: 'Payment month (YYYY-MM)' })
-  @IsString()
-  paymentMonth: string;
+  @ApiProperty({
+    description: 'GST register entry IDs to release (bulk selection)',
+    type: [String],
+    example: ['uuid1', 'uuid2'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  entryIds: string[];
 
   @ApiProperty({ description: 'UTR number' })
   @IsString()

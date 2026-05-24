@@ -149,49 +149,45 @@ export class TdsService {
   }
 
   /**
-   * Release TDS payment — atomic across all verified-unpaid entries for the month.
+   * Release TDS payment — entry-wise bulk selection.
    */
   async releasePayment(dto: CreateTdsPaymentDto, releasedBy: string) {
-    // Validate party type requirements
-    if (dto.partyType === PartyType.SALE && !dto.contractorId) {
-      throw new BadRequestException(TDS_ERRORS.INVALID_PARTY_CONTRACTOR);
-    }
-    if (dto.partyType === PartyType.PURCHASE && !dto.vendorId) {
-      throw new BadRequestException(TDS_ERRORS.INVALID_PARTY_VENDOR);
-    }
-
-    const partyId = dto.partyType === PartyType.SALE ? dto.contractorId : dto.vendorId;
-
     return await this.dataSource.transaction(async (em) => {
-      // Check if payment already exists
-      const existingWhere: any = {
-        siteId: dto.siteId,
-        partyType: dto.partyType,
-        paymentMonth: dto.paymentMonth,
-        deletedAt: IsNull(),
-      };
-      if (dto.partyType === PartyType.SALE) {
-        existingWhere.contractorId = dto.contractorId;
-      } else {
-        existingWhere.vendorId = dto.vendorId;
-      }
+      // Fetch all selected entries
+      const entries = await this.tdsRepository.getEntriesByIds(dto.entryIds, em);
 
-      const existing = await this.tdsRepository.findOnePayment({ where: existingWhere }, em);
-      if (existing) {
-        throw new ConflictException(TDS_ERRORS.PAYMENT_ALREADY_EXISTS);
-      }
-
-      // Get verified, unpaid entries
-      const entries = await this.tdsRepository.getVerifiedUnpaidEntries(
-        dto.siteId,
-        dto.partyType,
-        partyId,
-        dto.paymentMonth,
-        em,
-      );
       if (entries.length === 0) {
         throw new BadRequestException(TDS_ERRORS.NO_VERIFIED_ENTRIES);
       }
+      if (entries.length !== dto.entryIds.length) {
+        throw new BadRequestException('One or more entries not found.');
+      }
+
+      // Validate all entries are verified and unpaid
+      for (const entry of entries) {
+        if (!entry.isVerified) {
+          throw new BadRequestException(
+            `Entry ${entry.id} is not verified. Verify all entries before releasing payment.`,
+          );
+        }
+        if (entry.tdsPaymentId) {
+          throw new BadRequestException(`Entry ${entry.id} is already linked to a payment.`);
+        }
+      }
+
+      // All entries must share the same site, partyType, and party (contractor or vendor)
+      const siteIds = [...new Set(entries.map((e) => e.siteId))];
+      const partyTypes = [...new Set(entries.map((e) => e.partyType))];
+      if (siteIds.length > 1 || partyTypes.length > 1) {
+        throw new BadRequestException(
+          'All selected entries must belong to the same site and party type.',
+        );
+      }
+      const siteId = siteIds[0];
+      const partyType = partyTypes[0] as PartyType;
+      const contractorId = partyType === PartyType.SALE ? entries[0].contractorId : null;
+      const vendorId = partyType === PartyType.PURCHASE ? entries[0].vendorId : null;
+      const paymentMonth = entries[0].invoiceMonth;
 
       // Calculate net amount
       const netAmount = entries.reduce((sum, e) => sum + Number(e.tdsAmount), 0);
@@ -201,11 +197,11 @@ export class TdsService {
       // Create payment
       const payment = await this.tdsRepository.createPayment(
         {
-          siteId: dto.siteId,
-          partyType: dto.partyType,
-          contractorId: dto.partyType === PartyType.SALE ? dto.contractorId : null,
-          vendorId: dto.partyType === PartyType.PURCHASE ? dto.vendorId : null,
-          paymentMonth: dto.paymentMonth,
+          siteId,
+          partyType,
+          contractorId,
+          vendorId,
+          paymentMonth,
           financialYear,
           netAmount,
           utrNumber: dto.utrNumber,
@@ -219,9 +215,6 @@ export class TdsService {
         em,
       );
 
-      // Link all entries to this payment. Each entry already carries its own
-      // financialYear so we include it in the WHERE clause — Postgres prunes
-      // straight to the matching partition for each update.
       for (const entry of entries) {
         await this.tdsRepository.updateRegisterEntry(
           { id: entry.id, financialYear: entry.financialYear },

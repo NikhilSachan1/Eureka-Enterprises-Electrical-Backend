@@ -1,35 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsUUID,
-  IsDateString,
-  IsString,
-  IsOptional,
-  IsEnum,
-} from 'class-validator';
-import { PartyType } from 'src/modules/common/financials/financial.constants';
+import { IsUUID, IsDateString, IsString, IsOptional, IsArray, ArrayMinSize } from 'class-validator';
 
 export class CreateTdsPaymentDto {
-  @ApiProperty({ description: 'Site ID' })
-  @IsUUID()
-  siteId: string;
-
-  @ApiProperty({ enum: PartyType, description: 'Party type (SALE or PURCHASE)' })
-  @IsEnum(PartyType)
-  partyType: PartyType;
-
-  @ApiPropertyOptional({ description: 'Contractor ID (required for SALE side)' })
-  @IsUUID()
-  @IsOptional()
-  contractorId?: string;
-
-  @ApiPropertyOptional({ description: 'Vendor ID (required for PURCHASE side)' })
-  @IsUUID()
-  @IsOptional()
-  vendorId?: string;
-
-  @ApiProperty({ description: 'Payment month (YYYY-MM)' })
-  @IsString()
-  paymentMonth: string;
+  @ApiProperty({
+    description: 'TDS register entry IDs to release (bulk selection)',
+    type: [String],
+    example: ['uuid1', 'uuid2'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  entryIds: string[];
 
   @ApiProperty({ description: 'UTR number' })
   @IsString()
