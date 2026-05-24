@@ -6,6 +6,7 @@ import {
   FindOneOptions,
   FindManyOptions,
   FindOptionsWhere,
+  In,
 } from 'typeorm';
 import { GstRegisterEntryEntity } from './entities/gst-register-entry.entity';
 import { GstPaymentEntity } from './entities/gst-payment.entity';
@@ -29,9 +30,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<GstRegisterEntryEntity> {
     try {
-      const repo = em
-        ? em.getRepository(GstRegisterEntryEntity)
-        : this.registerRepository;
+      const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
       const row = repo.create(data);
       return await repo.save(row);
     } catch (error) {
@@ -44,9 +43,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<GstRegisterEntryEntity | null> {
     try {
-      const repo = em
-        ? em.getRepository(GstRegisterEntryEntity)
-        : this.registerRepository;
+      const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
       return await repo.findOne(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -58,9 +55,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<GstRegisterEntryEntity[]> {
     try {
-      const repo = em
-        ? em.getRepository(GstRegisterEntryEntity)
-        : this.registerRepository;
+      const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
       return await repo.find(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -72,9 +67,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<number> {
     try {
-      const repo = em
-        ? em.getRepository(GstRegisterEntryEntity)
-        : this.registerRepository;
+      const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
       return await repo.count(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -87,9 +80,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<void> {
     try {
-      const repo = em
-        ? em.getRepository(GstRegisterEntryEntity)
-        : this.registerRepository;
+      const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
       await repo.update(where, data);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -102,9 +93,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<GstPaymentEntity> {
     try {
-      const repo = em
-        ? em.getRepository(GstPaymentEntity)
-        : this.paymentRepository;
+      const repo = em ? em.getRepository(GstPaymentEntity) : this.paymentRepository;
       const row = repo.create(data);
       return await repo.save(row);
     } catch (error) {
@@ -117,9 +106,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<GstPaymentEntity | null> {
     try {
-      const repo = em
-        ? em.getRepository(GstPaymentEntity)
-        : this.paymentRepository;
+      const repo = em ? em.getRepository(GstPaymentEntity) : this.paymentRepository;
       return await repo.findOne(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -131,9 +118,7 @@ export class GstRepository {
     em?: EntityManager,
   ): Promise<GstPaymentEntity[]> {
     try {
-      const repo = em
-        ? em.getRepository(GstPaymentEntity)
-        : this.paymentRepository;
+      const repo = em ? em.getRepository(GstPaymentEntity) : this.paymentRepository;
       return await repo.find(options);
     } catch (error) {
       throw new InternalServerErrorException(error);
@@ -149,9 +134,7 @@ export class GstRepository {
     paymentMonth: string,
     em?: EntityManager,
   ): Promise<GstRegisterEntryEntity[]> {
-    const repo = em
-      ? em.getRepository(GstRegisterEntryEntity)
-      : this.registerRepository;
+    const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
     return await repo.find({
       where: {
         siteId,
@@ -165,6 +148,13 @@ export class GstRepository {
     });
   }
 
+  async getEntriesByIds(ids: string[], em?: EntityManager): Promise<GstRegisterEntryEntity[]> {
+    const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
+    return await repo.find({
+      where: { id: In(ids), deletedAt: null as any },
+    });
+  }
+
   /**
    * Allocate GST payment advice sequence number.
    */
@@ -172,10 +162,9 @@ export class GstRepository {
     financialYear: string,
     em: EntityManager,
   ): Promise<{ sequenceNumber: number; referenceNumber: string }> {
-    await em.query(
-      `SELECT pg_advisory_xact_lock(hashtext($1))`,
-      [`gst_payment_seq_${financialYear}`],
-    );
+    await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      `gst_payment_seq_${financialYear}`,
+    ]);
 
     const result = await em.query(
       `
@@ -189,7 +178,9 @@ export class GstRepository {
     );
 
     const sequenceNumber = result[0].lastSeq;
-    const referenceNumber = `${GST_PAYMENT_ADVICE_PREFIX}/${financialYear}/${String(sequenceNumber).padStart(3, '0')}`;
+    const referenceNumber = `${GST_PAYMENT_ADVICE_PREFIX}/${financialYear}/${String(
+      sequenceNumber,
+    ).padStart(3, '0')}`;
 
     return { sequenceNumber, referenceNumber };
   }

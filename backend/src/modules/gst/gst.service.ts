@@ -149,36 +149,45 @@ export class GstService {
   }
 
   /**
-   * Release GST payment — atomic across all verified-unpaid entries for the month.
+   * Release GST payment — entry-wise bulk selection.
    */
   async releasePayment(dto: CreateGstPaymentDto, releasedBy: string) {
     return await this.dataSource.transaction(async (em) => {
-      // Check if payment already exists
-      const existing = await this.gstRepository.findOnePayment(
-        {
-          where: {
-            siteId: dto.siteId,
-            vendorId: dto.vendorId,
-            paymentMonth: dto.paymentMonth,
-            deletedAt: IsNull(),
-          },
-        },
-        em,
-      );
-      if (existing) {
-        throw new ConflictException(GST_ERRORS.PAYMENT_ALREADY_EXISTS);
-      }
+      // Fetch all selected entries
+      const entries = await this.gstRepository.getEntriesByIds(dto.entryIds, em);
 
-      // Get verified, unpaid entries
-      const entries = await this.gstRepository.getVerifiedUnpaidEntries(
-        dto.siteId,
-        dto.vendorId,
-        dto.paymentMonth,
-        em,
-      );
       if (entries.length === 0) {
         throw new BadRequestException(GST_ERRORS.NO_VERIFIED_ENTRIES);
       }
+      if (entries.length !== dto.entryIds.length) {
+        throw new BadRequestException('One or more entries not found.');
+      }
+
+      // Validate all entries are verified and unpaid
+      for (const entry of entries) {
+        if (!entry.isVerified) {
+          throw new BadRequestException(
+            `Entry ${entry.id} is not verified. Verify all entries before releasing payment.`,
+          );
+        }
+        if (entry.gstPaymentId) {
+          throw new BadRequestException(`Entry ${entry.id} is already linked to a payment.`);
+        }
+      }
+
+      // Derive siteId and vendorId from entries (all must belong to same site+vendor)
+      const siteIds = [...new Set(entries.map((e) => e.siteId))];
+      const vendorIds = [...new Set(entries.map((e) => e.vendorId))];
+      if (siteIds.length > 1 || vendorIds.length > 1) {
+        throw new BadRequestException(
+          'All selected entries must belong to the same site and vendor.',
+        );
+      }
+      const siteId = siteIds[0];
+      const vendorId = vendorIds[0];
+
+      // Use the most common invoiceMonth as paymentMonth for reference
+      const paymentMonth = entries[0].invoiceMonth;
 
       // Calculate net amount
       const netAmount = entries.reduce((sum, e) => sum + Number(e.gstAmount), 0);
@@ -193,9 +202,9 @@ export class GstService {
       // Create payment
       const payment = await this.gstRepository.createPayment(
         {
-          siteId: dto.siteId,
-          vendorId: dto.vendorId,
-          paymentMonth: dto.paymentMonth,
+          siteId,
+          vendorId,
+          paymentMonth,
           financialYear,
           netAmount,
           utrNumber: dto.utrNumber,
@@ -210,9 +219,7 @@ export class GstService {
         em,
       );
 
-      // Link all entries to this payment. Each entry already carries its own
-      // financialYear so we include it in the WHERE clause — Postgres prunes
-      // straight to the matching partition for each update.
+      // Link selected entries to this payment
       for (const entry of entries) {
         await this.gstRepository.updateRegisterEntry(
           { id: entry.id, financialYear: entry.financialYear },
