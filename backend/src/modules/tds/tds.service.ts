@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { TdsRepository } from './tds.repository';
 import { GetTdsRegisterDto, CreateTdsPaymentDto } from './dto';
 import { TDS_ERRORS, TDS_RESPONSES } from './constants/tds.constants';
@@ -31,6 +31,8 @@ export class TdsService {
       vendorId,
       contractorId,
       isVerified,
+      dateFrom,
+      dateTo,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -44,7 +46,10 @@ export class TdsService {
     if (financialYear) where.financialYear = financialYear;
     if (vendorId) where.vendorId = vendorId;
     if (contractorId) where.contractorId = contractorId;
-    if (isVerified !== undefined) where.isVerified = isVerified;
+    if (isVerified !== undefined) where.isVerified = Equal(isVerified === 'true');
+    if (dateFrom && dateTo) where.invoice = { invoiceDate: Between(dateFrom, dateTo) };
+    else if (dateFrom) where.invoice = { invoiceDate: MoreThanOrEqual(dateFrom) };
+    else if (dateTo) where.invoice = { invoiceDate: LessThanOrEqual(dateTo) };
 
     const [records, totalRecords] = await Promise.all([
       this.tdsRepository.findAllRegisterEntries({

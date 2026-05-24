@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, IsNull, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { GstRepository } from './gst.repository';
 import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
 import { GST_ERRORS, GST_RESPONSES } from './constants/gst.constants';
@@ -32,6 +32,8 @@ export class GstService {
       vendorId,
       contractorId,
       isVerified,
+      dateFrom,
+      dateTo,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -45,7 +47,10 @@ export class GstService {
     if (financialYear) where.financialYear = financialYear;
     if (vendorId) where.vendorId = vendorId;
     if (contractorId) where.contractorId = contractorId;
-    if (isVerified !== undefined) where.isVerified = isVerified;
+    if (isVerified !== undefined) where.isVerified = Equal(isVerified === 'true');
+    if (dateFrom && dateTo) where.invoice = { invoiceDate: Between(dateFrom, dateTo) };
+    else if (dateFrom) where.invoice = { invoiceDate: MoreThanOrEqual(dateFrom) };
+    else if (dateTo) where.invoice = { invoiceDate: LessThanOrEqual(dateTo) };
 
     const [records, totalRecords] = await Promise.all([
       this.gstRepository.findAllRegisterEntries({

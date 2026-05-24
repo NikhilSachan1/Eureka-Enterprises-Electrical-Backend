@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID, IsString, IsInt, Min, IsEnum, IsBoolean } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
+import {
+  IsOptional,
+  IsUUID,
+  IsString,
+  IsInt,
+  Min,
+  IsEnum,
+  IsIn,
+  IsDateString,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 
 export class GetTdsRegisterDto {
@@ -34,11 +43,20 @@ export class GetTdsRegisterDto {
   @IsOptional()
   contractorId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by verification status' })
-  @Transform(({ value }) => value === 'true')
-  @IsBoolean()
+  @ApiPropertyOptional({ description: 'Filter by verification status', enum: ['true', 'false'] })
+  @IsIn(['true', 'false'])
   @IsOptional()
-  isVerified?: boolean;
+  isVerified?: string;
+
+  @ApiPropertyOptional({ description: 'Date range start — invoice date (ISO, e.g. 2026-04-01)' })
+  @IsDateString()
+  @IsOptional()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Date range end — invoice date (ISO, e.g. 2026-04-30)' })
+  @IsDateString()
+  @IsOptional()
+  dateTo?: string;
 
   @ApiPropertyOptional({ description: 'Sort field', default: 'createdAt' })
   @IsString()
