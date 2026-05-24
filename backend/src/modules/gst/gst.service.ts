@@ -10,7 +10,6 @@ import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto'
 import { GST_ERRORS, GST_RESPONSES } from './constants/gst.constants';
 import { GST_QUERIES } from './queries/gst.queries';
 import {
-  PartyType,
   FinancialApprovalStatus,
   getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
@@ -87,7 +86,7 @@ export class GstService {
   }
 
   /**
-   * Verify a GST register entry (PURCHASE side only).
+   * Verify a GST register entry (both SALE and PURCHASE).
    */
   async verifyEntry(
     id: string,
@@ -99,9 +98,6 @@ export class GstService {
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
 
-    if (entry.partyType !== PartyType.PURCHASE) {
-      throw new BadRequestException(GST_ERRORS.CANNOT_VERIFY_SALE);
-    }
     if (entry.isVerified) {
       throw new ConflictException(GST_ERRORS.ALREADY_VERIFIED);
     }
@@ -131,9 +127,6 @@ export class GstService {
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
 
-    if (entry.partyType !== PartyType.PURCHASE) {
-      throw new BadRequestException(GST_ERRORS.CANNOT_VERIFY_SALE);
-    }
     if (!entry.isVerified) {
       throw new BadRequestException(GST_ERRORS.NOT_VERIFIED);
     }
