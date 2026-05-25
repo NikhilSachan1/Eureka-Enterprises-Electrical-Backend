@@ -837,10 +837,11 @@ export class SiteService {
   private validateStatusTransition(currentStatus: SiteStatus, newStatus: SiteStatus): void {
     // Define valid transitions
     const validTransitions: Record<SiteStatus, SiteStatus[]> = {
-      [SiteStatus.UPCOMING]: [SiteStatus.ONGOING, SiteStatus.HOLD, SiteStatus.COMPLETED],
-      [SiteStatus.ONGOING]: [SiteStatus.HOLD, SiteStatus.COMPLETED],
-      [SiteStatus.HOLD]: [SiteStatus.ONGOING, SiteStatus.COMPLETED],
-      [SiteStatus.COMPLETED]: [], // No transitions from completed
+      [SiteStatus.UPCOMING]: [SiteStatus.ONGOING, SiteStatus.HOLD, SiteStatus.WORK_COMPLETED],
+      [SiteStatus.ONGOING]: [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED],
+      [SiteStatus.HOLD]: [SiteStatus.ONGOING, SiteStatus.WORK_COMPLETED],
+      [SiteStatus.WORK_COMPLETED]: [SiteStatus.COMPLETED, SiteStatus.ONGOING, SiteStatus.HOLD],
+      [SiteStatus.COMPLETED]: [], // Terminal — no transitions
     };
 
     if (!validTransitions[currentStatus].includes(newStatus)) {

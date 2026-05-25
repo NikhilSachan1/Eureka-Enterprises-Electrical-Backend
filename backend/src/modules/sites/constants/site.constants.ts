@@ -9,8 +9,7 @@ export const SITE_ERRORS = {
   AT_LEAST_ONE_CONTRACTOR: 'At least one contractor is required',
   INVALID_WORK_TYPE: 'Invalid work type: {workType}. Available: {available}',
   WORK_TYPES_CONFIG_NOT_FOUND: 'Work types configuration not found',
-  SITE_NOT_READY_FOR_CLOSING:
-    'Site cannot be closed. Financial clearance conditions not met.',
+  SITE_NOT_READY_FOR_CLOSING: 'Site cannot be closed. Financial clearance conditions not met.',
 };
 
 export const SITE_RESPONSES = {
@@ -31,6 +30,7 @@ export enum SiteStatus {
   UPCOMING = 'upcoming',
   ONGOING = 'ongoing',
   HOLD = 'hold',
+  WORK_COMPLETED = 'work_completed',
   COMPLETED = 'completed',
 }
 
