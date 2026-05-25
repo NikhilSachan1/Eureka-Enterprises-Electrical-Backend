@@ -133,7 +133,7 @@ export class SiteService {
     });
   }
 
-  async findAll(options: GetSiteDto) {
+  async findAll(options: GetSiteDto, requestUserId?: string, activeRole?: string) {
     const {
       search,
       companyId,
@@ -184,6 +184,22 @@ export class SiteService {
 
     if (isActive !== undefined) {
       where.isActive = isActive;
+    }
+
+    // For EMPLOYEE role — restrict to sites they were ever allocated to
+    const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MANAGER'];
+    const isEmployee = activeRole && !ADMIN_ROLES.includes(activeRole.toUpperCase());
+    if (isEmployee && requestUserId) {
+      const allocatedSiteRows = await this.dataSource.query(
+        `SELECT DISTINCT "siteId" FROM site_allocations WHERE "userId" = $1 AND "deletedAt" IS NULL`,
+        [requestUserId],
+      );
+      const allocatedSiteIds = allocatedSiteRows.map((r: any) => r.siteId);
+      if (allocatedSiteIds.length === 0) {
+        // Employee has no allocations — return empty
+        return this.utilityService.listResponse([], 0);
+      }
+      where.id = In(allocatedSiteIds);
     }
 
     const relations: string[] = ['company'];
