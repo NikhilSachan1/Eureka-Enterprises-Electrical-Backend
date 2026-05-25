@@ -93,33 +93,32 @@ export class PermissionService {
     records: PermissionEntity[];
     totalRecords: number;
   }> {
-    const { module, platform, search, page, sortField, sortOrder } = options;
+    const { module, platform, search, page, pageSize, sortField, sortOrder } = options;
 
-    // Build where conditions
     const where: FindOptionsWhere<PermissionEntity> = { deletedAt: null };
 
-    // Filter by module name
     if (module) {
       where.module = module;
     }
 
-    // Filter by platform
     if (platform) {
       where.platform = platform;
     }
 
-    // Search by label (case-insensitive)
     if (search) {
       where.label = ILike(`%${search}%`);
     }
 
-    // Build find options with pagination and sorting
     const findOptions: FindManyOptions<PermissionEntity> = {
       where,
-      skip: (page - 1) * 1000,
-      take: 1000,
       order: { [sortField]: sortOrder === SortOrder.ASC ? SortOrder.ASC : SortOrder.DESC },
     };
+
+    // Apply pagination only when pageSize is explicitly passed
+    if (pageSize) {
+      findOptions.skip = (page - 1) * pageSize;
+      findOptions.take = pageSize;
+    }
 
     return await this.permissionRepository.findAll(findOptions);
   }
