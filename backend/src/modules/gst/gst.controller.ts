@@ -61,8 +61,13 @@ export class GstController {
   @Get('payments')
   @RequiredPermission('financials.gst.view')
   @ApiOperation({ summary: 'List GST payments' })
-  findAllPayments(@Query('siteId') siteId?: string, @Query('vendorId') vendorId?: string) {
-    return this.gstService.findAllPayments(siteId, vendorId);
+  findAllPayments(
+    @Query('siteId') siteId?: string,
+    @Query('vendorId') vendorId?: string,
+    @Query('partyType') partyType?: string,
+    @Query('contractorId') contractorId?: string,
+  ) {
+    return this.gstService.findAllPayments(siteId, vendorId, partyType, contractorId);
   }
 
   @Get('summary')

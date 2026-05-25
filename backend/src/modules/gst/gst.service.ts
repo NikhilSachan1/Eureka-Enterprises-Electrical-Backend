@@ -10,6 +10,7 @@ import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto'
 import { GST_ERRORS, GST_RESPONSES } from './constants/gst.constants';
 import { GST_QUERIES } from './queries/gst.queries';
 import {
+  PartyType,
   FinancialApprovalStatus,
   getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
@@ -183,18 +184,38 @@ export class GstService {
         }
       }
 
-      // Derive siteId and vendorId from entries (all must belong to same site+vendor)
+      // All entries must share the same site and partyType
       const siteIds = [...new Set(entries.map((e) => e.siteId))];
-      const vendorIds = [...new Set(entries.map((e) => e.vendorId))];
-      if (siteIds.length > 1 || vendorIds.length > 1) {
+      const partyTypes = [...new Set(entries.map((e) => e.partyType))];
+      if (siteIds.length > 1 || partyTypes.length > 1) {
         throw new BadRequestException(
-          'All selected entries must belong to the same site and vendor.',
+          'All selected entries must belong to the same site and party type.',
         );
       }
       const siteId = siteIds[0];
-      const vendorId = vendorIds[0];
+      const partyType = partyTypes[0] as PartyType;
 
-      // Use the most common invoiceMonth as paymentMonth for reference
+      // Validate party consistency per side
+      if (partyType === PartyType.PURCHASE) {
+        const vendorIds = [...new Set(entries.map((e) => e.vendorId))];
+        if (vendorIds.length > 1) {
+          throw new BadRequestException(
+            'All selected PURCHASE entries must belong to the same vendor.',
+          );
+        }
+      } else {
+        const contractorIds = [...new Set(entries.map((e) => e.contractorId))];
+        if (contractorIds.length > 1) {
+          throw new BadRequestException(
+            'All selected SALE entries must belong to the same contractor.',
+          );
+        }
+      }
+
+      const contractorId = partyType === PartyType.SALE ? entries[0].contractorId : null;
+      const vendorId = partyType === PartyType.PURCHASE ? entries[0].vendorId : null;
+
+      // Use the first entry's invoiceMonth as paymentMonth for reference
       const paymentMonth = entries[0].invoiceMonth;
 
       // Calculate net amount
@@ -211,6 +232,8 @@ export class GstService {
       const payment = await this.gstRepository.createPayment(
         {
           siteId,
+          partyType,
+          contractorId,
           vendorId,
           paymentMonth,
           financialYear,
@@ -261,15 +284,22 @@ export class GstService {
   /**
    * Get GST payments list.
    */
-  async findAllPayments(siteId?: string, vendorId?: string) {
+  async findAllPayments(
+    siteId?: string,
+    vendorId?: string,
+    partyType?: string,
+    contractorId?: string,
+  ) {
     const where: any = { deletedAt: IsNull() };
     if (siteId) where.siteId = siteId;
     if (vendorId) where.vendorId = vendorId;
+    if (partyType) where.partyType = partyType;
+    if (contractorId) where.contractorId = contractorId;
 
     return await this.gstRepository.findAllPayments({
       where,
       order: { createdAt: 'DESC' },
-      relations: ['site', 'site.company', 'vendor'],
+      relations: ['site', 'site.company', 'vendor', 'contractor'],
     });
   }
 }
