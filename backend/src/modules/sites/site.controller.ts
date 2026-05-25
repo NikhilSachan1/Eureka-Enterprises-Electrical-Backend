@@ -41,12 +41,15 @@ export class SiteController {
 
   @Get()
   @ApiOperation({
-    summary: 'Get all sites',
+    summary: 'Get all sites — employees see only their allocated sites',
     description:
       'Retrieves a list of all sites with optional filtering, pagination, and sorting based on query parameters.',
   })
-  async findAll(@Query() query: GetSiteDto) {
-    return await this.siteService.findAll(query);
+  async findAll(
+    @Query() query: GetSiteDto,
+    @Request() req: { user: { id: string; activeRole: string } },
+  ) {
+    return await this.siteService.findAll(query, req.user.id, req.user.activeRole);
   }
 
   @Get(':id')
