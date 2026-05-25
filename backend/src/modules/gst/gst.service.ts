@@ -57,7 +57,7 @@ export class GstService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
+        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'gstPayment'],
       }),
       this.gstRepository.countRegisterEntries({ where }),
     ]);
@@ -68,7 +68,15 @@ export class GstService {
   async findRegisterEntryById(id: string) {
     const entry = await this.gstRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'verifiedByUser'],
+      relations: [
+        'invoice',
+        'site',
+        'site.company',
+        'contractor',
+        'vendor',
+        'verifiedByUser',
+        'gstPayment',
+      ],
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
     return {

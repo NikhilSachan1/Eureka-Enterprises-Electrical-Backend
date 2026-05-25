@@ -5,6 +5,7 @@ import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
+import { GstPaymentEntity } from './gst-payment.entity';
 
 /**
  * GST Register Entry — projected from invoices at approval time (§5.1.13)
@@ -100,4 +101,8 @@ export class GstRegisterEntryEntity extends BaseEntity {
   // Set once entry is included in a released GST payment
   @Column({ type: 'uuid', nullable: true })
   gstPaymentId: string | null;
+
+  @ManyToOne(() => GstPaymentEntity, { nullable: true })
+  @JoinColumn({ name: 'gstPaymentId' })
+  gstPayment: GstPaymentEntity | null;
 }
