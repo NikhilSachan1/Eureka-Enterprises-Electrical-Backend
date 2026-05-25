@@ -57,7 +57,16 @@ export class TdsService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'tdsPayment'],
+        relations: [
+          'invoice',
+          'bookPayment',
+          'bankTransfer',
+          'site',
+          'site.company',
+          'contractor',
+          'vendor',
+          'tdsPayment',
+        ],
       }),
       this.tdsRepository.countRegisterEntries({ where }),
     ]);
@@ -70,6 +79,8 @@ export class TdsService {
       where: { id, deletedAt: IsNull() },
       relations: [
         'invoice',
+        'bookPayment',
+        'bankTransfer',
         'site',
         'site.company',
         'contractor',
