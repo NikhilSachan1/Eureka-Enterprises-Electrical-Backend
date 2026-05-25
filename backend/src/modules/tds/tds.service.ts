@@ -57,7 +57,7 @@ export class TdsService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor'],
+        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'tdsPayment'],
       }),
       this.tdsRepository.countRegisterEntries({ where }),
     ]);
@@ -68,7 +68,15 @@ export class TdsService {
   async findRegisterEntryById(id: string) {
     const entry = await this.tdsRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'verifiedByUser'],
+      relations: [
+        'invoice',
+        'site',
+        'site.company',
+        'contractor',
+        'vendor',
+        'verifiedByUser',
+        'tdsPayment',
+      ],
     });
     if (!entry) throw new NotFoundException(TDS_ERRORS.ENTRY_NOT_FOUND);
     return {

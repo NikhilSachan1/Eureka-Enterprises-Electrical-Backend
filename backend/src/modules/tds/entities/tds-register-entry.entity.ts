@@ -7,6 +7,7 @@ import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import type { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
+import { TdsPaymentEntity } from './tds-payment.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 
 /**
@@ -118,4 +119,8 @@ export class TdsRegisterEntryEntity extends BaseEntity {
   // Set once entry is included in a TDS payment
   @Column({ type: 'uuid', nullable: true })
   tdsPaymentId: string | null;
+
+  @ManyToOne(() => TdsPaymentEntity, { nullable: true })
+  @JoinColumn({ name: 'tdsPaymentId' })
+  tdsPayment: TdsPaymentEntity | null;
 }
