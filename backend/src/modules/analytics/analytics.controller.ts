@@ -59,6 +59,21 @@ export class AnalyticsController {
   // ==================== SITE PROFITABILITY ====================
 
   /**
+   * NEW: Detailed financial breakdown for a site —
+   * Operational Expense, Vendor/Contractor Invoice Summaries, Payment Summary, Profitability.
+   * Must be declared BEFORE the generic `profitability` route to prevent NestJS ambiguity.
+   */
+  @Get('profitability/detail')
+  @ApiOperation({
+    summary: 'Get detailed site financial summary (new format)',
+    description:
+      'Returns operational expense breakdown (employee-wise, category-wise), vendor and contractor invoice summaries (PO-wise), payment summary (sales vs vendor/contractor), and profitability metrics (revenue, direct cost, profit margin, expense ratio). Requires siteId.',
+  })
+  async getSiteFinancialDetail(@Query('siteId', ParseUUIDPipe) siteId: string) {
+    return await this.analyticsService.getSiteFinancialDetail(siteId);
+  }
+
+  /**
    * Unified profitability endpoint — filter by siteId, companyId, contractorId, or none (all sites)
    */
   @Get('profitability')

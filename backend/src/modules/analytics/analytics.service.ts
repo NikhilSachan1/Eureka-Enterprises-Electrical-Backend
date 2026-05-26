@@ -1156,6 +1156,248 @@ export class AnalyticsService {
     };
   }
 
+  // ==================== SITE FINANCIAL DETAIL (New Profitability) ====================
+
+  /**
+   * GET /analytics/profitability/detail?siteId=
+   *
+   * Returns:
+   *   metaSummary      — SALE PO/invoice totals + PURCHASE PO/invoice totals, per-invoice lists
+   *   expenseSummary   — employee cost (payroll), regular expense, fuel expense
+   *   paymentSummary   — received vs invoiced (SALE) + paid vs invoiced (PURCHASE)
+   *   profitabilitySummary — revenue, project cost, gross/net profit, margins
+   */
+  async getSiteFinancialDetail(siteId: string) {
+    try {
+      const [
+        salePoResult,
+        purchasePoResult,
+        salesInvoiceListResult,
+        purchaseInvoiceListResult,
+        payrollByEmployeeResult,
+        payrollTotalResult,
+        opExpTotalResult,
+        opExpByEmpCatResult,
+        opExpByCategoryResult,
+        fuelTotalResult,
+        fuelByEmployeeResult,
+        invoiceTotalsResult,
+        bankTransferTotalsResult,
+      ] = await Promise.all([
+        this.executeQuery(queries.getSalesPOSummaryQuery(siteId)),
+        this.executeQuery(queries.getPurchasePOSummaryQuery(siteId)),
+        this.executeQuery(queries.getSalesInvoiceListQuery(siteId)),
+        this.executeQuery(queries.getPurchaseInvoiceListQuery(siteId)),
+        this.executeQuery(queries.getSitePayrollByEmployeeDetailQuery(siteId)),
+        this.executeQuery(queries.getSitePayrollTotalCostQuery(siteId)),
+        this.executeQuery(queries.getOpExpenseTotalQuery(siteId)),
+        this.executeQuery(queries.getOpExpenseByEmployeeAndCategoryQuery(siteId)),
+        this.executeQuery(queries.getOpExpenseByCategoryQuery(siteId)),
+        this.executeQuery(queries.getFuelExpenseTotalQuery(siteId)),
+        this.executeQuery(queries.getFuelExpenseByEmployeeQuery(siteId)),
+        this.executeQuery(queries.getInvoiceTotalsBySideQuery(siteId)),
+        this.executeQuery(queries.getBankTransferTotalsBySideQuery(siteId)),
+      ]);
+
+      // ── PO summaries ─────────────────────────────────────────────────────────
+      const salePO = salePoResult[0] || {};
+      const purchPO = purchasePoResult[0] || {};
+
+      const totalSalesPOValue = parseFloat(salePO.totalSalesPOValue ?? '0') || 0;
+      const totalSalesPOCount = parseInt(salePO.totalSalesPOCount ?? '0') || 0;
+      const totalPurchasePOValue = parseFloat(purchPO.totalPurchasePOValue ?? '0') || 0;
+      const totalPurchasePOCount = parseInt(purchPO.totalPurchasePOCount ?? '0') || 0;
+
+      // ── Invoice counts / totals ───────────────────────────────────────────────
+      const inv = invoiceTotalsResult[0] || {};
+      const totalSalesInvoicedAmount = parseFloat(inv.saleTotalInvoiced ?? '0') || 0;
+      const totalSalesInvoiceCount = parseInt(inv.salesInvoiceCount ?? '0') || 0;
+      const totalVendorInvoicedAmount = parseFloat(inv.purchaseTotalInvoiced ?? '0') || 0;
+      const totalVendorInvoiceCount = parseInt(inv.vendorInvoiceCount ?? '0') || 0;
+
+      const salesUnbilledAmount = Math.max(0, totalSalesPOValue - totalSalesInvoicedAmount);
+      const pendingVendorBillingAmount = Math.max(
+        0,
+        totalPurchasePOValue - totalVendorInvoicedAmount,
+      );
+      const billingCompletionPercentage =
+        totalSalesPOValue > 0
+          ? Math.round((totalSalesInvoicedAmount / totalSalesPOValue) * 100 * 100) / 100
+          : 0;
+      const purchaseBillingCompletionPercentage =
+        totalPurchasePOValue > 0
+          ? Math.round((totalVendorInvoicedAmount / totalPurchasePOValue) * 100 * 100) / 100
+          : 0;
+
+      // ── Sales invoice list ────────────────────────────────────────────────────
+      const salesInvoiceList = salesInvoiceListResult.map((r: any) => ({
+        invoiceNumber: r.invoiceNumber as string,
+        invoiceDate: r.invoiceDate as string,
+        poNumber: r.poNumber as string,
+        clientName: r.clientName as string,
+        invoiceAmount: parseFloat(r.invoiceAmount) || 0,
+      }));
+
+      // ── Purchase invoice list ─────────────────────────────────────────────────
+      const purchaseInvoiceList = purchaseInvoiceListResult.map((r: any) => ({
+        invoiceNumber: r.invoiceNumber as string,
+        invoiceDate: r.invoiceDate as string,
+        poNumber: r.poNumber as string,
+        vendorName: r.vendorName as string,
+        invoiceAmount: parseFloat(r.invoiceAmount) || 0,
+      }));
+
+      // ── Employee cost (payroll) ───────────────────────────────────────────────
+      const totalEmployeeCost = parseFloat(payrollTotalResult[0]?.total ?? '0') || 0;
+
+      const employeeCostWise = payrollByEmployeeResult.map((r: any) => {
+        const allocatedAmount = parseFloat(r.allocatedAmount) || 0;
+        const workingDays = parseInt(r.workingDays) || 0;
+        const perDayCost =
+          workingDays > 0 ? Math.round((allocatedAmount / workingDays) * 100) / 100 : 0;
+        return {
+          employeeName: r.employeeName as string,
+          employeeCode: r.employeeCode as string,
+          workingDays,
+          perDayCost,
+          allocatedAmount,
+        };
+      });
+
+      // ── Regular operational expense ───────────────────────────────────────────
+      const totalRegularExpense = parseFloat(opExpTotalResult[0]?.total ?? '0') || 0;
+
+      const regularExpenseByEmpCat = opExpByEmpCatResult.map((r: any) => ({
+        employeeName: r.employeeName as string,
+        employeeCode: r.employeeCode as string,
+        expenseType: r.expenseType as string,
+        expenseAmount: parseFloat(r.expenseAmount) || 0,
+      }));
+
+      const regularExpenseByCategory = opExpByCategoryResult.map((r: any) => ({
+        categoryName: r.categoryName as string,
+        amount: parseFloat(r.amount) || 0,
+      }));
+
+      // ── Fuel expense ──────────────────────────────────────────────────────────
+      const totalFuelExpense = parseFloat(fuelTotalResult[0]?.total ?? '0') || 0;
+
+      const fuelByEmployee = fuelByEmployeeResult.map((r: any) => ({
+        employeeName: r.employeeName as string,
+        employeeCode: r.employeeCode as string,
+        vehicleNumber: r.vehicleNumber as string,
+        expenseAmount: parseFloat(r.expenseAmount) || 0,
+      }));
+
+      const totalOperationalExpense = totalRegularExpense + totalFuelExpense;
+
+      // ── Payment summary ───────────────────────────────────────────────────────
+      const bt = bankTransferTotalsResult[0] || {};
+      const totalPaymentReceived = parseFloat(bt.saleTransferred ?? '0') || 0;
+      const totalPaymentPaid = parseFloat(bt.purchaseTransferred ?? '0') || 0;
+
+      const outstandingReceivableAmount = Math.max(
+        0,
+        totalSalesInvoicedAmount - totalPaymentReceived,
+      );
+      const outstandingPayableAmount = Math.max(0, totalVendorInvoicedAmount - totalPaymentPaid);
+
+      // ── Profitability ─────────────────────────────────────────────────────────
+      // Revenue = total sales invoiced (what clients owe us)
+      const revenue = totalSalesInvoicedAmount;
+      const vendorCost = totalVendorInvoicedAmount;
+      const employeeCostForProfit = totalEmployeeCost;
+      const operationalExpenseForProfit = totalOperationalExpense;
+
+      const totalProjectCost = vendorCost + employeeCostForProfit + operationalExpenseForProfit;
+      const grossProfit = revenue - totalProjectCost;
+      const netProfit = grossProfit; // same until overhead tracking is added
+      const profitMarginPercentage =
+        revenue > 0 ? Math.round((netProfit / revenue) * 100 * 100) / 100 : 0;
+      const expenseRatioPercentage =
+        revenue > 0 ? Math.round((totalProjectCost / revenue) * 100 * 100) / 100 : 0;
+
+      // ── Final response ────────────────────────────────────────────────────────
+      return {
+        metaSummary: {
+          salesSummary: {
+            totalSalesPOValue,
+            totalSalesPOCount,
+            totalSalesInvoicedAmount,
+            totalSalesInvoiceCount,
+            salesUnbilledAmount,
+            billingCompletionPercentage,
+            salesInvoiceSummary: {
+              totalSalesInvoiceAmount: totalSalesInvoicedAmount,
+              invoiceSummary: salesInvoiceList,
+            },
+          },
+          purchaseSummary: {
+            totalPurchasePOValue,
+            totalPurchasePOCount,
+            totalVendorInvoicedAmount,
+            totalVendorInvoiceCount,
+            pendingVendorBillingAmount,
+            purchaseBillingCompletionPercentage,
+            vendorInvoiceSummary: {
+              totalVendorInvoiceAmount: totalVendorInvoicedAmount,
+              invoiceSummary: purchaseInvoiceList,
+            },
+          },
+        },
+
+        expenseSummary: {
+          employeeCost: {
+            totalEmployeeCost,
+            employeeWiseSummary: employeeCostWise,
+          },
+          operationalExpense: {
+            totalOperationalExpense,
+            regularExpense: {
+              totalRegularExpense,
+              employeeWiseSummary: regularExpenseByEmpCat,
+              categoryWiseSummary: regularExpenseByCategory,
+            },
+            fuelExpense: {
+              totalFuelExpense,
+              employeeWiseSummary: fuelByEmployee,
+            },
+          },
+        },
+
+        paymentSummary: {
+          salesPaymentSummary: {
+            totalInvoicedAmount: totalSalesInvoicedAmount,
+            totalPaymentReceived,
+            outstandingReceivableAmount,
+          },
+          purchasePaymentSummary: {
+            totalVendorInvoiceAmount: totalVendorInvoicedAmount,
+            totalPaymentPaid,
+            outstandingPayableAmount,
+          },
+        },
+
+        profitabilitySummary: {
+          revenue,
+          projectCost: {
+            vendorCost,
+            employeeCost: employeeCostForProfit,
+            operationalExpense: operationalExpenseForProfit,
+            totalProjectCost,
+          },
+          grossProfit,
+          netProfit,
+          profitMarginPercentage,
+          expenseRatioPercentage,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get site financial detail: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
   // ==================== HELPER METHODS ====================
 
   /**
