@@ -58,9 +58,18 @@ export class TdsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         relations: [
-          'invoice',
+          // PURCHASE: bookPayment → invoice → jmc → po
           'bookPayment',
+          'bookPayment.invoice',
+          'bookPayment.invoice.jmc',
+          'bookPayment.invoice.jmc.po',
+          // SALE: bankTransfer → invoice → jmc → po
+          // PURCHASE: bankTransfer (bookPaymentId set; invoice already via bookPayment above)
           'bankTransfer',
+          'bankTransfer.invoice',
+          'bankTransfer.invoice.jmc',
+          'bankTransfer.invoice.jmc.po',
+          // Party & payment
           'site',
           'site.company',
           'contractor',
@@ -78,9 +87,18 @@ export class TdsService {
     const entry = await this.tdsRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
       relations: [
-        'invoice',
+        // PURCHASE: bookPayment → invoice → jmc → po
         'bookPayment',
+        'bookPayment.invoice',
+        'bookPayment.invoice.jmc',
+        'bookPayment.invoice.jmc.po',
+        // SALE: bankTransfer → invoice → jmc → po
+        // PURCHASE: bankTransfer (bookPaymentId set; invoice already via bookPayment above)
         'bankTransfer',
+        'bankTransfer.invoice',
+        'bankTransfer.invoice.jmc',
+        'bankTransfer.invoice.jmc.po',
+        // Party, audit & payment
         'site',
         'site.company',
         'contractor',
