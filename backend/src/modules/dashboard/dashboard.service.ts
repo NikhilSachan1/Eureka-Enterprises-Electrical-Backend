@@ -1210,14 +1210,21 @@ export class DashboardService {
   // ==================== NEW: Projects Pipeline ====================
 
   async getProjectsPipeline(): Promise<{
-    counts: { active: number; upcoming: number; onHold: number; completed: number; total: number };
+    counts: {
+      active: number;
+      upcoming: number;
+      onHold: number;
+      workCompleted: number;
+      completed: number;
+      total: number;
+    };
     activeContractTotal: number;
     activeSpendToDate: number;
     activeNetPL: number;
     activeProjects: Array<{
       id: string;
       name: string;
-      projectCode: string | null;
+      status: string;
       contractAmount: number;
       spendToDate: number;
       netPL: number;
@@ -1226,10 +1233,11 @@ export class DashboardService {
   }> {
     const counts = await this.dataSource.query(`
       SELECT
-        COUNT(CASE WHEN status = 'ACTIVE' THEN 1 END)::int as active,
-        COUNT(CASE WHEN status = 'UPCOMING' THEN 1 END)::int as upcoming,
-        COUNT(CASE WHEN status = 'ON_HOLD' THEN 1 END)::int as "onHold",
-        COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END)::int as completed,
+        COUNT(CASE WHEN status = 'ongoing' THEN 1 END)::int as active,
+        COUNT(CASE WHEN status = 'upcoming' THEN 1 END)::int as upcoming,
+        COUNT(CASE WHEN status = 'hold' THEN 1 END)::int as "onHold",
+        COUNT(CASE WHEN status = 'work_completed' THEN 1 END)::int as "workCompleted",
+        COUNT(CASE WHEN status = 'completed' THEN 1 END)::int as completed,
         COUNT(*)::int as total
       FROM sites WHERE "deletedAt" IS NULL
     `);
@@ -1242,7 +1250,7 @@ export class DashboardService {
           LEFT JOIN expenses e ON e."siteId" = s.id
             AND e."deletedAt" IS NULL AND e."isActive" = true
             AND e."approvalStatus" = 'approved'
-          WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+          WHERE s."deletedAt" IS NULL AND s.status IN ('ongoing', 'work_completed')
           GROUP BY s.id
         )
         SELECT
@@ -1251,7 +1259,7 @@ export class DashboardService {
           COALESCE(SUM(COALESCE(s."estimatedBudget"::numeric, 0) - COALESCE(et.spend, 0)), 0) as "netPL"
         FROM sites s
         LEFT JOIN expense_totals et ON et."siteId" = s.id
-        WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+        WHERE s."deletedAt" IS NULL AND s.status IN ('ongoing', 'work_completed')
       `),
       this.dataSource.query(`
         WITH expense_totals AS (
@@ -1260,13 +1268,13 @@ export class DashboardService {
           LEFT JOIN expenses e ON e."siteId" = s.id
             AND e."deletedAt" IS NULL AND e."isActive" = true
             AND e."approvalStatus" = 'approved'
-          WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+          WHERE s."deletedAt" IS NULL AND s.status IN ('ongoing', 'work_completed')
           GROUP BY s.id
         )
         SELECT
           s.id,
           s.name,
-          s."projectCode",
+          s.status,
           COALESCE(s."estimatedBudget"::numeric, 0) as "contractAmount",
           COALESCE(et.spend, 0) as "spendToDate",
           COALESCE(s."estimatedBudget"::numeric, 0) - COALESCE(et.spend, 0) as "netPL",
@@ -1276,20 +1284,27 @@ export class DashboardService {
           END as "progressPercent"
         FROM sites s
         LEFT JOIN expense_totals et ON et."siteId" = s.id
-        WHERE s."deletedAt" IS NULL AND s.status = 'ACTIVE'
+        WHERE s."deletedAt" IS NULL AND s.status IN ('ongoing', 'work_completed')
         ORDER BY s."createdAt" DESC
       `),
     ]);
 
     return {
-      counts: counts[0] || { active: 0, upcoming: 0, onHold: 0, completed: 0, total: 0 },
+      counts: counts[0] || {
+        active: 0,
+        upcoming: 0,
+        onHold: 0,
+        workCompleted: 0,
+        completed: 0,
+        total: 0,
+      },
       activeContractTotal: Number(totals[0]?.contractTotal) || 0,
       activeSpendToDate: Number(totals[0]?.spendToDate) || 0,
       activeNetPL: Number(totals[0]?.netPL) || 0,
       activeProjects: projects.map((p: any) => ({
         id: p.id,
         name: p.name,
-        projectCode: p.projectCode || null,
+        status: p.status,
         contractAmount: Number(p.contractAmount),
         spendToDate: Number(p.spendToDate),
         netPL: Number(p.netPL),

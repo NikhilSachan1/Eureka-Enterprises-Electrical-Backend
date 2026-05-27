@@ -119,6 +119,8 @@ pre .c{color:#8b949e;font-style:italic}
   <div class="nav-section">Summaries</div>
   <a class="nav-item" href="#billing">Billing & Site Closing</a>
   <a class="nav-item" href="#dashboard">Dashboard Universal View</a>
+  <a class="nav-item" href="#projects-pipeline">Dashboard — Projects Pipeline</a>
+  <a class="nav-item" href="#leave-balance">Leave Balance (User)</a>
 
   <div class="nav-section">UI Dropdown APIs</div>
   <a class="nav-item" href="#dropdown-pos">PO Dropdown</a>
@@ -1621,6 +1623,117 @@ pre .c{color:#8b949e;font-style:italic}
         <tr><td>companyId</td><td>Scope to one company</td></tr>
         <tr><td>partyType</td><td>SALE | PURCHASE</td></tr>
         <tr><td>fromDate, toDate</td><td>Date range filter (ISO date strings)</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="projects-pipeline">
+  <div class="module-header">
+    <div class="module-icon" style="background:#dcfce7">📊</div>
+    <h2>Dashboard — Projects Pipeline <small>Site status counts + active project financials</small></h2>
+  </div>
+  <div class="info-box" style="background:#f0fdf4;border-left-color:#16a34a;color:#14532d">
+    Returns live count of sites by status and financial summary for active (ongoing + work_completed) sites.
+    Available to all authenticated roles. <strong>Note:</strong> Site statuses are lowercase in DB —
+    <code>ongoing</code>, <code>upcoming</code>, <code>hold</code>, <code>work_completed</code>, <code>completed</code>.
+  </div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/dashboard/projects-pipeline</span>
+      <span class="endpoint-desc">Site status counts + active project financial rollup</span>
+    </div>
+    <div class="endpoint-body">
+      <p style="font-size:13px;margin:8px 0">No query params required. Returns all sites grouped by status and financial totals for <code>ongoing</code> + <code>work_completed</code> sites.</p>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"counts"</span>: {
+    <span class="s">"active"</span>: 3,          <span class="c">// ongoing sites</span>
+    <span class="s">"upcoming"</span>: 1,
+    <span class="s">"onHold"</span>: 0,
+    <span class="s">"workCompleted"</span>: 1,   <span class="c">// work done, financial clearance pending</span>
+    <span class="s">"completed"</span>: 2,
+    <span class="s">"total"</span>: 7
+  },
+  <span class="s">"activeContractTotal"</span>: 9737705751,  <span class="c">// sum of estimatedBudget for ongoing+work_completed</span>
+  <span class="s">"activeSpendToDate"</span>: 250000,
+  <span class="s">"activeNetPL"</span>: 9737455751,
+  <span class="s">"activeProjects"</span>: [
+    {
+      <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+      <span class="s">"name"</span>: <span class="s">"400/220 Kv Substation"</span>,
+      <span class="s">"status"</span>: <span class="s">"ongoing"</span>,       <span class="c">// ongoing | work_completed</span>
+      <span class="s">"contractAmount"</span>: 1500000,
+      <span class="s">"spendToDate"</span>: 50000,
+      <span class="s">"netPL"</span>: 1450000,
+      <span class="s">"progressPercent"</span>: 3
+    }
+  ]
+}</pre>
+      <div class="sect-label">Status Values Reference</div>
+      <table><tr><th>Value</th><th>Label</th><th>Meaning</th></tr>
+        <tr><td><code>upcoming</code></td><td>Upcoming</td><td>Site scheduled to start in future</td></tr>
+        <tr><td><code>ongoing</code></td><td>Ongoing</td><td>Site is currently active</td></tr>
+        <tr><td><code>hold</code></td><td>On Hold</td><td>Site work temporarily paused</td></tr>
+        <tr><td><code>work_completed</code></td><td>Work Completed</td><td>Physical work done, awaiting financial clearance</td></tr>
+        <tr><td><code>completed</code></td><td>Completed</td><td>Site fully closed (financial clearance done)</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<section id="leave-balance">
+  <div class="module-header">
+    <div class="module-icon" style="background:#fef3c7">🏖️</div>
+    <h2>Leave Balance <small>User-specific leave balance per category</small></h2>
+  </div>
+  <div class="info-box" style="background:#fffbeb;border-left-color:#d97706;color:#78350f">
+    <strong>Role-aware:</strong> Employees and Drivers automatically see only their own balance (no <code>userIds</code> needed).
+    Admins and Superadmins can pass <code>userIds</code> to fetch any user's balance.
+    This endpoint lives in the <code>leave-balances</code> module — not under <code>/dashboard</code> — but serves as the dashboard leave balance widget data source.
+  </div>
+
+  <div class="endpoint open">
+    <div class="endpoint-head" onclick="toggle(this)">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/leave-balances</span>
+      <span class="endpoint-desc">Leave balance per category (Casual, Sick, Earned, etc.)</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="sect-label">Query Params</div>
+      <table><tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+        <tr><td>userIds</td><td>uuid[]</td><td>No</td><td>Admin only — filter to specific users. Employees/Drivers: auto-scoped to self, passing this throws 400.</td></tr>
+        <tr><td>financialYear</td><td>string</td><td>No</td><td>e.g. <code>2526</code> — filter by FY. Omit for current FY.</td></tr>
+        <tr><td>sortField</td><td>string</td><td>No</td><td>Field to sort by</td></tr>
+        <tr><td>sortOrder</td><td>ASC | DESC</td><td>No</td><td>Sort direction</td></tr>
+      </table>
+      <div class="sect-label">Response 200</div>
+      <pre>{
+  <span class="s">"records"</span>: [
+    {
+      <span class="s">"id"</span>: <span class="s">"uuid"</span>,
+      <span class="s">"userId"</span>: <span class="s">"uuid"</span>,
+      <span class="s">"leaveCategory"</span>: <span class="s">"Casual Leave"</span>,
+      <span class="s">"financialYear"</span>: <span class="s">"2526"</span>,
+      <span class="s">"totalAllocated"</span>: <span class="s">"12"</span>,
+      <span class="s">"carriedForward"</span>: <span class="s">"0"</span>,
+      <span class="s">"adjusted"</span>: <span class="s">"0"</span>,
+      <span class="s">"consumed"</span>: <span class="s">"3"</span>,
+      <span class="s">"availableBalance"</span>: <span class="s">"9"</span>,  <span class="c">// totalAllocated + carriedForward + adjusted - consumed</span>
+      <span class="s">"creditSource"</span>: <span class="s">"ANNUAL"</span>,
+      <span class="s">"user"</span>: { <span class="s">"id"</span>: <span class="s">"uuid"</span>, <span class="s">"firstName"</span>: <span class="s">"Rahul"</span>, <span class="s">"lastName"</span>: <span class="s">"Gupta"</span>, <span class="s">"employeeId"</span>: <span class="s">"EMP001"</span> }
+    }
+  ],
+  <span class="s">"totalRecords"</span>: 3
+}</pre>
+      <div class="sect-label">Role Behaviour</div>
+      <table><tr><th>Role</th><th>Behaviour</th></tr>
+        <tr><td>EMPLOYEE / DRIVER</td><td>Automatically scoped to own user ID. Passing <code>userIds</code> returns 400.</td></tr>
+        <tr><td>ADMIN / SUPERADMIN</td><td>Can pass <code>userIds=uuid1&userIds=uuid2</code> to see any user's balance. Omitting returns all users.</td></tr>
       </table>
     </div>
   </div>
