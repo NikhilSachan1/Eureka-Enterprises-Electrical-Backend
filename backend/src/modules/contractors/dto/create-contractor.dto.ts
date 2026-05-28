@@ -48,9 +48,6 @@ export class CreateContractorDto {
   })
   @IsString()
   @IsOptional()
-  @Matches(CONTRACTOR_VALIDATION.GST_REGEX, {
-    message: CONTRACTOR_ERRORS.INVALID_GST_FORMAT,
-  })
   gstNumber?: string;
 
   // Address fields
@@ -117,16 +114,16 @@ export class CreateContractorDto {
   @MaxLength(100)
   state: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Pincode (6 digits)',
     example: '400001',
   })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @Matches(CONTRACTOR_VALIDATION.PINCODE_REGEX, {
     message: CONTRACTOR_ERRORS.INVALID_PINCODE,
   })
-  pincode: string;
+  pincode?: string;
 
   @ApiPropertyOptional({
     description: 'Country',

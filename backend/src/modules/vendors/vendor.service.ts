@@ -179,7 +179,13 @@ export class VendorService {
     const existingVendor = await this.findOneOrFail({ where: { id } });
 
     const effectiveType = (updateDto.vendorType ?? existingVendor.vendorType) as VendorType;
-    const effectiveGst = updateDto.gstNumber ?? existingVendor.gstNumber;
+
+    // When switching to FREELANCER and no gstNumber is provided in the payload,
+    // auto-clear the existing gstNumber instead of carrying it forward and failing validation.
+    const clearGst =
+      updateDto.vendorType === VendorType.FREELANCER && updateDto.gstNumber === undefined;
+
+    const effectiveGst = clearGst ? null : updateDto.gstNumber ?? existingVendor.gstNumber;
     this.validateGstByVendorType(effectiveType, effectiveGst);
 
     if (updateDto.name && updateDto.name !== existingVendor.name) {
@@ -211,10 +217,12 @@ export class VendorService {
       ...updateDto,
     });
 
-    await this.vendorRepository.update(
-      { id },
-      { ...updateDto, fullAddress, updatedBy } as Partial<VendorEntity>,
-    );
+    await this.vendorRepository.update({ id }, {
+      ...updateDto,
+      ...(clearGst ? { gstNumber: null } : {}),
+      fullAddress,
+      updatedBy,
+    } as Partial<VendorEntity>);
 
     return this.utilityService.getSuccessMessage(
       VendorEntityFields.VENDOR,

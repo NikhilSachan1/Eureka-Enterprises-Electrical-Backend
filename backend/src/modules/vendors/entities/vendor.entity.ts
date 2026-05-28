@@ -21,7 +21,7 @@ export class VendorEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 20, default: VendorType.GST_REGISTERED })
   vendorType: string;
 
-  @Column({ type: 'varchar', length: 15, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   gstNumber: string;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
@@ -49,8 +49,8 @@ export class VendorEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 100 })
   state: string;
 
-  @Column({ type: 'varchar', length: 6 })
-  pincode: string;
+  @Column({ type: 'varchar', length: 6, nullable: true })
+  pincode: string | null;
 
   @Column({ type: 'varchar', length: 100, default: 'India' })
   country: string;

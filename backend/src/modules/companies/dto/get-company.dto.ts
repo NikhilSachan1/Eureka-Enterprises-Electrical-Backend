@@ -62,7 +62,12 @@ export class GetCompanyDto extends BaseGetDto {
     required: false,
   })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
+    return undefined;
+  })
   @IsBoolean()
   isActive?: boolean;
 
@@ -71,7 +76,12 @@ export class GetCompanyDto extends BaseGetDto {
     required: false,
   })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
+    return undefined;
+  })
   @IsBoolean()
   onlyRootCompanies?: boolean;
 
@@ -81,7 +91,12 @@ export class GetCompanyDto extends BaseGetDto {
     default: false,
   })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
+    return undefined;
+  })
   @IsBoolean()
   includeChildren?: boolean;
 }

@@ -11,11 +11,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import {
-  VENDOR_ERRORS,
-  VENDOR_VALIDATION,
-  VendorType,
-} from '../constants/vendor.constants';
+import { VENDOR_ERRORS, VENDOR_VALIDATION, VendorType } from '../constants/vendor.constants';
 
 export class CreateVendorDto {
   @ApiProperty({
@@ -61,9 +57,6 @@ export class CreateVendorDto {
   })
   @IsString()
   @IsOptional()
-  @Matches(VENDOR_VALIDATION.GST_REGEX, {
-    message: VENDOR_ERRORS.INVALID_GST_FORMAT,
-  })
   gstNumber?: string;
 
   @ApiPropertyOptional({
@@ -120,13 +113,13 @@ export class CreateVendorDto {
   @MaxLength(100)
   state: string;
 
-  @ApiProperty({ description: 'Pincode (6 digits)', example: '400001' })
+  @ApiPropertyOptional({ description: 'Pincode (6 digits)', example: '400001' })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @Matches(VENDOR_VALIDATION.PINCODE_REGEX, {
     message: VENDOR_ERRORS.INVALID_PINCODE,
   })
-  pincode: string;
+  pincode?: string;
 
   @ApiPropertyOptional({ description: 'Country', example: 'India', default: 'India' })
   @IsString()

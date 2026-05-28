@@ -10,6 +10,12 @@ export const SITE_ERRORS = {
   INVALID_WORK_TYPE: 'Invalid work type: {workType}. Available: {available}',
   WORK_TYPES_CONFIG_NOT_FOUND: 'Work types configuration not found',
   SITE_NOT_READY_FOR_CLOSING: 'Site cannot be closed. Financial clearance conditions not met.',
+  COMPLETED_REQUIRES_PAST_END_DATE:
+    'Site can only be marked as Completed after the end date has passed. Please update the end date first.',
+  ONGOING_REQUIRES_STARTED:
+    'Site can only be marked as Ongoing after the start date has arrived. Please update the start date first.',
+  CANNOT_DELETE_SITE_HAS_DATA:
+    'Cannot delete site. Associated data exists: {tables}. Please remove them first.',
 };
 
 export const SITE_RESPONSES = {

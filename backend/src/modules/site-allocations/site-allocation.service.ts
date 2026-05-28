@@ -49,9 +49,12 @@ export class SiteAllocationService {
     // Validate site exists and is active
     const site = await this.siteService.findOneOrFail({ where: { id: createDto.siteId } });
 
-    // Cannot allocate to inactive or completed sites
-    if (site.status === SiteStatus.COMPLETED) {
-      throw new BadRequestException(SITE_ALLOCATION_ERRORS.CANNOT_ALLOCATE_TO_INACTIVE_SITE);
+    // Cannot allocate to sites that are on hold, work completed, or completed
+    const blockedStatuses = [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED, SiteStatus.COMPLETED];
+    if (blockedStatuses.includes(site.status as SiteStatus)) {
+      throw new BadRequestException(
+        SITE_ALLOCATION_ERRORS.SITE_STATUS_BLOCKS_ALLOCATION.replace('{status}', site.status),
+      );
     }
 
     // Check if employee is already allocated to another site
@@ -216,6 +219,15 @@ export class SiteAllocationService {
     // Already deallocated
     if (!allocation.isCurrentlyAllocated) {
       throw new BadRequestException(SITE_ALLOCATION_ERRORS.CANNOT_UPDATE_DEALLOCATED);
+    }
+
+    // Cannot deallocate from sites that are on hold, work completed, or completed
+    const site = await this.siteService.findOneOrFail({ where: { id: allocation.siteId } });
+    const blockedStatuses = [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED, SiteStatus.COMPLETED];
+    if (blockedStatuses.includes(site.status as SiteStatus)) {
+      throw new BadRequestException(
+        SITE_ALLOCATION_ERRORS.SITE_STATUS_BLOCKS_ALLOCATION.replace('{status}', site.status),
+      );
     }
 
     await this.siteAllocationRepository.update(

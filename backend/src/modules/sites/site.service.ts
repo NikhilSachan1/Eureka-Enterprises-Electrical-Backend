@@ -7,7 +7,13 @@ import {
 import { IsNull, ILike, FindOneOptions, Not, DataSource, In } from 'typeorm';
 import { SiteRepository } from './site.repository';
 import { SiteEntity } from './entities/site.entity';
-import { CreateSiteDto, UpdateSiteDto, GetSiteDto, UpdateSiteStatusDto } from './dto';
+import {
+  CreateSiteDto,
+  UpdateSiteDto,
+  GetSiteDto,
+  UpdateSiteStatusDto,
+  GetSiteActivityDto,
+} from './dto';
 import {
   SITE_ERRORS,
   SITE_RESPONSES,
@@ -387,6 +393,7 @@ export class SiteService {
       upcomingSites: parseInt(row.upcomingSites) || 0,
       ongoingSites: parseInt(row.ongoingSites) || 0,
       holdSites: parseInt(row.holdSites) || 0,
+      workCompletedSites: parseInt(row.workCompletedSites) || 0,
       completedSites: parseInt(row.completedSites) || 0,
       activeSites: parseInt(row.activeSites) || 0,
       inactiveSites: parseInt(row.inactiveSites) || 0,
@@ -519,6 +526,15 @@ export class SiteService {
       throw new BadRequestException(SITE_ERRORS.INVALID_DATE_RANGE);
     }
 
+    // Auto-recalculate status when dates change and no explicit status override is provided.
+    // Skip if site is on HOLD (user deliberately paused it) or if the caller is explicitly
+    // setting a status in this same request.
+    const datesChanged = updateDto.startDate !== undefined || updateDto.endDate !== undefined;
+    const currentStatus = existingSite.status as SiteStatus;
+    if (datesChanged && !updateDto.status && currentStatus !== SiteStatus.HOLD) {
+      updateDto.status = this.calculateStatus(startDate, endDate);
+    }
+
     const fullAddress = this.buildFullAddress({
       ...existingSite,
       ...updateDto,
@@ -578,6 +594,26 @@ export class SiteService {
     // Validate status transition
     this.validateStatusTransition(site.status, updateStatusDto.status);
 
+    // If transitioning to ONGOING, start date must have arrived
+    if (updateStatusDto.status === SiteStatus.ONGOING) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDate = site.startDate ? new Date(site.startDate) : null;
+      if (!startDate || startDate > today) {
+        throw new BadRequestException(SITE_ERRORS.ONGOING_REQUIRES_STARTED);
+      }
+    }
+
+    // If transitioning to COMPLETED, end date must have already passed
+    if (updateStatusDto.status === SiteStatus.COMPLETED) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endDate = site.endDate ? new Date(site.endDate) : null;
+      if (!endDate || endDate > today) {
+        throw new BadRequestException(SITE_ERRORS.COMPLETED_REQUIRES_PAST_END_DATE);
+      }
+    }
+
     // If transitioning to COMPLETED, check financial clearance (BRD §9)
     if (updateStatusDto.status === SiteStatus.COMPLETED) {
       const readiness = await this.billingService.getSiteClosingReadiness({ siteId: id });
@@ -628,6 +664,14 @@ export class SiteService {
       throw new BadRequestException(SITE_ERRORS.CANNOT_DELETE_ACTIVE_SITE);
     }
 
+    // Prevent deletion if any associated data exists
+    const blockers = await this.checkAssociatedData(id);
+    if (blockers.length > 0) {
+      throw new BadRequestException(
+        SITE_ERRORS.CANNOT_DELETE_SITE_HAS_DATA.replace('{tables}', blockers.join(', ')),
+      );
+    }
+
     await this.siteRepository.update({ id }, { deletedBy });
     await this.siteRepository.softDelete({ id });
 
@@ -662,6 +706,20 @@ export class SiteService {
             id: siteId,
             success: false,
             message: SITE_ERRORS.CANNOT_DELETE_ACTIVE_SITE,
+          });
+          continue;
+        }
+
+        // Prevent deletion if any associated data exists
+        const blockers = await this.checkAssociatedData(siteId);
+        if (blockers.length > 0) {
+          results.push({
+            id: siteId,
+            success: false,
+            message: SITE_ERRORS.CANNOT_DELETE_SITE_HAS_DATA.replace(
+              '{tables}',
+              blockers.join(', '),
+            ),
           });
           continue;
         }
@@ -806,6 +864,254 @@ export class SiteService {
   }
 
   /**
+   * GET /sites/activity — general cross-site report.
+   * Returns site details + contractors + vendors + full employee allocation history.
+   * Filterable by site name, siteId[], companyId[], contractorId[], vendorId[], employeeName.
+   */
+  async getSiteActivity(options: GetSiteActivityDto) {
+    const {
+      search,
+      siteId,
+      companyId,
+      contractorId,
+      vendorId,
+      employeeName,
+      sortField = 'createdAt',
+      sortOrder = 'DESC',
+      page = 1,
+      pageSize = 10,
+    } = options;
+
+    // --- Build dynamic WHERE + JOIN for filtering ---
+    const conditions: string[] = [`s."deletedAt" IS NULL`];
+    const params: any[] = [];
+
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`s.name ILIKE $${params.length}`);
+    }
+
+    if (siteId && siteId.length > 0) {
+      params.push(siteId);
+      conditions.push(`s.id = ANY($${params.length})`);
+    }
+
+    if (companyId && companyId.length > 0) {
+      params.push(companyId);
+      conditions.push(`s."companyId" = ANY($${params.length})`);
+    }
+
+    // Extra JOINs (INNER) — only applied when the corresponding filter is active
+    const extraJoins: string[] = [];
+
+    if (contractorId && contractorId.length > 0) {
+      extraJoins.push(
+        `JOIN site_contractors sc_f ON sc_f."siteId" = s.id` +
+          ` JOIN contractors c_f ON c_f.id = sc_f."contractorId" AND c_f."deletedAt" IS NULL`,
+      );
+      params.push(contractorId);
+      conditions.push(`c_f.id = ANY($${params.length})`);
+    }
+
+    if (vendorId && vendorId.length > 0) {
+      extraJoins.push(
+        `JOIN site_vendors sv_f ON sv_f."siteId" = s.id` +
+          ` JOIN vendors v_f ON v_f.id = sv_f."vendorId" AND v_f."deletedAt" IS NULL`,
+      );
+      params.push(vendorId);
+      conditions.push(`v_f.id = ANY($${params.length})`);
+    }
+
+    if (employeeName) {
+      extraJoins.push(
+        `JOIN site_allocations sa_f ON sa_f."siteId" = s.id AND sa_f."deletedAt" IS NULL` +
+          ` JOIN users u_f ON u_f.id = sa_f."userId" AND u_f."deletedAt" IS NULL`,
+      );
+      params.push(`%${employeeName}%`);
+      const p = params.length;
+      conditions.push(
+        `(u_f."firstName" ILIKE $${p} OR u_f."lastName" ILIKE $${p} OR (u_f."firstName" || ' ' || u_f."lastName") ILIKE $${p})`,
+      );
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const extraJoinSql = extraJoins.join('\n');
+
+    // Allowed sort columns (whitelist to prevent SQL injection)
+    const sortColMap: Record<string, string> = {
+      createdAt: 's."createdAt"',
+      name: 's.name',
+      status: 's.status',
+      startDate: 's."startDate"',
+      endDate: 's."endDate"',
+    };
+    const orderCol = sortColMap[sortField] ?? 's."createdAt"';
+    const orderDir = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+    // --- Count ---
+    const countResult = await this.dataSource.query(
+      `SELECT COUNT(DISTINCT s.id) AS count FROM sites s ${extraJoinSql} WHERE ${whereClause}`,
+      params,
+    );
+    const totalRecords = parseInt(countResult[0]?.count ?? '0') || 0;
+
+    if (totalRecords === 0) {
+      return { records: [], totalRecords };
+    }
+
+    // --- Paginated site IDs (ordered) ---
+    const idRows: { id: string }[] = await this.dataSource.query(
+      `SELECT DISTINCT s.id, ${orderCol} AS _sort
+       FROM sites s ${extraJoinSql}
+       WHERE ${whereClause}
+       ORDER BY _sort ${orderDir}, s.id ${orderDir}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
+
+    if (idRows.length === 0) {
+      return { records: [], totalRecords };
+    }
+
+    const orderedIds = idRows.map((r) => r.id);
+    const ph = orderedIds.map((_, i) => `$${i + 1}`).join(', ');
+
+    // --- Fetch all detail data in one parallel round-trip ---
+    const [siteRows, contractorRows, vendorRows, allocationRows] = await Promise.all([
+      this.dataSource.query(
+        `SELECT
+           s.id, s.name, s.status, s."startDate", s."endDate", s.city, s.state,
+           s.pincode, s."fullAddress", s."managerName", s."managerContact",
+           s."workTypes", s."isActive", s."estimatedBudget", s."createdAt", s."updatedAt",
+           comp.id AS "companyId", comp.name AS "companyName",
+           comp."fullAddress" AS "companyFullAddress", comp.logo AS "companyLogo"
+         FROM sites s
+         LEFT JOIN companies comp ON comp.id = s."companyId"
+         WHERE s.id IN (${ph})`,
+        orderedIds,
+      ),
+      this.dataSource.query(
+        `SELECT sc."siteId", c.id, c.name, c.email, c."contactNumber",
+                c."gstNumber", c."fullAddress", c."isActive"
+         FROM site_contractors sc
+         JOIN contractors c ON c.id = sc."contractorId" AND c."deletedAt" IS NULL
+         WHERE sc."siteId" IN (${ph})`,
+        orderedIds,
+      ),
+      this.dataSource.query(
+        `SELECT sv."siteId", v.id, v.name, v.email, v."contactNumber",
+                v."vendorType", v."gstNumber", v."fullAddress", v."isActive"
+         FROM site_vendors sv
+         JOIN vendors v ON v.id = sv."vendorId" AND v."deletedAt" IS NULL
+         WHERE sv."siteId" IN (${ph})`,
+        orderedIds,
+      ),
+      this.dataSource.query(
+        `SELECT
+           sa.id AS "allocationId", sa."siteId", sa."userId",
+           sa.role, sa."allocationType", sa."dailyAllowance",
+           sa."allocatedAt", sa."deallocatedAt", sa."isCurrentlyAllocated", sa.remarks,
+           u."firstName", u."lastName", u.email, u."employeeId", u."profilePicture"
+         FROM site_allocations sa
+         JOIN users u ON u.id = sa."userId" AND u."deletedAt" IS NULL
+         WHERE sa."siteId" IN (${ph}) AND sa."deletedAt" IS NULL
+         ORDER BY sa."siteId", u."lastName", u."firstName", sa."allocatedAt" DESC`,
+        orderedIds,
+      ),
+    ]);
+
+    // --- Build lookup maps ---
+    const siteMap = new Map<string, any>();
+    for (const row of siteRows) siteMap.set(row.id, row);
+
+    const contractorsBySite = new Map<string, any[]>();
+    for (const row of contractorRows) {
+      const { siteId: sid, ...c } = row;
+      if (!contractorsBySite.has(sid)) contractorsBySite.set(sid, []);
+      contractorsBySite.get(sid)!.push(c);
+    }
+
+    const vendorsBySite = new Map<string, any[]>();
+    for (const row of vendorRows) {
+      const { siteId: sid, ...v } = row;
+      if (!vendorsBySite.has(sid)) vendorsBySite.set(sid, []);
+      vendorsBySite.get(sid)!.push(v);
+    }
+
+    // Group allocation rows by site → user (each user may have multiple history rows)
+    const allocationsBySite = new Map<string, Map<string, any>>();
+    for (const row of allocationRows) {
+      const {
+        siteId: sid,
+        userId,
+        allocationId,
+        role,
+        allocationType,
+        dailyAllowance,
+        allocatedAt,
+        deallocatedAt,
+        isCurrentlyAllocated,
+        remarks,
+        firstName,
+        lastName,
+        email,
+        employeeId,
+        profilePicture,
+      } = row;
+
+      if (!allocationsBySite.has(sid)) allocationsBySite.set(sid, new Map());
+      const userMap = allocationsBySite.get(sid)!;
+
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          userId,
+          employeeId,
+          firstName,
+          lastName,
+          email,
+          profilePicture,
+          history: [],
+        });
+      }
+
+      userMap.get(userId)!.history.push({
+        allocationId,
+        role,
+        allocationType,
+        dailyAllowance: dailyAllowance != null ? Number(dailyAllowance) : 0,
+        allocatedAt,
+        deallocatedAt,
+        isCurrentlyAllocated,
+        remarks: remarks ?? null,
+      });
+    }
+
+    // --- Assemble final records in original (paginated) order ---
+    const records = orderedIds
+      .map((sid) => {
+        const site = siteMap.get(sid);
+        if (!site) return null;
+
+        const { companyId: cId, companyName, companyFullAddress, companyLogo, ...siteData } = site;
+
+        return {
+          ...siteData,
+          company: cId
+            ? { id: cId, name: companyName, fullAddress: companyFullAddress, logo: companyLogo }
+            : null,
+          contractors: contractorsBySite.get(sid) ?? [],
+          vendors: vendorsBySite.get(sid) ?? [],
+          employeeAllocations: allocationsBySite.has(sid)
+            ? Array.from(allocationsBySite.get(sid)!.values())
+            : [],
+        };
+      })
+      .filter(Boolean);
+
+    return { records, totalRecords };
+  }
+
+  /**
    * Get status history timeline for a site
    */
   async getStatusHistory(siteId: string) {
@@ -855,9 +1161,9 @@ export class SiteService {
     const validTransitions: Record<SiteStatus, SiteStatus[]> = {
       [SiteStatus.UPCOMING]: [SiteStatus.ONGOING, SiteStatus.HOLD, SiteStatus.WORK_COMPLETED],
       [SiteStatus.ONGOING]: [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED],
-      [SiteStatus.HOLD]: [SiteStatus.ONGOING, SiteStatus.WORK_COMPLETED],
+      [SiteStatus.HOLD]: [SiteStatus.ONGOING, SiteStatus.WORK_COMPLETED, SiteStatus.COMPLETED],
       [SiteStatus.WORK_COMPLETED]: [SiteStatus.COMPLETED, SiteStatus.ONGOING, SiteStatus.HOLD],
-      [SiteStatus.COMPLETED]: [], // Terminal — no transitions
+      [SiteStatus.COMPLETED]: [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED],
     };
 
     if (!validTransitions[currentStatus].includes(newStatus)) {
@@ -868,6 +1174,38 @@ export class SiteService {
         ),
       );
     }
+  }
+
+  /**
+   * Check if any associated data exists for a site across all dependent tables.
+   * Returns a list of human-readable table labels that have data, or empty array if safe to delete.
+   */
+  private async checkAssociatedData(siteId: string): Promise<string[]> {
+    const checks: { label: string; table: string; hasSoftDelete: boolean }[] = [
+      { label: 'Purchase Orders', table: 'purchase_orders', hasSoftDelete: true },
+      { label: 'JMCs', table: 'jmcs', hasSoftDelete: true },
+      { label: 'Site Reports', table: 'site_reports', hasSoftDelete: true },
+      { label: 'Invoices', table: 'site_invoices', hasSoftDelete: true },
+      { label: 'Book Payments', table: 'book_payments', hasSoftDelete: true },
+      { label: 'Bank Transfers', table: 'bank_transfers', hasSoftDelete: true },
+      { label: 'Debit Notes', table: 'debit_notes', hasSoftDelete: true },
+      { label: 'Credit Notes', table: 'credit_notes', hasSoftDelete: true },
+      { label: 'GST Register', table: 'gst_register_entries', hasSoftDelete: false },
+      { label: 'TDS Register', table: 'tds_register_entries', hasSoftDelete: false },
+      { label: 'Site Documents', table: 'site_documents', hasSoftDelete: true },
+      { label: 'Vehicle Logs', table: 'vehicle_logs', hasSoftDelete: true },
+      { label: 'Daily Status Reports', table: 'daily_status_reports', hasSoftDelete: true },
+      { label: 'Employee Allocations', table: 'site_allocations', hasSoftDelete: true },
+    ];
+
+    // Build a single UNION ALL query — returns first matching row per table (EXISTS is fastest)
+    const unionParts = checks.map(({ label, table, hasSoftDelete }) => {
+      const softDeleteClause = hasSoftDelete ? ` AND "deletedAt" IS NULL` : '';
+      return `SELECT '${label}' AS lbl WHERE EXISTS (SELECT 1 FROM ${table} WHERE "siteId" = '${siteId}'${softDeleteClause})`;
+    });
+
+    const rows: { lbl: string }[] = await this.dataSource.query(unionParts.join('\nUNION ALL\n'));
+    return rows.map((r) => r.lbl);
   }
 
   private buildFullAddress(data: {

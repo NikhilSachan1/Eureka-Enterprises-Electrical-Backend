@@ -28,6 +28,7 @@ export interface OverallSiteStats {
   upcomingSites: number;
   ongoingSites: number;
   holdSites: number;
+  workCompletedSites: number;
   completedSites: number;
   activeSites: number;
   inactiveSites: number;

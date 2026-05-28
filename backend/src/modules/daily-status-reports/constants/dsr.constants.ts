@@ -18,7 +18,7 @@ export const DSR_ERRORS = {
   NOT_FOUND: 'Daily Status Report not found',
   ALREADY_EXISTS: 'DSR already exists for this site and date',
   SITE_NOT_ALLOCATED: 'Site is not allocated to the user',
-  SITE_NOT_ACTIVE: 'Site must be in upcoming or ongoing status',
+  SITE_NOT_ACTIVE: 'DSR can only be added for a site that is currently Ongoing',
   INVALID_WORK_TYPE: 'Invalid work type: {type}. Available types: {available}',
   INVALID_WEATHER_CONDITION: 'Invalid weather condition: {condition}. Available: {available}',
   EQUIPMENT_NOT_ALLOCATED: 'Equipment with ID {assetId} is not allocated to the user',

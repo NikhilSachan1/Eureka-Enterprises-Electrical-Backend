@@ -40,9 +40,10 @@ export class GetContractorDto extends BaseGetDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
     return undefined;
   })
   isActive?: boolean;
@@ -53,9 +54,10 @@ export class GetContractorDto extends BaseGetDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
     return undefined;
   })
   excludeSelfContractor?: boolean;
@@ -66,9 +68,10 @@ export class GetContractorDto extends BaseGetDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
     return undefined;
   })
   onlySelfContractor?: boolean;

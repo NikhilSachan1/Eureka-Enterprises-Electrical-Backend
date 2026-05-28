@@ -6,6 +6,8 @@ export const SITE_ALLOCATION_ERRORS = {
     'Employee is already allocated to another site. Please deallocate first.',
   EMPLOYEE_ALREADY_IN_SITE: 'Employee is already allocated to this site',
   CANNOT_ALLOCATE_TO_INACTIVE_SITE: 'Cannot allocate employee to an inactive or completed site',
+  SITE_STATUS_BLOCKS_ALLOCATION:
+    'Site is currently {status}. Remove all employees from the site before this status can allow changes.',
   INVALID_ALLOCATION_TYPE: 'Invalid allocation type: {type}. Available: {available}',
   INVALID_SITE_ROLE: 'Invalid site role: {role}. Available: {available}',
   ALLOCATION_TYPES_CONFIG_NOT_FOUND: 'Allocation types configuration not found',

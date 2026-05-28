@@ -41,8 +41,8 @@ export class ContractorEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 100 })
   state: string;
 
-  @Column({ type: 'varchar', length: 6 })
-  pincode: string;
+  @Column({ type: 'varchar', length: 6, nullable: true })
+  pincode: string | null;
 
   @Column({ type: 'varchar', length: 100, default: 'India' })
   country: string;
