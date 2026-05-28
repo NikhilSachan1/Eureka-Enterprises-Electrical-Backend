@@ -72,6 +72,10 @@ export class SiteInvoiceService {
 
     this.validateAmounts(dto.taxableAmount, dto.gstAmount ?? 0, dto.totalAmount);
 
+    // Ceiling check at save time — soft guard before the pessimistic-lock check at approval.
+    // Sums all non-rejected invoices on this PO so users get immediate feedback.
+    await this.assertPoCeiling(jmc.poId, dto.totalAmount, null);
+
     const created = await this.invoiceRepository.create({
       jmcId: jmc.id,
       reportId: resolvedReportId,
@@ -214,6 +218,11 @@ export class SiteInvoiceService {
     const newGst = dto.gstAmount ?? Number(inv.gstAmount);
     const newTotal = dto.totalAmount ?? Number(inv.totalAmount);
     this.validateAmounts(newTaxable, newGst, newTotal);
+
+    // Ceiling check — exclude the current invoice so its own amount isn't double-counted.
+    if (dto.totalAmount !== undefined) {
+      await this.assertPoCeiling(inv.poId, newTotal, id);
+    }
 
     await this.invoiceRepository.update({ id }, {
       ...dto,
@@ -450,13 +459,59 @@ export class SiteInvoiceService {
   }
 
   /**
+   * Soft ceiling check at create / update time.
+   *
+   * Sums ALL non-rejected, non-deleted invoices on the PO (excluding the
+   * invoice being edited, if any) and compares against PO.totalAmount.
+   *
+   * This is a user-friendly guard so operators see the error immediately.
+   * The hard, race-condition-proof check still runs inside the approval
+   * transaction with a pessimistic PO lock (approve() method).
+   *
+   * @param poId          - PO the invoice belongs to
+   * @param newTotal      - totalAmount of the invoice being saved
+   * @param excludeId     - id of the invoice being updated (null on create)
+   */
+  private async assertPoCeiling(
+    poId: string,
+    newTotal: number,
+    excludeId: string | null,
+  ): Promise<void> {
+    // Load PO total amount
+    const [poRow] = await this.dataSource.query<{ totalAmount: string }[]>(
+      `SELECT "totalAmount" FROM purchase_orders WHERE id = $1 AND "deletedAt" IS NULL`,
+      [poId],
+    );
+    if (!poRow) return; // PO vanished — approve() will catch it with a lock
+
+    // Sum all non-rejected invoices on this PO (pending + approved)
+    const [sumRow] = await this.dataSource.query<{ existing: string }[]>(
+      `SELECT COALESCE(SUM("totalAmount"), 0) AS existing
+         FROM site_invoices
+        WHERE "poId" = $1
+          AND "deletedAt" IS NULL
+          AND "approvalStatus" != 'REJECTED'
+          ${excludeId ? `AND id != $2` : ''}`,
+      excludeId ? [poId, excludeId] : [poId],
+    );
+
+    const existing = Number(sumRow?.existing ?? 0);
+    const poTotal = Number(poRow.totalAmount);
+
+    if (existing + Number(newTotal) > poTotal) {
+      throw new BadRequestException(INVOICE_ERRORS.PO_CEILING_EXCEEDED_ON_SAVE);
+    }
+  }
+
+  /**
    * Dropdown endpoint — returns Invoices for a site with eligibility flags.
    *
    * forDocument = "book-payment"   → PURCHASE invoices for Book Payment creation.
    *   Eligible: APPROVED + bookedTotal < totalAmount.
    *
    * forDocument = "bank-transfer"  → SALE invoices for SALE Bank Transfer creation.
-   *   Eligible: APPROVED + paidTotal < totalAmount.
+   *   Eligible: APPROVED + paidTotal < taxableAmount.
+   *   GST is excluded — tracked in GST register, settled separately via GST payment release.
    */
   async getDropdown(siteId: string, forDocument: 'book-payment' | 'bank-transfer') {
     const partyType = forDocument === 'book-payment' ? 'PURCHASE' : 'SALE';
@@ -475,11 +530,11 @@ export class SiteInvoiceService {
         COALESCE(c.name, v.name) AS "partyName",
         -- eligibility
         -- book-payment ceiling = taxableAmount (GST excluded; only taxable - TDS is booked)
-        -- bank-transfer ceiling = totalAmount  (full invoice value on SALE side)
+        -- bank-transfer ceiling = taxableAmount (GST excluded on SALE side too; GST settled separately via register)
         CASE
           WHEN i."approvalStatus" != 'APPROVED' THEN false
           WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."taxableAmount" THEN false
-          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount"   THEN false
+          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."taxableAmount" THEN false
           ELSE true
         END AS eligible,
         CASE
@@ -487,8 +542,8 @@ export class SiteInvoiceService {
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
           WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."taxableAmount"
             THEN 'Invoice fully booked — no remaining taxable amount'
-          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount"
-            THEN 'Invoice fully paid'
+          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."taxableAmount"
+            THEN 'Invoice fully paid (taxable amount exhausted)'
           ELSE NULL
         END AS reason
       FROM site_invoices i
@@ -517,11 +572,11 @@ export class SiteInvoiceService {
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
           // remaining for book-payment = taxableAmount - bookedTotal (GST excluded)
-          // remaining for bank-transfer = totalAmount  - paidTotal
+          // remaining for bank-transfer = taxableAmount - paidTotal (GST excluded on SALE side too)
           remaining:
             forDocument === 'book-payment'
               ? Number(r.taxableAmount) - Number(r.bookedTotal)
-              : Number(r.totalAmount) - Number(r.paidTotal),
+              : Number(r.taxableAmount) - Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },
       })),

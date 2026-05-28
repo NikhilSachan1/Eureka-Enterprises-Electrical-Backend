@@ -54,7 +54,9 @@ export class BankTransferService {
   }
 
   /**
-   * SALE side: transfer linked to invoice, ceiling check Σ ≤ invoice total.
+   * SALE side: transfer linked to invoice, ceiling check Σ ≤ invoice taxable amount.
+   * GST is excluded — it is tracked in the GST register and settled separately.
+   * TDS is deducted by the contractor before transferring, not tracked here as a separate deduction.
    */
   private async createSaleTransfer(dto: CreateBankTransferDto, createdBy: string) {
     return await this.dataSource.transaction(async (em) => {
@@ -75,9 +77,10 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_NOT_APPROVED);
       }
 
-      // Ceiling check
+      // Ceiling check: Σ bank transfers ≤ invoice taxable amount
+      // GST is excluded from the payment to contractor — it is settled separately via GST register.
       const existingPaid = await this.bankTransferRepository.sumByInvoice(dto.invoiceId, em);
-      if (existingPaid + dto.transferAmount > Number(invoice.totalAmount)) {
+      if (existingPaid + dto.transferAmount > Number(invoice.taxableAmount)) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
@@ -392,7 +395,8 @@ export class BankTransferService {
 
         const existingPaid = await this.bankTransferRepository.sumByInvoice(bt.invoiceId, em);
         const adjustedPaid = existingPaid - Number(bt.transferAmount) + dto.transferAmount;
-        if (adjustedPaid > Number(invoice.totalAmount)) {
+        // Ceiling is taxable amount — GST excluded (same rule as create)
+        if (adjustedPaid > Number(invoice.taxableAmount)) {
           throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
