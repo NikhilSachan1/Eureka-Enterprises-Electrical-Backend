@@ -16,6 +16,7 @@ import {
   CreateSiteDto,
   UpdateSiteDto,
   GetSiteDto,
+  GetSiteActivityDto,
   UpdateSiteStatusDto,
   BulkDeleteSiteDto,
 } from './dto';
@@ -50,6 +51,17 @@ export class SiteController {
     @Request() req: { user: { id: string; activeRole: string } },
   ) {
     return await this.siteService.findAll(query, req.user.id, req.user.activeRole);
+  }
+
+  @Get('activity')
+  @ApiOperation({
+    summary: 'Site activity report',
+    description:
+      'Returns site details, linked contractors, linked vendors, and full employee allocation/deallocation history. ' +
+      'Filterable by site name/ID, company, contractor, vendor, and employee name. No siteId required — use filters.',
+  })
+  async getSiteActivity(@Query() query: GetSiteActivityDto) {
+    return await this.siteService.getSiteActivity(query);
   }
 
   @Get(':id')

@@ -53,7 +53,7 @@ export class DsrService {
       where: { id: createDto.siteId, deletedAt: IsNull() },
     });
 
-    if (![SiteStatus.UPCOMING, SiteStatus.ONGOING].includes(site.status as SiteStatus)) {
+    if (site.status !== SiteStatus.ONGOING) {
       throw new BadRequestException(DSR_ERRORS.SITE_NOT_ACTIVE);
     }
 
@@ -179,7 +179,7 @@ export class DsrService {
       where: { id: createDto.siteId, deletedAt: IsNull() },
     });
 
-    if (![SiteStatus.UPCOMING, SiteStatus.ONGOING].includes(site.status as SiteStatus)) {
+    if (site.status !== SiteStatus.ONGOING) {
       throw new BadRequestException(DSR_ERRORS.SITE_NOT_ACTIVE);
     }
 
@@ -294,9 +294,9 @@ export class DsrService {
       where.reportDate = LessThanOrEqual(new Date(reportDateTo));
     }
 
-    const relations: string[] = ['createdByUser'];
+    const relations: string[] = ['createdByUser', 'user'];
     if (includeSite) relations.push('site');
-    if (includeUser) relations.push('user');
+    if (includeUser && !relations.includes('user')) relations.push('user');
     if (includeFiles) relations.push('files');
     if (includeEditHistory) relations.push('editHistory');
 
@@ -673,6 +673,7 @@ export class DsrService {
       isActive: version.isActive,
       dsrEntryType: version.dsrEntryType ?? DsrEntryType.SELF,
       editReason: version.editReason,
+      reportDate: version.reportDate,
       createdAt: version.createdAt,
       updatedAt: version.updatedAt,
       site: version.site

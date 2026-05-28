@@ -53,6 +53,7 @@ export const getOverallSiteStatsQuery = `
     COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'upcoming') as "upcomingSites",
     COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'ongoing') as "ongoingSites",
     COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'hold') as "holdSites",
+    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'work_completed') as "workCompletedSites",
     COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'completed') as "completedSites",
     COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = true) as "activeSites",
     COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = false) as "inactiveSites"
