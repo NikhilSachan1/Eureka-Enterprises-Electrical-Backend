@@ -313,7 +313,10 @@ export class BookPaymentService {
   }
 
   private computePaymentTotal(taxable: number, gst: number, tds: number): number {
-    return Number((taxable - gst - tds).toFixed(2));
+    // paymentTotalAmount = taxable + gst - tds
+    // GST is included in what we pay the vendor (vendor collects it and remits to govt).
+    // TDS is what we deduct at source and deposit directly with the govt.
+    return Number((taxable + gst - tds).toFixed(2));
   }
 
   // ── Service methods exposed for downstream modules (proper service-to-service communication) ────────────
