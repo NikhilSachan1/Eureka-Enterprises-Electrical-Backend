@@ -467,23 +467,26 @@ export class SiteInvoiceService {
         i."invoiceNumber",
         i."invoiceDate",
         i."partyType",
+        i."taxableAmount",
         i."totalAmount",
         i."bookedTotal",
         i."paidTotal",
         i."approvalStatus",
         COALESCE(c.name, v.name) AS "partyName",
         -- eligibility
+        -- book-payment ceiling = taxableAmount (GST excluded; only taxable - TDS is booked)
+        -- bank-transfer ceiling = totalAmount  (full invoice value on SALE side)
         CASE
           WHEN i."approvalStatus" != 'APPROVED' THEN false
-          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."totalAmount" THEN false
-          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount" THEN false
+          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."taxableAmount" THEN false
+          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount"   THEN false
           ELSE true
         END AS eligible,
         CASE
           WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
-          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."totalAmount"
-            THEN 'Invoice fully booked — no remaining amount'
+          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."taxableAmount"
+            THEN 'Invoice fully booked — no remaining taxable amount'
           WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."totalAmount"
             THEN 'Invoice fully paid'
           ELSE NULL
@@ -509,12 +512,15 @@ export class SiteInvoiceService {
           invoiceNumber: r.invoiceNumber,
           partyType: r.partyType,
           partyName: r.partyName,
+          taxableAmount: Number(r.taxableAmount),
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
+          // remaining for book-payment = taxableAmount - bookedTotal (GST excluded)
+          // remaining for bank-transfer = totalAmount  - paidTotal
           remaining:
             forDocument === 'book-payment'
-              ? Number(r.totalAmount) - Number(r.bookedTotal)
+              ? Number(r.taxableAmount) - Number(r.bookedTotal)
               : Number(r.totalAmount) - Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },

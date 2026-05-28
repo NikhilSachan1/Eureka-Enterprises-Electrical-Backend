@@ -48,16 +48,17 @@ export class BookPaymentService {
 
       const gstAmount = dto.gstAmount ?? 0;
       const tdsAmount = dto.tdsDeductionAmount ?? 0;
-      const paymentTotalAmount = this.computePaymentTotal(dto.taxableAmount, gstAmount, tdsAmount);
+      // paymentTotalAmount is on taxable only — GST tracked separately in GST register
+      const paymentTotalAmount = this.computePaymentTotal(dto.taxableAmount, tdsAmount);
 
       if (paymentTotalAmount < 0) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
       }
 
-      // Ceiling check: sum of booked + new ≤ invoice total
+      // Ceiling check: sum of booked + new ≤ invoice taxable amount (GST excluded)
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
       const newTotal = existingBooked + paymentTotalAmount;
-      if (newTotal > Number(invoice.totalAmount)) {
+      if (newTotal > Number(invoice.taxableAmount)) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
@@ -225,9 +226,9 @@ export class BookPaymentService {
       // UpdateBookPaymentDto omits @Type(() => Number); absent fields stay
       // undefined under enableImplicitConversion so ?? fallback is safe.
       const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
-      const newGst = dto.gstAmount ?? Number(bp.gstAmount);
       const newTds = dto.tdsDeductionAmount ?? Number(bp.tdsDeductionAmount);
-      const newTotal = this.computePaymentTotal(newTaxable, newGst, newTds);
+      // GST excluded from payment total — only taxable - tds
+      const newTotal = this.computePaymentTotal(newTaxable, newTds);
 
       if (newTotal < 0) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
@@ -249,9 +250,10 @@ export class BookPaymentService {
           .getOne();
         if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
 
+        // Ceiling is invoice taxableAmount — GST is excluded from book payment
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - Number(bp.paymentTotalAmount) + newTotal;
-        if (adjustedBooked > Number(invoice.totalAmount)) {
+        if (adjustedBooked > Number(invoice.taxableAmount)) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
@@ -312,11 +314,12 @@ export class BookPaymentService {
     });
   }
 
-  private computePaymentTotal(taxable: number, gst: number, tds: number): number {
-    // paymentTotalAmount = taxable + gst - tds
-    // GST is included in what we pay the vendor (vendor collects it and remits to govt).
-    // TDS is what we deduct at source and deposit directly with the govt.
-    return Number((taxable + gst - tds).toFixed(2));
+  private computePaymentTotal(taxable: number, tds: number): number {
+    // paymentTotalAmount = taxableAmount - tdsDeductionAmount
+    // GST is NOT included here — it is tracked separately in the GST register
+    // and paid to the government via the GST payment flow.
+    // TDS is deducted at source from the taxable amount before paying the vendor.
+    return Number((taxable - tds).toFixed(2));
   }
 
   // ── Service methods exposed for downstream modules (proper service-to-service communication) ────────────
