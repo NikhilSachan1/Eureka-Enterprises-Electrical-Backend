@@ -244,13 +244,6 @@ export const getSiteProfitabilityQuery = (
         FROM site_allocations sa
         WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
       ),
-      -- Get all vehicles used at this site (from vehicle_logs)
-      site_vehicles AS (
-        SELECT DISTINCT vl."vehicleId", MIN(vl."logDate") as "firstUsedAt", MAX(vl."logDate") as "lastUsedAt"
-        FROM vehicle_logs vl
-        WHERE vl."siteId" = $1 AND vl."deletedAt" IS NULL
-        GROUP BY vl."vehicleId"
-      ),
       site_doc_totals AS (
         SELECT
           COALESCE(SUM(CASE WHEN sd.direction = 'RECEIVABLE' AND sd."documentType" = 'PO' THEN sd."totalAmount" ELSE 0 END), 0) as "totalPOValue",
@@ -290,20 +283,26 @@ export const getSiteProfitabilityQuery = (
           )
           ${siteDateFilterExp}
       ),
-      -- Fuel expenses: linked via vehicle usage at site (vehicle_logs)
-      -- Only includes fuel expenses for vehicles that were used at this site
+      -- Fuel expenses: linked via the employee who submitted the expense being allocated
+      -- to this site at the time of the fuel fill date.
+      -- (Same allocation-based approach as employee expenses — no vehicle_logs dependency.)
       fuel_expenses AS (
         SELECT COALESCE(SUM(fe."fuelAmount"), 0) as total
         FROM fuel_expenses fe
-        INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
         CROSS JOIN site_info
         WHERE fe."deletedAt" IS NULL
           AND fe."approvalStatus" = 'approved'
           AND fe."transactionType" = 'debit'
           AND fe."isActive" = true
-          -- Fuel fill date should be within the vehicle's usage period at this site
-          AND fe."fillDate"::date >= sv."firstUsedAt"
-          AND fe."fillDate"::date <= sv."lastUsedAt"
+          AND fe."userId" IN (SELECT "userId" FROM site_employees)
+          AND EXISTS (
+            SELECT 1 FROM site_allocations sa
+            WHERE sa."userId" = fe."userId"
+              AND sa."siteId" = $1
+              AND sa."deletedAt" IS NULL
+              AND fe."fillDate"::date >= sa."allocatedAt"
+              AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+          )
           ${siteDateFilterFuel}
       ),
       -- Payroll/Salary costs: pro-rated based on allocation days in each payroll month
@@ -504,11 +503,10 @@ export const getSiteFuelExpensesByVehicleQuery = (
         FROM sites
         WHERE id = $1 AND "deletedAt" IS NULL
       ),
-      site_vehicles AS (
-        SELECT DISTINCT vl."vehicleId", MIN(vl."logDate") as "firstUsedAt", MAX(vl."logDate") as "lastUsedAt"
-        FROM vehicle_logs vl
-        WHERE vl."siteId" = $1 AND vl."deletedAt" IS NULL
-        GROUP BY vl."vehicleId"
+      site_employees AS (
+        SELECT DISTINCT sa."userId"
+        FROM site_allocations sa
+        WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
       )
       SELECT
         fe."vehicleId" as "vehicleId",
@@ -516,15 +514,21 @@ export const getSiteFuelExpensesByVehicleQuery = (
         COALESCE(SUM(fe."fuelAmount"), 0)::numeric as amount,
         COUNT(fe.id)::int as count
       FROM fuel_expenses fe
-      INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
       LEFT JOIN vehicle_masters vm ON vm.id = fe."vehicleId" AND vm."deletedAt" IS NULL
       CROSS JOIN site_info
       WHERE fe."deletedAt" IS NULL
         AND fe."approvalStatus" = 'approved'
         AND fe."transactionType" = 'debit'
         AND fe."isActive" = true
-        AND fe."fillDate"::date >= sv."firstUsedAt"
-        AND fe."fillDate"::date <= sv."lastUsedAt"
+        AND fe."userId" IN (SELECT "userId" FROM site_employees)
+        AND EXISTS (
+          SELECT 1 FROM site_allocations sa
+          WHERE sa."userId" = fe."userId"
+            AND sa."siteId" = $1
+            AND sa."deletedAt" IS NULL
+            AND fe."fillDate"::date >= sa."allocatedAt"
+            AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+        )
         ${siteDateFilterFuel}
       GROUP BY fe."vehicleId"
       ORDER BY amount DESC
@@ -687,18 +691,11 @@ export const getSiteMonthlyTrendQuery = (
           ))::date as month_start
         FROM site_info
       ),
-      -- Site employees for linking
+      -- Site employees for linking (employee expenses + fuel expenses)
       site_employees AS (
         SELECT DISTINCT sa."userId", sa."allocatedAt", sa."deallocatedAt"
         FROM site_allocations sa
         WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
-      ),
-      -- Site vehicles for linking fuel expenses
-      site_vehicles AS (
-        SELECT DISTINCT vl."vehicleId", MIN(vl."logDate") as "firstUsedAt", MAX(vl."logDate") as "lastUsedAt"
-        FROM vehicle_logs vl
-        WHERE vl."siteId" = $1 AND vl."deletedAt" IS NULL
-        GROUP BY vl."vehicleId"
       ),
       -- Monthly revenue from site documents
       monthly_revenue AS (
@@ -744,19 +741,25 @@ export const getSiteMonthlyTrendQuery = (
           )
         GROUP BY DATE_TRUNC('month', e."expenseDate")
       ),
-      -- Monthly fuel expenses
+      -- Monthly fuel expenses: linked via employee allocation to site during fill date
       monthly_fuel AS (
-        SELECT 
+        SELECT
           DATE_TRUNC('month', fe."fillDate")::date as month_start,
           COALESCE(SUM(fe."fuelAmount"), 0) as fuel_expenses
         FROM fuel_expenses fe
-        INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
         WHERE fe."deletedAt" IS NULL
           AND fe."approvalStatus" = 'approved'
           AND fe."transactionType" = 'debit'
           AND fe."isActive" = true
-          AND fe."fillDate"::date >= sv."firstUsedAt"
-          AND fe."fillDate"::date <= sv."lastUsedAt"
+          AND fe."userId" IN (SELECT "userId" FROM site_employees)
+          AND EXISTS (
+            SELECT 1 FROM site_allocations sa
+            WHERE sa."userId" = fe."userId"
+              AND sa."siteId" = $1
+              AND sa."deletedAt" IS NULL
+              AND fe."fillDate"::date >= sa."allocatedAt"
+              AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+          )
         GROUP BY DATE_TRUNC('month', fe."fillDate")
       ),
       -- Monthly payroll costs
@@ -962,7 +965,8 @@ export const getAllSitesProfitabilityQuery = (
               ${siteDateFilterExp}
           ), 0) as "employeeExpenses",
           
-          -- Fuel expenses: linked via vehicle usage at site (vehicle_logs)
+          -- Fuel expenses: linked via the employee who submitted the expense being
+          -- allocated to this site at the time of the fuel fill date.
           COALESCE((
             SELECT SUM(fe."fuelAmount")
             FROM fuel_expenses fe
@@ -971,19 +975,12 @@ export const getAllSitesProfitabilityQuery = (
               AND fe."transactionType" = 'debit'
               AND fe."isActive" = true
               AND EXISTS (
-                -- Vehicle was used at this site during a period that includes the fuel fill date
-                SELECT 1 FROM vehicle_logs vl
-                WHERE vl."vehicleId" = fe."vehicleId"
-                  AND vl."siteId" = s.id
-                  AND vl."deletedAt" IS NULL
-                  AND fe."fillDate"::date >= (
-                    SELECT MIN(vl2."logDate") FROM vehicle_logs vl2 
-                    WHERE vl2."vehicleId" = fe."vehicleId" AND vl2."siteId" = s.id AND vl2."deletedAt" IS NULL
-                  )
-                  AND fe."fillDate"::date <= (
-                    SELECT MAX(vl3."logDate") FROM vehicle_logs vl3 
-                    WHERE vl3."vehicleId" = fe."vehicleId" AND vl3."siteId" = s.id AND vl3."deletedAt" IS NULL
-                  )
+                SELECT 1 FROM site_allocations sa
+                WHERE sa."userId" = fe."userId"
+                  AND sa."siteId" = s.id
+                  AND sa."deletedAt" IS NULL
+                  AND fe."fillDate"::date >= sa."allocatedAt"
+                  AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
               )
               ${siteDateFilterFuel}
           ), 0) as "fuelExpenses",
@@ -1759,19 +1756,6 @@ function buildSiteExpensesCTE(): string {
   )`;
 }
 
-/** Shared CTE fragment for site vehicles (vehicle_logs at the site). */
-function buildSiteVehiclesCTE(): string {
-  return `
-  site_vehicles AS (
-    SELECT DISTINCT vl."vehicleId",
-      MIN(vl."logDate") as "firstUsedAt",
-      MAX(vl."logDate") as "lastUsedAt"
-    FROM vehicle_logs vl
-    WHERE vl."siteId" = $1 AND vl."deletedAt" IS NULL
-    GROUP BY vl."vehicleId"
-  )`;
-}
-
 // ── PO Summaries ─────────────────────────────────────────────────────────────
 
 /** SALE purchase_orders total value + count (APPROVED only). */
@@ -2022,27 +2006,41 @@ export const getOpExpenseByCategoryQuery = (siteId: string) => ({
 
 // ── Fuel Expense ─────────────────────────────────────────────────────────────
 
-/** Fuel expense total at a site (via vehicle_logs). */
+/** Fuel expense total at a site (via employee allocation at fill date). */
 export const getFuelExpenseTotalQuery = (siteId: string) => ({
   query: `
-    WITH ${buildSiteVehiclesCTE()}
+    WITH site_employees AS (
+      SELECT DISTINCT sa."userId"
+      FROM site_allocations sa
+      WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
+    )
     SELECT COALESCE(SUM(fe."fuelAmount"), 0)::numeric as total
     FROM fuel_expenses fe
-    INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
     WHERE fe."deletedAt" IS NULL
       AND fe."approvalStatus" = 'approved'
       AND fe."transactionType" = 'debit'
       AND fe."isActive" = true
-      AND fe."fillDate"::date >= sv."firstUsedAt"
-      AND fe."fillDate"::date <= sv."lastUsedAt"
+      AND fe."userId" IN (SELECT "userId" FROM site_employees)
+      AND EXISTS (
+        SELECT 1 FROM site_allocations sa
+        WHERE sa."userId" = fe."userId"
+          AND sa."siteId" = $1
+          AND sa."deletedAt" IS NULL
+          AND fe."fillDate"::date >= sa."allocatedAt"
+          AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+      )
   `,
   params: [siteId],
 });
 
-/** Fuel expense per employee + vehicle combination. */
+/** Fuel expense per employee + vehicle combination (via employee allocation at fill date). */
 export const getFuelExpenseByEmployeeQuery = (siteId: string) => ({
   query: `
-    WITH ${buildSiteVehiclesCTE()}
+    WITH site_employees AS (
+      SELECT DISTINCT sa."userId"
+      FROM site_allocations sa
+      WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
+    )
     SELECT
       COALESCE(
         NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
@@ -2052,15 +2050,21 @@ export const getFuelExpenseByEmployeeQuery = (siteId: string) => ({
       COALESCE(vm."registrationNo", 'Unknown')       as "vehicleNumber",
       COALESCE(SUM(fe."fuelAmount"), 0)::numeric     as "expenseAmount"
     FROM fuel_expenses fe
-    INNER JOIN site_vehicles sv ON sv."vehicleId" = fe."vehicleId"
     JOIN  users          u  ON u.id  = fe."userId"     AND u."deletedAt"  IS NULL
     LEFT JOIN vehicle_masters vm ON vm.id = fe."vehicleId" AND vm."deletedAt" IS NULL
     WHERE fe."deletedAt" IS NULL
       AND fe."approvalStatus" = 'approved'
       AND fe."transactionType" = 'debit'
       AND fe."isActive" = true
-      AND fe."fillDate"::date >= sv."firstUsedAt"
-      AND fe."fillDate"::date <= sv."lastUsedAt"
+      AND fe."userId" IN (SELECT "userId" FROM site_employees)
+      AND EXISTS (
+        SELECT 1 FROM site_allocations sa
+        WHERE sa."userId" = fe."userId"
+          AND sa."siteId" = $1
+          AND sa."deletedAt" IS NULL
+          AND fe."fillDate"::date >= sa."allocatedAt"
+          AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+      )
     GROUP BY u.id, u."firstName", u."lastName", u."employeeId", vm."registrationNo"
     ORDER BY "expenseAmount" DESC
   `,

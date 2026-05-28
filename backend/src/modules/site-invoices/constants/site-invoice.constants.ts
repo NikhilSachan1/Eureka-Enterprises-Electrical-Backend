@@ -9,6 +9,8 @@ export const INVOICE_ERRORS = {
   INVOICE_NUMBER_EXISTS: 'Invoice number already exists',
   AMOUNT_VALIDATION_FAILED: 'Total amount must equal taxable + GST amount',
   CANNOT_DELETE_HAS_CHILDREN: 'Cannot delete invoice — payments / book payments exist against it.',
+  PO_CEILING_EXCEEDED_ON_SAVE:
+    'Invoice total amount exceeds the remaining PO capacity. Reduce the amount or check other pending/approved invoices on this PO.',
 };
 
 export const INVOICE_RESPONSES = {
