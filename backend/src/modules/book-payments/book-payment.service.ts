@@ -51,17 +51,20 @@ export class BookPaymentService {
 
       const gstAmount = dto.gstAmount ?? 0;
       const tdsAmount = dto.tdsDeductionAmount ?? 0;
-      // paymentTotalAmount is on taxable only — GST tracked separately in GST register
+      // paymentTotalAmount = taxable - tds (vendor receives this; GST settled separately)
       const paymentTotalAmount = this.computePaymentTotal(dto.taxableAmount, tdsAmount);
 
       if (paymentTotalAmount < 0) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
       }
 
-      // Ceiling check: sum of booked + new ≤ invoice taxable amount (GST excluded)
+      // Effective booked amount = paymentTotalAmount + tdsDeductionAmount = taxableAmount.
+      // TDS is deducted at source before paying the vendor but still discharges the invoice obligation.
+      const effectiveAmount = paymentTotalAmount + tdsAmount;
+
+      // Ceiling check: Σ (paymentTotalAmount + tdsDeductionAmount) ≤ invoice taxable amount
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      const newTotal = existingBooked + paymentTotalAmount;
-      if (newTotal > Number(invoice.taxableAmount)) {
+      if (existingBooked + effectiveAmount > Number(invoice.taxableAmount)) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
@@ -90,14 +93,14 @@ export class BookPaymentService {
         em,
       );
 
-      // Update invoice bookedTotal + PO bookedTotal
+      // Update invoice bookedTotal + PO bookedTotal using effective amount (payment + TDS)
       await em
         .getRepository(SiteInvoiceEntity)
-        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${paymentTotalAmount}` });
+        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${effectiveAmount}` });
 
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
-        { bookedTotal: paymentTotalAmount },
+        { bookedTotal: effectiveAmount },
         em,
       );
 
@@ -270,14 +273,20 @@ export class BookPaymentService {
           .getOne();
         if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
 
-        // Ceiling is invoice taxableAmount — GST is excluded from book payment
+        // oldEffective = what was counted at create time (paymentTotalAmount + tds)
+        const oldEffective = Number(bp.paymentTotalAmount) + Number(bp.tdsDeductionAmount ?? 0);
+        // newEffective = updated net + updated tds
+        const newEffective = newTotal + newTds;
+
+        // sumByInvoice already includes the current record's old effective,
+        // subtract it and add new effective to get the adjusted total.
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
-        const adjustedBooked = existingBooked - Number(bp.paymentTotalAmount) + newTotal;
+        const adjustedBooked = existingBooked - oldEffective + newEffective;
         if (adjustedBooked > Number(invoice.taxableAmount)) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        const delta = newTotal - Number(bp.paymentTotalAmount);
+        const delta = newEffective - oldEffective;
         if (delta !== 0) {
           await em
             .getRepository(SiteInvoiceEntity)
@@ -359,18 +368,12 @@ export class BookPaymentService {
       // dangling deduction for a deleted book payment.
       await em.query(deleteTdsRegisterEntryForBookPaymentQuery, [id]);
 
-      // Reverse rollups
+      // Reverse the full effective amount that was added at create time (payment + TDS)
+      const effectiveAmount = Number(bp.paymentTotalAmount) + Number(bp.tdsDeductionAmount ?? 0);
       await em
         .getRepository(SiteInvoiceEntity)
-        .update(
-          { id: bp.invoiceId },
-          { bookedTotal: () => `"bookedTotal" - ${bp.paymentTotalAmount}` },
-        );
-      await this.purchaseOrderService.adjustRollups(
-        bp.poId,
-        { bookedTotal: -Number(bp.paymentTotalAmount) },
-        em,
-      );
+        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
 
       await this.bookPaymentRepository.update({ id }, { deletedBy }, em);
       await this.bookPaymentRepository.softDelete({ id }, em);
