@@ -173,13 +173,26 @@ export class SiteInvoiceService {
     ]);
 
     return {
-      records: records.map((inv) => ({
-        ...inv,
-        createdByUser: formatUser(inv.createdByUser),
-        updatedByUser: formatUser(inv.updatedByUser),
-        approvalByUser: formatUser(inv.approvalByUser),
-        unlockRequestedByUser: formatUser(inv.unlockRequestedByUser),
-      })),
+      records: records.map((inv) => {
+        const bookedTotal = Number(inv.bookedTotal) || 0;
+        const totalAmount = Number(inv.totalAmount) || 0;
+        const bookingCeilingFull = bookedTotal >= totalAmount;
+
+        return {
+          ...inv,
+          createdByUser: formatUser(inv.createdByUser),
+          updatedByUser: formatUser(inv.updatedByUser),
+          approvalByUser: formatUser(inv.approvalByUser),
+          unlockRequestedByUser: formatUser(inv.unlockRequestedByUser),
+          // Dropdown hint: disable invoices whose book-payment ceiling is fully used
+          isDisabled: bookingCeilingFull,
+          disabledReason: bookingCeilingFull
+            ? `Book payment ceiling fully used (₹${bookedTotal.toLocaleString(
+                'en-IN',
+              )} of ₹${totalAmount.toLocaleString('en-IN')})`
+            : null,
+        };
+      }),
       totalRecords,
     };
   }
