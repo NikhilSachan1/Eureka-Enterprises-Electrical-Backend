@@ -566,12 +566,45 @@ export class SiteService {
 
       // Update contractors if provided
       if (updateDto.contractorIds) {
+        // Find which contractors are being removed and block if they have POs on this site
+        const currentContractors = await this.siteRepository.getContractorsBySiteId(
+          id,
+          entityManager,
+        );
+        const currentContractorIds = currentContractors.map((sc) => sc.contractorId);
+        const removedContractorIds = currentContractorIds.filter(
+          (cId) => !contractorIds.includes(cId),
+        );
+        if (removedContractorIds.length > 0) {
+          const result = await entityManager.query(
+            `SELECT 1 FROM purchase_orders WHERE "siteId" = $1 AND "contractorId" = ANY($2::uuid[]) AND "deletedAt" IS NULL LIMIT 1`,
+            [id, removedContractorIds],
+          );
+          if (result.length > 0) {
+            throw new BadRequestException(SITE_ERRORS.CONTRACTOR_HAS_FINANCIAL_DOCS);
+          }
+        }
         await this.siteRepository.removeContractors(id, undefined, entityManager);
         await this.siteRepository.addContractors(id, contractorIds, entityManager);
       }
 
       // Update vendors if provided — remove all, then re-add
       if (vendorIds !== undefined) {
+        // Find which vendors are being removed and block if they have POs on this site
+        const currentSiteVendors = await entityManager
+          .getRepository(SiteVendorEntity)
+          .find({ where: { siteId: id } });
+        const currentVendorIds = currentSiteVendors.map((sv) => sv.vendorId);
+        const removedVendorIds = currentVendorIds.filter((vId) => !vendorIds.includes(vId));
+        if (removedVendorIds.length > 0) {
+          const result = await entityManager.query(
+            `SELECT 1 FROM purchase_orders WHERE "siteId" = $1 AND "vendorId" = ANY($2::uuid[]) AND "deletedAt" IS NULL LIMIT 1`,
+            [id, removedVendorIds],
+          );
+          if (result.length > 0) {
+            throw new BadRequestException(SITE_ERRORS.VENDOR_HAS_FINANCIAL_DOCS);
+          }
+        }
         await entityManager.getRepository(SiteVendorEntity).delete({ siteId: id });
         if (vendorIds.length > 0) {
           const rows = vendorIds.map((vId) =>
