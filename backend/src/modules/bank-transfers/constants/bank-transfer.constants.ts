@@ -9,16 +9,18 @@ export const BANK_TRANSFER_ERRORS = {
     'Bank transfer amount must equal the book payment amount exactly for PURCHASE side.',
   INVOICE_CEILING_EXCEEDED:
     'Invoice ceiling exceeded — sum of bank transfers cannot exceed invoice total amount.',
-  INVALID_PARTY_SALE:
-    'For SALE side, invoiceId is required and bookPaymentId must be null.',
+  INVALID_PARTY_SALE: 'For SALE side, invoiceId is required and bookPaymentId must be null.',
   INVALID_PARTY_PURCHASE:
     'For PURCHASE side, bookPaymentId is required and invoiceId must be null.',
   CANNOT_DELETE_HAS_ADVICE:
     'Cannot delete bank transfer — a payment advice exists. Delete the payment advice first.',
-  CANNOT_CHANGE_AMOUNT_ADVICE_EXISTS:
-    'Cannot change transfer amount — a payment advice exists.',
+  CANNOT_CHANGE_AMOUNT_ADVICE_EXISTS: 'Cannot change transfer amount — a payment advice exists.',
   CANNOT_CHANGE_AMOUNT_PURCHASE:
     'Cannot change transfer amount on PURCHASE side — it must match book payment.',
+  CANNOT_UPDATE_TDS_PAID:
+    'Cannot update — TDS payment has already been released against this bank transfer.',
+  CANNOT_DELETE_TDS_PAID:
+    'Cannot delete — TDS payment has already been released against this bank transfer.',
 };
 
 export const BANK_TRANSFER_RESPONSES = {

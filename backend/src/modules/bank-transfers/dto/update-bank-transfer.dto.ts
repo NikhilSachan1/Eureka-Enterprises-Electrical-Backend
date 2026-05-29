@@ -1,11 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsDateString,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-} from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdateBankTransferDto {
   @ApiPropertyOptional({ description: 'UTR number' })
@@ -23,6 +17,24 @@ export class UpdateBankTransferDto {
   @Min(0)
   @IsOptional()
   transferAmount?: number;
+
+  @ApiPropertyOptional({
+    description: 'TDS deducted by contractor (SALE side only) — syncs TDS register entry',
+    example: 200,
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  tdsDeducted?: number;
+
+  @ApiPropertyOptional({
+    description: 'TDS percentage (informational, SALE side only)',
+    example: 2,
+  })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  tdsPercentage?: number;
 
   @ApiPropertyOptional({ description: 'Proof file S3 key' })
   @IsString()

@@ -23,7 +23,10 @@ import {
   UnlockRequestDto,
 } from 'src/modules/purchase-orders/dto/approval.dto';
 import { INVOICE_ERRORS, INVOICE_RESPONSES } from './constants/site-invoice.constants';
-import { insertGstRegisterEntryQuery } from './queries/site-invoice.queries';
+import {
+  insertGstRegisterEntryQuery,
+  deleteGstRegisterEntryForInvoiceQuery,
+} from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
@@ -313,7 +316,14 @@ export class SiteInvoiceService {
     inv: SiteInvoiceEntity,
     em: import('typeorm').EntityManager,
   ) {
-    if (Number(inv.gstAmount) === 0) return; // no GST on this invoice — nothing to project
+    // Always delete the existing unverified/unpaid entry first.
+    // This ensures re-approval after editing picks up new taxable/gst amounts,
+    // a shifted invoice date (FY partition change), or party changes.
+    // Safe no-op if the entry is verified or already payment-released.
+    await em.query(deleteGstRegisterEntryForInvoiceQuery, [inv.id]);
+
+    if (Number(inv.gstAmount) === 0) return; // no GST — entry cleaned up above, nothing to insert
+
     const invoiceDate = new Date(inv.invoiceDate);
     const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(
       invoiceDate.getUTCMonth() + 1,
@@ -412,6 +422,23 @@ export class SiteInvoiceService {
           { invoicedTotal: -Number(inv.totalAmount) },
           em,
         );
+
+        // Block unlock if GST payment has already been released — the entry is
+        // immutable and cannot be re-projected with edited amounts.
+        const gstPaid = await em.query(
+          `SELECT 1 FROM gst_register_entries
+           WHERE "invoiceId" = $1 AND "gstPaymentId" IS NOT NULL
+           LIMIT 1`,
+          [id],
+        );
+        if (gstPaid.length > 0) {
+          throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_UNLOCK_GST_PAID);
+        }
+
+        // Wipe ALL GST entries for this invoice (verified or not — paid ones
+        // are blocked above). On re-approval, projectGstRegisterEntry creates a
+        // fresh row that reflects the post-edit amounts / invoice date.
+        await em.query(`DELETE FROM gst_register_entries WHERE "invoiceId" = $1`, [id]);
       }
 
       await em.getRepository(SiteInvoiceEntity).update(

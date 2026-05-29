@@ -44,6 +44,8 @@ export const FINANCIAL_ERRORS = {
     'Cannot delete document — child documents exist. Delete children first.',
   CANNOT_DELETE_NOT_PENDING: 'Document can only be deleted while in PENDING state.',
   UNLOCK_NOT_REQUESTED: 'No unlock request pending on this document.',
+  CANNOT_UNLOCK_GST_PAID:
+    'Cannot unlock — GST payment has already been released against this invoice.',
   CANNOT_REJECT_APPROVED:
     'Document is already approved and cannot be rejected. If changes are needed, the document must be unlocked, updated, and re-submitted for approval.',
   UNLOCK_REJECT_NO_REQUEST: 'No pending unlock request found on this document.',
