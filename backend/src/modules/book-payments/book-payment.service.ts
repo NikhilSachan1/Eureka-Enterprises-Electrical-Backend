@@ -452,7 +452,9 @@ export class BookPaymentService {
     return {
       records: rows.map((r: any) => ({
         id: r.id,
-        label: `₹${Number(r.paymentTotalAmount).toLocaleString('en-IN')} — ${r.bookingDate}`,
+        label: `₹${Number(r.paymentTotalAmount).toLocaleString('en-IN')} — ${
+          r.bookingDate ? r.bookingDate.split('-').reverse().join('/') : ''
+        }`,
         eligible: r.eligible,
         reason: r.reason ?? null,
         meta: {
