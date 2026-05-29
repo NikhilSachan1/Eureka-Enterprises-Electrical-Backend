@@ -174,9 +174,32 @@ export class SiteInvoiceService {
 
     return {
       records: records.map((inv) => {
-        const bookedTotal = Number(inv.bookedTotal) || 0;
-        const totalAmount = Number(inv.totalAmount) || 0;
-        const bookingCeilingFull = bookedTotal >= totalAmount;
+        let isDisabled: boolean;
+        let disabledReason: string | null;
+
+        if (inv.partyType === PartyType.PURCHASE) {
+          // PURCHASE side: ceiling for book payments is against total invoice amount
+          const bookedTotal = Number(inv.bookedTotal) || 0;
+          const totalAmount = Number(inv.totalAmount) || 0;
+          isDisabled = bookedTotal >= totalAmount;
+          disabledReason = isDisabled
+            ? `Book payment ceiling fully used (₹${bookedTotal.toLocaleString(
+                'en-IN',
+              )} of ₹${totalAmount.toLocaleString('en-IN')})`
+            : null;
+        } else {
+          // SALE side: ceiling for bank transfers is against taxable amount (GST settled separately).
+          // paidTotal = Σ (transferAmount + tdsDeducted) — TDS counts as settled even though
+          // it is remitted to the govt rather than received in hand.
+          const paidTotal = Number(inv.paidTotal) || 0;
+          const taxableAmount = Number(inv.taxableAmount) || 0;
+          isDisabled = paidTotal >= taxableAmount;
+          disabledReason = isDisabled
+            ? `Bank transfer ceiling fully used (₹${paidTotal.toLocaleString(
+                'en-IN',
+              )} of ₹${taxableAmount.toLocaleString('en-IN')})`
+            : null;
+        }
 
         return {
           ...inv,
@@ -184,13 +207,8 @@ export class SiteInvoiceService {
           updatedByUser: formatUser(inv.updatedByUser),
           approvalByUser: formatUser(inv.approvalByUser),
           unlockRequestedByUser: formatUser(inv.unlockRequestedByUser),
-          // Dropdown hint: disable invoices whose book-payment ceiling is fully used
-          isDisabled: bookingCeilingFull,
-          disabledReason: bookingCeilingFull
-            ? `Book payment ceiling fully used (₹${bookedTotal.toLocaleString(
-                'en-IN',
-              )} of ₹${totalAmount.toLocaleString('en-IN')})`
-            : null,
+          isDisabled,
+          disabledReason,
         };
       }),
       totalRecords,

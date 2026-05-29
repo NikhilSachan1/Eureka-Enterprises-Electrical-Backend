@@ -647,6 +647,24 @@ export class SiteService {
       }
     }
 
+    // Block status change to HOLD / WORK_COMPLETED / COMPLETED if employees are still allocated
+    const restrictedStatuses = [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED, SiteStatus.COMPLETED];
+    if (restrictedStatuses.includes(updateStatusDto.status as SiteStatus)) {
+      const activeAllocations = await this.dataSource.query(
+        `SELECT COUNT(*)::int AS count FROM site_allocations WHERE "siteId" = $1 AND "isCurrentlyAllocated" = true AND "deletedAt" IS NULL`,
+        [id],
+      );
+      const activeCount = activeAllocations[0]?.count ?? 0;
+      if (activeCount > 0) {
+        throw new BadRequestException(
+          SITE_ERRORS.ACTIVE_ALLOCATIONS_EXIST.replace('{status}', updateStatusDto.status).replace(
+            '{count}',
+            String(activeCount),
+          ),
+        );
+      }
+    }
+
     // If transitioning to COMPLETED, check financial clearance (BRD §9)
     if (updateStatusDto.status === SiteStatus.COMPLETED) {
       const readiness = await this.billingService.getSiteClosingReadiness({ siteId: id });

@@ -80,16 +80,19 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_NOT_APPROVED);
       }
 
-      // Ceiling check: Σ bank transfers ≤ invoice taxable amount
-      // GST is excluded from the payment to contractor — it is settled separately via GST register.
+      const tdsDeducted = dto.tdsDeducted ?? 0;
+      // Effective settled amount = physical transfer + TDS deducted by contractor on behalf of govt.
+      // Both components discharge the invoice obligation, so both count against the ceiling.
+      const effectiveAmount = dto.transferAmount + tdsDeducted;
+
+      // Ceiling check: Σ (transferAmount + tdsDeducted) ≤ invoice taxable amount
+      // GST is excluded — it is tracked in the GST register and settled separately.
       const existingPaid = await this.bankTransferRepository.sumByInvoice(dto.invoiceId, em);
-      if (existingPaid + dto.transferAmount > Number(invoice.taxableAmount)) {
+      if (existingPaid + effectiveAmount > Number(invoice.taxableAmount)) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
       const financialYear = getFinancialYear(dto.transferDate);
-
-      const tdsDeducted = dto.tdsDeducted ?? 0;
 
       const created = await this.bankTransferRepository.create(
         {
@@ -117,13 +120,13 @@ export class BankTransferService {
         em,
       );
 
-      // Update invoice paidTotal + PO paidTotal
+      // Update invoice paidTotal + PO paidTotal using effective amount (transfer + TDS)
       await em
         .getRepository(SiteInvoiceEntity)
-        .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` });
+        .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${effectiveAmount}` });
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
-        { paidTotal: dto.transferAmount, lastPaymentAt: new Date() },
+        { paidTotal: effectiveAmount, lastPaymentAt: new Date() },
         em,
       );
 
@@ -389,21 +392,34 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_PURCHASE);
       }
 
-      // SALE side: re-check ceiling if amount changed
-      if (bt.partyType === PartyType.SALE && dto.transferAmount !== undefined) {
+      // SALE side: re-check ceiling if transferAmount OR tdsDeducted changed
+      // (both affect the effective settled amount = transferAmount + tdsDeducted)
+      if (
+        bt.partyType === PartyType.SALE &&
+        (dto.transferAmount !== undefined || dto.tdsDeducted !== undefined)
+      ) {
         const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
           where: { id: bt.invoiceId, deletedAt: IsNull() },
         });
         if (!invoice) throw new NotFoundException(BANK_TRANSFER_ERRORS.INVOICE_NOT_FOUND);
 
+        const oldEffective = Number(bt.transferAmount) + Number(bt.tdsDeducted ?? 0);
+        const newTransferAmt =
+          dto.transferAmount !== undefined ? dto.transferAmount : Number(bt.transferAmount);
+        const newTds =
+          dto.tdsDeducted !== undefined ? dto.tdsDeducted : Number(bt.tdsDeducted ?? 0);
+        const newEffective = newTransferAmt + newTds;
+
+        // sumByInvoice already includes the current record's old effective amount,
+        // so subtract it before adding the new effective to get the adjusted total.
         const existingPaid = await this.bankTransferRepository.sumByInvoice(bt.invoiceId, em);
-        const adjustedPaid = existingPaid - Number(bt.transferAmount) + dto.transferAmount;
+        const adjustedPaid = existingPaid - oldEffective + newEffective;
         // Ceiling is taxable amount — GST excluded (same rule as create)
         if (adjustedPaid > Number(invoice.taxableAmount)) {
           throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        const delta = dto.transferAmount - Number(bt.transferAmount);
+        const delta = newEffective - oldEffective;
         if (delta !== 0) {
           await em
             .getRepository(SiteInvoiceEntity)
@@ -556,10 +572,17 @@ export class BankTransferService {
       );
 
       // Reverse rollups
+      // SALE side: effective amount = transferAmount + tdsDeducted (TDS settles the invoice too)
+      // PURCHASE side: transferAmount is already the full net payment (= book payment amount)
+      const poRollbackAmount =
+        bt.partyType === PartyType.SALE
+          ? Number(bt.transferAmount) + Number(bt.tdsDeducted ?? 0)
+          : Number(bt.transferAmount);
+
       if (bt.partyType === PartyType.SALE && bt.invoiceId) {
         await em
           .getRepository(SiteInvoiceEntity)
-          .update({ id: bt.invoiceId }, { paidTotal: () => `"paidTotal" - ${bt.transferAmount}` });
+          .update({ id: bt.invoiceId }, { paidTotal: () => `"paidTotal" - ${poRollbackAmount}` });
       } else if (bt.partyType === PartyType.PURCHASE && bt.bookPaymentId) {
         await this.bookPaymentService.markHasTransfer(bt.bookPaymentId, false, em);
         // Get invoice from book payment
@@ -569,18 +592,11 @@ export class BankTransferService {
         if (bp) {
           await em
             .getRepository(SiteInvoiceEntity)
-            .update(
-              { id: bp.invoiceId },
-              { paidTotal: () => `"paidTotal" - ${bt.transferAmount}` },
-            );
+            .update({ id: bp.invoiceId }, { paidTotal: () => `"paidTotal" - ${poRollbackAmount}` });
         }
       }
 
-      await this.purchaseOrderService.adjustRollups(
-        bt.poId,
-        { paidTotal: -Number(bt.transferAmount) },
-        em,
-      );
+      await this.purchaseOrderService.adjustRollups(bt.poId, { paidTotal: -poRollbackAmount }, em);
 
       await this.bankTransferRepository.update({ id }, { deletedBy }, em);
       await this.bankTransferRepository.softDelete({ id }, em);

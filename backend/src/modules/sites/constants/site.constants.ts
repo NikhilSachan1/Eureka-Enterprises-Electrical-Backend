@@ -20,6 +20,8 @@ export const SITE_ERRORS = {
     'Cannot remove contractor — one or more POs / JMCs exist for this contractor on the site. Delete the financial documents first.',
   VENDOR_HAS_FINANCIAL_DOCS:
     'Cannot remove vendor — one or more POs / JMCs exist for this vendor on the site. Delete the financial documents first.',
+  ACTIVE_ALLOCATIONS_EXIST:
+    'Cannot change site status to {status} — {count} employee(s) are still allocated. Deallocate all employees from the site first.',
 };
 
 export const SITE_RESPONSES = {
