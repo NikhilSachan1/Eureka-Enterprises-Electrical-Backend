@@ -25,6 +25,10 @@ export const buildAnnouncementListQuery = (
   const whereConditions: string[] = [];
   const params: any[] = [];
   let paramIndex = 1;
+  // Tracks the $N position of userId inside the WHERE-clause params (user view only).
+  // Captured after userId is pushed so the count query's LEFT JOIN uses the right slot
+  // regardless of whether roleIds are also pushed (which shifts paramIndex further).
+  let userIdWhereParamIndex = 0;
 
   // Base condition - not deleted
   whereConditions.push(`a."deletedAt" IS NULL`);
@@ -53,6 +57,10 @@ export const buildAnnouncementListQuery = (
     )`);
     params.push(AnnouncementTargetType.ALL, AnnouncementTargetType.USER, userId);
     paramIndex += 3;
+    // Track the exact param index where userId sits in the WHERE params so the
+    // count query LEFT JOIN can reference it correctly regardless of whether
+    // roleIds were pushed (which shifts paramIndex further).
+    userIdWhereParamIndex = paramIndex - 1;
 
     if (roleIdArray.length > 0) {
       params.push(AnnouncementTargetType.ROLE, roleIdArray);
@@ -110,9 +118,7 @@ export const buildAnnouncementListQuery = (
       SELECT COUNT(DISTINCT a."id") as total
       FROM "announcements" a
       LEFT JOIN "announcement_targets" t ON a."id" = t."announcementId"
-      LEFT JOIN "user_announcement_ack" ack ON a."id" = ack."announcementId" AND ack."userId" = $${
-        paramIndex - 2
-      }
+      LEFT JOIN "user_announcement_ack" ack ON a."id" = ack."announcementId" AND ack."userId" = $${userIdWhereParamIndex}
       ${whereClause}
       ${unacknowledgedOnly ? 'AND (ack."id" IS NULL OR ack."acknowledged" = false)' : ''}
     `;
