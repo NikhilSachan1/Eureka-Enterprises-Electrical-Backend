@@ -5,6 +5,23 @@
  * Note: All queries use parameterized values to prevent SQL injection
  */
 
+/**
+ * Expense categories excluded from profitability calculations.
+ * These are one-time / settlement / non-operational costs that should not
+ * reduce site-level profitability figures.
+ *
+ * Categories: Asset Loss Recovery, Gratuity, FnF Settlement, Encashment, Performance Bonus
+ */
+const EXCLUDED_EXPENSE_CATEGORIES_SQL = `
+  AND LOWER(COALESCE(e.category, '')) NOT IN (
+    'asset_loss_recovery',
+    'gratuity',
+    'fnf_settlement',
+    'encashment',
+    'performance_bonus'
+  )
+`;
+
 // ==================== EXECUTIVE DASHBOARD QUERIES ====================
 
 /**
@@ -258,6 +275,7 @@ export const getSiteProfitabilityQuery = (
         WHERE sd."siteId" = $1 AND sd."deletedAt" IS NULL ${siteDateFilterDoc}
       ),
       -- Employee expenses: directly linked via siteId OR via allocation during expense date
+      -- Excludes non-operational settlement categories (asset loss recovery, gratuity, etc.)
       employee_expenses AS (
         SELECT COALESCE(SUM(e.amount), 0) as total
         FROM expenses e, site_info
@@ -265,6 +283,9 @@ export const getSiteProfitabilityQuery = (
           AND e."approvalStatus" = 'approved'
           AND e."transactionType" = 'debit'
           AND e."isActive" = true
+          AND LOWER(COALESCE(e.category, '')) NOT IN (
+            'asset_loss_recovery', 'gratuity', 'fnf_settlement', 'encashment', 'performance_bonus'
+          )
           AND (
             -- Directly linked to site
             e."siteId" = $1
@@ -460,6 +481,9 @@ export const getSiteEmployeeExpensesByCategoryQuery = (
         AND e."approvalStatus" = 'approved'
         AND e."transactionType" = 'debit'
         AND e."isActive" = true
+        AND LOWER(COALESCE(e.category, '')) NOT IN (
+          'asset_loss_recovery', 'gratuity', 'fnf_settlement', 'encashment', 'performance_bonus'
+        )
         AND (
           e."siteId" = $1
           OR (
@@ -717,7 +741,7 @@ export const getSiteMonthlyTrendQuery = (
       ),
       -- Monthly employee expenses
       monthly_employee AS (
-        SELECT 
+        SELECT
           DATE_TRUNC('month', e."expenseDate")::date as month_start,
           COALESCE(SUM(e.amount), 0) as employee_expenses
         FROM expenses e
@@ -725,6 +749,9 @@ export const getSiteMonthlyTrendQuery = (
           AND e."approvalStatus" = 'approved'
           AND e."transactionType" = 'debit'
           AND e."isActive" = true
+          AND LOWER(COALESCE(e.category, '')) NOT IN (
+            'asset_loss_recovery', 'gratuity', 'fnf_settlement', 'encashment', 'performance_bonus'
+          )
           AND (
             e."siteId" = $1
             OR (
@@ -947,6 +974,9 @@ export const getAllSitesProfitabilityQuery = (
               AND e."approvalStatus" = 'approved'
               AND e."transactionType" = 'debit'
               AND e."isActive" = true
+              AND LOWER(COALESCE(e.category, '')) NOT IN (
+                'asset_loss_recovery', 'gratuity', 'fnf_settlement', 'encashment', 'performance_bonus'
+              )
               AND (
                 -- Directly linked to site
                 e."siteId" = s.id
@@ -1739,6 +1769,7 @@ function buildSiteExpensesCTE(): string {
       AND e."approvalStatus" = 'approved'
       AND e."transactionType" = 'debit'
       AND e."isActive" = true
+      ${EXCLUDED_EXPENSE_CATEGORIES_SQL}
       AND (
         e."siteId" = $1
         OR (
