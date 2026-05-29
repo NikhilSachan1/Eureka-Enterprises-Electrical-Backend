@@ -8,7 +8,10 @@ import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
 import { getFinancialYear } from 'src/modules/common/financials/financial.constants';
-import { insertTdsRegisterEntryFromBookPaymentQuery } from 'src/modules/site-invoices/queries/site-invoice.queries';
+import {
+  insertTdsRegisterEntryFromBookPaymentQuery,
+  deleteTdsRegisterEntryForBookPaymentQuery,
+} from 'src/modules/site-invoices/queries/site-invoice.queries';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -223,6 +226,23 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
       }
 
+      // Block edits if TDS payment has been released — the register row is immutable.
+      const tdsRelevantForBlock =
+        dto.tdsDeductionAmount !== undefined ||
+        dto.taxableAmount !== undefined ||
+        dto.bookingDate !== undefined;
+      if (tdsRelevantForBlock) {
+        const tdsPaid = await em.query(
+          `SELECT 1 FROM tds_register_entries
+           WHERE "bookPaymentId" = $1 AND "tdsPaymentId" IS NOT NULL
+           LIMIT 1`,
+          [id],
+        );
+        if (tdsPaid.length > 0) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_TDS_PAID);
+        }
+      }
+
       // UpdateBookPaymentDto omits @Type(() => Number); absent fields stay
       // undefined under enableImplicitConversion so ?? fallback is safe.
       const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
@@ -281,6 +301,36 @@ export class BookPaymentService {
         em,
       );
 
+      // Re-sync TDS register when tdsDeductionAmount, taxableAmount, or bookingDate changes.
+      // Strategy: delete the existing unverified/unpaid row, then re-insert with fresh values.
+      // This cleanly handles FY shifts (bookingDate change moves to a different partition)
+      // and amount edits without requiring ON CONFLICT DO UPDATE (which can't touch verified rows).
+      if (tdsRelevantForBlock) {
+        await em.query(deleteTdsRegisterEntryForBookPaymentQuery, [id]);
+
+        if (newTds > 0) {
+          const effectiveDate = dto.bookingDate
+            ? new Date(dto.bookingDate)
+            : new Date(bp.bookingDate);
+          const invoiceMonth = `${effectiveDate.getUTCFullYear()}-${String(
+            effectiveDate.getUTCMonth() + 1,
+          ).padStart(2, '0')}`;
+          const financialYear = getFinancialYear(effectiveDate);
+          await em.query(insertTdsRegisterEntryFromBookPaymentQuery, [
+            bp.invoiceId, // $1 invoiceId
+            id, // $2 bookPaymentId
+            bp.siteId, // $3 siteId
+            PartyType.PURCHASE, // $4 partyType
+            null, // $5 contractorId (PURCHASE has none)
+            bp.vendorId, // $6 vendorId
+            invoiceMonth, // $7
+            financialYear, // $8
+            newTaxable, // $9 taxableAmount
+            newTds, // $10 tdsAmount
+          ]);
+        }
+      }
+
       return { message: BOOK_PAYMENT_RESPONSES.UPDATED };
     });
   }
@@ -293,6 +343,21 @@ export class BookPaymentService {
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_HAS_TRANSFER);
       }
+
+      // Block deletion if TDS payment has been released against this book payment.
+      const tdsPaid = await em.query(
+        `SELECT 1 FROM tds_register_entries
+         WHERE "bookPaymentId" = $1 AND "tdsPaymentId" IS NOT NULL
+         LIMIT 1`,
+        [id],
+      );
+      if (tdsPaid.length > 0) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_TDS_PAID);
+      }
+
+      // Remove the projected TDS register row so summaries don't include a
+      // dangling deduction for a deleted book payment.
+      await em.query(deleteTdsRegisterEntryForBookPaymentQuery, [id]);
 
       // Reverse rollups
       await em

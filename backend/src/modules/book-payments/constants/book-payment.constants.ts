@@ -8,8 +8,11 @@ export const BOOK_PAYMENT_ERRORS = {
     'Invoice ceiling exceeded — sum of booked payments cannot exceed invoice total amount.',
   CANNOT_DELETE_HAS_TRANSFER:
     'Cannot delete book payment — a bank transfer exists. Delete the bank transfer first.',
-  AMOUNT_VALIDATION_FAILED:
-    'Payment total must equal taxable + gst - tds deduction.',
+  CANNOT_UPDATE_TDS_PAID:
+    'Cannot update — TDS payment has already been released against this book payment.',
+  CANNOT_DELETE_TDS_PAID:
+    'Cannot delete — TDS payment has already been released against this book payment.',
+  AMOUNT_VALIDATION_FAILED: 'Payment total must equal taxable + gst - tds deduction.',
 };
 
 export const BOOK_PAYMENT_RESPONSES = {

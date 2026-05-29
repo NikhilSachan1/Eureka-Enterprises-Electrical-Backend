@@ -23,7 +23,10 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
-import { insertTdsRegisterEntryFromBankTransferQuery } from 'src/modules/site-invoices/queries/site-invoice.queries';
+import {
+  insertTdsRegisterEntryFromBankTransferQuery,
+  deleteTdsRegisterEntryForBankTransferQuery,
+} from 'src/modules/site-invoices/queries/site-invoice.queries';
 
 @Injectable()
 export class BankTransferService {
@@ -409,6 +412,25 @@ export class BankTransferService {
         }
       }
 
+      // SALE side: if tdsDeducted or transferDate changed, resync the TDS register row.
+      // Block if TDS payment already released (amounts are immutable after that).
+      // PURCHASE side: TDS belongs to the book payment — bank transfer doesn't own it.
+      const saleTdsChanged =
+        bt.partyType === PartyType.SALE &&
+        (dto.tdsDeducted !== undefined || dto.transferDate !== undefined);
+
+      if (saleTdsChanged) {
+        const tdsPaid = await em.query(
+          `SELECT 1 FROM tds_register_entries
+           WHERE "bankTransferId" = $1 AND "tdsPaymentId" IS NOT NULL
+           LIMIT 1`,
+          [id],
+        );
+        if (tdsPaid.length > 0) {
+          throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_UPDATE_TDS_PAID);
+        }
+      }
+
       await this.bankTransferRepository.update(
         { id },
         {
@@ -418,6 +440,44 @@ export class BankTransferService {
         } as Partial<BankTransferEntity>,
         em,
       );
+
+      // Delete-then-insert the TDS register row so edits to tdsDeducted (amount)
+      // or transferDate (FY/invoiceMonth shift) are always picked up.
+      if (saleTdsChanged) {
+        await em.query(deleteTdsRegisterEntryForBankTransferQuery, [id]);
+
+        const newTds =
+          dto.tdsDeducted !== undefined ? Number(dto.tdsDeducted) : Number(bt.tdsDeducted ?? 0);
+
+        if (newTds > 0) {
+          const effectiveDate = dto.transferDate
+            ? new Date(dto.transferDate)
+            : new Date(bt.transferDate);
+          const invoiceMonth = `${effectiveDate.getUTCFullYear()}-${String(
+            effectiveDate.getUTCMonth() + 1,
+          ).padStart(2, '0')}`;
+          const financialYear = getFinancialYear(effectiveDate);
+
+          // taxableAmount snapshot comes from the invoice (same reference used at create-time)
+          const inv = await em.getRepository(SiteInvoiceEntity).findOne({
+            where: { id: bt.invoiceId, deletedAt: IsNull() },
+          });
+          if (inv) {
+            await em.query(insertTdsRegisterEntryFromBankTransferQuery, [
+              bt.invoiceId, // $1 invoiceId
+              id, // $2 bankTransferId
+              bt.siteId, // $3 siteId
+              PartyType.SALE, // $4 partyType
+              bt.contractorId ?? null, // $5 contractorId
+              null, // $6 vendorId (SALE has none)
+              invoiceMonth, // $7
+              financialYear, // $8
+              Number(inv.taxableAmount), // $9 taxableAmount (invoice reference)
+              newTds, // $10 tdsAmount
+            ]);
+          }
+        }
+      }
 
       // Regenerate PDF if any field shown on the advice changed
       const pdfAffected =
@@ -470,6 +530,23 @@ export class BankTransferService {
         em,
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
+
+      // SALE side owns a TDS register row keyed by bankTransferId.
+      // Block deletion if TDS payment has been released — those numbers are locked.
+      // PURCHASE side TDS lives on the book payment, not here.
+      if (bt.partyType === PartyType.SALE) {
+        const tdsPaid = await em.query(
+          `SELECT 1 FROM tds_register_entries
+           WHERE "bankTransferId" = $1 AND "tdsPaymentId" IS NOT NULL
+           LIMIT 1`,
+          [id],
+        );
+        if (tdsPaid.length > 0) {
+          throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_DELETE_TDS_PAID);
+        }
+        // Remove the TDS register row so summaries don't show a dangling deduction.
+        await em.query(deleteTdsRegisterEntryForBankTransferQuery, [id]);
+      }
 
       // Cascade soft-delete payment advice if it exists
       await em.query(
