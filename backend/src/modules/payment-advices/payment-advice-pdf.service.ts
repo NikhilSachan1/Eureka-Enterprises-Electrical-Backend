@@ -11,6 +11,7 @@ export interface PaymentAdvicePdfData {
   vendorEmail: string;
   vendorGstNumber: string | null;
   vendorAddress: string | null;
+  vendorCity: string | null;
   vendorBankName: string | null;
   vendorAccountNumber: string | null;
   vendorIfscCode: string | null;
@@ -27,6 +28,11 @@ export interface PaymentAdvicePdfData {
   gstAmount: number;
   tdsDeductionAmount: number;
   paymentTotalAmount: number;
+  paymentHoldReason: string | null;
+  // Invoice / PO references
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  poNumber: string | null;
 }
 
 @Injectable()
@@ -50,7 +56,7 @@ export class PaymentAdvicePdfService {
         await page.pdf({
           format: 'A4',
           printBackground: true,
-          margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' },
+          margin: { top: '20px', bottom: '20px', left: '30px', right: '30px' },
         }),
       );
 
@@ -68,12 +74,223 @@ export class PaymentAdvicePdfService {
     }
   }
 
-  private buildHtml(d: PaymentAdvicePdfData): string {
-    const fmt = (n: number) =>
-      new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(n);
+  // ─── Number to words (Indian rupee format) ────────────────────────────────
+  private numberToWords(amount: number): string {
+    const ones = [
+      '',
+      'One',
+      'Two',
+      'Three',
+      'Four',
+      'Five',
+      'Six',
+      'Seven',
+      'Eight',
+      'Nine',
+      'Ten',
+      'Eleven',
+      'Twelve',
+      'Thirteen',
+      'Fourteen',
+      'Fifteen',
+      'Sixteen',
+      'Seventeen',
+      'Eighteen',
+      'Nineteen',
+    ];
+    const tens = [
+      '',
+      '',
+      'Twenty',
+      'Thirty',
+      'Forty',
+      'Fifty',
+      'Sixty',
+      'Seventy',
+      'Eighty',
+      'Ninety',
+    ];
 
-    const date = (v: Date | string) =>
-      new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const toWords = (n: number): string => {
+      if (n === 0) return '';
+      if (n < 20) return ones[n] + ' ';
+      if (n < 100)
+        return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] + ' ' : ' ');
+      return ones[Math.floor(n / 100)] + ' Hundred ' + (n % 100 !== 0 ? toWords(n % 100) : '');
+    };
+
+    const intPart = Math.floor(Math.abs(amount));
+    const decPart = Math.round((Math.abs(amount) - intPart) * 100);
+
+    let result = '';
+    let n = intPart;
+
+    if (n >= 10_000_000) {
+      result += toWords(Math.floor(n / 10_000_000)).trim() + ' Crore ';
+      n = n % 10_000_000;
+    }
+    if (n >= 100_000) {
+      result += toWords(Math.floor(n / 100_000)).trim() + ' Lakh ';
+      n = n % 100_000;
+    }
+    if (n >= 1_000) {
+      result += toWords(Math.floor(n / 1_000)).trim() + ' Thousand ';
+      n = n % 1_000;
+    }
+    result += toWords(n);
+
+    result = result.trim() || 'Zero';
+
+    if (decPart > 0) {
+      result += ' and ' + toWords(decPart).trim() + ' Paise';
+    }
+
+    return result + ' Only';
+  }
+
+  private buildHtml(d: PaymentAdvicePdfData): string {
+    // Currency formatter (with ₹ symbol, 2 decimals)
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 2,
+      }).format(n);
+
+    // Number formatter (no symbol, 2 decimals — for table cells)
+    const fmtN = (n: number) =>
+      new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(n);
+
+    // Date formatter
+    const fmtDate = (v: Date | string | null | undefined) => {
+      if (!v) return '-';
+      return new Date(v).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    };
+
+    // Amounts used in tables
+    const grossAmount = Number(d.taxableAmount);
+    const tdsAmount = Number(d.tdsDeductionAmount);
+    const gstAmount = Number(d.gstAmount);
+    const netAmount = Number(d.paymentTotalAmount);
+    const totalDeduction = tdsAmount; // GST tracked separately in GST register, not deducted from payment
+
+    const inWords = this.numberToWords(d.transferAmount);
+
+    // Conditional rows for the left info column
+    const leftRows: string[] = [];
+    leftRows.push(
+      `<tr><td class="lbl">Vendor Name</td><td class="sep">:</td><td class="val"><strong>${d.vendorName}</strong></td></tr>`,
+    );
+    if (d.vendorAddress) {
+      leftRows.push(
+        `<tr><td class="lbl">Address</td><td class="sep">:</td><td class="val">${d.vendorAddress}</td></tr>`,
+      );
+    }
+    if (d.vendorCity) {
+      leftRows.push(
+        `<tr><td class="lbl">City</td><td class="sep">:</td><td class="val">${d.vendorCity}</td></tr>`,
+      );
+    }
+    if (d.vendorGstNumber) {
+      leftRows.push(
+        `<tr><td class="lbl">GST No.</td><td class="sep">:</td><td class="val">${d.vendorGstNumber}</td></tr>`,
+      );
+    }
+    if (d.vendorIfscCode) {
+      leftRows.push(
+        `<tr><td class="lbl">Bank IFSC</td><td class="sep">:</td><td class="val">${d.vendorIfscCode}</td></tr>`,
+      );
+    }
+    if (d.vendorAccountNumber) {
+      leftRows.push(
+        `<tr><td class="lbl">Bank A/c No.</td><td class="sep">:</td><td class="val">${d.vendorAccountNumber}</td></tr>`,
+      );
+    }
+    if (d.vendorAccountHolderName) {
+      leftRows.push(
+        `<tr><td class="lbl">A/c Holder</td><td class="sep">:</td><td class="val">${d.vendorAccountHolderName}</td></tr>`,
+      );
+    }
+
+    // Conditional rows for the right info column
+    const rightRows: string[] = [];
+    rightRows.push(
+      `<tr><td class="lbl">Document No.</td><td class="sep">:</td><td class="val"><strong>${d.referenceNumber}</strong></td></tr>`,
+    );
+    rightRows.push(
+      `<tr><td class="lbl">Date</td><td class="sep">:</td><td class="val">${fmtDate(
+        d.generatedAt,
+      )}</td></tr>`,
+    );
+    rightRows.push(
+      `<tr><td class="lbl">UTR No.</td><td class="sep">:</td><td class="val">${d.utrNumber}</td></tr>`,
+    );
+    if (d.poNumber) {
+      rightRows.push(
+        `<tr><td class="lbl">PO Number</td><td class="sep">:</td><td class="val">${d.poNumber}</td></tr>`,
+      );
+    }
+    if (d.invoiceNumber) {
+      rightRows.push(
+        `<tr><td class="lbl">Vendor Bill No.</td><td class="sep">:</td><td class="val">${d.invoiceNumber}</td></tr>`,
+      );
+    }
+    rightRows.push(
+      `<tr><td class="lbl">Site</td><td class="sep">:</td><td class="val">${d.siteName}</td></tr>`,
+    );
+    rightRows.push(
+      `<tr><td class="lbl">Financial Year</td><td class="sep">:</td><td class="val">FY ${d.financialYear.slice(
+        0,
+        2,
+      )}-${d.financialYear.slice(2)}</td></tr>`,
+    );
+
+    // GST note (informational — tracked separately)
+    const gstNote =
+      gstAmount > 0
+        ? `<p style="font-size:10px;color:#555;margin-top:6px;">Note: GST of ${fmt(
+            gstAmount,
+          )} is tracked separately in the GST register.</p>`
+        : '';
+
+    // Payment hold reason block
+    const holdReasonHtml = d.paymentHoldReason
+      ? `<div class="hold-reason"><strong>Payment Hold Reason:</strong> ${d.paymentHoldReason}</div>`
+      : '';
+
+    // Deduction details table (only if TDS > 0)
+    const deductionTableHtml =
+      tdsAmount > 0
+        ? `
+      <div class="section-label">Deduction Details</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Invoice Reference</th>
+            <th class="r">Gross Amount (Rs.)</th>
+            <th>Deduction Remarks</th>
+            <th class="r">TDS / TCS Amount (Rs.)</th>
+            <th class="r">Deduction Amount (Rs.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${d.invoiceNumber ?? '-'}</td>
+            <td class="r">${fmtN(grossAmount)}</td>
+            <td>TDS Deduction</td>
+            <td class="r">${fmtN(tdsAmount)}</td>
+            <td class="r">${fmtN(tdsAmount)}</td>
+          </tr>
+        </tbody>
+      </table>`
+        : '';
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -81,148 +298,116 @@ export class PaymentAdvicePdfService {
 <meta charset="UTF-8"/>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #222; background: #fff; }
-  .page { padding: 32px; }
-  /* Header */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a56db; padding-bottom: 16px; margin-bottom: 20px; }
-  .company-name { font-size: 20px; font-weight: 700; color: #1a56db; }
-  .doc-title { text-align: right; }
-  .doc-title h2 { font-size: 16px; font-weight: 700; color: #1a56db; }
-  .doc-title .ref { font-size: 13px; color: #374151; margin-top: 4px; }
-  .doc-title .date { font-size: 11px; color: #6b7280; margin-top: 2px; }
-  /* Section */
-  .section { margin-bottom: 18px; }
-  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-  /* Two-col layout */
-  .two-col { display: flex; gap: 24px; }
-  .two-col > div { flex: 1; }
-  /* Info rows */
-  .info-row { display: flex; margin-bottom: 4px; }
-  .info-label { color: #6b7280; width: 160px; flex-shrink: 0; }
-  .info-value { font-weight: 500; }
-  /* Table */
-  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  th { background: #1a56db; color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; }
-  td { padding: 7px 10px; border-bottom: 1px solid #e5e7eb; }
-  tr:last-child td { border-bottom: none; }
-  .text-right { text-align: right; }
-  .total-row td { background: #eff6ff; font-weight: 700; }
-  /* Footer */
-  .footer { margin-top: 28px; border-top: 1px solid #e5e7eb; padding-top: 14px; font-size: 10px; color: #9ca3af; text-align: center; }
-  .badge { display: inline-block; background: #d1fae5; color: #065f46; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 600; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; background: #fff; }
+  .page { padding: 28px 36px; }
+
+  /* ── Header ──────────────────────────────────────────── */
+  .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 16px; }
+  .header .company { font-size: 17px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .header .doc-title { font-size: 13px; font-weight: bold; margin-top: 3px; letter-spacing: 1px; }
+
+  /* ── Info block (two-column table) ───────────────────── */
+  .info-block { width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #000; }
+  .info-block td { vertical-align: top; padding: 8px 10px; }
+  .info-block .divider { border-left: 1px solid #000; width: 1px; padding: 0; }
+  .info-cell table { width: 100%; border-collapse: collapse; }
+  .info-cell table .lbl { white-space: nowrap; color: #333; padding-bottom: 4px; padding-right: 6px; width: 110px; vertical-align: top; }
+  .info-cell table .sep { padding: 0 4px 4px 0; vertical-align: top; }
+  .info-cell table .val { padding-bottom: 4px; vertical-align: top; }
+
+  /* ── Body text ───────────────────────────────────────── */
+  .greeting { margin-bottom: 10px; }
+  .payment-msg { margin-bottom: 14px; line-height: 1.6; }
+  .amount-highlight { font-weight: bold; }
+  .hold-reason { background: #fff8e1; border-left: 3px solid #f59e0b; padding: 8px 10px; margin-bottom: 14px; }
+
+  /* ── Section labels ──────────────────────────────────── */
+  .section-label { font-weight: bold; font-size: 11px; margin-bottom: 4px; text-decoration: underline; }
+
+  /* ── Tables ──────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 10px; }
+  th { background: #e8e8e8; border: 1px solid #000; padding: 6px 8px; text-align: left; font-weight: bold; font-size: 10px; }
+  th.r { text-align: right; }
+  td { border: 1px solid #000; padding: 5px 8px; }
+  td.r { text-align: right; }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  .footer { margin-top: 24px; }
+  .regards { margin-bottom: 36px; line-height: 1.8; }
+  .system-note { text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 8px; margin-top: 16px; }
 </style>
 </head>
 <body>
 <div class="page">
 
-  <!-- Header -->
+  <!-- ── Header ─────────────────────────────────────────── -->
   <div class="header">
-    <div>
-      <div class="company-name">${d.companyName}</div>
-      <div style="color:#6b7280;margin-top:4px;">${d.siteName}</div>
-    </div>
-    <div class="doc-title">
-      <h2>PAYMENT ADVICE</h2>
-      <div class="ref">${d.referenceNumber}</div>
-      <div class="date">Generated: ${date(d.generatedAt)}</div>
-      <div style="margin-top:6px;"><span class="badge">APPROVED</span></div>
-    </div>
+    <div class="company">${d.companyName}</div>
+    <div class="doc-title">PAYMENT ADVICE</div>
   </div>
 
-  <!-- Vendor & Transfer Details -->
-  <div class="two-col">
-    <div class="section">
-      <div class="section-title">Vendor Details</div>
-      <div class="info-row"><span class="info-label">Name</span><span class="info-value">${
-        d.vendorName
-      }</span></div>
-      <div class="info-row"><span class="info-label">Email</span><span class="info-value">${
-        d.vendorEmail
-      }</span></div>
-      ${
-        d.vendorGstNumber
-          ? `<div class="info-row"><span class="info-label">GST Number</span><span class="info-value">${d.vendorGstNumber}</span></div>`
-          : ''
-      }
-      ${
-        d.vendorAddress
-          ? `<div class="info-row"><span class="info-label">Address</span><span class="info-value">${d.vendorAddress}</span></div>`
-          : ''
-      }
-    </div>
-    <div class="section">
-      <div class="section-title">Bank Details</div>
-      ${
-        d.vendorBankName
-          ? `<div class="info-row"><span class="info-label">Bank</span><span class="info-value">${d.vendorBankName}</span></div>`
-          : '<div style="color:#9ca3af;">Not provided</div>'
-      }
-      ${
-        d.vendorAccountNumber
-          ? `<div class="info-row"><span class="info-label">Account No.</span><span class="info-value">${d.vendorAccountNumber}</span></div>`
-          : ''
-      }
-      ${
-        d.vendorIfscCode
-          ? `<div class="info-row"><span class="info-label">IFSC Code</span><span class="info-value">${d.vendorIfscCode}</span></div>`
-          : ''
-      }
-      ${
-        d.vendorAccountHolderName
-          ? `<div class="info-row"><span class="info-label">Account Holder</span><span class="info-value">${d.vendorAccountHolderName}</span></div>`
-          : ''
-      }
-    </div>
+  <!-- ── Info Block ─────────────────────────────────────── -->
+  <table class="info-block">
+    <tr>
+      <td class="info-cell" style="width:49%">
+        <table>${leftRows.join('')}</table>
+      </td>
+      <td class="divider"></td>
+      <td class="info-cell" style="width:49%">
+        <table>${rightRows.join('')}</table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ── Greeting & Payment Message ────────────────────── -->
+  <div class="greeting">Dear SIR / MADAM,</div>
+  <div class="payment-msg">
+    This is to inform you that payment has been released for
+    <span class="amount-highlight">${fmt(d.transferAmount)}</span>
+    (${inWords}).
   </div>
 
-  <!-- Transfer Info -->
-  <div class="section">
-    <div class="section-title">Transfer Details</div>
-    <div class="two-col">
-      <div>
-        <div class="info-row"><span class="info-label">UTR Number</span><span class="info-value">${
-          d.utrNumber
-        }</span></div>
-        <div class="info-row"><span class="info-label">Transfer Date</span><span class="info-value">${date(
-          d.transferDate,
-        )}</span></div>
-      </div>
-      <div>
-        <div class="info-row"><span class="info-label">Financial Year</span><span class="info-value">FY ${d.financialYear.slice(
-          0,
-          2,
-        )}-${d.financialYear.slice(2)}</span></div>
-      </div>
-    </div>
-  </div>
+  ${holdReasonHtml}
 
-  <!-- Amount Breakdown -->
-  <div class="section">
-    <div class="section-title">Payment Breakdown</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th class="text-right">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td>Taxable Amount</td><td class="text-right">${fmt(d.taxableAmount)}</td></tr>
-        <tr><td>GST Deducted</td><td class="text-right">- ${fmt(d.gstAmount)}</td></tr>
-        <tr><td>TDS Deducted</td><td class="text-right">- ${fmt(d.tdsDeductionAmount)}</td></tr>
-        <tr class="total-row"><td>Net Payment Amount</td><td class="text-right">${fmt(
-          d.paymentTotalAmount,
-        )}</td></tr>
-        <tr class="total-row"><td>Amount Transferred (UTR: ${
-          d.utrNumber
-        })</td><td class="text-right">${fmt(d.transferAmount)}</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <!-- ── Invoice Summary ───────────────────────────────── -->
+  <div class="section-label">Invoice Summary</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Invoice Reference</th>
+        <th>Invoice Date</th>
+        <th class="r">Gross Amount (Rs.)</th>
+        <th class="r">Total Deduction (Rs.)</th>
+        <th class="r">Net Amount Paid (Rs.)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${d.invoiceNumber ?? '-'}</td>
+        <td>${fmtDate(d.invoiceDate)}</td>
+        <td class="r">${fmtN(grossAmount)}</td>
+        <td class="r">${fmtN(totalDeduction)}</td>
+        <td class="r">${fmtN(netAmount)}</td>
+      </tr>
+    </tbody>
+  </table>
 
-  <!-- Footer -->
+  ${gstNote}
+
+  ${deductionTableHtml}
+
+  <!-- ── Footer ─────────────────────────────────────────── -->
   <div class="footer">
-    This is a system-generated Payment Advice. Reference: ${d.referenceNumber} | ${d.companyName}
+    <div class="regards">
+      Thanks and Regards,<br/>
+      <strong>${d.companyName}</strong>
+    </div>
+  </div>
+
+  <div class="system-note">
+    This is a system generated document &nbsp;|&nbsp; Reference: ${
+      d.referenceNumber
+    } &nbsp;|&nbsp; Generated: ${fmtDate(d.generatedAt)}
   </div>
 
 </div>

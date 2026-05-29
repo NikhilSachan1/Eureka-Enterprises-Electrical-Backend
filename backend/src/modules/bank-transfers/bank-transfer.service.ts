@@ -14,6 +14,7 @@ import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoi
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
+import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -226,10 +227,15 @@ export class BankTransferService {
         em,
       );
 
-      // Fetch vendor + site details for PDF (outside the critical path — failures logged, not fatal)
-      const [vendor, site] = await Promise.all([
+      // Fetch vendor, site, invoice, and PO details for PDF
+      // (outside the critical path — failures logged, not fatal)
+      const [vendor, site, invoiceForPdf, poForPdf] = await Promise.all([
         em.getRepository(VendorEntity).findOne({ where: { id: bp.vendorId } }),
         em.getRepository(SiteEntity).findOne({ where: { id: bp.siteId }, relations: ['company'] }),
+        em
+          .getRepository(SiteInvoiceEntity)
+          .findOne({ where: { id: bp.invoiceId, deletedAt: IsNull() } }),
+        em.getRepository(PurchaseOrderEntity).findOne({ where: { id: bp.poId } }),
       ]);
 
       // Auto-generate payment advice (§5.1.9)
@@ -245,6 +251,7 @@ export class BankTransferService {
           vendorEmail: vendor?.email ?? '',
           vendorGstNumber: vendor?.gstNumber ?? null,
           vendorAddress: vendor?.fullAddress ?? null,
+          vendorCity: vendor?.city ?? null,
           vendorBankName: vendor?.bankName ?? null,
           vendorAccountNumber: vendor?.accountNumber ?? null,
           vendorIfscCode: vendor?.ifscCode ?? null,
@@ -258,6 +265,12 @@ export class BankTransferService {
           gstAmount: Number(bp.gstAmount),
           tdsDeductionAmount: Number(bp.tdsDeductionAmount),
           paymentTotalAmount: Number(bp.paymentTotalAmount),
+          paymentHoldReason: bp.paymentHoldReason ?? null,
+          invoiceNumber: invoiceForPdf?.invoiceNumber ?? null,
+          invoiceDate: invoiceForPdf?.invoiceDate
+            ? String(invoiceForPdf.invoiceDate).split('T')[0]
+            : null,
+          poNumber: poForPdf?.poNumber ?? null,
         },
       );
 
@@ -501,15 +514,27 @@ export class BankTransferService {
         dto.transferDate !== undefined ||
         dto.transferAmount !== undefined;
       if (pdfAffected && bt.partyType === PartyType.PURCHASE) {
-        const [vendor, site] = await Promise.all([
+        const [vendor, site, bp] = await Promise.all([
           em.getRepository(VendorEntity).findOne({ where: { id: bt.vendorId } }),
           em
             .getRepository(SiteEntity)
             .findOne({ where: { id: bt.siteId }, relations: ['company'] }),
+          bt.bookPaymentId
+            ? em.getRepository(BookPaymentEntity).findOne({ where: { id: bt.bookPaymentId } })
+            : Promise.resolve(null),
         ]);
-        const bp = bt.bookPaymentId
-          ? await em.getRepository(BookPaymentEntity).findOne({ where: { id: bt.bookPaymentId } })
-          : null;
+
+        // Fetch invoice + PO for reference numbers
+        const [invoiceForPdf, poForPdf] = await Promise.all([
+          bp?.invoiceId
+            ? em
+                .getRepository(SiteInvoiceEntity)
+                .findOne({ where: { id: bp.invoiceId, deletedAt: IsNull() } })
+            : Promise.resolve(null),
+          bp?.poId
+            ? em.getRepository(PurchaseOrderEntity).findOne({ where: { id: bp.poId } })
+            : Promise.resolve(null),
+        ]);
 
         this.paymentAdviceService.regeneratePdfAsync(id, {
           referenceNumber: '', // overridden inside regeneratePdfAsync
@@ -519,6 +544,7 @@ export class BankTransferService {
           vendorEmail: vendor?.email ?? '',
           vendorGstNumber: vendor?.gstNumber ?? null,
           vendorAddress: vendor?.fullAddress ?? null,
+          vendorCity: vendor?.city ?? null,
           vendorBankName: vendor?.bankName ?? null,
           vendorAccountNumber: vendor?.accountNumber ?? null,
           vendorIfscCode: vendor?.ifscCode ?? null,
@@ -532,6 +558,12 @@ export class BankTransferService {
           gstAmount: bp ? Number(bp.gstAmount) : 0,
           tdsDeductionAmount: bp ? Number(bp.tdsDeductionAmount) : 0,
           paymentTotalAmount: bp ? Number(bp.paymentTotalAmount) : 0,
+          paymentHoldReason: bp?.paymentHoldReason ?? null,
+          invoiceNumber: invoiceForPdf?.invoiceNumber ?? null,
+          invoiceDate: invoiceForPdf?.invoiceDate
+            ? String(invoiceForPdf.invoiceDate).split('T')[0]
+            : null,
+          poNumber: poForPdf?.poNumber ?? null,
         });
       }
 

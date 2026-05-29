@@ -178,14 +178,15 @@ export class SiteInvoiceService {
         let disabledReason: string | null;
 
         if (inv.partyType === PartyType.PURCHASE) {
-          // PURCHASE side: ceiling for book payments is against total invoice amount
+          // PURCHASE side: book payment ceiling is against taxable amount (GST settled separately).
+          // bookedTotal = Σ (paymentTotalAmount + tdsDeductionAmount) = Σ taxableAmount per booking.
           const bookedTotal = Number(inv.bookedTotal) || 0;
-          const totalAmount = Number(inv.totalAmount) || 0;
-          isDisabled = bookedTotal >= totalAmount;
+          const taxableAmount = Number(inv.taxableAmount) || 0;
+          isDisabled = bookedTotal >= taxableAmount;
           disabledReason = isDisabled
             ? `Book payment ceiling fully used (₹${bookedTotal.toLocaleString(
                 'en-IN',
-              )} of ₹${totalAmount.toLocaleString('en-IN')})`
+              )} of ₹${taxableAmount.toLocaleString('en-IN')})`
             : null;
         } else {
           // SALE side: ceiling for bank transfers is against taxable amount (GST settled separately).
