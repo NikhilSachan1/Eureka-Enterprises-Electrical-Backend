@@ -16,6 +16,10 @@ export const SITE_ERRORS = {
     'Site can only be marked as Ongoing after the start date has arrived. Please update the start date first.',
   CANNOT_DELETE_SITE_HAS_DATA:
     'Cannot delete site. Associated data exists: {tables}. Please remove them first.',
+  CONTRACTOR_HAS_FINANCIAL_DOCS:
+    'Cannot remove contractor — one or more POs / JMCs exist for this contractor on the site. Delete the financial documents first.',
+  VENDOR_HAS_FINANCIAL_DOCS:
+    'Cannot remove vendor — one or more POs / JMCs exist for this vendor on the site. Delete the financial documents first.',
 };
 
 export const SITE_RESPONSES = {
