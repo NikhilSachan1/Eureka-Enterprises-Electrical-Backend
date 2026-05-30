@@ -45,8 +45,7 @@ export class SalaryStructureService {
     createdBy: string,
     entityManager?: EntityManager,
   ): Promise<SalaryStructureEntity> {
-    // Validate ESIC
-    await this.validateEsic(createDto);
+    const esic = await this.calculateEsic(createDto.basic);
 
     // Check if active salary structure already exists
     const existingActive = await this.getActiveByUserId(createDto.userId);
@@ -59,6 +58,7 @@ export class SalaryStructureService {
       const salaryStructure = await this.salaryStructureRepository.create(
         {
           ...createDto,
+          esic,
           effectiveFrom: new Date(createDto.effectiveFrom),
           incrementType: IncrementType.INITIAL,
           createdBy,
@@ -107,10 +107,9 @@ export class SalaryStructureService {
       updatedBy,
     };
 
-    // Validate ESIC if updating salary components
     if (this.isSalaryComponentUpdate(updateDto)) {
-      const mergedDto = { ...existing, ...updateDto };
-      await this.validateEsic(mergedDto as any);
+      const effectiveBasic = updateDto.basic ?? existing.basic;
+      updatedData['esic'] = await this.calculateEsic(effectiveBasic);
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -161,20 +160,10 @@ export class SalaryStructureService {
       employeePf,
       employerPf,
       tds,
-      esic,
       professionalTax,
     } = incrementDto;
 
-    // Validate ESIC
-    await this.validateEsic({
-      basic,
-      hra,
-      foodAllowance,
-      conveyanceAllowance,
-      medicalAllowance,
-      specialAllowance,
-      esic,
-    });
+    const esic = await this.calculateEsic(basic);
 
     // Validate effective date is not in past (timezone-aware)
     const effectiveDateStr =
@@ -336,35 +325,13 @@ export class SalaryStructureService {
     return Number(configSetting.value);
   }
 
-  private async validateEsic(dto: {
-    esic?: number;
-    basic: number;
-    hra?: number;
-    foodAllowance?: number;
-    conveyanceAllowance?: number;
-    medicalAllowance?: number;
-    specialAllowance?: number;
-  }): Promise<void> {
-    if (dto.esic && dto.esic > 0) {
-      const grossSalary =
-        Number(dto.basic || 0) +
-        Number(dto.hra || 0) +
-        Number(dto.foodAllowance || 0) +
-        Number(dto.conveyanceAllowance || 0) +
-        Number(dto.medicalAllowance || 0) +
-        Number(dto.specialAllowance || 0);
-
-      const esicLimit = await this.getEsicGrossLimit();
-
-      if (grossSalary > esicLimit) {
-        throw new BadRequestException(
-          SALARY_STRUCTURE_ERRORS.ESIC_NOT_APPLICABLE.replace(
-            '{limit}',
-            esicLimit.toLocaleString('en-IN'),
-          ),
-        );
-      }
+  private async calculateEsic(basic: number): Promise<number> {
+    const esicLimit = await this.getEsicGrossLimit();
+    const basicHalf = Number(basic) / 2;
+    if (basicHalf <= esicLimit) {
+      return Math.round(basicHalf * 0.0075 * 100) / 100;
     }
+    return 0;
   }
 
   private getSalarySnapshot(structure: SalaryStructureEntity): Record<string, any> {
@@ -405,8 +372,7 @@ export class SalaryStructureService {
       dto.foodAllowance !== undefined ||
       dto.conveyanceAllowance !== undefined ||
       dto.medicalAllowance !== undefined ||
-      dto.specialAllowance !== undefined ||
-      dto.esic !== undefined
+      dto.specialAllowance !== undefined
     );
   }
 }
