@@ -89,11 +89,16 @@ export class ApplyIncrementDto {
   @Type(() => Number)
   tds: number;
 
-  @ApiProperty({ description: 'ESIC (applicable if gross <= limit)', example: 0, required: true })
+  @ApiProperty({
+    description: 'ESIC (auto-calculated by backend based on basic/2)',
+    example: 0,
+    required: false,
+  })
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  esic: number;
+  esic?: number;
 
   @ApiProperty({ description: 'Professional Tax', example: 200, required: true })
   @IsNumber()

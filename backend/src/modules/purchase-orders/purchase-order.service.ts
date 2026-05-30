@@ -138,13 +138,26 @@ export class PurchaseOrderService {
     ]);
 
     return {
-      records: records.map((po) => ({
-        ...po,
-        createdByUser: formatUser(po.createdByUser),
-        updatedByUser: formatUser(po.updatedByUser),
-        approvalByUser: formatUser(po.approvalByUser),
-        unlockRequestedByUser: formatUser(po.unlockRequestedByUser),
-      })),
+      records: records.map((po) => {
+        const invoicedTotal = Number(po.invoicedTotal) || 0;
+        const totalAmount = Number(po.totalAmount) || 0;
+        const invoiceCeilingFull = invoicedTotal >= totalAmount;
+
+        return {
+          ...po,
+          createdByUser: formatUser(po.createdByUser),
+          updatedByUser: formatUser(po.updatedByUser),
+          approvalByUser: formatUser(po.approvalByUser),
+          unlockRequestedByUser: formatUser(po.unlockRequestedByUser),
+          // Dropdown hint: disable POs whose invoice ceiling is fully exhausted
+          isDisabled: invoiceCeilingFull,
+          disabledReason: invoiceCeilingFull
+            ? `Invoice ceiling fully used (₹${invoicedTotal.toLocaleString(
+                'en-IN',
+              )} of ₹${totalAmount.toLocaleString('en-IN')})`
+            : null,
+        };
+      }),
       totalRecords,
     };
   }

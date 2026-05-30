@@ -33,7 +33,6 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
-import { SiteStatus } from '../sites/constants/site.constants';
 
 @Injectable()
 export class SiteAllocationService {
@@ -46,16 +45,8 @@ export class SiteAllocationService {
   ) {}
 
   async create(createDto: CreateSiteAllocationDto, createdBy: string) {
-    // Validate site exists and is active
-    const site = await this.siteService.findOneOrFail({ where: { id: createDto.siteId } });
-
-    // Cannot allocate to sites that are on hold, work completed, or completed
-    const blockedStatuses = [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED, SiteStatus.COMPLETED];
-    if (blockedStatuses.includes(site.status as SiteStatus)) {
-      throw new BadRequestException(
-        SITE_ALLOCATION_ERRORS.SITE_STATUS_BLOCKS_ALLOCATION.replace('{status}', site.status),
-      );
-    }
+    // Validate site exists
+    await this.siteService.findOneOrFail({ where: { id: createDto.siteId } });
 
     // Check if employee is already allocated to another site
     // Note: User existence is validated by FK constraint
@@ -219,15 +210,6 @@ export class SiteAllocationService {
     // Already deallocated
     if (!allocation.isCurrentlyAllocated) {
       throw new BadRequestException(SITE_ALLOCATION_ERRORS.CANNOT_UPDATE_DEALLOCATED);
-    }
-
-    // Cannot deallocate from sites that are on hold, work completed, or completed
-    const site = await this.siteService.findOneOrFail({ where: { id: allocation.siteId } });
-    const blockedStatuses = [SiteStatus.HOLD, SiteStatus.WORK_COMPLETED, SiteStatus.COMPLETED];
-    if (blockedStatuses.includes(site.status as SiteStatus)) {
-      throw new BadRequestException(
-        SITE_ALLOCATION_ERRORS.SITE_STATUS_BLOCKS_ALLOCATION.replace('{status}', site.status),
-      );
     }
 
     await this.siteAllocationRepository.update(

@@ -20,10 +20,7 @@ export class BookPaymentRepository {
     return em ? em.getRepository(BookPaymentEntity) : this.repository;
   }
 
-  async create(
-    data: Partial<BookPaymentEntity>,
-    em?: EntityManager,
-  ): Promise<BookPaymentEntity> {
+  async create(data: Partial<BookPaymentEntity>, em?: EntityManager): Promise<BookPaymentEntity> {
     try {
       const repo = this.repo(em);
       const row = repo.create(data);
@@ -55,10 +52,7 @@ export class BookPaymentRepository {
     }
   }
 
-  async count(
-    options: FindManyOptions<BookPaymentEntity>,
-    em?: EntityManager,
-  ): Promise<number> {
+  async count(options: FindManyOptions<BookPaymentEntity>, em?: EntityManager): Promise<number> {
     try {
       return await this.repo(em).count(options);
     } catch (error) {
@@ -78,10 +72,7 @@ export class BookPaymentRepository {
     }
   }
 
-  async softDelete(
-    where: FindOptionsWhere<BookPaymentEntity>,
-    em?: EntityManager,
-  ): Promise<void> {
+  async softDelete(where: FindOptionsWhere<BookPaymentEntity>, em?: EntityManager): Promise<void> {
     try {
       await this.repo(em).softDelete(where);
     } catch (error) {
@@ -89,10 +80,7 @@ export class BookPaymentRepository {
     }
   }
 
-  async restore(
-    where: FindOptionsWhere<BookPaymentEntity>,
-    em?: EntityManager,
-  ): Promise<void> {
+  async restore(where: FindOptionsWhere<BookPaymentEntity>, em?: EntityManager): Promise<void> {
     try {
       await this.repo(em).restore(where);
     } catch (error) {
@@ -111,10 +99,7 @@ export class BookPaymentRepository {
   /**
    * Lock a book payment row inside a transaction for bank transfer validation.
    */
-  async findOneForUpdate(
-    id: string,
-    em: EntityManager,
-  ): Promise<BookPaymentEntity | null> {
+  async findOneForUpdate(id: string, em: EntityManager): Promise<BookPaymentEntity | null> {
     return await em
       .getRepository(BookPaymentEntity)
       .createQueryBuilder('bp')
@@ -125,12 +110,17 @@ export class BookPaymentRepository {
   }
 
   /**
-   * Sum of booked payments for a given invoice.
+   * Effective booked amount for a given invoice (PURCHASE side).
+   * Counts paymentTotalAmount + tdsDeductionAmount because TDS is deducted at
+   * source but still settles the invoice obligation (= taxableAmount per booking).
    */
   async sumByInvoice(invoiceId: string, em?: EntityManager): Promise<number> {
     const result = await this.repo(em)
       .createQueryBuilder('bp')
-      .select('COALESCE(SUM(bp."paymentTotalAmount"), 0)', 'total')
+      .select(
+        'COALESCE(SUM(bp."paymentTotalAmount" + COALESCE(bp."tdsDeductionAmount", 0)), 0)',
+        'total',
+      )
       .where('bp."invoiceId" = :invoiceId', { invoiceId })
       .andWhere('bp."deletedAt" IS NULL')
       .getRawOne();

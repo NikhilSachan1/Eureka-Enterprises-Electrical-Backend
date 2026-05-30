@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { In, IsNull } from 'typeorm';
+import { DataSource, In, IsNull } from 'typeorm';
 import { SiteVendorRepository } from './site-vendor.repository';
 import { VendorRepository } from 'src/modules/vendors/vendor.repository';
 import { SiteRepository } from 'src/modules/sites/site.repository';
@@ -13,14 +13,13 @@ export class SiteVendorService {
     private readonly siteVendorRepository: SiteVendorRepository,
     private readonly vendorRepository: VendorRepository,
     private readonly siteRepository: SiteRepository,
+    private readonly dataSource: DataSource,
   ) {}
 
   async listVendorsForSite(siteId: string) {
     await this.assertSiteExists(siteId);
     const rows = await this.siteVendorRepository.getVendorsBySiteId(siteId);
-    return rows
-      .filter((r) => r.vendor && !r.vendor.deletedAt)
-      .map((r) => r.vendor);
+    return rows.filter((r) => r.vendor && !r.vendor.deletedAt).map((r) => r.vendor);
   }
 
   async addVendorsToSite(siteId: string, vendorIds: string[]) {
@@ -44,6 +43,16 @@ export class SiteVendorService {
 
   async removeVendorsFromSite(siteId: string, vendorIds: string[]) {
     await this.assertSiteExists(siteId);
+
+    // Block removal if any of these vendors have purchase orders on this site
+    const result = await this.dataSource.query(
+      `SELECT 1 FROM purchase_orders WHERE "siteId" = $1 AND "vendorId" = ANY($2::uuid[]) AND "deletedAt" IS NULL LIMIT 1`,
+      [siteId, vendorIds],
+    );
+    if (result.length > 0) {
+      throw new BadRequestException(SITE_VENDOR_ERRORS.VENDOR_HAS_FINANCIAL_DOCS);
+    }
+
     await this.siteVendorRepository.removeVendors(siteId, vendorIds);
     return { message: SITE_VENDOR_RESPONSES.VENDORS_UNLINKED, removedCount: vendorIds.length };
   }
