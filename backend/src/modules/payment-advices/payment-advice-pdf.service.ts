@@ -19,6 +19,9 @@ export interface PaymentAdvicePdfData {
   // Site / Company
   siteName: string;
   companyName: string;
+  companyLogoKey?: string | null;
+  companyAddress?: string | null;
+  companyGstNumber?: string | null;
   // Transfer
   utrNumber: string;
   transferDate: string;
@@ -42,7 +45,19 @@ export class PaymentAdvicePdfService {
   constructor(private readonly filesService: FilesService) {}
 
   async generate(data: PaymentAdvicePdfData): Promise<string> {
-    const html = this.buildHtml(data);
+    let logoBase64: string | null = null;
+    if (data.companyLogoKey) {
+      try {
+        const buf = await this.filesService.getFileContent(data.companyLogoKey);
+        const ext = data.companyLogoKey.split('.').pop()?.toLowerCase() ?? 'png';
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+        logoBase64 = `data:${mime};base64,${buf.toString('base64')}`;
+      } catch {
+        // logo fetch failed — render without it
+      }
+    }
+
+    const html = this.buildHtml(data, logoBase64);
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
     try {
@@ -148,7 +163,7 @@ export class PaymentAdvicePdfService {
     return result + ' Only';
   }
 
-  private buildHtml(d: PaymentAdvicePdfData): string {
+  private buildHtml(d: PaymentAdvicePdfData, logoBase64: string | null = null): string {
     // Currency formatter (with ₹ symbol, 2 decimals)
     const fmt = (n: number) =>
       new Intl.NumberFormat('en-IN', {
@@ -302,24 +317,30 @@ export class PaymentAdvicePdfService {
   .page { padding: 28px 36px; }
 
   /* ── Header ──────────────────────────────────────────── */
-  .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 16px; }
+  .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 16px; }
+  .header-inner { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .header-logo { flex-shrink: 0; }
+  .header-logo img { height: 52px; width: auto; object-fit: contain; }
+  .header-info { flex: 1; }
   .header .company { font-size: 17px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-  .header .doc-title { font-size: 13px; font-weight: bold; margin-top: 3px; letter-spacing: 1px; }
+  .header .company-address { font-size: 10px; color: #444; margin-top: 2px; }
+  .header .company-gst { font-size: 10px; color: #444; margin-top: 1px; }
+  .header .doc-title { font-size: 13px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-top: 6px; }
 
-  /* ── Info block (two-column table) ───────────────────── */
-  .info-block { width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #000; }
+  /* ── Info block (two-column layout) ─────────────────── */
+  .info-block { width: 100%; border-collapse: collapse; margin-bottom: 16px; border-bottom: 1px solid #ccc; }
   .info-block td { vertical-align: top; padding: 8px 10px; }
-  .info-block .divider { border-left: 1px solid #000; width: 1px; padding: 0; }
+  .info-block .divider { border-left: 1px solid #ddd; width: 1px; padding: 0; }
   .info-cell table { width: 100%; border-collapse: collapse; }
-  .info-cell table .lbl { white-space: nowrap; color: #333; padding-bottom: 4px; padding-right: 6px; width: 110px; vertical-align: top; }
-  .info-cell table .sep { padding: 0 4px 4px 0; vertical-align: top; }
+  .info-cell table .lbl { white-space: nowrap; color: #555; padding-bottom: 4px; padding-right: 6px; width: 110px; vertical-align: top; }
+  .info-cell table .sep { padding: 0 4px 4px 0; vertical-align: top; color: #555; }
   .info-cell table .val { padding-bottom: 4px; vertical-align: top; }
 
   /* ── Body text ───────────────────────────────────────── */
   .greeting { margin-bottom: 10px; }
   .payment-msg { margin-bottom: 14px; line-height: 1.6; }
   .amount-highlight { font-weight: bold; }
-  .hold-reason { background: #fff8e1; border-left: 3px solid #f59e0b; padding: 8px 10px; margin-bottom: 14px; }
+  .hold-reason { border-left: 3px solid #999; padding: 8px 10px; margin-bottom: 14px; }
 
   /* ── Section labels ──────────────────────────────────── */
   .section-label { font-weight: bold; font-size: 11px; margin-bottom: 4px; text-decoration: underline; }
@@ -342,7 +363,14 @@ export class PaymentAdvicePdfService {
 
   <!-- ── Header ─────────────────────────────────────────── -->
   <div class="header">
-    <div class="company">${d.companyName}</div>
+    <div class="header-inner">
+      ${logoBase64 ? `<div class="header-logo"><img src="${logoBase64}" alt="logo"/></div>` : ''}
+      <div class="header-info">
+        <div class="company">${d.companyName}</div>
+        ${d.companyAddress ? `<div class="company-address">${d.companyAddress}</div>` : ''}
+        ${d.companyGstNumber ? `<div class="company-gst">GST: ${d.companyGstNumber}</div>` : ''}
+      </div>
+    </div>
     <div class="doc-title">PAYMENT ADVICE</div>
   </div>
 
@@ -366,8 +394,6 @@ export class PaymentAdvicePdfService {
     <span class="amount-highlight">${fmt(d.transferAmount)}</span>
     (${inWords}).
   </div>
-
-  ${holdReasonHtml}
 
   <!-- ── Invoice Summary ───────────────────────────────── -->
   <div class="section-label">Invoice Summary</div>
@@ -395,6 +421,8 @@ export class PaymentAdvicePdfService {
   ${gstNote}
 
   ${deductionTableHtml}
+
+  ${holdReasonHtml}
 
   <!-- ── Footer ─────────────────────────────────────────── -->
   <div class="footer">
