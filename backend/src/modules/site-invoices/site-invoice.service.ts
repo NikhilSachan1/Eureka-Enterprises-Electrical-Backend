@@ -565,15 +565,19 @@ export class SiteInvoiceService {
   /**
    * Dropdown endpoint — returns Invoices for a site with eligibility flags.
    *
-   * forDocument = "book-payment"   → PURCHASE invoices for Book Payment creation.
-   *   Eligible: APPROVED + bookedTotal < totalAmount.
-   *
-   * forDocument = "bank-transfer"  → SALE invoices for SALE Bank Transfer creation.
-   *   Eligible: APPROVED + paidTotal < taxableAmount.
-   *   GST is excluded — tracked in GST register, settled separately via GST payment release.
+   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < taxableAmount.
+   * forDocument = "bank-transfer" + PURCHASE        → PURCHASE invoices booked but not yet paid. Eligible: APPROVED + bookedTotal > 0 + paidTotal < bookedTotal.
+   * forDocument = "bank-transfer" + SALE (default)  → SALE invoices. Eligible: APPROVED + paidTotal < taxableAmount.
    */
-  async getDropdown(siteId: string, forDocument: 'book-payment' | 'bank-transfer') {
-    const partyType = forDocument === 'book-payment' ? 'PURCHASE' : 'SALE';
+  async getDropdown(
+    siteId: string,
+    forDocument: 'book-payment' | 'bank-transfer',
+    partyTypeOverride?: 'PURCHASE' | 'SALE',
+  ) {
+    const partyType = partyTypeOverride ?? (forDocument === 'book-payment' ? 'PURCHASE' : 'SALE');
+
+    const isPurchaseBankTransfer = forDocument === 'bank-transfer' && partyType === 'PURCHASE';
+
     const rows = await this.dataSource.query(
       `
       SELECT
@@ -587,21 +591,24 @@ export class SiteInvoiceService {
         i."paidTotal",
         i."approvalStatus",
         COALESCE(c.name, v.name) AS "partyName",
-        -- eligibility
-        -- book-payment ceiling = taxableAmount (GST excluded; only taxable - TDS is booked)
-        -- bank-transfer ceiling = taxableAmount (GST excluded on SALE side too; GST settled separately via register)
         CASE
-          WHEN i."approvalStatus" != 'APPROVED' THEN false
-          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."taxableAmount" THEN false
-          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."taxableAmount" THEN false
+          WHEN i."approvalStatus" != 'APPROVED'                                                    THEN false
+          WHEN $3 = 'book-payment'                       AND i."bookedTotal" >= i."taxableAmount"  THEN false
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                  THEN false
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"   THEN false
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal"   >= i."taxableAmount" THEN false
           ELSE true
         END AS eligible,
         CASE
           WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
-          WHEN $3 = 'book-payment'  AND i."bookedTotal" >= i."taxableAmount"
+          WHEN $3 = 'book-payment' AND i."bookedTotal" >= i."taxableAmount"
             THEN 'Invoice fully booked — no remaining taxable amount'
-          WHEN $3 = 'bank-transfer' AND i."paidTotal"   >= i."taxableAmount"
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."bookedTotal" = 0
+            THEN 'Invoice not yet booked — do a Book Payment first'
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."paidTotal" >= i."bookedTotal"
+            THEN 'Invoice fully paid — booked amount exhausted'
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= i."taxableAmount"
             THEN 'Invoice fully paid (taxable amount exhausted)'
           ELSE NULL
         END AS reason
@@ -613,7 +620,7 @@ export class SiteInvoiceService {
         AND i."deletedAt" IS NULL
       ORDER BY i."createdAt" DESC
       `,
-      [siteId, partyType, forDocument],
+      [siteId, partyType, forDocument, partyType],
     );
 
     return {
@@ -630,12 +637,11 @@ export class SiteInvoiceService {
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
-          // remaining for book-payment = taxableAmount - bookedTotal (GST excluded)
-          // remaining for bank-transfer = taxableAmount - paidTotal (GST excluded on SALE side too)
-          remaining:
-            forDocument === 'book-payment'
-              ? Number(r.taxableAmount) - Number(r.bookedTotal)
-              : Number(r.taxableAmount) - Number(r.paidTotal),
+          remaining: isPurchaseBankTransfer
+            ? Number(r.bookedTotal) - Number(r.paidTotal)
+            : forDocument === 'book-payment'
+            ? Number(r.taxableAmount) - Number(r.bookedTotal)
+            : Number(r.taxableAmount) - Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },
       })),

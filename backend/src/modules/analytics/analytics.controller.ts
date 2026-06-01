@@ -69,8 +69,12 @@ export class AnalyticsController {
     description:
       'Returns operational expense breakdown (employee-wise, category-wise), vendor and contractor invoice summaries (PO-wise), payment summary (sales vs vendor/contractor), and profitability metrics (revenue, direct cost, profit margin, expense ratio). Requires siteId.',
   })
-  async getSiteFinancialDetail(@Query('siteId', ParseUUIDPipe) siteId: string) {
-    return await this.analyticsService.getSiteFinancialDetail(siteId);
+  async getSiteFinancialDetail(
+    @Query('siteId', ParseUUIDPipe) siteId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return await this.analyticsService.getSiteFinancialDetail(siteId, startDate, endDate);
   }
 
   /**

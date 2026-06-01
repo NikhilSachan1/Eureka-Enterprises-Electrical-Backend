@@ -172,7 +172,9 @@ export class AnalyticsService {
       this.executeQuery(
         queries.getSiteFuelExpensesByVehicleQuery(siteId, dateRange.startDate, dateRange.endDate),
       ),
-      this.executeQuery(queries.getSitePayrollByEmployeeQuery(siteId)),
+      this.executeQuery(
+        queries.getSitePayrollByEmployeeQuery(siteId, dateRange.startDate, dateRange.endDate),
+      ),
       this.executeQuery(queries.getSiteDocumentSummaryQuery(siteId)),
       this.executeQuery(
         queries.getSiteMonthlyTrendQuery(siteId, dateRange.startDate, dateRange.endDate),
@@ -1167,7 +1169,7 @@ export class AnalyticsService {
    *   paymentSummary   — received vs invoiced (SALE) + paid vs invoiced (PURCHASE)
    *   profitabilitySummary — revenue, project cost, gross/net profit, margins
    */
-  async getSiteFinancialDetail(siteId: string) {
+  async getSiteFinancialDetail(siteId: string, startDate?: string, endDate?: string) {
     try {
       const [
         salePoResult,
@@ -1188,13 +1190,15 @@ export class AnalyticsService {
         this.executeQuery(queries.getPurchasePOSummaryQuery(siteId)),
         this.executeQuery(queries.getSalesInvoiceListQuery(siteId)),
         this.executeQuery(queries.getPurchaseInvoiceListQuery(siteId)),
-        this.executeQuery(queries.getSitePayrollByEmployeeDetailQuery(siteId)),
-        this.executeQuery(queries.getSitePayrollTotalCostQuery(siteId)),
-        this.executeQuery(queries.getOpExpenseTotalQuery(siteId)),
-        this.executeQuery(queries.getOpExpenseByEmployeeAndCategoryQuery(siteId)),
-        this.executeQuery(queries.getOpExpenseByCategoryQuery(siteId)),
-        this.executeQuery(queries.getFuelExpenseTotalQuery(siteId)),
-        this.executeQuery(queries.getFuelExpenseByEmployeeQuery(siteId)),
+        this.executeQuery(queries.getSitePayrollByEmployeeDetailQuery(siteId, startDate, endDate)),
+        this.executeQuery(queries.getSitePayrollTotalCostQuery(siteId, startDate, endDate)),
+        this.executeQuery(queries.getOpExpenseTotalQuery(siteId, startDate, endDate)),
+        this.executeQuery(
+          queries.getOpExpenseByEmployeeAndCategoryQuery(siteId, startDate, endDate),
+        ),
+        this.executeQuery(queries.getOpExpenseByCategoryQuery(siteId, startDate, endDate)),
+        this.executeQuery(queries.getFuelExpenseTotalQuery(siteId, startDate, endDate)),
+        this.executeQuery(queries.getFuelExpenseByEmployeeQuery(siteId, startDate, endDate)),
         this.executeQuery(queries.getInvoiceTotalsBySideQuery(siteId)),
         this.executeQuery(queries.getBankTransferTotalsBySideQuery(siteId)),
       ]);

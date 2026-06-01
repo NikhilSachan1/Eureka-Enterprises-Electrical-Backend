@@ -177,6 +177,9 @@ type SiteProfitabilityDateFilters = {
   siteDateFilterDoc: string;
   siteDateFilterExp: string;
   siteDateFilterFuel: string;
+  siteDateFilterPayroll: string;
+  payrollProrateLower: string;
+  payrollProrateUpper: string;
 };
 
 /**
@@ -192,6 +195,9 @@ export function buildSiteProfitabilityDateFilters(
   let dateFilterDoc = '';
   let dateFilterExp = '';
   let dateFilterFuel = '';
+  let dateFilterPayroll = '';
+  let payrollProrateLower = '';
+  let payrollProrateUpper = '';
   let useSiteDates = false;
 
   if (startDate && endDate) {
@@ -201,16 +207,27 @@ export function buildSiteProfitabilityDateFilters(
     dateFilterDoc = `AND sd."documentDate" >= $${lo}::date AND sd."documentDate" <= $${hi}::date`;
     dateFilterExp = `AND e."expenseDate"::date >= $${lo}::date AND e."expenseDate"::date <= $${hi}::date`;
     dateFilterFuel = `AND fe."fillDate"::date >= $${lo}::date AND fe."fillDate"::date <= $${hi}::date`;
+    dateFilterPayroll = `AND make_date(p.year, p.month, 1) <= $${hi}::date AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= $${lo}::date`;
+    payrollProrateLower = `$${lo}::date`;
+    payrollProrateUpper = `$${hi}::date`;
   } else if (startDate) {
     params.push(startDate);
-    dateFilterDoc = `AND sd."documentDate" >= $${params.length}::date`;
-    dateFilterExp = `AND e."expenseDate"::date >= $${params.length}::date`;
-    dateFilterFuel = `AND fe."fillDate"::date >= $${params.length}::date`;
+    const idx = params.length;
+    dateFilterDoc = `AND sd."documentDate" >= $${idx}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${idx}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${idx}::date`;
+    dateFilterPayroll = `AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= $${idx}::date AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE)`;
+    payrollProrateLower = `$${idx}::date`;
+    payrollProrateUpper = `COALESCE(site_info."endDate", CURRENT_DATE)`;
   } else if (endDate) {
     params.push(endDate);
-    dateFilterDoc = `AND sd."documentDate" <= $${params.length}::date`;
-    dateFilterExp = `AND e."expenseDate"::date <= $${params.length}::date`;
-    dateFilterFuel = `AND fe."fillDate"::date <= $${params.length}::date`;
+    const idx = params.length;
+    dateFilterDoc = `AND sd."documentDate" <= $${idx}::date`;
+    dateFilterExp = `AND e."expenseDate"::date <= $${idx}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date <= $${idx}::date`;
+    dateFilterPayroll = `AND make_date(p.year, p.month, 1) <= $${idx}::date AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"`;
+    payrollProrateLower = `site_info."startDate"`;
+    payrollProrateUpper = `$${idx}::date`;
   } else {
     useSiteDates = true;
   }
@@ -224,8 +241,23 @@ export function buildSiteProfitabilityDateFilters(
   const siteDateFilterFuel = useSiteDates
     ? `AND fe."fillDate"::date >= site_info."startDate" AND fe."fillDate"::date <= COALESCE(site_info."endDate", CURRENT_DATE)`
     : dateFilterFuel;
+  const siteDateFilterPayroll = useSiteDates
+    ? `AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE) AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"`
+    : dateFilterPayroll;
+  const resolvedPayrollProrateLower = useSiteDates ? `site_info."startDate"` : payrollProrateLower;
+  const resolvedPayrollProrateUpper = useSiteDates
+    ? `COALESCE(site_info."endDate", CURRENT_DATE)`
+    : payrollProrateUpper;
 
-  return { params, siteDateFilterDoc, siteDateFilterExp, siteDateFilterFuel };
+  return {
+    params,
+    siteDateFilterDoc,
+    siteDateFilterExp,
+    siteDateFilterFuel,
+    siteDateFilterPayroll,
+    payrollProrateLower: resolvedPayrollProrateLower,
+    payrollProrateUpper: resolvedPayrollProrateUpper,
+  };
 }
 
 /**
@@ -245,8 +277,15 @@ export const getSiteProfitabilityQuery = (
   startDate?: string | null,
   endDate?: string | null,
 ) => {
-  const { params, siteDateFilterDoc, siteDateFilterExp, siteDateFilterFuel } =
-    buildSiteProfitabilityDateFilters(siteId, startDate, endDate);
+  const {
+    params,
+    siteDateFilterDoc,
+    siteDateFilterExp,
+    siteDateFilterFuel,
+    siteDateFilterPayroll,
+    payrollProrateLower,
+    payrollProrateUpper,
+  } = buildSiteProfitabilityDateFilters(siteId, startDate, endDate);
 
   return {
     query: `
@@ -330,30 +369,21 @@ export const getSiteProfitabilityQuery = (
       -- Only includes PAID or APPROVED payroll entries
       payroll_costs AS (
         SELECT COALESCE(SUM(
-          -- Pro-rate salary based on days allocated during that payroll month
           p."netPayable" * (
-            -- Calculate days allocated in this payroll month
             LEAST(
-              -- End of allocation or end of month
               COALESCE(sa."deallocatedAt", (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
-              -- End of payroll month
               (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
-              -- End of site date range filter (if provided)
-              COALESCE(site_info."endDate", CURRENT_DATE)
+              ${payrollProrateUpper}
             )
             -
             GREATEST(
-              -- Start of allocation or start of month
               sa."allocatedAt",
-              -- Start of payroll month
               make_date(p.year, p.month, 1),
-              -- Start of site date range filter (if provided)
-              site_info."startDate"
+              ${payrollProrateLower}
             )
             + 1
           )::numeric
           /
-          -- Total days in the payroll month
           EXTRACT(DAY FROM (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day'))::numeric
         ), 0) as total
         FROM payroll p
@@ -363,12 +393,9 @@ export const getSiteProfitabilityQuery = (
           AND sa."siteId" = $1
           AND sa."deletedAt" IS NULL
           AND p.status IN ('PAID', 'APPROVED')
-          -- Payroll month overlaps with allocation period
           AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
           AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
-          -- Payroll month overlaps with site date range
-          AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE)
-          AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"
+          ${siteDateFilterPayroll}
       )
       SELECT
         s.id as "siteId",
@@ -564,7 +591,14 @@ export const getSiteFuelExpensesByVehicleQuery = (
 /**
  * Pro-rated payroll cost per employee (same rules as profitability payroll_costs).
  */
-export const getSitePayrollByEmployeeQuery = (siteId: string) => {
+export const getSitePayrollByEmployeeQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const { params, siteDateFilterPayroll, payrollProrateLower, payrollProrateUpper } =
+    buildSiteProfitabilityDateFilters(siteId, startDate, endDate);
+
   return {
     query: `
       WITH site_info AS (
@@ -585,13 +619,13 @@ export const getSitePayrollByEmployeeQuery = (siteId: string) => {
             LEAST(
               COALESCE(sa."deallocatedAt", (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
               (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
-              COALESCE(site_info."endDate", CURRENT_DATE)
+              ${payrollProrateUpper}
             )
             -
             GREATEST(
               sa."allocatedAt",
               make_date(p.year, p.month, 1),
-              site_info."startDate"
+              ${payrollProrateLower}
             )
             + 1
           )::numeric
@@ -608,12 +642,11 @@ export const getSitePayrollByEmployeeQuery = (siteId: string) => {
         AND p.status IN ('PAID', 'APPROVED')
         AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
         AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
-        AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE)
-        AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"
+        ${siteDateFilterPayroll}
       GROUP BY p."userId"
       ORDER BY amount DESC
     `,
-    params: [siteId],
+    params,
   };
 };
 
@@ -870,6 +903,9 @@ export const getAllSitesProfitabilityQuery = (
   let dateFilterDoc = '';
   let dateFilterExp = '';
   let dateFilterFuel = '';
+  let dateFilterPayroll = '';
+  let payrollProrateLower = '';
+  let payrollProrateUpper = '';
   let useSiteDates = false;
 
   if (siteId) {
@@ -897,31 +933,36 @@ export const getAllSitesProfitabilityQuery = (
   // Date filters
   if (startDate && endDate) {
     params.push(startDate, endDate);
-    dateFilterDoc = `AND sd."documentDate" >= $${
-      params.length - 1
-    }::date AND sd."documentDate" <= $${params.length}::date`;
-    dateFilterExp = `AND e."expenseDate"::date >= $${
-      params.length - 1
-    }::date AND e."expenseDate"::date <= $${params.length}::date`;
-    dateFilterFuel = `AND fe."fillDate"::date >= $${
-      params.length - 1
-    }::date AND fe."fillDate"::date <= $${params.length}::date`;
+    const lo = params.length - 1;
+    const hi = params.length;
+    dateFilterDoc = `AND sd."documentDate" >= $${lo}::date AND sd."documentDate" <= $${hi}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${lo}::date AND e."expenseDate"::date <= $${hi}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${lo}::date AND fe."fillDate"::date <= $${hi}::date`;
+    dateFilterPayroll = `AND make_date(p.year, p.month, 1) <= $${hi}::date AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= $${lo}::date`;
+    payrollProrateLower = `$${lo}::date`;
+    payrollProrateUpper = `$${hi}::date`;
   } else if (startDate) {
     params.push(startDate);
-    dateFilterDoc = `AND sd."documentDate" >= $${params.length}::date`;
-    dateFilterExp = `AND e."expenseDate"::date >= $${params.length}::date`;
-    dateFilterFuel = `AND fe."fillDate"::date >= $${params.length}::date`;
+    const idx = params.length;
+    dateFilterDoc = `AND sd."documentDate" >= $${idx}::date`;
+    dateFilterExp = `AND e."expenseDate"::date >= $${idx}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date >= $${idx}::date`;
+    dateFilterPayroll = `AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= $${idx}::date AND make_date(p.year, p.month, 1) <= COALESCE(s."endDate", CURRENT_DATE)`;
+    payrollProrateLower = `$${idx}::date`;
+    payrollProrateUpper = `COALESCE(s."endDate", CURRENT_DATE)`;
   } else if (endDate) {
     params.push(endDate);
-    dateFilterDoc = `AND sd."documentDate" <= $${params.length}::date`;
-    dateFilterExp = `AND e."expenseDate"::date <= $${params.length}::date`;
-    dateFilterFuel = `AND fe."fillDate"::date <= $${params.length}::date`;
+    const idx = params.length;
+    dateFilterDoc = `AND sd."documentDate" <= $${idx}::date`;
+    dateFilterExp = `AND e."expenseDate"::date <= $${idx}::date`;
+    dateFilterFuel = `AND fe."fillDate"::date <= $${idx}::date`;
+    dateFilterPayroll = `AND make_date(p.year, p.month, 1) <= $${idx}::date AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= s."startDate"`;
+    payrollProrateLower = `s."startDate"`;
+    payrollProrateUpper = `$${idx}::date`;
   } else {
-    // No date filter provided - use site's date range for each site
     useSiteDates = true;
   }
 
-  // When using site dates, apply date filter using site's own date range
   const siteDateFilterDoc = useSiteDates
     ? `AND sd."documentDate" >= s."startDate" AND sd."documentDate" <= COALESCE(s."endDate", CURRENT_DATE)`
     : dateFilterDoc;
@@ -931,6 +972,13 @@ export const getAllSitesProfitabilityQuery = (
   const siteDateFilterFuel = useSiteDates
     ? `AND fe."fillDate"::date >= s."startDate" AND fe."fillDate"::date <= COALESCE(s."endDate", CURRENT_DATE)`
     : dateFilterFuel;
+  const siteDateFilterPayroll = useSiteDates
+    ? `AND make_date(p.year, p.month, 1) <= COALESCE(s."endDate", CURRENT_DATE) AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= s."startDate"`
+    : dateFilterPayroll;
+  const resolvedPayrollProrateLower = useSiteDates ? `s."startDate"` : payrollProrateLower;
+  const resolvedPayrollProrateUpper = useSiteDates
+    ? `COALESCE(s."endDate", CURRENT_DATE)`
+    : payrollProrateUpper;
 
   // Validate sort field to prevent SQL injection
   const validSortFields: Record<string, string> = {
@@ -1019,17 +1067,16 @@ export const getAllSitesProfitabilityQuery = (
           COALESCE((
             SELECT SUM(
               p."netPayable" * (
-                -- Days allocated in this payroll month
                 LEAST(
                   COALESCE(sa."deallocatedAt", (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
                   (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
-                  COALESCE(s."endDate", CURRENT_DATE)
+                  ${resolvedPayrollProrateUpper}
                 )
                 -
                 GREATEST(
                   sa."allocatedAt",
                   make_date(p.year, p.month, 1),
-                  s."startDate"
+                  ${resolvedPayrollProrateLower}
                 )
                 + 1
               )::numeric
@@ -1042,12 +1089,9 @@ export const getAllSitesProfitabilityQuery = (
               AND sa."siteId" = s.id
               AND sa."deletedAt" IS NULL
               AND p.status IN ('PAID', 'APPROVED')
-              -- Payroll month overlaps with allocation period
               AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
               AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
-              -- Payroll month overlaps with site date range
-              AND make_date(p.year, p.month, 1) <= COALESCE(s."endDate", CURRENT_DATE)
-              AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= s."startDate"
+              ${siteDateFilterPayroll}
           ), 0) as "payrollCosts"
           
         FROM sites s
@@ -1755,7 +1799,7 @@ export const getSiteHealthDataQuery = (siteId: string) => {
  * Shared CTE fragment for filtered site expenses (expenses table).
  * Includes: directly linked to site + linked via employee allocation during expense date.
  */
-function buildSiteExpensesCTE(): string {
+function buildSiteExpensesCTE(expenseDateFilter = ''): string {
   return `
   site_employees AS (
     SELECT DISTINCT sa."userId"
@@ -1770,6 +1814,7 @@ function buildSiteExpensesCTE(): string {
       AND e."transactionType" = 'debit'
       AND e."isActive" = true
       ${EXCLUDED_EXPENSE_CATEGORIES_SQL}
+      ${expenseDateFilter}
       AND (
         e."siteId" = $1
         OR (
@@ -1785,6 +1830,46 @@ function buildSiteExpensesCTE(): string {
         )
       )
   )`;
+}
+
+function buildExpenseDateFilter(
+  params: any[],
+  startDate?: string | null,
+  endDate?: string | null,
+): string {
+  if (startDate && endDate) {
+    params.push(startDate, endDate);
+    return `AND e."expenseDate"::date >= $${
+      params.length - 1
+    }::date AND e."expenseDate"::date <= $${params.length}::date`;
+  } else if (startDate) {
+    params.push(startDate);
+    return `AND e."expenseDate"::date >= $${params.length}::date`;
+  } else if (endDate) {
+    params.push(endDate);
+    return `AND e."expenseDate"::date <= $${params.length}::date`;
+  }
+  return '';
+}
+
+function buildFuelDateFilter(
+  params: any[],
+  startDate?: string | null,
+  endDate?: string | null,
+): string {
+  if (startDate && endDate) {
+    params.push(startDate, endDate);
+    return `AND fe."fillDate"::date >= $${params.length - 1}::date AND fe."fillDate"::date <= $${
+      params.length
+    }::date`;
+  } else if (startDate) {
+    params.push(startDate);
+    return `AND fe."fillDate"::date >= $${params.length}::date`;
+  } else if (endDate) {
+    params.push(endDate);
+    return `AND fe."fillDate"::date <= $${params.length}::date`;
+  }
+  return '';
 }
 
 // ── PO Summaries ─────────────────────────────────────────────────────────────
@@ -1869,33 +1954,114 @@ export const getPurchaseInvoiceListQuery = (siteId: string) => ({
  * Pro-rated payroll per employee — includes allocatedAmount, workingDays, perDayCost.
  * workingDays = sum of pro-rated allocation days within each payroll month's window.
  */
-export const getSitePayrollByEmployeeDetailQuery = (siteId: string) => ({
-  query: `
-    WITH site_info AS (
-      SELECT id, "startDate", "endDate"
-      FROM sites
-      WHERE id = $1 AND "deletedAt" IS NULL
-    )
-    SELECT
-      COALESCE(
-        NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
-        u."employeeId"::text
-      )                        as "employeeName",
-      u."employeeId"::text     as "employeeCode",
-      COALESCE(SUM(
+export const getSitePayrollByEmployeeDetailQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const { params, siteDateFilterPayroll, payrollProrateLower, payrollProrateUpper } =
+    buildSiteProfitabilityDateFilters(siteId, startDate, endDate);
+  return {
+    query: `
+      WITH site_info AS (
+        SELECT id, "startDate", "endDate"
+        FROM sites
+        WHERE id = $1 AND "deletedAt" IS NULL
+      )
+      SELECT
+        COALESCE(
+          NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
+          u."employeeId"::text
+        )                        as "employeeName",
+        u."employeeId"::text     as "employeeCode",
+        COALESCE(SUM(
+          p."netPayable" * (
+            GREATEST(0,
+              LEAST(
+                COALESCE(sa."deallocatedAt",
+                  (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
+                (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
+                ${payrollProrateUpper}
+              )
+              -
+              GREATEST(
+                sa."allocatedAt",
+                make_date(p.year, p.month, 1),
+                ${payrollProrateLower}
+              )
+              + 1
+            )::numeric
+            / EXTRACT(DAY FROM
+                (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')
+              )::numeric
+          )
+        ), 0)::numeric             as "allocatedAmount",
+        COALESCE(SUM(
+          GREATEST(0,
+            LEAST(
+              COALESCE(sa."deallocatedAt",
+                (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
+              (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
+              ${payrollProrateUpper}
+            )
+            -
+            GREATEST(
+              sa."allocatedAt",
+              make_date(p.year, p.month, 1),
+              ${payrollProrateLower}
+            )
+            + 1
+          )
+        ), 0)::int                 as "workingDays"
+      FROM payroll p
+      INNER JOIN site_allocations sa ON sa."userId" = p."userId"
+      INNER JOIN users u             ON u.id = p."userId" AND u."deletedAt" IS NULL
+      CROSS JOIN site_info
+      WHERE p."deletedAt" IS NULL
+        AND sa."siteId" = $1
+        AND sa."deletedAt" IS NULL
+        AND p.status IN ('PAID', 'APPROVED')
+        AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
+        AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
+        ${siteDateFilterPayroll}
+      GROUP BY p."userId", u."firstName", u."lastName", u."employeeId"
+      ORDER BY "allocatedAmount" DESC
+    `,
+    params,
+  };
+};
+
+/**
+ * Pro-rated payroll total for a site (all employees allocated to this site).
+ */
+export const getSitePayrollTotalCostQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const { params, siteDateFilterPayroll, payrollProrateLower, payrollProrateUpper } =
+    buildSiteProfitabilityDateFilters(siteId, startDate, endDate);
+  return {
+    query: `
+      WITH site_info AS (
+        SELECT id, "startDate", "endDate"
+        FROM sites
+        WHERE id = $1 AND "deletedAt" IS NULL
+      )
+      SELECT COALESCE(SUM(
         p."netPayable" * (
           GREATEST(0,
             LEAST(
               COALESCE(sa."deallocatedAt",
                 (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
               (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
-              COALESCE(site_info."endDate", CURRENT_DATE)
+              ${payrollProrateUpper}
             )
             -
             GREATEST(
               sa."allocatedAt",
               make_date(p.year, p.month, 1),
-              site_info."startDate"
+              ${payrollProrateLower}
             )
             + 1
           )::numeric
@@ -1903,204 +2069,179 @@ export const getSitePayrollByEmployeeDetailQuery = (siteId: string) => ({
               (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')
             )::numeric
         )
-      ), 0)::numeric             as "allocatedAmount",
-      COALESCE(SUM(
-        GREATEST(0,
-          LEAST(
-            COALESCE(sa."deallocatedAt",
-              (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
-            (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
-            COALESCE(site_info."endDate", CURRENT_DATE)
-          )
-          -
-          GREATEST(
-            sa."allocatedAt",
-            make_date(p.year, p.month, 1),
-            site_info."startDate"
-          )
-          + 1
-        )
-      ), 0)::int                 as "workingDays"
-    FROM payroll p
-    INNER JOIN site_allocations sa ON sa."userId" = p."userId"
-    INNER JOIN users u             ON u.id = p."userId" AND u."deletedAt" IS NULL
-    CROSS JOIN site_info
-    WHERE p."deletedAt" IS NULL
-      AND sa."siteId" = $1
-      AND sa."deletedAt" IS NULL
-      AND p.status IN ('PAID', 'APPROVED')
-      AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
-      AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
-      AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE)
-      AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"
-    GROUP BY p."userId", u."firstName", u."lastName", u."employeeId"
-    ORDER BY "allocatedAmount" DESC
-  `,
-  params: [siteId],
-});
-
-/**
- * Pro-rated payroll total for a site (all employees allocated to this site).
- */
-export const getSitePayrollTotalCostQuery = (siteId: string) => ({
-  query: `
-    WITH site_info AS (
-      SELECT id, "startDate", "endDate"
-      FROM sites
-      WHERE id = $1 AND "deletedAt" IS NULL
-    )
-    SELECT COALESCE(SUM(
-      p."netPayable" * (
-        GREATEST(0,
-          LEAST(
-            COALESCE(sa."deallocatedAt",
-              (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
-            (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
-            COALESCE(site_info."endDate", CURRENT_DATE)
-          )
-          -
-          GREATEST(
-            sa."allocatedAt",
-            make_date(p.year, p.month, 1),
-            site_info."startDate"
-          )
-          + 1
-        )::numeric
-        / EXTRACT(DAY FROM
-            (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')
-          )::numeric
-      )
-    ), 0)::numeric as total
-    FROM payroll p
-    INNER JOIN site_allocations sa ON sa."userId" = p."userId"
-    CROSS JOIN site_info
-    WHERE p."deletedAt" IS NULL
-      AND sa."siteId" = $1
-      AND sa."deletedAt" IS NULL
-      AND p.status IN ('PAID', 'APPROVED')
-      AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
-      AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
-      AND make_date(p.year, p.month, 1) <= COALESCE(site_info."endDate", CURRENT_DATE)
-      AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= site_info."startDate"
-  `,
-  params: [siteId],
-});
+      ), 0)::numeric as total
+      FROM payroll p
+      INNER JOIN site_allocations sa ON sa."userId" = p."userId"
+      CROSS JOIN site_info
+      WHERE p."deletedAt" IS NULL
+        AND sa."siteId" = $1
+        AND sa."deletedAt" IS NULL
+        AND p.status IN ('PAID', 'APPROVED')
+        AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
+        AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
+        ${siteDateFilterPayroll}
+    `,
+    params,
+  };
+};
 
 // ── Operational Expense (expenses table) ─────────────────────────────────────
 
 /** Operational expense total for a site (expenses table). */
-export const getOpExpenseTotalQuery = (siteId: string) => ({
-  query: `
-    WITH ${buildSiteExpensesCTE()}
-    SELECT COALESCE(SUM(fe.amount), 0)::numeric as total
-    FROM filtered_expenses fe
-  `,
-  params: [siteId],
-});
+export const getOpExpenseTotalQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const params: any[] = [siteId];
+  const expenseDateFilter = buildExpenseDateFilter(params, startDate, endDate);
+  return {
+    query: `
+      WITH ${buildSiteExpensesCTE(expenseDateFilter)}
+      SELECT COALESCE(SUM(fe.amount), 0)::numeric as total
+      FROM filtered_expenses fe
+    `,
+    params,
+  };
+};
 
 /**
  * Operational expense per (employee, category) — gives the regular-expense
  * employee-wise summary with expenseType per row.
  */
-export const getOpExpenseByEmployeeAndCategoryQuery = (siteId: string) => ({
-  query: `
-    WITH ${buildSiteExpensesCTE()}
-    SELECT
-      COALESCE(
-        NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
-        u."employeeId"::text
-      )                                       as "employeeName",
-      u."employeeId"::text                    as "employeeCode",
-      COALESCE(fe.category, 'Uncategorized') as "expenseType",
-      COALESCE(SUM(fe.amount), 0)::numeric    as "expenseAmount"
-    FROM filtered_expenses fe
-    JOIN users u ON u.id = fe."userId" AND u."deletedAt" IS NULL
-    GROUP BY u.id, u."firstName", u."lastName", u."employeeId", fe.category
-    ORDER BY "expenseAmount" DESC
-  `,
-  params: [siteId],
-});
+export const getOpExpenseByEmployeeAndCategoryQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const params: any[] = [siteId];
+  const expenseDateFilter = buildExpenseDateFilter(params, startDate, endDate);
+  return {
+    query: `
+      WITH ${buildSiteExpensesCTE(expenseDateFilter)}
+      SELECT
+        COALESCE(
+          NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
+          u."employeeId"::text
+        )                                       as "employeeName",
+        u."employeeId"::text                    as "employeeCode",
+        COALESCE(fe.category, 'Uncategorized') as "expenseType",
+        COALESCE(SUM(fe.amount), 0)::numeric    as "expenseAmount"
+      FROM filtered_expenses fe
+      JOIN users u ON u.id = fe."userId" AND u."deletedAt" IS NULL
+      GROUP BY u.id, u."firstName", u."lastName", u."employeeId", fe.category
+      ORDER BY "expenseAmount" DESC
+    `,
+    params,
+  };
+};
 
 /** Operational expense grouped by category. */
-export const getOpExpenseByCategoryQuery = (siteId: string) => ({
-  query: `
-    WITH ${buildSiteExpensesCTE()}
-    SELECT
-      COALESCE(fe.category, 'Uncategorized') as "categoryName",
-      COALESCE(SUM(fe.amount), 0)::numeric    as amount
-    FROM filtered_expenses fe
-    GROUP BY fe.category
-    ORDER BY amount DESC
-  `,
-  params: [siteId],
-});
+export const getOpExpenseByCategoryQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const params: any[] = [siteId];
+  const expenseDateFilter = buildExpenseDateFilter(params, startDate, endDate);
+  return {
+    query: `
+      WITH ${buildSiteExpensesCTE(expenseDateFilter)}
+      SELECT
+        COALESCE(fe.category, 'Uncategorized') as "categoryName",
+        COALESCE(SUM(fe.amount), 0)::numeric    as amount
+      FROM filtered_expenses fe
+      GROUP BY fe.category
+      ORDER BY amount DESC
+    `,
+    params,
+  };
+};
 
 // ── Fuel Expense ─────────────────────────────────────────────────────────────
 
 /** Fuel expense total at a site (via employee allocation at fill date). */
-export const getFuelExpenseTotalQuery = (siteId: string) => ({
-  query: `
-    WITH site_employees AS (
-      SELECT DISTINCT sa."userId"
-      FROM site_allocations sa
-      WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
-    )
-    SELECT COALESCE(SUM(fe."fuelAmount"), 0)::numeric as total
-    FROM fuel_expenses fe
-    WHERE fe."deletedAt" IS NULL
-      AND fe."approvalStatus" = 'approved'
-      AND fe."transactionType" = 'debit'
-      AND fe."isActive" = true
-      AND fe."userId" IN (SELECT "userId" FROM site_employees)
-      AND EXISTS (
-        SELECT 1 FROM site_allocations sa
-        WHERE sa."userId" = fe."userId"
-          AND sa."siteId" = $1
-          AND sa."deletedAt" IS NULL
-          AND fe."fillDate"::date >= sa."allocatedAt"
-          AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+export const getFuelExpenseTotalQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const params: any[] = [siteId];
+  const fuelDateFilter = buildFuelDateFilter(params, startDate, endDate);
+  return {
+    query: `
+      WITH site_employees AS (
+        SELECT DISTINCT sa."userId"
+        FROM site_allocations sa
+        WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
       )
-  `,
-  params: [siteId],
-});
+      SELECT COALESCE(SUM(fe."fuelAmount"), 0)::numeric as total
+      FROM fuel_expenses fe
+      WHERE fe."deletedAt" IS NULL
+        AND fe."approvalStatus" = 'approved'
+        AND fe."transactionType" = 'debit'
+        AND fe."isActive" = true
+        AND fe."userId" IN (SELECT "userId" FROM site_employees)
+        ${fuelDateFilter}
+        AND EXISTS (
+          SELECT 1 FROM site_allocations sa
+          WHERE sa."userId" = fe."userId"
+            AND sa."siteId" = $1
+            AND sa."deletedAt" IS NULL
+            AND fe."fillDate"::date >= sa."allocatedAt"
+            AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+        )
+    `,
+    params,
+  };
+};
 
 /** Fuel expense per employee + vehicle combination (via employee allocation at fill date). */
-export const getFuelExpenseByEmployeeQuery = (siteId: string) => ({
-  query: `
-    WITH site_employees AS (
-      SELECT DISTINCT sa."userId"
-      FROM site_allocations sa
-      WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
-    )
-    SELECT
-      COALESCE(
-        NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
-        u."employeeId"::text
-      )                                              as "employeeName",
-      u."employeeId"::text                           as "employeeCode",
-      COALESCE(vm."registrationNo", 'Unknown')       as "vehicleNumber",
-      COALESCE(SUM(fe."fuelAmount"), 0)::numeric     as "expenseAmount"
-    FROM fuel_expenses fe
-    JOIN  users          u  ON u.id  = fe."userId"     AND u."deletedAt"  IS NULL
-    LEFT JOIN vehicle_masters vm ON vm.id = fe."vehicleId" AND vm."deletedAt" IS NULL
-    WHERE fe."deletedAt" IS NULL
-      AND fe."approvalStatus" = 'approved'
-      AND fe."transactionType" = 'debit'
-      AND fe."isActive" = true
-      AND fe."userId" IN (SELECT "userId" FROM site_employees)
-      AND EXISTS (
-        SELECT 1 FROM site_allocations sa
-        WHERE sa."userId" = fe."userId"
-          AND sa."siteId" = $1
-          AND sa."deletedAt" IS NULL
-          AND fe."fillDate"::date >= sa."allocatedAt"
-          AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+export const getFuelExpenseByEmployeeQuery = (
+  siteId: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) => {
+  const params: any[] = [siteId];
+  const fuelDateFilter = buildFuelDateFilter(params, startDate, endDate);
+  return {
+    query: `
+      WITH site_employees AS (
+        SELECT DISTINCT sa."userId"
+        FROM site_allocations sa
+        WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
       )
-    GROUP BY u.id, u."firstName", u."lastName", u."employeeId", vm."registrationNo"
-    ORDER BY "expenseAmount" DESC
-  `,
-  params: [siteId],
-});
+      SELECT
+        COALESCE(
+          NULLIF(TRIM(COALESCE(u."firstName",'') || ' ' || COALESCE(u."lastName",'')), ''),
+          u."employeeId"::text
+        )                                              as "employeeName",
+        u."employeeId"::text                           as "employeeCode",
+        COALESCE(vm."registrationNo", 'Unknown')       as "vehicleNumber",
+        COALESCE(SUM(fe."fuelAmount"), 0)::numeric     as "expenseAmount"
+      FROM fuel_expenses fe
+      JOIN  users          u  ON u.id  = fe."userId"     AND u."deletedAt"  IS NULL
+      LEFT JOIN vehicle_masters vm ON vm.id = fe."vehicleId" AND vm."deletedAt" IS NULL
+      WHERE fe."deletedAt" IS NULL
+        AND fe."approvalStatus" = 'approved'
+        AND fe."transactionType" = 'debit'
+        AND fe."isActive" = true
+        AND fe."userId" IN (SELECT "userId" FROM site_employees)
+        ${fuelDateFilter}
+        AND EXISTS (
+          SELECT 1 FROM site_allocations sa
+          WHERE sa."userId" = fe."userId"
+            AND sa."siteId" = $1
+            AND sa."deletedAt" IS NULL
+            AND fe."fillDate"::date >= sa."allocatedAt"
+            AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+        )
+      GROUP BY u.id, u."firstName", u."lastName", u."employeeId", vm."registrationNo"
+      ORDER BY "expenseAmount" DESC
+    `,
+    params,
+  };
+};
 
 // ── Payment (bank_transfers) ──────────────────────────────────────────────────
 

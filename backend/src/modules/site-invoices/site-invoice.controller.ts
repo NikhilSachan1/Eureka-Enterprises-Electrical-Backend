@@ -39,17 +39,19 @@ export class SiteInvoiceController {
   @Get('dropdown')
   @RequiredPermission('financials.invoices.view')
   @ApiOperation({
-    summary: 'Invoice dropdown for Book Payment or Bank Transfer (SALE) creation',
+    summary: 'Invoice dropdown for Book Payment or Bank Transfer creation',
     description:
-      'forDocument=book-payment  → returns PURCHASE invoices eligible for a new Book Payment.\n' +
-      'forDocument=bank-transfer → returns SALE invoices eligible for a new Bank Transfer.\n' +
+      'forDocument=book-payment                    → PURCHASE invoices eligible for a new Book Payment.\n' +
+      'forDocument=bank-transfer + partyType=PURCHASE → PURCHASE invoices booked but not yet paid.\n' +
+      'forDocument=bank-transfer + partyType=SALE     → SALE invoices eligible for a new Bank Transfer.\n' +
       'Ineligible items are included with eligible=false and a human-readable reason.',
   })
   async getDropdown(
     @Query('siteId') siteId: string,
     @Query('forDocument') forDocument: 'book-payment' | 'bank-transfer',
+    @Query('partyType') partyType?: 'PURCHASE' | 'SALE',
   ) {
-    return await this.invoiceService.getDropdown(siteId, forDocument);
+    return await this.invoiceService.getDropdown(siteId, forDocument, partyType);
   }
 
   @Get()
