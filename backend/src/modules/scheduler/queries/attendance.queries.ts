@@ -20,6 +20,12 @@ export const getActiveUsersForAttendanceQuery = (status: string, todayDate: Date
       WHERE "status" = $1
         AND "deletedAt" IS NULL
         AND ("dateOfJoining" IS NULL OR "dateOfJoining" <= $2)
+        AND EXISTS (
+          SELECT 1 FROM user_roles ur
+          INNER JOIN roles r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+          WHERE ur."userId" = users.id
+            AND r.name IN ('EMPLOYEE', 'DRIVER')
+        )
     `,
     params: [status, todayDate],
   };
@@ -102,6 +108,12 @@ export const getUsersWithoutAttendanceQuery = (status: string, date: Date) => {
       WHERE u."status" = $1
         AND u."deletedAt" IS NULL
         AND (u."dateOfJoining" IS NULL OR u."dateOfJoining" <= $2)
+        AND EXISTS (
+          SELECT 1 FROM user_roles ur
+          INNER JOIN roles r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+          WHERE ur."userId" = u.id
+            AND r.name IN ('EMPLOYEE', 'DRIVER')
+        )
         AND NOT EXISTS (
           SELECT 1 FROM attendances a
           WHERE a."userId" = u.id

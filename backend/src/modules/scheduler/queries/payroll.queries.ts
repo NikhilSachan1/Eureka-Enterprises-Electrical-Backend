@@ -18,7 +18,7 @@ export const getEligibleUsersForPayrollQuery = (month: number, year: number) => 
 
   return {
     query: `
-      SELECT DISTINCT 
+      SELECT DISTINCT
         u.id as "userId",
         u."firstName",
         u."lastName",
@@ -28,15 +28,21 @@ export const getEligibleUsersForPayrollQuery = (month: number, year: number) => 
       INNER JOIN salary_structures ss ON ss."userId" = u.id
       WHERE u."deletedAt" IS NULL
         AND ss."deletedAt" IS NULL
+        AND EXISTS (
+          SELECT 1 FROM user_roles ur
+          INNER JOIN roles r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+          WHERE ur."userId" = u.id
+            AND r.name IN ('EMPLOYEE', 'DRIVER')
+        )
         AND (
           -- Active users with active salary structure
           (u.status = $1 AND ss."isActive" = true)
           OR
           -- Archived users who have attendance in the payroll month
           (u.status = $2 AND EXISTS (
-            SELECT 1 FROM attendances a 
-            WHERE a."userId" = u.id 
-              AND a."attendanceDate" >= $3::date 
+            SELECT 1 FROM attendances a
+            WHERE a."userId" = u.id
+              AND a."attendanceDate" >= $3::date
               AND a."attendanceDate" <= $4::date
               AND a."deletedAt" IS NULL
           ))

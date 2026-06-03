@@ -51,6 +51,12 @@ export const getActiveUsersQuery = () => {
       FROM users
       WHERE status = $1
         AND "deletedAt" IS NULL
+        AND EXISTS (
+          SELECT 1 FROM user_roles ur
+          INNER JOIN roles r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+          WHERE ur."userId" = users.id
+            AND r.name IN ('EMPLOYEE', 'DRIVER')
+        )
     `,
     params: [UserStatus.ACTIVE],
   };
