@@ -144,7 +144,7 @@ export const USER_RESPONSE_FIELDS = ['id', 'firstName', 'lastName', 'email', 'em
 export const COMPANY_DETAILS = {
   NAME: 'Eureka Enterprises Pvt Ltd',
   LOGO_URL: 'https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg',
-  EMAIL_HR: 'hr@eurekaenterprises.com',
+  EMAIL_HR: 'hr@eurekaenterprises.org',
   PHONE: '+91 510 123 4567',
   ADDRESS: {
     CITY: 'Jhansi',
@@ -153,4 +153,20 @@ export const COMPANY_DETAILS = {
     COUNTRY: 'India',
   },
   FULL_ADDRESS: 'Jhansi, Uttar Pradesh 284001 India',
+};
+
+export const PAYMENT_ADVICE_COMPANY_DETAILS = {
+  NAME: 'EUREKA ENTERPRISES, JHANSI',
+  LOGO_URL: 'https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg',
+  EMAIL_HR: 'hr@eurekaenterprises.org',
+  PHONE: '+91 510 123 4567',
+  ADDRESS: {
+    CITY: 'Jhansi',
+    STATE: 'Uttar Pradesh',
+    PINCODE: '284001',
+    COUNTRY: 'India',
+    CODE: '09',
+  },
+  FULL_ADDRESS: '362, Outside Khanderao Gate, Jhansi Khas',
+  GSTIN: '09IZPPS2918F1ZO',
 };

@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as https from 'https';
+import * as http from 'http';
 import puppeteer from 'puppeteer';
 import { FilesService } from 'src/modules/common/file-upload/files.service';
+import { PAYMENT_ADVICE_COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 
 export interface PaymentAdvicePdfData {
   referenceNumber: string;
@@ -44,18 +47,29 @@ export class PaymentAdvicePdfService {
 
   constructor(private readonly filesService: FilesService) {}
 
+  // ─── Fetch a URL and return it as base64 data URI ────────────────────────
+  private fetchUrlAsBase64(url: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const client = url.startsWith('https') ? https : http;
+      client
+        .get(url, (res) => {
+          const chunks: Uint8Array[] = [];
+          res.on('data', (c: Uint8Array) => chunks.push(c));
+          res.on('end', () => {
+            const buf = Buffer.concat(chunks);
+            const contentType = res.headers['content-type'] ?? 'image/jpeg';
+            resolve(`data:${contentType};base64,${buf.toString('base64')}`);
+          });
+        })
+        .on('error', () => resolve(null));
+    });
+  }
+
   async generate(data: PaymentAdvicePdfData): Promise<string> {
-    let logoBase64: string | null = null;
-    if (data.companyLogoKey) {
-      try {
-        const buf = await this.filesService.getFileContent(data.companyLogoKey);
-        const ext = data.companyLogoKey.split('.').pop()?.toLowerCase() ?? 'png';
-        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-        logoBase64 = `data:${mime};base64,${buf.toString('base64')}`;
-      } catch {
-        // logo fetch failed — render without it
-      }
-    }
+    // Fetch company logo from URL defined in master constants
+    const logoBase64 = await this.fetchUrlAsBase64(PAYMENT_ADVICE_COMPANY_DETAILS.LOGO_URL).catch(
+      () => null,
+    );
 
     const html = this.buildHtml(data, logoBase64);
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
@@ -318,23 +332,24 @@ export class PaymentAdvicePdfService {
 
   /* ── Header ──────────────────────────────────────────── */
   .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 16px; }
-  .header-inner { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .header-top { display: flex; align-items: center; gap: 14px; }
   .header-logo { flex-shrink: 0; }
-  .header-logo img { height: 52px; width: auto; object-fit: contain; }
-  .header-info { flex: 1; }
-  .header .company { font-size: 17px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-  .header .company-address { font-size: 10px; color: #444; margin-top: 2px; }
-  .header .company-gst { font-size: 10px; color: #444; margin-top: 1px; }
-  .header .doc-title { font-size: 13px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-top: 6px; }
+  .header-logo img { height: 60px; width: auto; object-fit: contain; }
+  .header-details { flex: 1; }
+  .header .company { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .header .company-address { font-size: 10px; color: #333; margin-top: 3px; }
+  .header .company-gst { font-size: 10px; color: #333; margin-top: 2px; }
+  .header .doc-title { font-size: 13px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-top: 8px; }
 
   /* ── Info block (two-column layout) ─────────────────── */
   .info-block { width: 100%; border-collapse: collapse; margin-bottom: 16px; border-bottom: 1px solid #ccc; }
-  .info-block td { vertical-align: top; padding: 8px 10px; }
-  .info-block .divider { border-left: 1px solid #ddd; width: 1px; padding: 0; }
+  .info-block td { vertical-align: top; padding: 8px 10px; border: none; }
+  .info-block .divider { border-left: 1px solid #ddd; width: 1px; padding: 0; border-top: none; border-bottom: none; border-right: none; }
   .info-cell table { width: 100%; border-collapse: collapse; }
-  .info-cell table .lbl { white-space: nowrap; color: #555; padding-bottom: 4px; padding-right: 6px; width: 110px; vertical-align: top; }
-  .info-cell table .sep { padding: 0 4px 4px 0; vertical-align: top; color: #555; }
-  .info-cell table .val { padding-bottom: 4px; vertical-align: top; }
+  .info-cell table td { border: none; padding: 0 0 4px 0; vertical-align: top; }
+  .info-cell table .lbl { white-space: nowrap; color: #555; padding-right: 6px; width: 110px; }
+  .info-cell table .sep { padding: 0 4px 0 0; color: #555; }
+  .info-cell table .val { }
 
   /* ── Body text ───────────────────────────────────────── */
   .greeting { margin-bottom: 10px; }
@@ -363,12 +378,16 @@ export class PaymentAdvicePdfService {
 
   <!-- ── Header ─────────────────────────────────────────── -->
   <div class="header">
-    <div class="header-inner">
+    <div class="header-top">
       ${logoBase64 ? `<div class="header-logo"><img src="${logoBase64}" alt="logo"/></div>` : ''}
-      <div class="header-info">
-        <div class="company">${d.companyName}</div>
-        ${d.companyAddress ? `<div class="company-address">${d.companyAddress}</div>` : ''}
-        ${d.companyGstNumber ? `<div class="company-gst">GST: ${d.companyGstNumber}</div>` : ''}
+      <div class="header-details">
+        <div class="company">${PAYMENT_ADVICE_COMPANY_DETAILS.NAME}</div>
+        <div class="company-address">${PAYMENT_ADVICE_COMPANY_DETAILS.FULL_ADDRESS}, ${
+      PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.CITY
+    }, ${PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.STATE} - ${
+      PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.PINCODE
+    }</div>
+        <div class="company-gst">GSTIN: ${PAYMENT_ADVICE_COMPANY_DETAILS.GSTIN}</div>
       </div>
     </div>
     <div class="doc-title">PAYMENT ADVICE</div>
@@ -428,7 +447,7 @@ export class PaymentAdvicePdfService {
   <div class="footer">
     <div class="regards">
       Thanks and Regards,<br/>
-      <strong>${d.companyName}</strong>
+      <strong>${PAYMENT_ADVICE_COMPANY_DETAILS.NAME}</strong>
     </div>
   </div>
 
