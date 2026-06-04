@@ -40,28 +40,12 @@ export class VendorService {
   async create(createDto: CreateVendorDto, createdBy: string) {
     this.validateGstByVendorType(createDto.vendorType, createDto.gstNumber);
 
-    const existingByName = await this.findOne({
-      where: { name: ILike(createDto.name), deletedAt: IsNull() },
-    });
-    if (existingByName) {
-      throw new ConflictException(VENDOR_ERRORS.NAME_ALREADY_EXISTS);
-    }
-
     if (createDto.gstNumber) {
       const existingByGst = await this.findOne({
         where: { gstNumber: createDto.gstNumber, deletedAt: IsNull() },
       });
       if (existingByGst) {
         throw new ConflictException(VENDOR_ERRORS.GST_ALREADY_EXISTS);
-      }
-    }
-
-    if (createDto.email) {
-      const existingByEmail = await this.findOne({
-        where: { email: ILike(createDto.email), deletedAt: IsNull() },
-      });
-      if (existingByEmail) {
-        throw new ConflictException(VENDOR_ERRORS.EMAIL_ALREADY_EXISTS);
       }
     }
 
@@ -188,25 +172,11 @@ export class VendorService {
     const effectiveGst = clearGst ? null : updateDto.gstNumber ?? existingVendor.gstNumber;
     this.validateGstByVendorType(effectiveType, effectiveGst);
 
-    if (updateDto.name && updateDto.name !== existingVendor.name) {
-      const nameConflict = await this.findOne({
-        where: { name: ILike(updateDto.name), deletedAt: IsNull(), id: Not(id) },
-      });
-      if (nameConflict) throw new ConflictException(VENDOR_ERRORS.NAME_ALREADY_EXISTS);
-    }
-
     if (updateDto.gstNumber && updateDto.gstNumber !== existingVendor.gstNumber) {
       const gstConflict = await this.findOne({
         where: { gstNumber: updateDto.gstNumber, deletedAt: IsNull(), id: Not(id) },
       });
       if (gstConflict) throw new ConflictException(VENDOR_ERRORS.GST_ALREADY_EXISTS);
-    }
-
-    if (updateDto.email && updateDto.email !== existingVendor.email) {
-      const emailConflict = await this.findOne({
-        where: { email: ILike(updateDto.email), deletedAt: IsNull(), id: Not(id) },
-      });
-      if (emailConflict) throw new ConflictException(VENDOR_ERRORS.EMAIL_ALREADY_EXISTS);
     }
 
     // existingVendor.vendorType is widened to `string` from the DB column,

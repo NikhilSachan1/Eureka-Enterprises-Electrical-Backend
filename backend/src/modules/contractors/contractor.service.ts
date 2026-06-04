@@ -37,14 +37,6 @@ export class ContractorService {
   ) {}
 
   async create(createDto: CreateContractorDto, createdBy: string) {
-    // Check for duplicate name
-    const existingByName = await this.findOne({
-      where: { name: ILike(createDto.name), deletedAt: IsNull() },
-    });
-    if (existingByName) {
-      throw new ConflictException(CONTRACTOR_ERRORS.NAME_ALREADY_EXISTS);
-    }
-
     // Check for duplicate GST (only if provided)
     if (createDto.gstNumber) {
       const existingByGst = await this.findOne({
@@ -52,16 +44,6 @@ export class ContractorService {
       });
       if (existingByGst) {
         throw new ConflictException(CONTRACTOR_ERRORS.GST_ALREADY_EXISTS);
-      }
-    }
-
-    // Check for duplicate email (only if provided)
-    if (createDto.email) {
-      const existingByEmail = await this.findOne({
-        where: { email: ILike(createDto.email), deletedAt: IsNull() },
-      });
-      if (existingByEmail) {
-        throw new ConflictException(CONTRACTOR_ERRORS.EMAIL_ALREADY_EXISTS);
       }
     }
 
@@ -217,16 +199,6 @@ export class ContractorService {
   async update(id: string, updateDto: UpdateContractorDto, updatedBy: string) {
     const existingContractor = await this.findOneOrFail({ where: { id } });
 
-    // Check for duplicate name (excluding current)
-    if (updateDto.name && updateDto.name !== existingContractor.name) {
-      const nameConflict = await this.findOne({
-        where: { name: ILike(updateDto.name), deletedAt: IsNull(), id: Not(id) },
-      });
-      if (nameConflict) {
-        throw new ConflictException(CONTRACTOR_ERRORS.NAME_ALREADY_EXISTS);
-      }
-    }
-
     // Check for duplicate GST (excluding current)
     if (updateDto.gstNumber && updateDto.gstNumber !== existingContractor.gstNumber) {
       const gstConflict = await this.findOne({
@@ -234,16 +206,6 @@ export class ContractorService {
       });
       if (gstConflict) {
         throw new ConflictException(CONTRACTOR_ERRORS.GST_ALREADY_EXISTS);
-      }
-    }
-
-    // Check for duplicate email (excluding current)
-    if (updateDto.email && updateDto.email !== existingContractor.email) {
-      const emailConflict = await this.findOne({
-        where: { email: ILike(updateDto.email), deletedAt: IsNull(), id: Not(id) },
-      });
-      if (emailConflict) {
-        throw new ConflictException(CONTRACTOR_ERRORS.EMAIL_ALREADY_EXISTS);
       }
     }
 
