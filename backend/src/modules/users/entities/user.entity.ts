@@ -146,6 +146,10 @@ export class UserEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 20, nullable: true })
   passportNumber: string;
 
+  // ==================== System Flag ====================
+  @Column({ type: 'boolean', default: false, select: false })
+  isSystemUser: boolean;
+
   // ==================== WhatsApp Preferences ====================
   @Column({ type: 'boolean', default: false })
   whatsappOptIn: boolean;
