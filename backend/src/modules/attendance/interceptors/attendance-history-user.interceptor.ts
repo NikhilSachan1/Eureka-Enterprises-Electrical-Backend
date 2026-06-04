@@ -19,6 +19,7 @@ export class AttendanceHistoryUserInterceptor implements NestInterceptor {
       user.role === Roles.SUPER_ADMIN ||
       user.role === Roles.ADMIN ||
       user.role === Roles.MANAGER ||
+      user.role === Roles.OPERATION_MANAGER ||
       user.role === Roles.HR;
 
     if (isPrivilegedRole) {

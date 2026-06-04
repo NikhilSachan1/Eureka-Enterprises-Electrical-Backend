@@ -431,7 +431,7 @@ export class BookPaymentService {
         bp."taxableAmount",
         bp."gstAmount",
         bp."tdsDeductionAmount",
-        bp."bookingDate",
+        to_char(bp."bookingDate", 'YYYY-MM-DD') AS "bookingDate",
         bp."hasTransfer",
         bp."approvalStatus",
         -- eligibility: only one bank transfer per book payment

@@ -18,7 +18,9 @@ export class AttendanceCurrentStatusInterceptor implements NestInterceptor {
     const isPrivilegedRole =
       user.activeRole === Roles.SUPER_ADMIN ||
       user.activeRole === Roles.ADMIN ||
-      user.activeRole === Roles.HR;
+      user.activeRole === Roles.HR ||
+      user.activeRole === Roles.MANAGER ||
+      user.activeRole === Roles.OPERATION_MANAGER;
 
     if (isPrivilegedRole) {
       if (!request.query.userId) {

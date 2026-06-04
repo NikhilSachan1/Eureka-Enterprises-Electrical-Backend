@@ -2312,36 +2312,36 @@ export const getSiteTimelineQuery = (
         -- Site creation
         SELECT
           s.id::text as id,
-          s."createdAt"::date as event_date,
-          s."createdAt"::time as event_time,
+          to_char(s."createdAt", 'YYYY-MM-DD') as event_date,
+          to_char(s."createdAt", 'HH24:MI:SS.US') || 'Z' as event_time,
           'SITE_CREATED' as event_type,
           'Site Created' as title,
           'Site was created' as description,
           NULL as actor
         FROM sites s
         WHERE s.id = $1 AND s."deletedAt" IS NULL
-        
+
         UNION ALL
-        
+
         -- Status changes
         SELECT
           ssh.id::text,
-          ssh."createdAt"::date,
-          ssh."createdAt"::time,
+          to_char(ssh."createdAt", 'YYYY-MM-DD'),
+          to_char(ssh."createdAt", 'HH24:MI:SS.US') || 'Z',
           'STATUS_CHANGED',
           'Status Changed to ' || ssh."toStatus",
           COALESCE(ssh.reason, 'Status changed from ' || COALESCE(ssh."fromStatus", 'N/A') || ' to ' || ssh."toStatus"),
           (SELECT u."firstName" || ' ' || u."lastName" FROM users u WHERE u.id = ssh."changedBy")
         FROM site_status_history ssh
         WHERE ssh."siteId" = $1
-        
+
         UNION ALL
-        
+
         -- Contractor assignments
         SELECT
           sc.id::text,
-          sc."createdAt"::date,
-          sc."createdAt"::time,
+          to_char(sc."createdAt", 'YYYY-MM-DD'),
+          to_char(sc."createdAt", 'HH24:MI:SS.US') || 'Z',
           'CONTRACTOR_ASSIGNED',
           'Contractor Assigned',
           'Contractor ' || c.name || ' was assigned to the site',
@@ -2349,30 +2349,30 @@ export const getSiteTimelineQuery = (
         FROM site_contractors sc
         INNER JOIN contractors c ON sc."contractorId" = c.id
         WHERE sc."siteId" = $1
-        
+
         UNION ALL
-        
-        -- Employee allocations (allocatedAt is DATE type, not TIMESTAMP)
+
+        -- Employee allocations (allocatedAt is DATE type, no time component)
         SELECT
           sa.id::text,
-          sa."allocatedAt"::date,
-          '00:00:00'::time,
+          to_char(sa."allocatedAt", 'YYYY-MM-DD'),
+          NULL::text,
           CASE WHEN sa."deallocatedAt" IS NOT NULL THEN 'EMPLOYEE_DEALLOCATED' ELSE 'EMPLOYEE_ALLOCATED' END,
           CASE WHEN sa."deallocatedAt" IS NOT NULL THEN 'Employee Deallocated' ELSE 'Employee Allocated' END,
-          u."firstName" || ' ' || u."lastName" || 
+          u."firstName" || ' ' || u."lastName" ||
             CASE WHEN sa."deallocatedAt" IS NOT NULL THEN ' was deallocated from the site' ELSE ' was allocated to the site' END,
           NULL
         FROM site_allocations sa
         INNER JOIN users u ON sa."userId" = u.id
         WHERE sa."siteId" = $1 AND sa."deletedAt" IS NULL
-        
+
         UNION ALL
-        
+
         -- Documents uploaded
         SELECT
           sd.id::text,
-          (sd."createdAt" AT TIME ZONE 'UTC')::date,
-          (sd."createdAt" AT TIME ZONE 'UTC')::time,
+          to_char(sd."createdAt", 'YYYY-MM-DD'),
+          to_char(sd."createdAt", 'HH24:MI:SS.US') || 'Z',
           'DOCUMENT_UPLOADED',
           sd."documentType" || ' Uploaded',
           sd."documentType" ||
