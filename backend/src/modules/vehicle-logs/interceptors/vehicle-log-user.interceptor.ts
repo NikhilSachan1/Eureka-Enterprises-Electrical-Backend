@@ -15,9 +15,13 @@ export class VehicleLogUserInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // HR and ADMIN can specify vehicleId (create on behalf of others)
+    // HR, ADMIN and OPERATION_MANAGER can specify vehicleId (create on behalf of others)
     // Other roles can only create logs for their own assigned vehicle
-    if (user.role !== Roles.HR && user.role !== Roles.ADMIN) {
+    if (
+      user.role !== Roles.HR &&
+      user.role !== Roles.ADMIN &&
+      user.role !== Roles.OPERATION_MANAGER
+    ) {
       if (request.body.vehicleId) {
         throw new BadRequestException(VEHICLE_LOG_ERRORS.EMPLOYEE_CANNOT_SPECIFY_VEHICLE_ID);
       }

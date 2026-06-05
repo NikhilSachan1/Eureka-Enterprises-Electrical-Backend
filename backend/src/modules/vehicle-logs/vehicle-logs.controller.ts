@@ -125,7 +125,8 @@ export class VehicleLogsController {
       req.user.role !== Roles.HR &&
       req.user.role !== Roles.ADMIN &&
       req.user.role !== Roles.MANAGER &&
-      req.user.role !== Roles.SUPER_ADMIN
+      req.user.role !== Roles.SUPER_ADMIN &&
+      req.user.role !== Roles.OPERATION_MANAGER
     ) {
       query.driverId = req.user.id;
     }

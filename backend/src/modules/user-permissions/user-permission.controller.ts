@@ -18,6 +18,8 @@ import {
   GetUserPermissionDto,
 } from './dto';
 import { UserPermissionUserIdInterceptor } from './interceptors/user-permission-userid.interceptor';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles as RoleEnum } from '../roles/constants/role.constants';
 
 @ApiTags('User Permissions')
 @ApiBearerAuth('JWT-auth')
@@ -26,6 +28,7 @@ export class UserPermissionController {
   constructor(private readonly userPermissionService: UserPermissionService) {}
 
   @Post('bulk')
+  @Roles(RoleEnum.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Bulk create user permissions',
     description: 'Creates multiple user permissions at once for one or more users.',
@@ -46,6 +49,7 @@ export class UserPermissionController {
   }
 
   @Get('stats')
+  @Roles(RoleEnum.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Get user permission statistics',
     description: 'Retrieves statistics about user permissions including counts and user details.',
@@ -55,6 +59,7 @@ export class UserPermissionController {
   }
 
   @Delete('bulk-by-users')
+  @Roles(RoleEnum.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Bulk delete all permission overrides for multiple users',
     description:
@@ -71,6 +76,7 @@ export class UserPermissionController {
   }
 
   @Delete('bulk')
+  @Roles(RoleEnum.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Bulk delete user permissions',
     description:

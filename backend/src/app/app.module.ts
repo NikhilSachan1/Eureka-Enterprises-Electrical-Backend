@@ -12,6 +12,7 @@ import { RequestInterceptor } from 'src/utils/middleware/request.interceptor';
 import { ResponseInterceptor } from 'src/utils/middleware/response.interceptor';
 import { AuthGuard } from 'src/modules/auth/guards/auth.guard';
 import { HeaderValidationGuard } from 'src/modules/auth/guards/header-validation.guard';
+import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { AppConfigModule } from 'src/utils/config/config.module';
 import { CustomLoggerModule } from 'src/utils/custom-logger/custom-logger.module';
 import { SharedModule } from 'src/modules/shared/shared.module';
@@ -185,6 +186,10 @@ import { BillingModule } from 'src/modules/billing/billing.module';
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     Reflector,
   ],

@@ -6,10 +6,13 @@ import {
   BulkDeleteRolePermissionsDto,
   GetAllRolePermissionDto,
 } from './dto';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles as RoleEnum } from '../roles/constants/role.constants';
 
 @ApiTags('Role Permissions')
 @ApiBearerAuth('JWT-auth')
 @Controller('role-permissions')
+@Roles(RoleEnum.SUPER_ADMIN)
 export class RolePermissionController {
   constructor(private readonly rolePermissionService: RolePermissionService) {}
 

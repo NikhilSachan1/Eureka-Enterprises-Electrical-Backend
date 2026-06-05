@@ -169,7 +169,13 @@ export class DsrService {
     const targetUserId = bodyUserId ?? actingUserId;
 
     if (targetUserId !== actingUserId) {
-      const allowedRoles = [Roles.SUPER_ADMIN, Roles.HR, Roles.ADMIN, Roles.MANAGER];
+      const allowedRoles = [
+        Roles.SUPER_ADMIN,
+        Roles.HR,
+        Roles.ADMIN,
+        Roles.MANAGER,
+        Roles.OPERATION_MANAGER,
+      ];
       if (!allowedRoles.includes(actingUserRole as Roles)) {
         throw new ForbiddenException(DSR_ERRORS.FORCE_TARGET_USER_FORBIDDEN);
       }

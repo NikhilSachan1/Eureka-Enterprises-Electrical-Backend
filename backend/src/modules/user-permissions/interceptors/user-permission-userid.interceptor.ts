@@ -16,23 +16,19 @@ export class UserPermissionUserIdInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    const isPrivilegedRole =
-      user.role === Roles.SUPER_ADMIN ||
-      user.role === Roles.ADMIN ||
-      user.role === Roles.HR ||
-      user.role === Roles.MANAGER;
+    const isSuperAdmin = user.role === Roles.SUPER_ADMIN;
 
     if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
       if (request.query.userId || request.query.permissionId || request.query.isActive) {
         throw new BadRequestException(USER_PERMISSION_ERRORS.CANNOT_SPECIFY_FIELDS);
       }
       request.query.userId = user.id;
-    } else if (isPrivilegedRole) {
+    } else if (isSuperAdmin) {
       if (!request.query.userId) {
         request.query.userId = user.id;
       }
     } else {
-      // Fallback for any other roles - use their own userId
+      // All other roles (ADMIN, HR, MANAGER, OPERATION_MANAGER, etc.) - use their own userId only
       if (!request.query.userId) {
         request.query.userId = user.id;
       }
@@ -70,15 +66,7 @@ export class UserPermissionUserIdInterceptor implements NestInterceptor {
 
     // Fallback: detect from user-agent
     const userAgent = request.headers['user-agent']?.toLowerCase() || '';
-    const mobileIndicators = [
-      'android',
-      'iphone',
-      'ipad',
-      'mobile',
-      'dart',
-      'flutter',
-      'okhttp',
-    ];
+    const mobileIndicators = ['android', 'iphone', 'ipad', 'mobile', 'dart', 'flutter', 'okhttp'];
 
     if (mobileIndicators.some((indicator) => userAgent.includes(indicator))) {
       return PermissionPlatform.MOBILE;
