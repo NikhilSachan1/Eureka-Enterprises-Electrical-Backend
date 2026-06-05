@@ -3,6 +3,10 @@
 /node_modules
 .env
 
+# Local test/utility scripts (may contain credentials)
+/scripts/*.js
+/scripts/*.ts.tmp.*
+
 # Logs
 logs
 *.log
