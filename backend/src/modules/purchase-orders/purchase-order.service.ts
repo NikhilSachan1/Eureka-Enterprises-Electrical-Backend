@@ -473,9 +473,8 @@ export class PurchaseOrderService {
    * Dropdown endpoint — returns POs for a site+partyType with eligibility
    * flags so the frontend can disable ineligible items and show a reason.
    *
-   * Used when creating a JMC. A PO is eligible when it is APPROVED.
-   * We intentionally do NOT check the PO ceiling here — a JMC itself does
-   * not consume any financial amount; the ceiling fires at Invoice approval.
+   * Used when creating a JMC. A PO is eligible when it is APPROVED AND
+   * its invoice ceiling is not fully exhausted (invoicedTotal < totalAmount).
    */
   async getDropdown(siteId: string, partyType: string) {
     const rows = await this.dataSource.query(
@@ -490,14 +489,19 @@ export class PurchaseOrderService {
         po."isLocked",
         COALESCE(c.name, v.name)   AS "partyName",
         COALESCE(c.id, v.id)       AS "partyId",
-        -- eligibility
+        -- eligibility: APPROVED and invoice ceiling not fully used
         CASE
-          WHEN po."approvalStatus" = 'APPROVED' THEN true
+          WHEN po."approvalStatus" = 'APPROVED'
+            AND COALESCE(po."invoicedTotal", 0) < po."totalAmount"
+          THEN true
           ELSE false
         END AS eligible,
         CASE
           WHEN po."approvalStatus" = 'PENDING'  THEN 'PO is pending admin approval'
           WHEN po."approvalStatus" = 'REJECTED' THEN 'PO was rejected'
+          WHEN po."approvalStatus" = 'APPROVED'
+            AND COALESCE(po."invoicedTotal", 0) >= po."totalAmount"
+          THEN 'Invoice ceiling fully used for this PO'
           ELSE NULL
         END AS reason
       FROM purchase_orders po
@@ -512,21 +516,27 @@ export class PurchaseOrderService {
     );
 
     return {
-      records: rows.map((r: any) => ({
-        id: r.id,
-        label: `${r.poNumber} — ${r.partyName ?? 'Unknown'}`,
-        eligible: r.eligible,
-        reason: r.reason ?? null,
-        meta: {
-          poNumber: r.poNumber,
-          partyType: r.partyType,
-          partyName: r.partyName,
-          totalAmount: Number(r.totalAmount),
-          invoicedTotal: Number(r.invoicedTotal),
-          remaining: Number(r.totalAmount) - Number(r.invoicedTotal),
-          approvalStatus: r.approvalStatus,
-        },
-      })),
+      records: rows.map((r: any) => {
+        const totalAmount = Number(r.totalAmount);
+        const invoicedTotal = Number(r.invoicedTotal) || 0;
+        const remaining = totalAmount - invoicedTotal;
+
+        return {
+          id: r.id,
+          label: `${r.poNumber} — ${r.partyName ?? 'Unknown'}`,
+          eligible: r.eligible,
+          reason: r.reason ?? null,
+          meta: {
+            poNumber: r.poNumber,
+            partyType: r.partyType,
+            partyName: r.partyName,
+            totalAmount,
+            invoicedTotal,
+            remaining,
+            approvalStatus: r.approvalStatus,
+          },
+        };
+      }),
     };
   }
 }
