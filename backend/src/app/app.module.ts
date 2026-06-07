@@ -77,6 +77,7 @@ import { NoteModule } from 'src/modules/debit-credit-notes/note.module';
 import { GstModule } from 'src/modules/gst/gst.module';
 import { TdsModule } from 'src/modules/tds/tds.module';
 import { BillingModule } from 'src/modules/billing/billing.module';
+import { DocumentStatusModule } from 'src/modules/document-status/document-status.module';
 
 @Module({
   imports: [
@@ -154,6 +155,7 @@ import { BillingModule } from 'src/modules/billing/billing.module';
     GstModule,
     TdsModule,
     BillingModule,
+    DocumentStatusModule,
   ],
   controllers: [AppController],
   providers: [
