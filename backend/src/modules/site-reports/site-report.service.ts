@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SiteReportRepository } from './site-report.repository';
 import { SiteReportEntity } from './entities/site-report.entity';
@@ -26,9 +21,6 @@ export class SiteReportService {
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(REPORT_ERRORS.JMC_NOT_FOUND);
-    if (jmc.approvalStatus !== FinancialApprovalStatus.APPROVED) {
-      throw new BadRequestException(REPORT_ERRORS.JMC_NOT_APPROVED);
-    }
 
     // 1 JMC = 1 Report (BRD §4.3 confirmed-8)
     const existingForJmc = await this.reportRepository.findOne({

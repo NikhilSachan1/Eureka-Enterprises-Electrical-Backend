@@ -53,9 +53,6 @@ export class SiteInvoiceService {
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(INVOICE_ERRORS.JMC_NOT_FOUND);
-    if (jmc.approvalStatus !== FinancialApprovalStatus.APPROVED) {
-      throw new BadRequestException(INVOICE_ERRORS.JMC_NOT_APPROVED);
-    }
 
     // 1 JMC = 1 Invoice
     const dup = await this.invoiceRepository.findOne({
@@ -303,7 +300,15 @@ export class SiteInvoiceService {
         throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
       }
 
-      // Lock PO + assert ceiling
+      // Bottom-up chain: JMC must be APPROVED before Invoice can be approved
+      const jmc = await em.getRepository(JmcEntity).findOne({
+        where: { id: inv.jmcId, deletedAt: IsNull() },
+      });
+      if (!jmc || jmc.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(INVOICE_ERRORS.JMC_NOT_APPROVED_FOR_APPROVAL);
+      }
+
+      // Lock PO + assert ceiling (also validates PO is APPROVED)
       const po = await this.poRepository.findOneForUpdate(inv.poId, em);
       if (!po) throw new NotFoundException(FINANCIAL_ERRORS.PARENT_NOT_FOUND);
       const newInvoicedTotal = Number(po.invoicedTotal) + Number(inv.totalAmount);

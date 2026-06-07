@@ -489,19 +489,19 @@ export class PurchaseOrderService {
         po."isLocked",
         COALESCE(c.name, v.name)   AS "partyName",
         COALESCE(c.id, v.id)       AS "partyId",
-        -- eligibility: APPROVED and invoice ceiling not fully used
+        -- eligibility: NOT REJECTED and invoice ceiling not fully used
+        -- (PENDING POs are now allowed for JMC creation; approval chain enforced at approval time)
         CASE
-          WHEN po."approvalStatus" = 'APPROVED'
-            AND COALESCE(po."invoicedTotal", 0) < po."totalAmount"
-          THEN true
-          ELSE false
+          WHEN po."approvalStatus" = 'REJECTED' THEN false
+          WHEN COALESCE(po."invoicedTotal", 0) >= po."totalAmount" THEN false
+          ELSE true
         END AS eligible,
         CASE
-          WHEN po."approvalStatus" = 'PENDING'  THEN 'PO is pending admin approval'
           WHEN po."approvalStatus" = 'REJECTED' THEN 'PO was rejected'
-          WHEN po."approvalStatus" = 'APPROVED'
-            AND COALESCE(po."invoicedTotal", 0) >= po."totalAmount"
+          WHEN COALESCE(po."invoicedTotal", 0) >= po."totalAmount"
           THEN 'Invoice ceiling fully used for this PO'
+          WHEN po."approvalStatus" = 'PENDING'
+          THEN 'PO not yet approved — JMC can be created but invoice cannot be approved until PO is approved'
           ELSE NULL
         END AS reason
       FROM purchase_orders po

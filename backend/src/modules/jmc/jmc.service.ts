@@ -44,9 +44,6 @@ export class JmcService {
       .getRepository(PurchaseOrderEntity)
       .findOne({ where: { id: dto.poId, deletedAt: IsNull() } });
     if (!po) throw new NotFoundException(JMC_ERRORS.PO_NOT_FOUND);
-    if (po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
-      throw new BadRequestException(JMC_ERRORS.PO_NOT_APPROVED);
-    }
 
     // Uniqueness within PO + jmcNumber (partial on deletedAt)
     const dup = await this.jmcRepository.findOne({
@@ -206,6 +203,15 @@ export class JmcService {
     if (jmc.approvalStatus === FinancialApprovalStatus.APPROVED) {
       throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
     }
+
+    // Bottom-up chain: PO must be APPROVED before JMC can be approved
+    const po = await this.dataSource
+      .getRepository(PurchaseOrderEntity)
+      .findOne({ where: { id: jmc.poId, deletedAt: IsNull() } });
+    if (!po || po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(JMC_ERRORS.PO_NOT_APPROVED_FOR_APPROVAL);
+    }
+
     await this.jmcRepository.update(
       { id },
       {
@@ -347,8 +353,9 @@ export class JmcService {
         (SELECT COUNT(*)::int FROM site_reports   sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) AS "reportCount",
         (SELECT COUNT(*)::int FROM site_invoices   si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) AS "invoiceCount",
         -- eligibility computed per forDocument
+        -- PENDING JMCs are now eligible (creation allowed); only REJECTED is blocked
         CASE
-          WHEN j."approvalStatus" != 'APPROVED' THEN false
+          WHEN j."approvalStatus" = 'REJECTED' THEN false
           WHEN $3 = 'report'  AND (SELECT COUNT(*) FROM site_reports  sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) > 0 THEN false
           WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0 THEN false
           WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
@@ -356,7 +363,6 @@ export class JmcService {
           ELSE true
         END AS eligible,
         CASE
-          WHEN j."approvalStatus" = 'PENDING'  THEN 'JMC is pending admin approval'
           WHEN j."approvalStatus" = 'REJECTED' THEN 'JMC was rejected'
           WHEN $3 = 'report'  AND (SELECT COUNT(*) FROM site_reports  sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) > 0
             THEN 'Report already exists for this JMC'
@@ -365,6 +371,7 @@ export class JmcService {
           WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
                AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0
             THEN 'Report must be created first (PURCHASE side)'
+          WHEN j."approvalStatus" = 'PENDING' THEN 'JMC not yet approved — document can be created but invoice cannot be approved until JMC is approved'
           ELSE NULL
         END AS reason
       FROM jmcs j
