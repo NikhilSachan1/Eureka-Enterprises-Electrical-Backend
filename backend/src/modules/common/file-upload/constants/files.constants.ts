@@ -7,6 +7,16 @@ export const ALLOWED_FILE_TYPES = [
   'text/csv',
   'application/json',
   'text/html',
+  // Archive types (zip/rar/7z etc.) — used for site report attachments
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-zip',
+  'application/x-rar-compressed',
+  'application/vnd.rar',
+  'application/x-7z-compressed',
+  'application/gzip',
+  'application/x-tar',
+  'application/x-bzip2',
 ];
 
 export const ALLOWED_MIME_TYPES: { [key: string]: string[] } = {
@@ -16,6 +26,17 @@ export const ALLOWED_MIME_TYPES: { [key: string]: string[] } = {
   csv: ['text/csv'],
   json: ['application/json'],
   html: ['text/html'],
+  archive: [
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/x-zip',
+    'application/x-rar-compressed',
+    'application/vnd.rar',
+    'application/x-7z-compressed',
+    'application/gzip',
+    'application/x-tar',
+    'application/x-bzip2',
+  ],
 };
 
 export const ALLOWED_FILE_CATEGORY = {
@@ -26,6 +47,7 @@ export const ALLOWED_FILE_CATEGORY = {
   CSV: 'csv',
   JSON: 'json',
   HTML: 'html',
+  ARCHIVE: 'archive',
 };
 
 export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
@@ -37,6 +59,16 @@ export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
   'text/csv': 10 * 1024 * 1024, // 10 MB
   'application/json': 10 * 1024 * 1024, // 10 MB
   'text/html': 10 * 1024 * 1024, // 10 MB
+  // Archive types — 50 MB (used for site report attachments)
+  'application/zip': 50 * 1024 * 1024,
+  'application/x-zip-compressed': 50 * 1024 * 1024,
+  'application/x-zip': 50 * 1024 * 1024,
+  'application/x-rar-compressed': 50 * 1024 * 1024,
+  'application/vnd.rar': 50 * 1024 * 1024,
+  'application/x-7z-compressed': 50 * 1024 * 1024,
+  'application/gzip': 50 * 1024 * 1024,
+  'application/x-tar': 50 * 1024 * 1024,
+  'application/x-bzip2': 50 * 1024 * 1024,
 };
 
 export const FILE_LIMIT = {
@@ -73,6 +105,12 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   other: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   dsrFiles: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
   financialFile: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  // Site report: PDF, image, and all archive types (zip/rar/7z) up to 50 MB
+  siteReportFile: [
+    ALLOWED_FILE_CATEGORY.IMAGE,
+    ALLOWED_FILE_CATEGORY.PDF,
+    ALLOWED_FILE_CATEGORY.ARCHIVE,
+  ],
   vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogEndOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogOther: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
@@ -115,6 +153,7 @@ export const FIELD_NAMES = {
   VEHICLE_LOG_START_ODOMETER: 'vehicleLogStartOdometer',
   VEHICLE_LOG_END_ODOMETER: 'vehicleLogEndOdometer',
   VEHICLE_LOG_OTHER: 'vehicleLogOther',
+  SITE_REPORT_FILE: 'siteReportFile',
 };
 
 export const FIELD_NAME_REFORMED = {
@@ -147,6 +186,8 @@ export const DATABASE_FIELD_NAMES = {
   orgFiles: 'orgFileKeys',
   // Financial module file (single attachment per document)
   financialFile: 'fileKey',
+  // Site report file (PDF/image/archive up to 50 MB)
+  siteReportFile: 'fileKey',
 };
 
 export const FILE_ERRORS = {
@@ -171,4 +212,5 @@ export const FILE_UPLOAD_FOLDER_NAMES = {
   VEHICLE_LOG_FILES: 'vehicle-log-files',
   ORG_FILES: 'org-files',
   FINANCIAL_FILES: 'financial-files',
+  SITE_REPORT_FILES: 'site-report-files',
 };

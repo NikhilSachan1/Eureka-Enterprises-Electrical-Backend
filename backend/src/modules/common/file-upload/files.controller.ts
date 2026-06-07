@@ -73,9 +73,62 @@ export class FilesController {
       );
     }
 
+    const [validated] = validateFileUploads([file], FILE_UPLOAD_FOLDER_NAMES.FINANCIAL_FILES);
+
+    const fileKey = await this.filesService.uploadFile(
+      validated.fileStream,
+      validated.key,
+      validated.mimetype,
+    );
+
+    return { fileKey, fileName: file.originalname };
+  }
+
+  /**
+   * Upload endpoint for site report attachments.
+   *
+   * Supports PDF, JPEG, PNG and all archive formats (zip, rar, 7z, gz, tar, bz2).
+   * Maximum file size: 50 MB.
+   * Returns { fileKey, fileName } — include in the site report create/update body.
+   */
+  @Post('site-report-upload')
+  @UseInterceptors(FileInterceptor(FIELD_NAMES.SITE_REPORT_FILE))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['siteReportFile'],
+      properties: {
+        siteReportFile: {
+          type: 'string',
+          format: 'binary',
+          description: 'PDF, image, or archive (zip/rar/7z/gz) for a site report (max 50 MB)',
+        },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload a site report attachment',
+    description:
+      'Uploads one PDF, image, or archive file (zip/rar/7z/gz/tar/bz2) to S3 — max 50 MB. ' +
+      'Returns { fileKey, fileName }. Use the returned values in the fileKey/fileName fields ' +
+      'of the site report create/update body.',
+  })
+  async uploadSiteReportFile(
+    @Request() req: { user: { id: string } },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException(
+        'No file uploaded. Provide a PDF, image, or archive in the "siteReportFile" field.',
+      );
+    }
+
+    const SITE_REPORT_MAX_SIZE = 50 * 1024 * 1024; // 50 MB for all types (PDF, image, archive)
     const [validated] = validateFileUploads(
       [file],
-      FILE_UPLOAD_FOLDER_NAMES.FINANCIAL_FILES,
+      FILE_UPLOAD_FOLDER_NAMES.SITE_REPORT_FILES,
+      SITE_REPORT_MAX_SIZE,
     );
 
     const fileKey = await this.filesService.uploadFile(

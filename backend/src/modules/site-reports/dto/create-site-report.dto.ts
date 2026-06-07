@@ -6,27 +6,34 @@ export class CreateSiteReportDto {
   @IsUUID('4')
   jmcId: string;
 
-  @ApiProperty({ description: 'Report Number' })
+  @ApiPropertyOptional({ description: 'Report Number (optional)' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  reportNumber: string;
+  @IsOptional()
+  reportNumber?: string;
 
   @ApiProperty({ description: 'Report Date (ISO)' })
   @IsDateString()
   reportDate: string;
 
-  @ApiProperty({ description: 'S3 file key' })
+  @ApiPropertyOptional({
+    description: 'S3 file key (optional — upload via POST /files/site-report-upload)',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
-  fileKey: string;
+  @IsOptional()
+  fileKey?: string;
 
-  @ApiProperty({ description: 'Original file name' })
+  @ApiPropertyOptional({
+    description: 'Original file name (optional — required when fileKey is provided)',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  fileName: string;
+  @IsOptional()
+  fileName?: string;
 
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()

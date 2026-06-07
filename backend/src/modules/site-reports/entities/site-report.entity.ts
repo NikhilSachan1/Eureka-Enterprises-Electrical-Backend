@@ -43,17 +43,17 @@ export class SiteReportEntity extends BaseEntity {
   @JoinColumn({ name: 'vendorId' })
   vendor: VendorEntity | null;
 
-  @Column({ type: 'varchar', length: 100 })
-  reportNumber: string;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  reportNumber: string | null;
 
   @Column({ type: 'date' })
   reportDate: Date;
 
-  @Column({ type: 'varchar', length: 500 })
-  fileKey: string;
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  fileKey: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
-  fileName: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fileName: string | null;
 
   @Column({ type: 'text', nullable: true })
   remarks: string;

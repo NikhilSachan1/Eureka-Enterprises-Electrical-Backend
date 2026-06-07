@@ -10,7 +10,19 @@ import {
 } from '../constants/files.constants';
 import { IFileUpload } from '../files.types';
 
-export const validateFileUploads = (uploadedFiles: IFileUpload[], folderName: string) => {
+/**
+ * @param uploadedFiles  Files to validate and prepare for S3 upload.
+ * @param folderName     S3 folder prefix.
+ * @param maxSizeOverride  Optional: flat size limit (bytes) applied to ALL
+ *                         mime types for this call, overriding the global
+ *                         per-mime limits. Useful for endpoints that allow
+ *                         a higher ceiling (e.g. site-report-upload = 50 MB).
+ */
+export const validateFileUploads = (
+  uploadedFiles: IFileUpload[],
+  folderName: string,
+  maxSizeOverride?: number,
+) => {
   const filesToBeUploaded = [];
 
   if (uploadedFiles.length > FILE_LIMIT.MAXIMUM_FILE_LIMIT) {
@@ -39,7 +51,9 @@ export const validateFileUploads = (uploadedFiles: IFileUpload[], folderName: st
       );
     }
 
-    if (ALLOWED_MAX_FILE_SIZE[mimetype] && size > ALLOWED_MAX_FILE_SIZE[mimetype]) {
+    // Use override limit if provided, otherwise fall back to per-mime global limit
+    const effectiveMaxSize = maxSizeOverride ?? ALLOWED_MAX_FILE_SIZE[mimetype];
+    if (effectiveMaxSize && size > effectiveMaxSize) {
       throw new BadRequestException(FILE_UPLOAD_ERRORS.FILE_SIZE_EXCEEDED);
     }
 
