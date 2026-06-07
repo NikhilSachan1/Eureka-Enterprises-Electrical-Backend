@@ -1489,7 +1489,7 @@
 		"id" : "4f266ba7-5e7c-4a88-abe6-b96a0a144e27",
 		"configId" : "530b6564-fcc0-48bc-a9b7-45e6a4158ad0",
 		"contextKey" : null,
-		"value" : "[\"dashboard\", \"employee\", \"attendance\", \"expense\", \"leave\", \"asset\", \"vehicle\", \"vehicle_service\", \"vehicle_reading\", \"petro_card\", \"fuel\", \"company\", \"contractor\", \"project\", \"announcement\", \"payroll\", \"system_permission\", \"user_permission\", \"role_permission\", \"salary_structure\", \"configuration\", \"cron\"]",
+		"value" : "[\"dashboard\", \"employee\", \"attendance\", \"expense\", \"leave\", \"asset\", \"vehicle\", \"vehicle_service\", \"vehicle_reading\", \"petro_card\", \"fuel\", \"company\", \"contractor\", \"project\", \"announcement\", \"payroll\", \"system_permission\", \"user_permission\", \"role_permission\", \"salary_structure\", \"configuration\", \"cron\", \"financials\"]",
 		"effectiveFrom" : null,
 		"effectiveTo" : null,
 		"createdBy" : null,
