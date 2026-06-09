@@ -7,6 +7,9 @@ export const ALLOWED_FILE_TYPES = [
   'text/csv',
   'application/json',
   'text/html',
+  // Word document types — used for site report attachments
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   // Archive types (zip/rar/7z etc.) — used for site report attachments
   'application/zip',
   'application/x-zip-compressed',
@@ -26,6 +29,10 @@ export const ALLOWED_MIME_TYPES: { [key: string]: string[] } = {
   csv: ['text/csv'],
   json: ['application/json'],
   html: ['text/html'],
+  word: [
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ],
   archive: [
     'application/zip',
     'application/x-zip-compressed',
@@ -47,6 +54,7 @@ export const ALLOWED_FILE_CATEGORY = {
   CSV: 'csv',
   JSON: 'json',
   HTML: 'html',
+  WORD: 'word',
   ARCHIVE: 'archive',
 };
 
@@ -59,6 +67,9 @@ export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
   'text/csv': 10 * 1024 * 1024, // 10 MB
   'application/json': 10 * 1024 * 1024, // 10 MB
   'text/html': 10 * 1024 * 1024, // 10 MB
+  // Word document types — 50 MB (used for site report attachments)
+  'application/msword': 50 * 1024 * 1024,
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 50 * 1024 * 1024,
   // Archive types — 500 MB (used for site report attachments)
   'application/zip': 500 * 1024 * 1024,
   'application/x-zip-compressed': 500 * 1024 * 1024,
@@ -109,6 +120,7 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   siteReportFile: [
     ALLOWED_FILE_CATEGORY.IMAGE,
     ALLOWED_FILE_CATEGORY.PDF,
+    ALLOWED_FILE_CATEGORY.WORD,
     ALLOWED_FILE_CATEGORY.ARCHIVE,
   ],
   vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
