@@ -195,7 +195,7 @@ async function generatePdf(html: string, outputPath: string): Promise<void> {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'load' });
 
     await page.pdf({
       path: outputPath,

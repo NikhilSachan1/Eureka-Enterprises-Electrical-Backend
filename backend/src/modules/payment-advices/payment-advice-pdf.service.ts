@@ -77,17 +77,18 @@ export class PaymentAdvicePdfService {
     try {
       browser = await puppeteer.launch({
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage', // prevents /dev/shm crash in containers
+          '--disable-dev-shm-usage',
           '--disable-gpu',
           '--no-zygote',
-          '--single-process', // needed on some AWS Linux environments
+          '--disable-features=VizDisplayCompositor',
         ],
       });
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.setContent(html, { waitUntil: 'load' });
       const pdfBuffer = Buffer.from(
         await page.pdf({
           format: 'A4',
