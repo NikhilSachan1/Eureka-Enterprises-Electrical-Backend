@@ -102,7 +102,8 @@ export class FilesController {
         siteReportFile: {
           type: 'string',
           format: 'binary',
-          description: 'PDF, image, or archive (zip/rar/7z/gz) for a site report (max 50 MB)',
+          description:
+            'PDF, image, Word doc (.doc/.docx), or archive (zip/rar/7z/gz) for a site report',
         },
       },
     },
@@ -110,7 +111,7 @@ export class FilesController {
   @ApiOperation({
     summary: 'Upload a site report attachment',
     description:
-      'Uploads one PDF, image, or archive file (zip/rar/7z/gz/tar/bz2) to S3 — max 50 MB. ' +
+      'Uploads one PDF, image, Word doc (.doc/.docx), or archive file (zip/rar/7z/gz/tar/bz2) to S3. ' +
       'Returns { fileKey, fileName }. Use the returned values in the fileKey/fileName fields ' +
       'of the site report create/update body.',
   })

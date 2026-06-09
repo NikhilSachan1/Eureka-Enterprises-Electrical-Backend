@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsUUID, IsOptional, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsUUID, IsOptional, IsDateString, MaxLength } from 'class-validator';
 
 export class CreateSiteReportDto {
   @ApiProperty({ description: 'Parent JMC ID' })
@@ -7,10 +7,9 @@ export class CreateSiteReportDto {
   jmcId: string;
 
   @ApiPropertyOptional({ description: 'Report Number (optional)' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
   @IsOptional()
+  @IsString()
+  @MaxLength(100)
   reportNumber?: string;
 
   @ApiProperty({ description: 'Report Date (ISO)' })
@@ -20,23 +19,21 @@ export class CreateSiteReportDto {
   @ApiPropertyOptional({
     description: 'S3 file key (optional — upload via POST /files/site-report-upload)',
   })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(500)
   @IsOptional()
+  @IsString()
+  @MaxLength(500)
   fileKey?: string;
 
   @ApiPropertyOptional({
     description: 'Original file name (optional — required when fileKey is provided)',
   })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
   @IsOptional()
+  @IsString()
+  @MaxLength(255)
   fileName?: string;
 
   @ApiPropertyOptional({ description: 'Remarks' })
-  @IsString()
   @IsOptional()
+  @IsString()
   remarks?: string;
 }
