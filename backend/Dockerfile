@@ -9,7 +9,7 @@ ENV HUSKY=0 \
 
 COPY . .
 
-RUN npm install --ignore-scripts && npm run build
+RUN npm install --ignore-scripts && npm run build && npm run copy-hbs
 
 FROM node:22.3-alpine AS production
 
