@@ -1,22 +1,54 @@
-FROM node:22-alpine
+# syntax=docker/dockerfile:1
 
-# Set the working directory inside the container
+FROM node:22.3-alpine AS builder
+
 WORKDIR /app
 
-# Copy package.json and package-lock.json files from the current directory to the working directory
-COPY package*.json .
+COPY package.json package-lock.json ./
 
-# Install app dependencies
-RUN npm ci
+ENV HUSKY=0 \
+    NODE_ENV=development
 
-# Copy all files and folders from the current directory to the working directory
+RUN npm ci --ignore-scripts
+
 COPY . .
 
-# Build the application
-RUN npm run build && npm run copy-hbs
+RUN npm run build
 
-# Expose the application port
+FROM node:22.3-alpine AS production
+
+WORKDIR /app
+
+RUN apk add --no-cache \
+    dumb-init \
+    curl \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+COPY package.json package-lock.json ./
+
+ENV HUSKY=0 \
+    NODE_ENV=production \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+RUN npm ci --omit=dev --ignore-scripts \
+    && chown -R node:node /app
+
+COPY --from=builder --chown=node:node /app/dist ./dist
+
+USER node
+
 EXPOSE 3333
 
-# Set the command to run on container start
-CMD ["sh", "-c", "npm run migration:run && npm run start:prod "]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:3333/api/v1/health-check || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+
+CMD ["node", "dist/src/main.js"]

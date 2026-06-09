@@ -59,16 +59,16 @@ export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
   'text/csv': 10 * 1024 * 1024, // 10 MB
   'application/json': 10 * 1024 * 1024, // 10 MB
   'text/html': 10 * 1024 * 1024, // 10 MB
-  // Archive types — 50 MB (used for site report attachments)
-  'application/zip': 50 * 1024 * 1024,
-  'application/x-zip-compressed': 50 * 1024 * 1024,
-  'application/x-zip': 50 * 1024 * 1024,
-  'application/x-rar-compressed': 50 * 1024 * 1024,
-  'application/vnd.rar': 50 * 1024 * 1024,
-  'application/x-7z-compressed': 50 * 1024 * 1024,
-  'application/gzip': 50 * 1024 * 1024,
-  'application/x-tar': 50 * 1024 * 1024,
-  'application/x-bzip2': 50 * 1024 * 1024,
+  // Archive types — 500 MB (used for site report attachments)
+  'application/zip': 500 * 1024 * 1024,
+  'application/x-zip-compressed': 500 * 1024 * 1024,
+  'application/x-zip': 500 * 1024 * 1024,
+  'application/x-rar-compressed': 500 * 1024 * 1024,
+  'application/vnd.rar': 500 * 1024 * 1024,
+  'application/x-7z-compressed': 500 * 1024 * 1024,
+  'application/gzip': 500 * 1024 * 1024,
+  'application/x-tar': 500 * 1024 * 1024,
+  'application/x-bzip2': 500 * 1024 * 1024,
 };
 
 export const FILE_LIMIT = {

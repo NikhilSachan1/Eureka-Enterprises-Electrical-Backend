@@ -124,7 +124,7 @@ export class FilesController {
       );
     }
 
-    const SITE_REPORT_MAX_SIZE = 50 * 1024 * 1024; // 50 MB for all types (PDF, image, archive)
+    const SITE_REPORT_MAX_SIZE = 500 * 1024 * 1024; // 50 MB for all types (PDF, image, archive)
     const [validated] = validateFileUploads(
       [file],
       FILE_UPLOAD_FOLDER_NAMES.SITE_REPORT_FILES,

@@ -193,7 +193,7 @@ export class SiteService {
     }
 
     // For EMPLOYEE role — restrict to sites they were ever allocated to
-    const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'OPERATION_MANAGER'];
+    const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'OPERATION_MANAGER', 'HR'];
     const isEmployee = activeRole && !ADMIN_ROLES.includes(activeRole.toUpperCase());
     if (isEmployee && requestUserId) {
       const allocatedSiteRows = await this.dataSource.query(
