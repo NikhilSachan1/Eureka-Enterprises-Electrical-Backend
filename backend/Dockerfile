@@ -4,16 +4,12 @@ FROM node:22.3-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-
 ENV HUSKY=0 \
     NODE_ENV=development
 
-RUN npm ci --ignore-scripts
-
 COPY . .
 
-RUN npm run build
+RUN npm ci --ignore-scripts && npm run build
 
 FROM node:22.3-alpine AS production
 
@@ -29,13 +25,13 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont
 
-COPY package.json package-lock.json ./
-
 ENV HUSKY=0 \
     NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+COPY package.json package-lock.json ./
 
 RUN npm ci --omit=dev --ignore-scripts \
     && chown -R node:node /app
