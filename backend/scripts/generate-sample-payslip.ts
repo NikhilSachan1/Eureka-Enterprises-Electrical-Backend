@@ -105,7 +105,7 @@ async function generateSamplePayslip() {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'load' });
 
     const pdfPath = path.join(__dirname, 'sample-payslip.pdf');
     await page.pdf({
