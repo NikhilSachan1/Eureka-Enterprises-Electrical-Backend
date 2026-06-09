@@ -9,7 +9,7 @@ ENV HUSKY=0 \
 
 COPY . .
 
-RUN npm ci --ignore-scripts && npm run build
+RUN npm install --ignore-scripts && npm run build
 
 FROM node:22.3-alpine AS production
 
@@ -31,7 +31,8 @@ ENV HUSKY=0 \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-COPY package.json package-lock.json ./
+COPY package.json ./
+COPY --from=builder /app/package-lock.json ./
 
 RUN npm ci --omit=dev --ignore-scripts \
     && chown -R node:node /app
