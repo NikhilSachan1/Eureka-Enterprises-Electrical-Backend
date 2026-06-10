@@ -46,23 +46,11 @@ export class BookPaymentService {
 
       const gstAmount = dto.gstAmount ?? 0;
 
-      // Pro-rata TDS deducted from this booking's taxable portion.
-      // TDS rate comes from the invoice; applied to the portion being booked.
-      const invoiceTaxable = Number(invoice.taxableAmount);
-      const invoiceTds = Number(invoice.tdsAmount ?? 0);
-      const proRataTds =
-        invoiceTaxable > 0 && invoiceTds > 0
-          ? Number(((dto.taxableAmount * invoiceTds) / invoiceTaxable).toFixed(2))
-          : 0;
-      // paymentTotalAmount = taxable booked - pro-rata TDS (GST excluded — tracked in GST register)
-      const paymentTotalAmount = Number((dto.taxableAmount - proRataTds).toFixed(2));
-
-      if (paymentTotalAmount < 0) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
-      }
+      // TDS is captured at invoice level — paymentTotalAmount is the exact cash amount to the vendor.
+      const paymentTotalAmount = dto.taxableAmount;
 
       // Ceiling check: Σ(paymentTotalAmount) ≤ invoice.taxableAmount − invoice.tdsAmount
-      const invoiceNetPayable = invoiceTaxable - invoiceTds;
+      const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
       if (existingBooked + paymentTotalAmount > invoiceNetPayable) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
@@ -219,20 +207,10 @@ export class BookPaymentService {
         if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
 
         const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
-        const invoiceTaxable = Number(invoice.taxableAmount);
-        const invoiceTds = Number(invoice.tdsAmount ?? 0);
-        const newProRataTds =
-          invoiceTaxable > 0 && invoiceTds > 0
-            ? Number(((newTaxable * invoiceTds) / invoiceTaxable).toFixed(2))
-            : 0;
-        const newPaymentTotal = Number((newTaxable - newProRataTds).toFixed(2));
-
-        if (newPaymentTotal < 0) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
-        }
+        const newPaymentTotal = newTaxable;
 
         const oldPaymentTotal = Number(bp.paymentTotalAmount);
-        const invoiceNetPayable = invoiceTaxable - invoiceTds;
+        const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
 
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - oldPaymentTotal + newPaymentTotal;
