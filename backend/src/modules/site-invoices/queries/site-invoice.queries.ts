@@ -16,7 +16,7 @@ export const insertGstRegisterEntryQuery = `
     (id, "invoiceId", "siteId", "partyType", "contractorId", "vendorId",
      "invoiceMonth", "financialYear", "gstType", "taxableAmount", "gstAmount",
      "isVerified", "createdAt", "updatedAt")
-  VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, NOW(), NOW())
+  VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
   ON CONFLICT DO NOTHING
 `;
 

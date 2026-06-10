@@ -94,6 +94,7 @@ export class SiteInvoiceService {
       tdsAmount: dto.tdsAmount ?? 0,
       tdsPercentage: dto.tdsPercentage ?? null,
       totalAmount: dto.totalAmount,
+      isGstHold: dto.isGstHold ?? false,
       fileKey: dto.fileKey,
       fileName: dto.fileName,
       remarks: dto.remarks,
@@ -365,6 +366,8 @@ export class SiteInvoiceService {
     const financialYear = getFinancialYear(invoiceDate);
     const gstType = inv.partyType === PartyType.PURCHASE ? GstType.GST_3B : GstType.GST_1;
 
+    // isGstHold=true → entry stays pending (isVerified=false); false → auto-verified on approval
+    const isVerified = !inv.isGstHold;
     await em.query(insertGstRegisterEntryQuery, [
       inv.id,
       inv.siteId,
@@ -376,6 +379,7 @@ export class SiteInvoiceService {
       gstType,
       Number(inv.taxableAmount),
       Number(inv.gstAmount),
+      isVerified,
     ]);
   }
 
@@ -642,6 +646,7 @@ export class SiteInvoiceService {
         i."totalAmount",
         i."bookedTotal",
         i."paidTotal",
+        i."isGstHold",
         i."approvalStatus",
         COALESCE(c.name, v.name) AS "partyName",
         CASE
@@ -691,6 +696,7 @@ export class SiteInvoiceService {
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
+          isGstHold: r.isGstHold ?? false,
           remaining: isPurchaseBankTransfer
             ? Number(r.bookedTotal) - Number(r.paidTotal)
             : forDocument === 'book-payment'

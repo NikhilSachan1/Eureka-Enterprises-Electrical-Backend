@@ -56,17 +56,8 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
-      // Hold validations
-      const gstHoldType = dto.gstHoldType ?? null;
-      const gstHoldAmount = Number(dto.gstHoldAmount ?? 0);
+      // Payment hold validation
       const paymentHoldAmount = Number(dto.paymentHoldAmount ?? 0);
-
-      if (gstHoldType && gstHoldAmount <= 0) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_REQUIRED);
-      }
-      if (gstHoldType && gstHoldAmount > gstAmount) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_EXCEEDS_GST);
-      }
       if (paymentHoldAmount > 0 && !dto.paymentHoldReason) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
       }
@@ -86,8 +77,6 @@ export class BookPaymentService {
           gstAmount,
           gstPercentage: dto.gstPercentage ?? null,
           paymentTotalAmount,
-          gstHoldType,
-          gstHoldAmount,
           paymentHoldAmount,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
@@ -247,11 +236,7 @@ export class BookPaymentService {
           await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: delta }, em);
         }
 
-        // Hold validations against updated amounts
-        const newGstAmount = dto.gstAmount ?? Number(bp.gstAmount);
-        const newGstHoldType = dto.gstHoldType !== undefined ? dto.gstHoldType : bp.gstHoldType;
-        const newGstHoldAmount =
-          dto.gstHoldAmount !== undefined ? Number(dto.gstHoldAmount) : Number(bp.gstHoldAmount);
+        // Payment hold validations against updated amounts
         const newPaymentHoldAmount =
           dto.paymentHoldAmount !== undefined
             ? Number(dto.paymentHoldAmount)
@@ -259,12 +244,6 @@ export class BookPaymentService {
         const newPaymentHoldReason =
           dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
 
-        if (newGstHoldType && newGstHoldAmount <= 0) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_REQUIRED);
-        }
-        if (newGstHoldType && newGstHoldAmount > newGstAmount) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_EXCEEDS_GST);
-        }
         if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
         }
@@ -286,11 +265,7 @@ export class BookPaymentService {
           em,
         );
       } else {
-        // Hold validations for non-amount updates
-        const curGstAmount = Number(bp.gstAmount);
-        const newGstHoldType = dto.gstHoldType !== undefined ? dto.gstHoldType : bp.gstHoldType;
-        const newGstHoldAmount =
-          dto.gstHoldAmount !== undefined ? Number(dto.gstHoldAmount) : Number(bp.gstHoldAmount);
+        // Payment hold validations for non-amount updates
         const newPaymentHoldAmount =
           dto.paymentHoldAmount !== undefined
             ? Number(dto.paymentHoldAmount)
@@ -298,12 +273,6 @@ export class BookPaymentService {
         const newPaymentHoldReason =
           dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
 
-        if (newGstHoldType && newGstHoldAmount <= 0) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_REQUIRED);
-        }
-        if (newGstHoldType && newGstHoldAmount > curGstAmount) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_EXCEEDS_GST);
-        }
         if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
         }
@@ -386,6 +355,7 @@ export class BookPaymentService {
         bp."paymentTotalAmount",
         bp."taxableAmount",
         bp."gstAmount",
+        bp."paymentHoldAmount",
         to_char(bp."bookingDate", 'YYYY-MM-DD') AS "bookingDate",
         bp."hasTransfer",
         bp."approvalStatus",
@@ -402,7 +372,7 @@ export class BookPaymentService {
       WHERE bp."invoiceId" = $1
         AND bp."deletedAt" IS NULL
       ORDER BY bp."createdAt" DESC
-      `,
+`,
       [invoiceId],
     );
 
@@ -418,6 +388,8 @@ export class BookPaymentService {
           paymentTotalAmount: Number(r.paymentTotalAmount),
           taxableAmount: Number(r.taxableAmount),
           gstAmount: Number(r.gstAmount),
+          paymentHoldAmount: Number(r.paymentHoldAmount ?? 0),
+          expectedTransferAmount: Number(r.paymentTotalAmount) - Number(r.paymentHoldAmount ?? 0),
           bookingDate: r.bookingDate,
           hasTransfer: r.hasTransfer,
           approvalStatus: r.approvalStatus,

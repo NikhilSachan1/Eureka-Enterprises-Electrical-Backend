@@ -123,6 +123,10 @@ export class SiteInvoiceEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   unlockReason: string | null;
 
+  // GST hold flag — true = GST withheld (register entry stays pending); false = auto-verified on approval
+  @Column({ type: 'boolean', default: false })
+  isGstHold: boolean;
+
   // Denormalized rollups for fast invoice-level reads
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   bookedTotal: number; // sum of book_payments (purchase only)

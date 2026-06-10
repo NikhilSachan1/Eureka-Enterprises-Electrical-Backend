@@ -4,7 +4,7 @@ import * as http from 'http';
 import puppeteer from 'puppeteer';
 import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { PAYMENT_ADVICE_COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
-import { GST_HOLD_REASONS } from 'src/modules/book-payments/constants/book-payment.constants';
+import { GST_HOLD_REMARK } from 'src/modules/book-payments/constants/book-payment.constants';
 
 export interface PaymentAdvicePdfData {
   referenceNumber: string;
@@ -35,12 +35,12 @@ export interface PaymentAdvicePdfData {
   gstAmount: number;
   tdsDeductionAmount: number;
   paymentTotalAmount: number;
-  gstHoldType?: '1B' | '3B' | null;
   gstHoldAmount?: number;
   paymentHoldAmount?: number;
   paymentHoldReason: string | null;
   // Invoice-level data for outstanding balance section
   invoiceTaxableAmount?: number;
+  invoiceGstAmount?: number;
   invoiceTdsAmount?: number;
   invoicePaidTotal?: number;
   // Invoice / PO references
@@ -216,13 +216,20 @@ export class PaymentAdvicePdfService {
       });
     };
 
-    const grossAmount = Number(d.taxableAmount);
-    const tdsAmount = Number(d.tdsDeductionAmount);
+    const taxableAmount = Number(d.taxableAmount);
     const gstAmount = Number(d.gstAmount);
+    const tdsAmount = Number(d.tdsDeductionAmount);
     const payHoldAmt = Number(d.paymentHoldAmount ?? 0);
     const gstHoldAmt = Number(d.gstHoldAmount ?? 0);
-    // Total deduction shown in Invoice Summary = TDS (at book-payment level, legacy) + payment hold
-    const totalDeduction = tdsAmount + payHoldAmt;
+
+    // Gross = full invoice value (invoice taxable + invoice GST)
+    const invTaxable = Number(d.invoiceTaxableAmount ?? taxableAmount);
+    const invGst = Number((d as any).invoiceGstAmount ?? gstHoldAmt ?? gstAmount);
+    const grossAmount = invTaxable + invGst;
+    // Total Deduction = TDS only
+    const totalDeduction = tdsAmount;
+    // Net Amount = Gross − TDS (before holds; actual transfer shown in payment message)
+    const netAmount = grossAmount - totalDeduction;
 
     const inWords = this.numberToWords(d.transferAmount);
 
@@ -287,14 +294,6 @@ export class PaymentAdvicePdfService {
       )}-${d.financialYear.slice(2)}</td></tr>`,
     );
 
-    // ── GST note (informational) ─────────────────────────
-    const gstNote =
-      gstAmount > 0
-        ? `<p style="font-size:10px;color:#555;margin-top:6px;">Note: GST of ${fmt(
-            gstAmount,
-          )} is tracked separately in the GST register and is not included in the payment amount.</p>`
-        : '';
-
     // ── Deduction Details table (legacy — only if TDS > 0 at book-payment level) ──
     const deductionTableHtml =
       tdsAmount > 0
@@ -323,24 +322,18 @@ export class PaymentAdvicePdfService {
         : '';
 
     // ── Hold Details table + Remarks ─────────────────────
-    const hasHold = d.gstHoldType || payHoldAmt > 0;
+    const hasHold = gstHoldAmt > 0 || payHoldAmt > 0;
     let holdSection = '';
     if (hasHold) {
       const holdRows: string[] = [];
       const remarkLines: string[] = [];
       let serial = 1;
 
-      if (d.gstHoldType) {
+      if (gstHoldAmt > 0) {
         holdRows.push(
-          `<tr><td>${serial}</td><td>GST Hold (GSTR-${d.gstHoldType})</td><td class="r">${fmtN(
-            gstHoldAmt,
-          )}</td></tr>`,
+          `<tr><td>${serial}</td><td>GST Hold</td><td class="r">${fmtN(gstHoldAmt)}</td></tr>`,
         );
-        remarkLines.push(
-          `<p><strong>${serial}. GST Hold (GSTR-${d.gstHoldType}):</strong> ${
-            GST_HOLD_REASONS[d.gstHoldType]
-          }</p>`,
-        );
+        remarkLines.push(`<p><strong>${serial}. GST Hold:</strong> ${GST_HOLD_REMARK}</p>`);
         serial++;
       }
       if (payHoldAmt > 0 && d.paymentHoldReason) {
@@ -482,12 +475,10 @@ export class PaymentAdvicePdfService {
         <td>${fmtDate(d.invoiceDate)}</td>
         <td class="r">${fmtN(grossAmount)}</td>
         <td class="r">${fmtN(totalDeduction)}</td>
-        <td class="r">${fmtN(d.transferAmount)}</td>
+        <td class="r">${fmtN(netAmount)}</td>
       </tr>
     </tbody>
   </table>
-
-  ${gstNote}
 
   ${deductionTableHtml}
 
