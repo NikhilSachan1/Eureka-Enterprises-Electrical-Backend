@@ -617,9 +617,9 @@ export class SiteInvoiceService {
   /**
    * Dropdown endpoint — returns Invoices for a site with eligibility flags.
    *
-   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < taxableAmount.
+   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < taxableAmount − tdsAmount.
    * forDocument = "bank-transfer" + PURCHASE        → PURCHASE invoices booked but not yet paid. Eligible: APPROVED + bookedTotal > 0 + paidTotal < bookedTotal.
-   * forDocument = "bank-transfer" + SALE (default)  → SALE invoices. Eligible: APPROVED + paidTotal < taxableAmount.
+   * forDocument = "bank-transfer" + SALE (default)  → SALE invoices. Eligible: APPROVED + paidTotal < taxableAmount − tdsAmount.
    */
   async getDropdown(
     siteId: string,
@@ -638,30 +638,31 @@ export class SiteInvoiceService {
         i."invoiceDate",
         i."partyType",
         i."taxableAmount",
+        i."tdsAmount",
         i."totalAmount",
         i."bookedTotal",
         i."paidTotal",
         i."approvalStatus",
         COALESCE(c.name, v.name) AS "partyName",
         CASE
-          WHEN i."approvalStatus" != 'APPROVED'                                                    THEN false
-          WHEN $3 = 'book-payment'                       AND i."bookedTotal" >= i."taxableAmount"  THEN false
-          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                  THEN false
-          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"   THEN false
-          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal"   >= i."taxableAmount" THEN false
+          WHEN i."approvalStatus" != 'APPROVED'                                                                                           THEN false
+          WHEN $3 = 'book-payment'                       AND i."bookedTotal" >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)            THEN false
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                                                         THEN false
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"                                          THEN false
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal"   >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)           THEN false
           ELSE true
         END AS eligible,
         CASE
           WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
-          WHEN $3 = 'book-payment' AND i."bookedTotal" >= i."taxableAmount"
-            THEN 'Invoice fully booked — no remaining taxable amount'
+          WHEN $3 = 'book-payment' AND i."bookedTotal" >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)
+            THEN 'Invoice fully booked — no remaining net payable amount'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."bookedTotal" = 0
             THEN 'Invoice not yet booked — do a Book Payment first'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."paidTotal" >= i."bookedTotal"
             THEN 'Invoice fully paid — booked amount exhausted'
-          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= i."taxableAmount"
-            THEN 'Invoice fully paid (taxable amount exhausted)'
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)
+            THEN 'Invoice fully paid — net payable amount exhausted'
           ELSE NULL
         END AS reason
       FROM site_invoices i
@@ -686,14 +687,15 @@ export class SiteInvoiceService {
           partyType: r.partyType,
           partyName: r.partyName,
           taxableAmount: Number(r.taxableAmount),
+          tdsAmount: Number(r.tdsAmount ?? 0),
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
           remaining: isPurchaseBankTransfer
             ? Number(r.bookedTotal) - Number(r.paidTotal)
             : forDocument === 'book-payment'
-            ? Number(r.taxableAmount) - Number(r.bookedTotal)
-            : Number(r.taxableAmount) - Number(r.paidTotal),
+            ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0) - Number(r.bookedTotal)
+            : Number(r.taxableAmount) - Number(r.tdsAmount ?? 0) - Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },
       })),
