@@ -120,7 +120,11 @@ export class BankTransferService {
         em,
       );
 
-      return { message: BANK_TRANSFER_RESPONSES.CREATED, id: created.id };
+      return {
+        message: BANK_TRANSFER_RESPONSES.CREATED,
+        id: created.id,
+        tdsNote: BANK_TRANSFER_RESPONSES.TDS_AT_INVOICE,
+      };
     });
   }
 

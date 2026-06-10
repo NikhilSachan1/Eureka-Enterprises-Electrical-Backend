@@ -29,4 +29,6 @@ export const BANK_TRANSFER_RESPONSES = {
   DELETED: 'Bank transfer deleted successfully.',
   PDF_GENERATING:
     'Payment advice PDF is being generated and will be ready within 2 minutes. You can download it from the payment advice details once ready.',
+  TDS_AT_INVOICE:
+    'TDS deduction (if applicable) is captured at invoice level and has been recorded in the TDS register.',
 };
