@@ -85,6 +85,10 @@ export class SiteEntity extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true })
   workTypes: string[];
 
+  // Site type (e.g. Civil, Electrical, Mechanical — free text)
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  siteType: string;
+
   // Additional notes
   @Column({ type: 'text', nullable: true })
   notes: string;

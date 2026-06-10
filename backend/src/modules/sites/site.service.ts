@@ -902,6 +902,7 @@ export class SiteService {
         state: site.state,
         pincode: site.pincode,
         estimatedBudget: site.estimatedBudget ? Number(site.estimatedBudget) : null,
+        siteType: site.siteType ?? null,
         isActive: site.isActive,
         company: site.company ? { id: site.company.id, name: site.company.name } : null,
       },
@@ -1033,7 +1034,7 @@ export class SiteService {
         `SELECT
            s.id, s.name, s.status, s."startDate", s."endDate", s.city, s.state,
            s.pincode, s."fullAddress", s."managerName", s."managerContact",
-           s."workTypes", s."isActive", s."estimatedBudget", s."createdAt", s."updatedAt",
+           s."workTypes", s."isActive", s."estimatedBudget", s."siteType", s."createdAt", s."updatedAt",
            comp.id AS "companyId", comp.name AS "companyName",
            comp."fullAddress" AS "companyFullAddress", comp.logo AS "companyLogo"
          FROM sites s
