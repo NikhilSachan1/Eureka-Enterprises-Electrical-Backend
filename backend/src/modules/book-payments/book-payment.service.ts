@@ -56,6 +56,24 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
+      // Hold validations
+      const gstHoldType = dto.gstHoldType ?? null;
+      const gstHoldAmount = Number(dto.gstHoldAmount ?? 0);
+      const paymentHoldAmount = Number(dto.paymentHoldAmount ?? 0);
+
+      if (gstHoldType && gstHoldAmount <= 0) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_REQUIRED);
+      }
+      if (gstHoldType && gstHoldAmount > gstAmount) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_EXCEEDS_GST);
+      }
+      if (paymentHoldAmount > 0 && !dto.paymentHoldReason) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
+      }
+      if (paymentHoldAmount >= paymentTotalAmount) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
+      }
+
       // Create book payment (auto-approved)
       const created = await this.bookPaymentRepository.create(
         {
@@ -68,6 +86,9 @@ export class BookPaymentService {
           gstAmount,
           gstPercentage: dto.gstPercentage ?? null,
           paymentTotalAmount,
+          gstHoldType,
+          gstHoldAmount,
+          paymentHoldAmount,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
@@ -226,6 +247,31 @@ export class BookPaymentService {
           await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: delta }, em);
         }
 
+        // Hold validations against updated amounts
+        const newGstAmount = dto.gstAmount ?? Number(bp.gstAmount);
+        const newGstHoldType = dto.gstHoldType !== undefined ? dto.gstHoldType : bp.gstHoldType;
+        const newGstHoldAmount =
+          dto.gstHoldAmount !== undefined ? Number(dto.gstHoldAmount) : Number(bp.gstHoldAmount);
+        const newPaymentHoldAmount =
+          dto.paymentHoldAmount !== undefined
+            ? Number(dto.paymentHoldAmount)
+            : Number(bp.paymentHoldAmount);
+        const newPaymentHoldReason =
+          dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
+
+        if (newGstHoldType && newGstHoldAmount <= 0) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_REQUIRED);
+        }
+        if (newGstHoldType && newGstHoldAmount > newGstAmount) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_EXCEEDS_GST);
+        }
+        if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
+        }
+        if (newPaymentHoldAmount >= newPaymentTotal) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
+        }
+
         const { taxableAmount, gstAmount, ...restDto } = dto;
         await this.bookPaymentRepository.update(
           { id },
@@ -240,6 +286,31 @@ export class BookPaymentService {
           em,
         );
       } else {
+        // Hold validations for non-amount updates
+        const curGstAmount = Number(bp.gstAmount);
+        const newGstHoldType = dto.gstHoldType !== undefined ? dto.gstHoldType : bp.gstHoldType;
+        const newGstHoldAmount =
+          dto.gstHoldAmount !== undefined ? Number(dto.gstHoldAmount) : Number(bp.gstHoldAmount);
+        const newPaymentHoldAmount =
+          dto.paymentHoldAmount !== undefined
+            ? Number(dto.paymentHoldAmount)
+            : Number(bp.paymentHoldAmount);
+        const newPaymentHoldReason =
+          dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
+
+        if (newGstHoldType && newGstHoldAmount <= 0) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_REQUIRED);
+        }
+        if (newGstHoldType && newGstHoldAmount > curGstAmount) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_HOLD_AMOUNT_EXCEEDS_GST);
+        }
+        if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
+        }
+        if (newPaymentHoldAmount >= Number(bp.paymentTotalAmount)) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
+        }
+
         await this.bookPaymentRepository.update(
           { id },
           {

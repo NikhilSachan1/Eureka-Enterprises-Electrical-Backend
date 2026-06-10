@@ -147,10 +147,11 @@ export class BankTransferService {
         throw new ConflictException(BANK_TRANSFER_ERRORS.BOOK_PAYMENT_HAS_TRANSFER);
       }
 
-      // Exact amount match
-      if (
-        Number(dto.transferAmount.toFixed(2)) !== Number(Number(bp.paymentTotalAmount).toFixed(2))
-      ) {
+      // transferAmount must equal paymentTotalAmount − paymentHoldAmount
+      const expectedTransfer = Number(
+        (Number(bp.paymentTotalAmount) - Number(bp.paymentHoldAmount ?? 0)).toFixed(2),
+      );
+      if (Number(dto.transferAmount.toFixed(2)) !== expectedTransfer) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.AMOUNT_MISMATCH_PURCHASE);
       }
 
@@ -240,7 +241,13 @@ export class BankTransferService {
           gstAmount: Number(bp.gstAmount),
           tdsDeductionAmount: Number(invoiceForPdf?.tdsAmount ?? 0),
           paymentTotalAmount: Number(bp.paymentTotalAmount),
+          gstHoldType: bp.gstHoldType ?? null,
+          gstHoldAmount: Number(bp.gstHoldAmount ?? 0),
+          paymentHoldAmount: Number(bp.paymentHoldAmount ?? 0),
           paymentHoldReason: bp.paymentHoldReason ?? null,
+          invoiceTaxableAmount: Number(invoiceForPdf?.taxableAmount ?? 0),
+          invoiceTdsAmount: Number(invoiceForPdf?.tdsAmount ?? 0),
+          invoicePaidTotal: Number(invoiceForPdf?.paidTotal ?? 0),
           invoiceNumber: invoiceForPdf?.invoiceNumber ?? null,
           invoiceDate: invoiceForPdf?.invoiceDate
             ? String(invoiceForPdf.invoiceDate).split('T')[0]
@@ -470,7 +477,13 @@ export class BankTransferService {
           gstAmount: bp ? Number(bp.gstAmount) : 0,
           tdsDeductionAmount: invoiceForPdf ? Number(invoiceForPdf.tdsAmount) : 0,
           paymentTotalAmount: bp ? Number(bp.paymentTotalAmount) : 0,
+          gstHoldType: bp?.gstHoldType ?? null,
+          gstHoldAmount: bp ? Number(bp.gstHoldAmount ?? 0) : 0,
+          paymentHoldAmount: bp ? Number(bp.paymentHoldAmount ?? 0) : 0,
           paymentHoldReason: bp?.paymentHoldReason ?? null,
+          invoiceTaxableAmount: invoiceForPdf ? Number(invoiceForPdf.taxableAmount) : 0,
+          invoiceTdsAmount: invoiceForPdf ? Number(invoiceForPdf.tdsAmount) : 0,
+          invoicePaidTotal: invoiceForPdf ? Number(invoiceForPdf.paidTotal) : 0,
           invoiceNumber: invoiceForPdf?.invoiceNumber ?? null,
           invoiceDate: invoiceForPdf?.invoiceDate
             ? String(invoiceForPdf.invoiceDate).split('T')[0]

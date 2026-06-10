@@ -54,9 +54,21 @@ export class BookPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   gstPercentage: number | null;
 
-  // The actual payment amount = taxableAmount - pro-rata TDS (from invoice); GST excluded — tracked separately in GST register
+  // Actual cash amount to the vendor = taxableAmount (TDS deducted at invoice level; GST excluded — tracked in GST register)
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   paymentTotalAmount: number;
+
+  // GST hold — which GSTR compliance return is pending; null = no GST hold
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  gstHoldType: '1B' | '3B' | null;
+
+  // GST amount being withheld (informational; equals gstAmount when gstHoldType is set)
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  gstHoldAmount: number;
+
+  // Net payment hold amount (non-GST operational reasons; transferAmount = paymentTotalAmount − paymentHoldAmount)
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  paymentHoldAmount: number;
 
   @Column({ type: 'text', nullable: true })
   paymentHoldReason: string | null;
