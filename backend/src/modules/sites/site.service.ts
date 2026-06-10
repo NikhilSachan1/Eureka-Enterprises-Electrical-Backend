@@ -194,8 +194,10 @@ export class SiteService {
     }
 
     if (siteTypes && siteTypes.length > 0) {
-      const safeLiteral = siteTypes.map((t) => `'${t.replace(/'/g, "''")}'`).join(',');
-      where.siteTypes = Raw((alias) => `${alias} ?| ARRAY[${safeLiteral}]`);
+      // Use @> (contains) per value joined with OR — avoids ?| which conflicts with TypeORM param binding
+      where.siteTypes = Raw((alias) =>
+        siteTypes.map((t) => `${alias} @> '["${t.replace(/"/g, '\\"')}"]'::jsonb`).join(' OR '),
+      );
     }
 
     // For EMPLOYEE role — restrict to sites they were ever allocated to
