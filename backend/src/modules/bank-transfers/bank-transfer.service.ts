@@ -24,10 +24,6 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
-import {
-  insertTdsRegisterEntryFromBankTransferQuery,
-  deleteTdsRegisterEntryForBankTransferQuery,
-} from 'src/modules/site-invoices/queries/site-invoice.queries';
 
 @Injectable()
 export class BankTransferService {
@@ -58,9 +54,9 @@ export class BankTransferService {
   }
 
   /**
-   * SALE side: transfer linked to invoice, ceiling check Σ ≤ invoice taxable amount.
-   * GST is excluded — it is tracked in the GST register and settled separately.
-   * TDS is deducted by the contractor before transferring, not tracked here as a separate deduction.
+   * SALE side: transfer linked to invoice, ceiling check Σ(transferAmount) ≤ invoice.taxableAmount − invoice.tdsAmount.
+   * GST is excluded — tracked in the GST register and settled separately.
+   * TDS is captured at invoice level (invoice.tdsAmount) — not tracked per transfer.
    */
   private async createSaleTransfer(dto: CreateBankTransferDto, createdBy: string) {
     return await this.dataSource.transaction(async (em) => {
@@ -81,15 +77,10 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_NOT_APPROVED);
       }
 
-      const tdsDeducted = dto.tdsDeducted ?? 0;
-      // Effective settled amount = physical transfer + TDS deducted by contractor on behalf of govt.
-      // Both components discharge the invoice obligation, so both count against the ceiling.
-      const effectiveAmount = dto.transferAmount + tdsDeducted;
-
-      // Ceiling check: Σ (transferAmount + tdsDeducted) ≤ invoice taxable amount
-      // GST is excluded — it is tracked in the GST register and settled separately.
+      // Ceiling check: Σ(transferAmount) ≤ invoice.taxableAmount − invoice.tdsAmount
+      const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
       const existingPaid = await this.bankTransferRepository.sumByInvoice(dto.invoiceId, em);
-      if (existingPaid + effectiveAmount > Number(invoice.taxableAmount)) {
+      if (existingPaid + dto.transferAmount > invoiceNetPayable) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
@@ -111,8 +102,6 @@ export class BankTransferService {
           proofFileKey: dto.proofFileKey ?? null,
           proofFileName: dto.proofFileName ?? null,
           remarks: dto.remarks ?? null,
-          tdsDeducted,
-          tdsPercentage: dto.tdsPercentage ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
           approvalBy: createdBy,
           approvalAt: new Date(),
@@ -121,35 +110,15 @@ export class BankTransferService {
         em,
       );
 
-      // Update invoice paidTotal + PO paidTotal using effective amount (transfer + TDS)
+      // Update invoice paidTotal + PO paidTotal
       await em
         .getRepository(SiteInvoiceEntity)
-        .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${effectiveAmount}` });
+        .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` });
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
-        { paidTotal: effectiveAmount, lastPaymentAt: new Date() },
+        { paidTotal: dto.transferAmount, lastPaymentAt: new Date() },
         em,
       );
-
-      // Project TDS register entry if contractor deducted TDS
-      if (tdsDeducted > 0) {
-        const transferDate = new Date(dto.transferDate);
-        const invoiceMonth = `${transferDate.getUTCFullYear()}-${String(
-          transferDate.getUTCMonth() + 1,
-        ).padStart(2, '0')}`;
-        await em.query(insertTdsRegisterEntryFromBankTransferQuery, [
-          invoice.id,
-          created.id,
-          invoice.siteId,
-          PartyType.SALE,
-          invoice.contractorId ?? null,
-          null,
-          invoiceMonth,
-          financialYear,
-          Number(invoice.taxableAmount),
-          tdsDeducted,
-        ]);
-      }
 
       return { message: BANK_TRANSFER_RESPONSES.CREATED, id: created.id };
     });
@@ -228,7 +197,6 @@ export class BankTransferService {
       );
 
       // Fetch vendor, site, invoice, and PO details for PDF
-      // (outside the critical path — failures logged, not fatal)
       const [vendor, site, invoiceForPdf, poForPdf] = await Promise.all([
         em.getRepository(VendorEntity).findOne({ where: { id: bp.vendorId } }),
         em.getRepository(SiteEntity).findOne({ where: { id: bp.siteId }, relations: ['company'] }),
@@ -266,7 +234,7 @@ export class BankTransferService {
           transferAmount: dto.transferAmount,
           taxableAmount: Number(bp.taxableAmount),
           gstAmount: Number(bp.gstAmount),
-          tdsDeductionAmount: Number(bp.tdsDeductionAmount),
+          tdsDeductionAmount: Number(invoiceForPdf?.tdsAmount ?? 0),
           paymentTotalAmount: Number(bp.paymentTotalAmount),
           paymentHoldReason: bp.paymentHoldReason ?? null,
           invoiceNumber: invoiceForPdf?.invoiceNumber ?? null,
@@ -282,6 +250,7 @@ export class BankTransferService {
         id: created.id,
         paymentAdviceId: advice.id,
         paymentAdviceReference: advice.referenceNumber,
+        pdfNote: BANK_TRANSFER_RESPONSES.PDF_GENERATING,
       };
     });
   }
@@ -408,58 +377,29 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_PURCHASE);
       }
 
-      // SALE side: re-check ceiling if transferAmount OR tdsDeducted changed
-      // (both affect the effective settled amount = transferAmount + tdsDeducted)
-      if (
-        bt.partyType === PartyType.SALE &&
-        (dto.transferAmount !== undefined || dto.tdsDeducted !== undefined)
-      ) {
+      // SALE side: re-check ceiling if transferAmount changed
+      if (bt.partyType === PartyType.SALE && dto.transferAmount !== undefined) {
         const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
           where: { id: bt.invoiceId, deletedAt: IsNull() },
         });
         if (!invoice) throw new NotFoundException(BANK_TRANSFER_ERRORS.INVOICE_NOT_FOUND);
 
-        const oldEffective = Number(bt.transferAmount) + Number(bt.tdsDeducted ?? 0);
-        const newTransferAmt =
-          dto.transferAmount !== undefined ? dto.transferAmount : Number(bt.transferAmount);
-        const newTds =
-          dto.tdsDeducted !== undefined ? dto.tdsDeducted : Number(bt.tdsDeducted ?? 0);
-        const newEffective = newTransferAmt + newTds;
+        const oldTransfer = Number(bt.transferAmount);
+        const newTransfer = dto.transferAmount;
+        const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
 
-        // sumByInvoice already includes the current record's old effective amount,
-        // so subtract it before adding the new effective to get the adjusted total.
         const existingPaid = await this.bankTransferRepository.sumByInvoice(bt.invoiceId, em);
-        const adjustedPaid = existingPaid - oldEffective + newEffective;
-        // Ceiling is taxable amount — GST excluded (same rule as create)
-        if (adjustedPaid > Number(invoice.taxableAmount)) {
+        const adjustedPaid = existingPaid - oldTransfer + newTransfer;
+        if (adjustedPaid > invoiceNetPayable) {
           throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        const delta = newEffective - oldEffective;
+        const delta = newTransfer - oldTransfer;
         if (delta !== 0) {
           await em
             .getRepository(SiteInvoiceEntity)
             .update({ id: bt.invoiceId }, { paidTotal: () => `"paidTotal" + ${delta}` });
           await this.purchaseOrderService.adjustRollups(bt.poId, { paidTotal: delta }, em);
-        }
-      }
-
-      // SALE side: if tdsDeducted or transferDate changed, resync the TDS register row.
-      // Block if TDS payment already released (amounts are immutable after that).
-      // PURCHASE side: TDS belongs to the book payment — bank transfer doesn't own it.
-      const saleTdsChanged =
-        bt.partyType === PartyType.SALE &&
-        (dto.tdsDeducted !== undefined || dto.transferDate !== undefined);
-
-      if (saleTdsChanged) {
-        const tdsPaid = await em.query(
-          `SELECT 1 FROM tds_register_entries
-           WHERE "bankTransferId" = $1 AND "tdsPaymentId" IS NOT NULL
-           LIMIT 1`,
-          [id],
-        );
-        if (tdsPaid.length > 0) {
-          throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_UPDATE_TDS_PAID);
         }
       }
 
@@ -472,44 +412,6 @@ export class BankTransferService {
         } as Partial<BankTransferEntity>,
         em,
       );
-
-      // Delete-then-insert the TDS register row so edits to tdsDeducted (amount)
-      // or transferDate (FY/invoiceMonth shift) are always picked up.
-      if (saleTdsChanged) {
-        await em.query(deleteTdsRegisterEntryForBankTransferQuery, [id]);
-
-        const newTds =
-          dto.tdsDeducted !== undefined ? Number(dto.tdsDeducted) : Number(bt.tdsDeducted ?? 0);
-
-        if (newTds > 0) {
-          const effectiveDate = dto.transferDate
-            ? new Date(dto.transferDate)
-            : new Date(bt.transferDate);
-          const invoiceMonth = `${effectiveDate.getUTCFullYear()}-${String(
-            effectiveDate.getUTCMonth() + 1,
-          ).padStart(2, '0')}`;
-          const financialYear = getFinancialYear(effectiveDate);
-
-          // taxableAmount snapshot comes from the invoice (same reference used at create-time)
-          const inv = await em.getRepository(SiteInvoiceEntity).findOne({
-            where: { id: bt.invoiceId, deletedAt: IsNull() },
-          });
-          if (inv) {
-            await em.query(insertTdsRegisterEntryFromBankTransferQuery, [
-              bt.invoiceId, // $1 invoiceId
-              id, // $2 bankTransferId
-              bt.siteId, // $3 siteId
-              PartyType.SALE, // $4 partyType
-              bt.contractorId ?? null, // $5 contractorId
-              null, // $6 vendorId (SALE has none)
-              invoiceMonth, // $7
-              financialYear, // $8
-              Number(inv.taxableAmount), // $9 taxableAmount (invoice reference)
-              newTds, // $10 tdsAmount
-            ]);
-          }
-        }
-      }
 
       // Regenerate PDF if any field shown on the advice changed
       const pdfAffected =
@@ -527,7 +429,7 @@ export class BankTransferService {
             : Promise.resolve(null),
         ]);
 
-        // Fetch invoice + PO for reference numbers
+        // Fetch invoice + PO for reference numbers and invoice-level TDS
         const [invoiceForPdf, poForPdf] = await Promise.all([
           bp?.invoiceId
             ? em
@@ -562,7 +464,7 @@ export class BankTransferService {
           transferAmount: dto.transferAmount ?? Number(bt.transferAmount),
           taxableAmount: bp ? Number(bp.taxableAmount) : 0,
           gstAmount: bp ? Number(bp.gstAmount) : 0,
-          tdsDeductionAmount: bp ? Number(bp.tdsDeductionAmount) : 0,
+          tdsDeductionAmount: invoiceForPdf ? Number(invoiceForPdf.tdsAmount) : 0,
           paymentTotalAmount: bp ? Number(bp.paymentTotalAmount) : 0,
           paymentHoldReason: bp?.paymentHoldReason ?? null,
           invoiceNumber: invoiceForPdf?.invoiceNumber ?? null,
@@ -585,23 +487,6 @@ export class BankTransferService {
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
 
-      // SALE side owns a TDS register row keyed by bankTransferId.
-      // Block deletion if TDS payment has been released — those numbers are locked.
-      // PURCHASE side TDS lives on the book payment, not here.
-      if (bt.partyType === PartyType.SALE) {
-        const tdsPaid = await em.query(
-          `SELECT 1 FROM tds_register_entries
-           WHERE "bankTransferId" = $1 AND "tdsPaymentId" IS NOT NULL
-           LIMIT 1`,
-          [id],
-        );
-        if (tdsPaid.length > 0) {
-          throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_DELETE_TDS_PAID);
-        }
-        // Remove the TDS register row so summaries don't show a dangling deduction.
-        await em.query(deleteTdsRegisterEntryForBankTransferQuery, [id]);
-      }
-
       // Cascade soft-delete payment advice if it exists
       await em.query(
         `UPDATE payment_advices SET "deletedAt" = NOW(), "deletedBy" = $2
@@ -610,12 +495,7 @@ export class BankTransferService {
       );
 
       // Reverse rollups
-      // SALE side: effective amount = transferAmount + tdsDeducted (TDS settles the invoice too)
-      // PURCHASE side: transferAmount is already the full net payment (= book payment amount)
-      const poRollbackAmount =
-        bt.partyType === PartyType.SALE
-          ? Number(bt.transferAmount) + Number(bt.tdsDeducted ?? 0)
-          : Number(bt.transferAmount);
+      const poRollbackAmount = Number(bt.transferAmount);
 
       if (bt.partyType === PartyType.SALE && bt.invoiceId) {
         await em

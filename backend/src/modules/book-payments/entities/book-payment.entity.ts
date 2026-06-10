@@ -54,13 +54,7 @@ export class BookPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   gstPercentage: number | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  tdsDeductionAmount: number;
-
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  tdsPercentage: number | null;
-
-  // The actual payment amount = taxableAmount - tdsDeductionAmount (GST excluded — tracked separately in GST register)
+  // The actual payment amount = taxableAmount - pro-rata TDS (from invoice); GST excluded — tracked separately in GST register
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   paymentTotalAmount: number;
 

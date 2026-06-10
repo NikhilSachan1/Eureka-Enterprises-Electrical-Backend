@@ -46,6 +46,8 @@ export const FINANCIAL_ERRORS = {
   UNLOCK_NOT_REQUESTED: 'No unlock request pending on this document.',
   CANNOT_UNLOCK_GST_PAID:
     'Cannot unlock — GST payment has already been released against this invoice.',
+  CANNOT_UNLOCK_TDS_PAID:
+    'Cannot unlock — TDS payment has already been released against this invoice.',
   CANNOT_REJECT_APPROVED:
     'Document is already approved and cannot be rejected. If changes are needed, the document must be unlocked, updated, and re-submitted for approval.',
   UNLOCK_REJECT_NO_REQUEST: 'No pending unlock request found on this document.',

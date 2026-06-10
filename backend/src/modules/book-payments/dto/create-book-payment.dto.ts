@@ -27,18 +27,6 @@ export class CreateBookPaymentDto {
   @IsOptional()
   gstPercentage?: number;
 
-  @ApiPropertyOptional({ description: 'TDS deduction amount', default: 0 })
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  tdsDeductionAmount?: number;
-
-  @ApiPropertyOptional({ description: 'TDS percentage (informational only)', example: 2 })
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  tdsPercentage?: number;
-
   @ApiPropertyOptional({ description: 'Reason if payment is on hold' })
   @IsString()
   @IsOptional()

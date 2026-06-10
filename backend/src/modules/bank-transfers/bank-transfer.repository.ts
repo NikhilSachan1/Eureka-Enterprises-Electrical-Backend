@@ -97,14 +97,13 @@ export class BankTransferRepository {
   }
 
   /**
-   * Effective settled amount for a given invoice (SALE side).
-   * Counts transferAmount + tdsDeducted because TDS is money the contractor
-   * deducts on behalf of the govt — it still settles the invoice obligation.
+   * Sum of transferAmount for a given invoice (SALE side).
+   * TDS is now at invoice level — ceiling check: Σ(transferAmount) ≤ invoice.taxableAmount − invoice.tdsAmount.
    */
   async sumByInvoice(invoiceId: string, em?: EntityManager): Promise<number> {
     const result = await this.repo(em)
       .createQueryBuilder('bt')
-      .select('COALESCE(SUM(bt."transferAmount" + COALESCE(bt."tdsDeducted", 0)), 0)', 'total')
+      .select('COALESCE(SUM(bt."transferAmount"), 0)', 'total')
       .where('bt."invoiceId" = :invoiceId', { invoiceId })
       .andWhere('bt."deletedAt" IS NULL')
       .getRawOne();
