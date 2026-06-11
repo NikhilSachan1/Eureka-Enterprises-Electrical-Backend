@@ -49,8 +49,12 @@ export class BookPaymentService {
       // TDS is captured at invoice level — paymentTotalAmount is the exact cash amount to the vendor.
       const paymentTotalAmount = dto.taxableAmount;
 
-      // Ceiling check: Σ(paymentTotalAmount) ≤ invoice.taxableAmount − invoice.tdsAmount
-      const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
+      // Ceiling: isGstHold=true → taxable−tds; isGstHold=false → taxable+gst−tds
+      const invoiceNetPayable = invoice.isGstHold
+        ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
+        : Number(invoice.taxableAmount) +
+          Number(invoice.gstAmount ?? 0) -
+          Number(invoice.tdsAmount ?? 0);
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
       if (existingBooked + paymentTotalAmount > invoiceNetPayable) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
@@ -220,7 +224,11 @@ export class BookPaymentService {
         const newPaymentTotal = newTaxable;
 
         const oldPaymentTotal = Number(bp.paymentTotalAmount);
-        const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
+        const invoiceNetPayable = invoice.isGstHold
+          ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
+          : Number(invoice.taxableAmount) +
+            Number(invoice.gstAmount ?? 0) -
+            Number(invoice.tdsAmount ?? 0);
 
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - oldPaymentTotal + newPaymentTotal;

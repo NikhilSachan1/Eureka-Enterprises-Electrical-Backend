@@ -77,8 +77,12 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_NOT_APPROVED);
       }
 
-      // Ceiling check: Σ(transferAmount) ≤ invoice.taxableAmount − invoice.tdsAmount
-      const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
+      // Ceiling: isGstHold=true → taxable−tds; isGstHold=false → taxable+gst−tds
+      const invoiceNetPayable = invoice.isGstHold
+        ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
+        : Number(invoice.taxableAmount) +
+          Number(invoice.gstAmount ?? 0) -
+          Number(invoice.tdsAmount ?? 0);
       const existingPaid = await this.bankTransferRepository.sumByInvoice(dto.invoiceId, em);
       if (existingPaid + dto.transferAmount > invoiceNetPayable) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
@@ -397,7 +401,12 @@ export class BankTransferService {
 
         const oldTransfer = Number(bt.transferAmount);
         const newTransfer = dto.transferAmount;
-        const invoiceNetPayable = Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0);
+        // Ceiling: isGstHold=true → taxable−tds; isGstHold=false → taxable+gst−tds
+        const invoiceNetPayable = invoice.isGstHold
+          ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
+          : Number(invoice.taxableAmount) +
+            Number(invoice.gstAmount ?? 0) -
+            Number(invoice.tdsAmount ?? 0);
 
         const existingPaid = await this.bankTransferRepository.sumByInvoice(bt.invoiceId, em);
         const adjustedPaid = existingPaid - oldTransfer + newTransfer;

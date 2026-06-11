@@ -178,9 +178,10 @@ export class SiteInvoiceService {
         let disabledReason: string | null;
 
         if (inv.partyType === PartyType.PURCHASE) {
-          // PURCHASE: ceiling = taxableAmount − tdsAmount (TDS now at invoice level)
           const bookedTotal = Number(inv.bookedTotal) || 0;
-          const netPayable = Number(inv.taxableAmount) - Number(inv.tdsAmount ?? 0);
+          const netPayable = inv.isGstHold
+            ? Number(inv.taxableAmount) - Number(inv.tdsAmount ?? 0)
+            : Number(inv.taxableAmount) + Number(inv.gstAmount ?? 0) - Number(inv.tdsAmount ?? 0);
           isDisabled = bookedTotal >= netPayable;
           disabledReason = isDisabled
             ? `Book payment ceiling fully used (₹${bookedTotal.toLocaleString(
@@ -188,9 +189,10 @@ export class SiteInvoiceService {
               )} of ₹${netPayable.toLocaleString('en-IN')})`
             : null;
         } else {
-          // SALE: ceiling = taxableAmount − tdsAmount (TDS now at invoice level)
           const paidTotal = Number(inv.paidTotal) || 0;
-          const netPayable = Number(inv.taxableAmount) - Number(inv.tdsAmount ?? 0);
+          const netPayable = inv.isGstHold
+            ? Number(inv.taxableAmount) - Number(inv.tdsAmount ?? 0)
+            : Number(inv.taxableAmount) + Number(inv.gstAmount ?? 0) - Number(inv.tdsAmount ?? 0);
           isDisabled = paidTotal >= netPayable;
           disabledReason = isDisabled
             ? `Bank transfer ceiling fully used (₹${paidTotal.toLocaleString(
@@ -655,7 +657,7 @@ export class SiteInvoiceService {
           WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                                                         THEN false
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"                                          THEN false
-          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal"   >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)           THEN false
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
           ELSE true
         END AS eligible,
         CASE
@@ -667,7 +669,7 @@ export class SiteInvoiceService {
             THEN 'Invoice not yet booked — do a Book Payment first'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."paidTotal" >= i."bookedTotal"
             THEN 'Invoice fully paid — booked amount exhausted'
-          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END
             THEN 'Invoice fully paid — net payable amount exhausted'
           ELSE NULL
         END AS reason
@@ -706,7 +708,10 @@ export class SiteInvoiceService {
                 ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
                 : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
               Number(r.bookedTotal)
-            : Number(r.taxableAmount) - Number(r.tdsAmount ?? 0) - Number(r.paidTotal),
+            : (r.isGstHold
+                ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
+                : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+              Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },
       })),
