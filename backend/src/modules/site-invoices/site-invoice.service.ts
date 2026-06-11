@@ -621,7 +621,7 @@ export class SiteInvoiceService {
   /**
    * Dropdown endpoint — returns Invoices for a site with eligibility flags.
    *
-   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < taxableAmount − tdsAmount.
+   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < ceiling (isGstHold=true: taxable−tds; isGstHold=false: taxable+gst−tds).
    * forDocument = "bank-transfer" + PURCHASE        → PURCHASE invoices booked but not yet paid. Eligible: APPROVED + bookedTotal > 0 + paidTotal < bookedTotal.
    * forDocument = "bank-transfer" + SALE (default)  → SALE invoices. Eligible: APPROVED + paidTotal < taxableAmount − tdsAmount.
    */
@@ -642,6 +642,7 @@ export class SiteInvoiceService {
         i."invoiceDate",
         i."partyType",
         i."taxableAmount",
+        i."gstAmount",
         i."tdsAmount",
         i."totalAmount",
         i."bookedTotal",
@@ -651,7 +652,7 @@ export class SiteInvoiceService {
         COALESCE(c.name, v.name) AS "partyName",
         CASE
           WHEN i."approvalStatus" != 'APPROVED'                                                                                           THEN false
-          WHEN $3 = 'book-payment'                       AND i."bookedTotal" >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)            THEN false
+          WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                                                         THEN false
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"                                          THEN false
           WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal"   >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)           THEN false
@@ -660,7 +661,7 @@ export class SiteInvoiceService {
         CASE
           WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
-          WHEN $3 = 'book-payment' AND i."bookedTotal" >= i."taxableAmount" - COALESCE(i."tdsAmount", 0)
+          WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END
             THEN 'Invoice fully booked — no remaining net payable amount'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."bookedTotal" = 0
             THEN 'Invoice not yet booked — do a Book Payment first'
@@ -692,6 +693,7 @@ export class SiteInvoiceService {
           partyType: r.partyType,
           partyName: r.partyName,
           taxableAmount: Number(r.taxableAmount),
+          gstAmount: Number(r.gstAmount ?? 0),
           tdsAmount: Number(r.tdsAmount ?? 0),
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
@@ -700,7 +702,10 @@ export class SiteInvoiceService {
           remaining: isPurchaseBankTransfer
             ? Number(r.bookedTotal) - Number(r.paidTotal)
             : forDocument === 'book-payment'
-            ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0) - Number(r.bookedTotal)
+            ? (r.isGstHold
+                ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
+                : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+              Number(r.bookedTotal)
             : Number(r.taxableAmount) - Number(r.tdsAmount ?? 0) - Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },
