@@ -19,6 +19,13 @@ export class CreateBookPaymentDto {
   @Min(1)
   transferAmount: number;
 
+  @ApiPropertyOptional({
+    description: 'Reason for partial payment — shown on payment advice as hold reason',
+  })
+  @IsString()
+  @IsOptional()
+  paymentHoldReason?: string;
+
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()
   @IsOptional()

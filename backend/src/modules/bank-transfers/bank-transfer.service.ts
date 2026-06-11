@@ -216,6 +216,15 @@ export class BankTransferService {
       ]);
 
       // Auto-generate payment advice (§5.1.9)
+      const derivedPayHold = (() => {
+        if (!invoiceForPdf) return 0;
+        const netPayable = invoiceForPdf.isGstHold
+          ? Number(invoiceForPdf.taxableAmount) - Number(invoiceForPdf.tdsAmount ?? 0)
+          : Number(invoiceForPdf.taxableAmount) +
+            Number(invoiceForPdf.gstAmount ?? 0) -
+            Number(invoiceForPdf.tdsAmount ?? 0);
+        return Math.max(0, netPayable - Number(invoiceForPdf.paidTotal ?? 0));
+      })();
       const advice = await this.paymentAdviceService.createForBankTransfer(
         created.id,
         created.siteId,
@@ -246,7 +255,7 @@ export class BankTransferService {
           tdsDeductionAmount: Number(invoiceForPdf?.tdsAmount ?? 0),
           paymentTotalAmount: Number(bp.paymentTotalAmount),
           gstHoldAmount: invoiceForPdf?.isGstHold ? Number(invoiceForPdf.gstAmount) : 0,
-          paymentHoldAmount: Number(bp.paymentHoldAmount ?? 0),
+          paymentHoldAmount: derivedPayHold,
           paymentHoldReason: bp.paymentHoldReason ?? null,
           invoiceTaxableAmount: Number(invoiceForPdf?.taxableAmount ?? 0),
           invoiceGstAmount: Number(invoiceForPdf?.gstAmount ?? 0),
@@ -487,7 +496,15 @@ export class BankTransferService {
           tdsDeductionAmount: invoiceForPdf ? Number(invoiceForPdf.tdsAmount) : 0,
           paymentTotalAmount: bp ? Number(bp.paymentTotalAmount) : 0,
           gstHoldAmount: invoiceForPdf?.isGstHold ? Number(invoiceForPdf.gstAmount) : 0,
-          paymentHoldAmount: bp ? Number(bp.paymentHoldAmount ?? 0) : 0,
+          paymentHoldAmount: (() => {
+            if (!invoiceForPdf) return 0;
+            const netPayable = invoiceForPdf.isGstHold
+              ? Number(invoiceForPdf.taxableAmount) - Number(invoiceForPdf.tdsAmount ?? 0)
+              : Number(invoiceForPdf.taxableAmount) +
+                Number(invoiceForPdf.gstAmount ?? 0) -
+                Number(invoiceForPdf.tdsAmount ?? 0);
+            return Math.max(0, netPayable - Number(invoiceForPdf.paidTotal ?? 0));
+          })(),
           paymentHoldReason: bp?.paymentHoldReason ?? null,
           invoiceTaxableAmount: invoiceForPdf ? Number(invoiceForPdf.taxableAmount) : 0,
           invoiceGstAmount: invoiceForPdf ? Number(invoiceForPdf.gstAmount) : 0,

@@ -82,7 +82,7 @@ export class BookPaymentService {
           gstPercentage,
           paymentTotalAmount,
           paymentHoldAmount: 0,
-          paymentHoldReason: null,
+          paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
           approvalBy: createdBy,
@@ -245,6 +245,8 @@ export class BookPaymentService {
           { id },
           {
             paymentTotalAmount: newTransferAmount,
+            paymentHoldReason:
+              dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason,
             bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
             remarks: dto.remarks !== undefined ? dto.remarks : bp.remarks,
             updatedBy,
@@ -255,6 +257,8 @@ export class BookPaymentService {
         await this.bookPaymentRepository.update(
           { id },
           {
+            paymentHoldReason:
+              dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason,
             bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
             remarks: dto.remarks !== undefined ? dto.remarks : bp.remarks,
             updatedBy,
