@@ -17,13 +17,7 @@ export class DocumentStatusService {
   // ─────────────────────────────────────────────────────────────────────────
 
   async getSummary(query: GetDocumentStatusDto) {
-    const {
-      siteId,
-      companyId,
-      partyType,
-      page     = 1,
-      pageSize = 10,
-    } = query;
+    const { siteId, companyId, partyType, page = 1, pageSize = 10 } = query;
 
     const params: any[] = [siteId];
     let paramIdx = 2;
@@ -36,10 +30,10 @@ export class DocumentStatusService {
       paramIdx++;
     }
 
-    const limit  = pageSize;
+    const limit = pageSize;
     const offset = (page - 1) * pageSize;
     params.push(limit, offset);
-    const limitParam  = paramIdx++;
+    const limitParam = paramIdx++;
     const offsetParam = paramIdx++;
 
     /*
@@ -138,14 +132,15 @@ export class DocumentStatusService {
       ),
 
       -- ── Bank Transfers SALE — applicable = approved invoices ─────────────
+      -- Net payable = taxableAmount − tdsAmount (TDS now at invoice level)
       sale_bt_agg AS (
         SELECT
           si."siteId",
-          COUNT(si.id)                                                                    AS applicable,
-          COUNT(si.id) FILTER (WHERE COALESCE(si."paidTotal",0) >= si."taxableAmount")   AS done,
+          COUNT(si.id)                                                                                                              AS applicable,
+          COUNT(si.id) FILTER (WHERE COALESCE(si."paidTotal",0) >= si."taxableAmount" - COALESCE(si."tdsAmount",0))               AS done,
           COUNT(si.id) FILTER (WHERE COALESCE(si."paidTotal",0) > 0
-                                 AND si."paidTotal" < si."taxableAmount")                AS partial,
-          COUNT(si.id) FILTER (WHERE COALESCE(si."paidTotal",0) = 0)                    AS not_started
+                                 AND si."paidTotal" < si."taxableAmount" - COALESCE(si."tdsAmount",0))                            AS partial,
+          COUNT(si.id) FILTER (WHERE COALESCE(si."paidTotal",0) = 0)                                                              AS not_started
         FROM site_invoices si
         WHERE si."siteId"         = ANY($1)
           AND si."deletedAt"      IS NULL
@@ -255,7 +250,7 @@ export class DocumentStatusService {
     const totalRecords = rows.length > 0 ? Number(rows[0].totalRecords) : 0;
 
     const records = rows.map((r) => {
-      const showSale     = !partyType || partyType === DocumentStatusPartyType.SALE;
+      const showSale = !partyType || partyType === DocumentStatusPartyType.SALE;
       const showPurchase = !partyType || partyType === DocumentStatusPartyType.PURCHASE;
 
       // Compute issueCount from all problem indicators
@@ -263,97 +258,101 @@ export class DocumentStatusService {
 
       if (showSale) {
         issueCount +=
-          Number(r.sale_jmc_pending)      +
-          Number(r.sale_jmc_rejected)     +
-          Number(r.sale_invoice_missing)  +
-          Number(r.sale_invoice_pending)  +
+          Number(r.sale_jmc_pending) +
+          Number(r.sale_jmc_rejected) +
+          Number(r.sale_invoice_missing) +
+          Number(r.sale_invoice_pending) +
           Number(r.sale_invoice_rejected) +
-          Number(r.sale_bt_not_started)   +
+          Number(r.sale_bt_not_started) +
           Number(r.sale_bt_partial);
       }
 
       if (showPurchase) {
         issueCount +=
-          Number(r.purchase_jmc_pending)      +
-          Number(r.purchase_jmc_rejected)     +
-          Number(r.purchase_report_missing)   +
-          Number(r.purchase_invoice_missing)  +
-          Number(r.purchase_invoice_pending)  +
+          Number(r.purchase_jmc_pending) +
+          Number(r.purchase_jmc_rejected) +
+          Number(r.purchase_report_missing) +
+          Number(r.purchase_invoice_missing) +
+          Number(r.purchase_invoice_pending) +
           Number(r.purchase_invoice_rejected) +
-          Number(r.purchase_bp_not_started)   +
+          Number(r.purchase_bp_not_started) +
           Number(r.purchase_bt_not_started);
       }
 
       return {
-        siteId:      r.siteId,
-        siteName:    r.siteName,
-        companyId:   r.companyId,
+        siteId: r.siteId,
+        siteName: r.siteName,
+        companyId: r.companyId,
         companyName: r.companyName,
 
-        sale: showSale ? {
-          po: {
-            total:    Number(r.sale_po_total),
-            approved: Number(r.sale_po_approved),
-            pending:  Number(r.sale_po_pending),
-            rejected: Number(r.sale_po_rejected),
-          },
-          jmc: {
-            total:    Number(r.sale_jmc_total),
-            approved: Number(r.sale_jmc_approved),
-            pending:  Number(r.sale_jmc_pending),
-            rejected: Number(r.sale_jmc_rejected),
-          },
-          invoice: {
-            created:  Number(r.sale_invoice_created),
-            approved: Number(r.sale_invoice_approved),
-            pending:  Number(r.sale_invoice_pending),
-            rejected: Number(r.sale_invoice_rejected),
-            missing:  Number(r.sale_invoice_missing),
-          },
-          bankTransfer: {
-            applicable: Number(r.sale_bt_applicable),
-            done:       Number(r.sale_bt_done),
-            partial:    Number(r.sale_bt_partial),
-            notStarted: Number(r.sale_bt_not_started),
-          },
-        } : null,
+        sale: showSale
+          ? {
+              po: {
+                total: Number(r.sale_po_total),
+                approved: Number(r.sale_po_approved),
+                pending: Number(r.sale_po_pending),
+                rejected: Number(r.sale_po_rejected),
+              },
+              jmc: {
+                total: Number(r.sale_jmc_total),
+                approved: Number(r.sale_jmc_approved),
+                pending: Number(r.sale_jmc_pending),
+                rejected: Number(r.sale_jmc_rejected),
+              },
+              invoice: {
+                created: Number(r.sale_invoice_created),
+                approved: Number(r.sale_invoice_approved),
+                pending: Number(r.sale_invoice_pending),
+                rejected: Number(r.sale_invoice_rejected),
+                missing: Number(r.sale_invoice_missing),
+              },
+              bankTransfer: {
+                applicable: Number(r.sale_bt_applicable),
+                done: Number(r.sale_bt_done),
+                partial: Number(r.sale_bt_partial),
+                notStarted: Number(r.sale_bt_not_started),
+              },
+            }
+          : null,
 
-        purchase: showPurchase ? {
-          po: {
-            total:    Number(r.purchase_po_total),
-            approved: Number(r.purchase_po_approved),
-            pending:  Number(r.purchase_po_pending),
-            rejected: Number(r.purchase_po_rejected),
-          },
-          jmc: {
-            total:    Number(r.purchase_jmc_total),
-            approved: Number(r.purchase_jmc_approved),
-            pending:  Number(r.purchase_jmc_pending),
-            rejected: Number(r.purchase_jmc_rejected),
-          },
-          report: {
-            total:    Number(r.purchase_report_total),
-            uploaded: Number(r.purchase_report_uploaded),
-            missing:  Number(r.purchase_report_missing),
-          },
-          invoice: {
-            created:  Number(r.purchase_invoice_created),
-            approved: Number(r.purchase_invoice_approved),
-            pending:  Number(r.purchase_invoice_pending),
-            rejected: Number(r.purchase_invoice_rejected),
-            missing:  Number(r.purchase_invoice_missing),
-          },
-          bookPayment: {
-            applicable: Number(r.purchase_bp_applicable),
-            done:       Number(r.purchase_bp_done),
-            notStarted: Number(r.purchase_bp_not_started),
-          },
-          bankTransfer: {
-            applicable: Number(r.purchase_bt_applicable),
-            done:       Number(r.purchase_bt_done),
-            notStarted: Number(r.purchase_bt_not_started),
-          },
-        } : null,
+        purchase: showPurchase
+          ? {
+              po: {
+                total: Number(r.purchase_po_total),
+                approved: Number(r.purchase_po_approved),
+                pending: Number(r.purchase_po_pending),
+                rejected: Number(r.purchase_po_rejected),
+              },
+              jmc: {
+                total: Number(r.purchase_jmc_total),
+                approved: Number(r.purchase_jmc_approved),
+                pending: Number(r.purchase_jmc_pending),
+                rejected: Number(r.purchase_jmc_rejected),
+              },
+              report: {
+                total: Number(r.purchase_report_total),
+                uploaded: Number(r.purchase_report_uploaded),
+                missing: Number(r.purchase_report_missing),
+              },
+              invoice: {
+                created: Number(r.purchase_invoice_created),
+                approved: Number(r.purchase_invoice_approved),
+                pending: Number(r.purchase_invoice_pending),
+                rejected: Number(r.purchase_invoice_rejected),
+                missing: Number(r.purchase_invoice_missing),
+              },
+              bookPayment: {
+                applicable: Number(r.purchase_bp_applicable),
+                done: Number(r.purchase_bp_done),
+                notStarted: Number(r.purchase_bp_not_started),
+              },
+              bankTransfer: {
+                applicable: Number(r.purchase_bt_applicable),
+                done: Number(r.purchase_bt_done),
+                notStarted: Number(r.purchase_bt_not_started),
+              },
+            }
+          : null,
 
         issueCount,
         hasIssues: issueCount > 0,
@@ -376,10 +375,10 @@ export class DocumentStatusService {
       includeComplete = false,
       dateFrom,
       dateTo,
-      sortField  = 'jmcDate',
-      sortOrder  = SortOrder.DESC,
-      page       = 1,
-      pageSize   = 20,
+      sortField = 'jmcDate',
+      sortOrder = SortOrder.DESC,
+      page = 1,
+      pageSize = 20,
     } = query;
 
     const params: any[] = [siteId];
@@ -413,11 +412,9 @@ export class DocumentStatusService {
       paramIdx++;
     }
 
-    const baseWhere = [
-      `j."siteId" = ANY($1)`,
-      `j."deletedAt" IS NULL`,
-      ...extraFilters,
-    ].join(' AND ');
+    const baseWhere = [`j."siteId" = ANY($1)`, `j."deletedAt" IS NULL`, ...extraFilters].join(
+      ' AND ',
+    );
 
     // overallStatus filter (applied on the CTE alias, not base table)
     const statusFilters: string[] = [];
@@ -429,24 +426,22 @@ export class DocumentStatusService {
       statusFilters.push(`chain."overallStatus" = ANY($${paramIdx})`);
       paramIdx++;
     }
-    const statusWhere = statusFilters.length
-      ? `WHERE ${statusFilters.join(' AND ')}`
-      : '';
+    const statusWhere = statusFilters.length ? `WHERE ${statusFilters.join(' AND ')}` : '';
 
     // Sort — whitelist field names to prevent injection
     const allowedSortFields: Record<string, string> = {
-      jmcDate:   'j."jmcDate"',
+      jmcDate: 'j."jmcDate"',
       jmcNumber: 'j."jmcNumber"',
       partyName: 'COALESCE(c.name, v.name)',
-      siteName:  's.name',
+      siteName: 's.name',
     };
-    const orderBy  = allowedSortFields[sortField] ?? 'j."jmcDate"';
+    const orderBy = allowedSortFields[sortField] ?? 'j."jmcDate"';
     const orderDir = sortOrder === SortOrder.ASC ? 'ASC' : 'DESC';
 
-    const limit  = pageSize;
+    const limit = pageSize;
     const offset = (page - 1) * pageSize;
     params.push(limit, offset);
-    const limitParam  = paramIdx++;
+    const limitParam = paramIdx++;
     const offsetParam = paramIdx++;
 
     const sql = `
@@ -474,6 +469,7 @@ export class DocumentStatusService {
           si."approvalStatus"  AS "invoiceStatus",
           si."taxableAmount"   AS "invoiceTaxableAmount",
           si."totalAmount"     AS "invoiceTotalAmount",
+          COALESCE(si."tdsAmount", 0) AS "invoiceTdsAmount",
           COALESCE(si."paidTotal", 0) AS "paidTotal",
 
           bp.id                    AS "bookPaymentId",
@@ -530,10 +526,14 @@ export class DocumentStatusService {
     // Dynamic next-action for partial bank transfer
     let nextAction: string | null = NEXT_ACTION[status];
     if (status === OverallStatus.BANK_TRANSFER_PARTIAL && r.invoiceTaxableAmount) {
-      const invoiceAmt   = Number(r.invoiceTaxableAmount);
-      const transferred  = Number(r.paidTotal);
-      const remaining    = invoiceAmt - transferred;
-      nextAction = `₹${remaining.toLocaleString('en-IN')} of ₹${invoiceAmt.toLocaleString('en-IN')} remaining to be transferred`;
+      const invoiceAmt = Number(r.invoiceTaxableAmount);
+      const invoiceTds = Number(r.invoiceTdsAmount ?? 0);
+      const netPayable = invoiceAmt - invoiceTds;
+      const transferred = Number(r.paidTotal);
+      const remaining = netPayable - transferred;
+      nextAction = `₹${remaining.toLocaleString('en-IN')} of ₹${netPayable.toLocaleString(
+        'en-IN',
+      )} remaining to be transferred`;
     }
 
     // ── Chain: Report ──────────────────────────────────────────────────────
@@ -541,7 +541,7 @@ export class DocumentStatusService {
     if (isPurchase) {
       reportChain = r.reportId
         ? { id: r.reportId, status: 'UPLOADED' }
-        : { id: null,       status: 'MISSING'  };
+        : { id: null, status: 'MISSING' };
     } else {
       reportChain = { id: null, status: 'N/A' };
     }
@@ -551,18 +551,16 @@ export class DocumentStatusService {
     if (!r.invoiceId) {
       // Determine blocked reason
       const blockedReason =
-        isPurchase && !r.reportId
-          ? 'Report must be uploaded before invoice can be created'
-          : null;
+        isPurchase && !r.reportId ? 'Report must be uploaded before invoice can be created' : null;
       invoiceChain = {
-        id:     null,
+        id: null,
         status: blockedReason ? 'BLOCKED' : 'MISSING',
         reason: blockedReason,
         amount: null,
       };
     } else {
       invoiceChain = {
-        id:     r.invoiceId,
+        id: r.invoiceId,
         status: r.invoiceStatus,
         reason: null,
         amount: r.invoiceTotalAmount ? Number(r.invoiceTotalAmount) : null,
@@ -577,8 +575,8 @@ export class DocumentStatusService {
       bookPaymentChain = { id: null, status: 'NOT_STARTED', paymentAmount: null };
     } else {
       bookPaymentChain = {
-        id:            r.bookPaymentId,
-        status:        'DONE',
+        id: r.bookPaymentId,
+        status: 'DONE',
         paymentAmount: r.paymentTotalAmount ? Number(r.paymentTotalAmount) : null,
       };
     }
@@ -587,65 +585,63 @@ export class DocumentStatusService {
     let bankTransferChain: any;
     if (!r.invoiceId || r.invoiceStatus !== 'APPROVED') {
       bankTransferChain = {
-        status:            'N/A',
+        status: 'N/A',
         transferredAmount: null,
-        invoiceAmount:     null,
-        percentage:        null,
+        invoiceAmount: null,
+        percentage: null,
       };
     } else if (isPurchase) {
       // PURCHASE: 1:1 with book payment, check hasTransfer flag
       const done = r.hasTransfer === true;
       bankTransferChain = {
-        status:            done ? 'DONE' : (r.bookPaymentId ? 'NOT_STARTED' : 'N/A'),
+        status: done ? 'DONE' : r.bookPaymentId ? 'NOT_STARTED' : 'N/A',
         transferredAmount: done && r.paymentTotalAmount ? Number(r.paymentTotalAmount) : null,
-        invoiceAmount:     r.invoiceTaxableAmount ? Number(r.invoiceTaxableAmount) : null,
-        percentage:        done ? 100 : 0,
+        invoiceAmount: r.invoiceTaxableAmount ? Number(r.invoiceTaxableAmount) : null,
+        percentage: done ? 100 : 0,
       };
     } else {
       // SALE: multiple partial transfers — use paidTotal vs taxableAmount
-      const paidTotal   = Number(r.paidTotal);
-      const taxable     = Number(r.invoiceTaxableAmount);
-      const percentage  = taxable > 0 ? Math.round((paidTotal / taxable) * 100) : 0;
-      const btStatus    = paidTotal >= taxable ? 'DONE'
-                        : paidTotal > 0        ? 'PARTIAL'
-                        :                        'NOT_STARTED';
+      const paidTotal = Number(r.paidTotal);
+      const taxable = Number(r.invoiceTaxableAmount);
+      const percentage = taxable > 0 ? Math.round((paidTotal / taxable) * 100) : 0;
+      const btStatus = paidTotal >= taxable ? 'DONE' : paidTotal > 0 ? 'PARTIAL' : 'NOT_STARTED';
       bankTransferChain = {
-        status:            btStatus,
+        status: btStatus,
         transferredAmount: paidTotal,
-        invoiceAmount:     taxable,
+        invoiceAmount: taxable,
         percentage,
       };
     }
 
     return {
-      siteId:      r.siteId,
-      siteName:    r.siteName,
+      siteId: r.siteId,
+      siteName: r.siteName,
       companyName: r.companyName,
 
-      jmcId:      r.jmcId,
-      jmcNumber:  r.jmcNumber,
-      jmcDate:    r.jmcDate,
-      partyType:  r.partyType,
-      partyName:  r.partyName ?? null,
-      poId:       r.poId,
-      poNumber:   r.poNumber,
+      jmcId: r.jmcId,
+      jmcNumber: r.jmcNumber,
+      jmcDate: r.jmcDate,
+      partyType: r.partyType,
+      partyName: r.partyName ?? null,
+      poId: r.poId,
+      poNumber: r.poNumber,
 
       overallStatus: status,
       nextAction,
 
       chain: {
         po: {
-          id:     r.poId,
+          id: r.poId,
           number: r.poNumber,
           status: r.poStatus,
         },
         jmc: {
-          id:     r.jmcId,
+          id: r.jmcId,
           number: r.jmcNumber,
           status: r.jmcStatus,
         },
-        report:      reportChain,
-        invoice:     invoiceChain,
+        report: reportChain,
+        invoice: invoiceChain,
         bookPayment: bookPaymentChain,
         bankTransfer: bankTransferChain,
       },

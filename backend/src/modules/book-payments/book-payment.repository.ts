@@ -110,17 +110,14 @@ export class BookPaymentRepository {
   }
 
   /**
-   * Effective booked amount for a given invoice (PURCHASE side).
-   * Counts paymentTotalAmount + tdsDeductionAmount because TDS is deducted at
-   * source but still settles the invoice obligation (= taxableAmount per booking).
+   * Sum of paymentTotalAmount for a given invoice (PURCHASE side).
+   * TDS is now at invoice level — paymentTotalAmount = taxableAmount - pro-rata TDS.
+   * Ceiling check: Σ(paymentTotalAmount) ≤ invoice.taxableAmount − invoice.tdsAmount.
    */
   async sumByInvoice(invoiceId: string, em?: EntityManager): Promise<number> {
     const result = await this.repo(em)
       .createQueryBuilder('bp')
-      .select(
-        'COALESCE(SUM(bp."paymentTotalAmount" + COALESCE(bp."tdsDeductionAmount", 0)), 0)',
-        'total',
-      )
+      .select('COALESCE(SUM(bp."paymentTotalAmount"), 0)', 'total')
       .where('bp."invoiceId" = :invoiceId', { invoiceId })
       .andWhere('bp."deletedAt" IS NULL')
       .getRawOne();

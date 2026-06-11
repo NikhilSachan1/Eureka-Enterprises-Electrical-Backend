@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions, Not, DataSource, In } from 'typeorm';
+import { IsNull, ILike, FindOneOptions, Not, DataSource, In, Raw } from 'typeorm';
 import { SiteRepository } from './site.repository';
 import { SiteEntity } from './entities/site.entity';
 import {
@@ -149,6 +149,7 @@ export class SiteService {
       city,
       state,
       isActive,
+      siteTypes,
       includeContractors,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
@@ -190,6 +191,13 @@ export class SiteService {
 
     if (isActive !== undefined) {
       where.isActive = isActive;
+    }
+
+    if (siteTypes && siteTypes.length > 0) {
+      // Use @> (contains) per value joined with OR — avoids ?| which conflicts with TypeORM param binding
+      where.siteTypes = Raw((alias) =>
+        siteTypes.map((t) => `${alias} @> '["${t.replace(/"/g, '\\"')}"]'::jsonb`).join(' OR '),
+      );
     }
 
     // For EMPLOYEE role — restrict to sites they were ever allocated to
@@ -902,6 +910,7 @@ export class SiteService {
         state: site.state,
         pincode: site.pincode,
         estimatedBudget: site.estimatedBudget ? Number(site.estimatedBudget) : null,
+        siteTypes: site.siteTypes ?? [],
         isActive: site.isActive,
         company: site.company ? { id: site.company.id, name: site.company.name } : null,
       },
@@ -926,6 +935,7 @@ export class SiteService {
       companyId,
       contractorId,
       vendorId,
+      siteTypes,
       employeeName,
       sortField = 'createdAt',
       sortOrder = 'DESC',
@@ -950,6 +960,11 @@ export class SiteService {
     if (companyId && companyId.length > 0) {
       params.push(companyId);
       conditions.push(`s."companyId" = ANY($${params.length})`);
+    }
+
+    if (siteTypes && siteTypes.length > 0) {
+      params.push(siteTypes);
+      conditions.push(`s."siteTypes" ?| $${params.length}::text[]`);
     }
 
     // Extra JOINs (INNER) — only applied when the corresponding filter is active
@@ -1033,7 +1048,7 @@ export class SiteService {
         `SELECT
            s.id, s.name, s.status, s."startDate", s."endDate", s.city, s.state,
            s.pincode, s."fullAddress", s."managerName", s."managerContact",
-           s."workTypes", s."isActive", s."estimatedBudget", s."createdAt", s."updatedAt",
+           s."workTypes", s."isActive", s."estimatedBudget", s."siteTypes", s."createdAt", s."updatedAt",
            comp.id AS "companyId", comp.name AS "companyName",
            comp."fullAddress" AS "companyFullAddress", comp.logo AS "companyLogo"
          FROM sites s

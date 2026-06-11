@@ -4,7 +4,7 @@ import { Module, Scope } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
-import { ScheduleModule } from '@nestjs/schedule';
+// import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HttpErrorFilter } from 'src/utils/custom-error-filter/error.filter';
@@ -24,7 +24,7 @@ import { PermissionsModule } from 'src/modules/permissions/permission.module';
 import { RolePermissionsModule } from 'src/modules/role-permissions/role-permission.module';
 import { UserPermissionsModule } from 'src/modules/user-permissions/user-permission.module';
 import { AttendanceModule } from 'src/modules/attendance/attendance.module';
-import { SchedulerModule } from 'src/modules/scheduler/scheduler.module';
+// import { SchedulerModule } from 'src/modules/scheduler/scheduler.module';
 import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.module';
 import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
 import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';
@@ -122,8 +122,8 @@ import { DocumentStatusModule } from 'src/modules/document-status/document-statu
     SalaryStructureModule,
     BonusModule,
     PayrollModule,
-    ScheduleModule.forRoot(),
-    SchedulerModule,
+    // ScheduleModule.forRoot(),
+    // SchedulerModule,
     DateTimeModule,
     CronLogModule,
     CronTriggerModule,

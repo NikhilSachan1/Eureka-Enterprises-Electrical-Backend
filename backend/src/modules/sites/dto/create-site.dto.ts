@@ -180,6 +180,16 @@ export class CreateSiteDto {
   @IsOptional()
   workTypes?: string[];
 
+  @ApiPropertyOptional({
+    description: 'Types of site (e.g. Civil, Electrical, Mechanical — multiple allowed)',
+    example: ['Civil', 'Electrical'],
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  siteTypes?: string[];
+
   @ApiPropertyOptional({ description: 'Additional notes' })
   @IsString()
   @IsOptional()

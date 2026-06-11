@@ -78,6 +78,14 @@ export class CreateSiteInvoiceDto {
   @MaxLength(255)
   fileName: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Set true to withhold GST pending vendor compliance — GST register entry stays pending until verified',
+    default: false,
+  })
+  @IsOptional()
+  isGstHold?: boolean = false;
+
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()

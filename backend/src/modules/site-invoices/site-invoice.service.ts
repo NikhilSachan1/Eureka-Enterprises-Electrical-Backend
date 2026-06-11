@@ -26,6 +26,8 @@ import { INVOICE_ERRORS, INVOICE_RESPONSES } from './constants/site-invoice.cons
 import {
   insertGstRegisterEntryQuery,
   deleteGstRegisterEntryForInvoiceQuery,
+  insertTdsRegisterEntryFromInvoiceQuery,
+  deleteTdsRegisterEntryForInvoiceQuery,
 } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
@@ -92,6 +94,7 @@ export class SiteInvoiceService {
       tdsAmount: dto.tdsAmount ?? 0,
       tdsPercentage: dto.tdsPercentage ?? null,
       totalAmount: dto.totalAmount,
+      isGstHold: dto.isGstHold ?? false,
       fileKey: dto.fileKey,
       fileName: dto.fileName,
       remarks: dto.remarks,
@@ -175,27 +178,26 @@ export class SiteInvoiceService {
         let disabledReason: string | null;
 
         if (inv.partyType === PartyType.PURCHASE) {
-          // PURCHASE side: book payment ceiling is against taxable amount (GST settled separately).
-          // bookedTotal = Σ (paymentTotalAmount + tdsDeductionAmount) = Σ taxableAmount per booking.
           const bookedTotal = Number(inv.bookedTotal) || 0;
-          const taxableAmount = Number(inv.taxableAmount) || 0;
-          isDisabled = bookedTotal >= taxableAmount;
+          const netPayable = inv.isGstHold
+            ? Number(inv.taxableAmount) - Number(inv.tdsAmount ?? 0)
+            : Number(inv.taxableAmount) + Number(inv.gstAmount ?? 0) - Number(inv.tdsAmount ?? 0);
+          isDisabled = bookedTotal >= netPayable;
           disabledReason = isDisabled
             ? `Book payment ceiling fully used (₹${bookedTotal.toLocaleString(
                 'en-IN',
-              )} of ₹${taxableAmount.toLocaleString('en-IN')})`
+              )} of ₹${netPayable.toLocaleString('en-IN')})`
             : null;
         } else {
-          // SALE side: ceiling for bank transfers is against taxable amount (GST settled separately).
-          // paidTotal = Σ (transferAmount + tdsDeducted) — TDS counts as settled even though
-          // it is remitted to the govt rather than received in hand.
           const paidTotal = Number(inv.paidTotal) || 0;
-          const taxableAmount = Number(inv.taxableAmount) || 0;
-          isDisabled = paidTotal >= taxableAmount;
+          const netPayable = inv.isGstHold
+            ? Number(inv.taxableAmount) - Number(inv.tdsAmount ?? 0)
+            : Number(inv.taxableAmount) + Number(inv.gstAmount ?? 0) - Number(inv.tdsAmount ?? 0);
+          isDisabled = paidTotal >= netPayable;
           disabledReason = isDisabled
             ? `Bank transfer ceiling fully used (₹${paidTotal.toLocaleString(
                 'en-IN',
-              )} of ₹${taxableAmount.toLocaleString('en-IN')})`
+              )} of ₹${netPayable.toLocaleString('en-IN')})`
             : null;
         }
 
@@ -339,11 +341,9 @@ export class SiteInvoiceService {
         em,
       );
 
-      // Project GST + TDS register entries (Plan §5.1.13 + §5.1.15).
-      // These are created atomically with the approval so they always exist
-      // exactly when (and only when) the invoice is approved.
+      // Project GST + TDS register entries atomically with approval.
       await this.projectGstRegisterEntry(inv, em);
-      // TDS is now projected from book payments, not invoice approval
+      await this.projectTdsRegisterEntry(inv, em);
 
       return { message: INVOICE_RESPONSES.APPROVED };
     });
@@ -368,6 +368,8 @@ export class SiteInvoiceService {
     const financialYear = getFinancialYear(invoiceDate);
     const gstType = inv.partyType === PartyType.PURCHASE ? GstType.GST_3B : GstType.GST_1;
 
+    // isGstHold=true → entry stays pending (isVerified=false); false → auto-verified on approval
+    const isVerified = !inv.isGstHold;
     await em.query(insertGstRegisterEntryQuery, [
       inv.id,
       inv.siteId,
@@ -379,6 +381,36 @@ export class SiteInvoiceService {
       gstType,
       Number(inv.taxableAmount),
       Number(inv.gstAmount),
+      isVerified,
+    ]);
+  }
+
+  private async projectTdsRegisterEntry(
+    inv: SiteInvoiceEntity,
+    em: import('typeorm').EntityManager,
+  ) {
+    if (Number(inv.tdsAmount ?? 0) === 0) return;
+
+    // Delete any existing unverified/unpaid invoice-level TDS entry first.
+    // Re-approval after an edit picks up the updated taxable/tds amounts.
+    await em.query(deleteTdsRegisterEntryForInvoiceQuery, [inv.id]);
+
+    const invoiceDate = new Date(inv.invoiceDate);
+    const invoiceMonth = `${invoiceDate.getUTCFullYear()}-${String(
+      invoiceDate.getUTCMonth() + 1,
+    ).padStart(2, '0')}`;
+    const financialYear = getFinancialYear(invoiceDate);
+
+    await em.query(insertTdsRegisterEntryFromInvoiceQuery, [
+      inv.id,
+      inv.siteId,
+      inv.partyType,
+      inv.contractorId ?? null,
+      inv.vendorId ?? null,
+      invoiceMonth,
+      financialYear,
+      Number(inv.taxableAmount),
+      Number(inv.tdsAmount),
     ]);
   }
 
@@ -472,10 +504,31 @@ export class SiteInvoiceService {
           throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_UNLOCK_GST_PAID);
         }
 
+        // Block unlock if TDS payment has already been released against this invoice's TDS entry.
+        const tdsPaid = await em.query(
+          `SELECT 1 FROM tds_register_entries
+           WHERE "invoiceId" = $1
+             AND "bookPaymentId" IS NULL
+             AND "bankTransferId" IS NULL
+             AND "tdsPaymentId" IS NOT NULL
+           LIMIT 1`,
+          [id],
+        );
+        if (tdsPaid.length > 0) {
+          throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_UNLOCK_TDS_PAID);
+        }
+
         // Wipe ALL GST entries for this invoice (verified or not — paid ones
         // are blocked above). On re-approval, projectGstRegisterEntry creates a
         // fresh row that reflects the post-edit amounts / invoice date.
         await em.query(`DELETE FROM gst_register_entries WHERE "invoiceId" = $1`, [id]);
+
+        // Wipe invoice-level TDS entries. On re-approval, projectTdsRegisterEntry re-creates.
+        await em.query(
+          `DELETE FROM tds_register_entries
+           WHERE "invoiceId" = $1 AND "bookPaymentId" IS NULL AND "bankTransferId" IS NULL`,
+          [id],
+        );
       }
 
       await em.getRepository(SiteInvoiceEntity).update(
@@ -570,9 +623,9 @@ export class SiteInvoiceService {
   /**
    * Dropdown endpoint — returns Invoices for a site with eligibility flags.
    *
-   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < taxableAmount.
+   * forDocument = "book-payment"                   → PURCHASE invoices. Eligible: APPROVED + bookedTotal < ceiling (isGstHold=true: taxable−tds; isGstHold=false: taxable+gst−tds).
    * forDocument = "bank-transfer" + PURCHASE        → PURCHASE invoices booked but not yet paid. Eligible: APPROVED + bookedTotal > 0 + paidTotal < bookedTotal.
-   * forDocument = "bank-transfer" + SALE (default)  → SALE invoices. Eligible: APPROVED + paidTotal < taxableAmount.
+   * forDocument = "bank-transfer" + SALE (default)  → SALE invoices. Eligible: APPROVED + paidTotal < taxableAmount − tdsAmount.
    */
   async getDropdown(
     siteId: string,
@@ -591,30 +644,33 @@ export class SiteInvoiceService {
         i."invoiceDate",
         i."partyType",
         i."taxableAmount",
+        i."gstAmount",
+        i."tdsAmount",
         i."totalAmount",
         i."bookedTotal",
         i."paidTotal",
+        i."isGstHold",
         i."approvalStatus",
         COALESCE(c.name, v.name) AS "partyName",
         CASE
-          WHEN i."approvalStatus" != 'APPROVED'                                                    THEN false
-          WHEN $3 = 'book-payment'                       AND i."bookedTotal" >= i."taxableAmount"  THEN false
-          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                  THEN false
-          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"   THEN false
-          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal"   >= i."taxableAmount" THEN false
+          WHEN i."approvalStatus" != 'APPROVED'                                                                                           THEN false
+          WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                                                         THEN false
+          WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"                                          THEN false
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
           ELSE true
         END AS eligible,
         CASE
           WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
-          WHEN $3 = 'book-payment' AND i."bookedTotal" >= i."taxableAmount"
-            THEN 'Invoice fully booked — no remaining taxable amount'
+          WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END
+            THEN 'Invoice fully booked — no remaining net payable amount'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."bookedTotal" = 0
             THEN 'Invoice not yet booked — do a Book Payment first'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."paidTotal" >= i."bookedTotal"
             THEN 'Invoice fully paid — booked amount exhausted'
-          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= i."taxableAmount"
-            THEN 'Invoice fully paid (taxable amount exhausted)'
+          WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END
+            THEN 'Invoice fully paid — net payable amount exhausted'
           ELSE NULL
         END AS reason
       FROM site_invoices i
@@ -639,14 +695,23 @@ export class SiteInvoiceService {
           partyType: r.partyType,
           partyName: r.partyName,
           taxableAmount: Number(r.taxableAmount),
+          gstAmount: Number(r.gstAmount ?? 0),
+          tdsAmount: Number(r.tdsAmount ?? 0),
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
+          isGstHold: r.isGstHold ?? false,
           remaining: isPurchaseBankTransfer
             ? Number(r.bookedTotal) - Number(r.paidTotal)
             : forDocument === 'book-payment'
-            ? Number(r.taxableAmount) - Number(r.bookedTotal)
-            : Number(r.taxableAmount) - Number(r.paidTotal),
+            ? (r.isGstHold
+                ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
+                : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+              Number(r.bookedTotal)
+            : (r.isGstHold
+                ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
+                : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+              Number(r.paidTotal),
           approvalStatus: r.approvalStatus,
         },
       })),

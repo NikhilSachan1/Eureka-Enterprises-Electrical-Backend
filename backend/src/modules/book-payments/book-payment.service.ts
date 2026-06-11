@@ -7,11 +7,6 @@ import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-pa
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
-import { getFinancialYear } from 'src/modules/common/financials/financial.constants';
-import {
-  insertTdsRegisterEntryFromBookPaymentQuery,
-  deleteTdsRegisterEntryForBookPaymentQuery,
-} from 'src/modules/site-invoices/queries/site-invoice.queries';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -28,7 +23,7 @@ export class BookPaymentService {
 
   /**
    * Create a book payment — runs in a transaction with the invoice locked
-   * to enforce the ceiling check (Σ booked ≤ invoice total).
+   * to enforce the ceiling check (Σ booked ≤ invoice net payable).
    */
   async create(dto: CreateBookPaymentDto, createdBy: string) {
     return await this.dataSource.transaction(async (em) => {
@@ -50,22 +45,28 @@ export class BookPaymentService {
       }
 
       const gstAmount = dto.gstAmount ?? 0;
-      const tdsAmount = dto.tdsDeductionAmount ?? 0;
-      // paymentTotalAmount = taxable - tds (vendor receives this; GST settled separately)
-      const paymentTotalAmount = this.computePaymentTotal(dto.taxableAmount, tdsAmount);
 
-      if (paymentTotalAmount < 0) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
+      // TDS is captured at invoice level — paymentTotalAmount is the exact cash amount to the vendor.
+      const paymentTotalAmount = dto.taxableAmount;
+
+      // Ceiling: isGstHold=true → taxable−tds; isGstHold=false → taxable+gst−tds
+      const invoiceNetPayable = invoice.isGstHold
+        ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
+        : Number(invoice.taxableAmount) +
+          Number(invoice.gstAmount ?? 0) -
+          Number(invoice.tdsAmount ?? 0);
+      const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
+      if (existingBooked + paymentTotalAmount > invoiceNetPayable) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
-      // Effective booked amount = paymentTotalAmount + tdsDeductionAmount = taxableAmount.
-      // TDS is deducted at source before paying the vendor but still discharges the invoice obligation.
-      const effectiveAmount = paymentTotalAmount + tdsAmount;
-
-      // Ceiling check: Σ (paymentTotalAmount + tdsDeductionAmount) ≤ invoice taxable amount
-      const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      if (existingBooked + effectiveAmount > Number(invoice.taxableAmount)) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
+      // Payment hold validation
+      const paymentHoldAmount = Number(dto.paymentHoldAmount ?? 0);
+      if (paymentHoldAmount > 0 && !dto.paymentHoldReason) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
+      }
+      if (paymentHoldAmount >= paymentTotalAmount) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
       }
 
       // Create book payment (auto-approved)
@@ -79,9 +80,8 @@ export class BookPaymentService {
           taxableAmount: dto.taxableAmount,
           gstAmount,
           gstPercentage: dto.gstPercentage ?? null,
-          tdsDeductionAmount: tdsAmount,
-          tdsPercentage: dto.tdsPercentage ?? null,
           paymentTotalAmount,
+          paymentHoldAmount,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
@@ -93,37 +93,16 @@ export class BookPaymentService {
         em,
       );
 
-      // Update invoice bookedTotal + PO bookedTotal using effective amount (payment + TDS)
+      // Update invoice bookedTotal + PO bookedTotal
       await em
         .getRepository(SiteInvoiceEntity)
-        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${effectiveAmount}` });
+        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${paymentTotalAmount}` });
 
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
-        { bookedTotal: effectiveAmount },
+        { bookedTotal: paymentTotalAmount },
         em,
       );
-
-      // Project TDS register entry if TDS was deducted
-      if (tdsAmount > 0) {
-        const bookingDate = new Date(dto.bookingDate);
-        const invoiceMonth = `${bookingDate.getUTCFullYear()}-${String(
-          bookingDate.getUTCMonth() + 1,
-        ).padStart(2, '0')}`;
-        const financialYear = getFinancialYear(bookingDate);
-        await em.query(insertTdsRegisterEntryFromBookPaymentQuery, [
-          invoice.id,
-          created.id,
-          invoice.siteId,
-          invoice.partyType,
-          invoice.contractorId ?? null,
-          invoice.vendorId ?? null,
-          invoiceMonth,
-          financialYear,
-          Number(dto.taxableAmount),
-          tdsAmount,
-        ]);
-      }
 
       return { message: BOOK_PAYMENT_RESPONSES.CREATED, id: created.id };
     });
@@ -229,39 +208,7 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
       }
 
-      // Block edits if TDS payment has been released — the register row is immutable.
-      const tdsRelevantForBlock =
-        dto.tdsDeductionAmount !== undefined ||
-        dto.taxableAmount !== undefined ||
-        dto.bookingDate !== undefined;
-      if (tdsRelevantForBlock) {
-        const tdsPaid = await em.query(
-          `SELECT 1 FROM tds_register_entries
-           WHERE "bookPaymentId" = $1 AND "tdsPaymentId" IS NOT NULL
-           LIMIT 1`,
-          [id],
-        );
-        if (tdsPaid.length > 0) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_TDS_PAID);
-        }
-      }
-
-      // UpdateBookPaymentDto omits @Type(() => Number); absent fields stay
-      // undefined under enableImplicitConversion so ?? fallback is safe.
-      const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
-      const newTds = dto.tdsDeductionAmount ?? Number(bp.tdsDeductionAmount);
-      // GST excluded from payment total — only taxable - tds
-      const newTotal = this.computePaymentTotal(newTaxable, newTds);
-
-      if (newTotal < 0) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.AMOUNT_VALIDATION_FAILED);
-      }
-
-      // Re-check ceiling if any amount field changed.
-      const amountsChanged =
-        dto.taxableAmount !== undefined ||
-        dto.gstAmount !== undefined ||
-        dto.tdsDeductionAmount !== undefined;
+      const amountsChanged = dto.taxableAmount !== undefined || dto.gstAmount !== undefined;
 
       if (amountsChanged) {
         const invoice = await em
@@ -273,71 +220,83 @@ export class BookPaymentService {
           .getOne();
         if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
 
-        // oldEffective = what was counted at create time (paymentTotalAmount + tds)
-        const oldEffective = Number(bp.paymentTotalAmount) + Number(bp.tdsDeductionAmount ?? 0);
-        // newEffective = updated net + updated tds
-        const newEffective = newTotal + newTds;
+        const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
+        const newPaymentTotal = newTaxable;
 
-        // sumByInvoice already includes the current record's old effective,
-        // subtract it and add new effective to get the adjusted total.
+        const oldPaymentTotal = Number(bp.paymentTotalAmount);
+        const invoiceNetPayable = invoice.isGstHold
+          ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
+          : Number(invoice.taxableAmount) +
+            Number(invoice.gstAmount ?? 0) -
+            Number(invoice.tdsAmount ?? 0);
+
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
-        const adjustedBooked = existingBooked - oldEffective + newEffective;
-        if (adjustedBooked > Number(invoice.taxableAmount)) {
+        const adjustedBooked = existingBooked - oldPaymentTotal + newPaymentTotal;
+        if (adjustedBooked > invoiceNetPayable) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        const delta = newEffective - oldEffective;
+        const delta = newPaymentTotal - oldPaymentTotal;
         if (delta !== 0) {
           await em
             .getRepository(SiteInvoiceEntity)
             .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" + ${delta}` });
           await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: delta }, em);
         }
-      }
 
-      const { taxableAmount, gstAmount, tdsDeductionAmount, ...restDto } = dto;
-      await this.bookPaymentRepository.update(
-        { id },
-        {
-          ...restDto,
-          ...(taxableAmount !== undefined && { taxableAmount }),
-          ...(gstAmount !== undefined && { gstAmount }),
-          ...(tdsDeductionAmount !== undefined && { tdsDeductionAmount }),
-          ...(amountsChanged && { paymentTotalAmount: newTotal }),
-          bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
-          updatedBy,
-        } as Partial<BookPaymentEntity>,
-        em,
-      );
+        // Payment hold validations against updated amounts
+        const newPaymentHoldAmount =
+          dto.paymentHoldAmount !== undefined
+            ? Number(dto.paymentHoldAmount)
+            : Number(bp.paymentHoldAmount);
+        const newPaymentHoldReason =
+          dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
 
-      // Re-sync TDS register when tdsDeductionAmount, taxableAmount, or bookingDate changes.
-      // Strategy: delete the existing unverified/unpaid row, then re-insert with fresh values.
-      // This cleanly handles FY shifts (bookingDate change moves to a different partition)
-      // and amount edits without requiring ON CONFLICT DO UPDATE (which can't touch verified rows).
-      if (tdsRelevantForBlock) {
-        await em.query(deleteTdsRegisterEntryForBookPaymentQuery, [id]);
-
-        if (newTds > 0) {
-          const effectiveDate = dto.bookingDate
-            ? new Date(dto.bookingDate)
-            : new Date(bp.bookingDate);
-          const invoiceMonth = `${effectiveDate.getUTCFullYear()}-${String(
-            effectiveDate.getUTCMonth() + 1,
-          ).padStart(2, '0')}`;
-          const financialYear = getFinancialYear(effectiveDate);
-          await em.query(insertTdsRegisterEntryFromBookPaymentQuery, [
-            bp.invoiceId, // $1 invoiceId
-            id, // $2 bookPaymentId
-            bp.siteId, // $3 siteId
-            PartyType.PURCHASE, // $4 partyType
-            null, // $5 contractorId (PURCHASE has none)
-            bp.vendorId, // $6 vendorId
-            invoiceMonth, // $7
-            financialYear, // $8
-            newTaxable, // $9 taxableAmount
-            newTds, // $10 tdsAmount
-          ]);
+        if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
         }
+        if (newPaymentHoldAmount >= newPaymentTotal) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
+        }
+
+        const { taxableAmount, gstAmount, ...restDto } = dto;
+        await this.bookPaymentRepository.update(
+          { id },
+          {
+            ...restDto,
+            ...(taxableAmount !== undefined && { taxableAmount }),
+            ...(gstAmount !== undefined && { gstAmount }),
+            paymentTotalAmount: newPaymentTotal,
+            bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
+            updatedBy,
+          } as Partial<BookPaymentEntity>,
+          em,
+        );
+      } else {
+        // Payment hold validations for non-amount updates
+        const newPaymentHoldAmount =
+          dto.paymentHoldAmount !== undefined
+            ? Number(dto.paymentHoldAmount)
+            : Number(bp.paymentHoldAmount);
+        const newPaymentHoldReason =
+          dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
+
+        if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
+        }
+        if (newPaymentHoldAmount >= Number(bp.paymentTotalAmount)) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
+        }
+
+        await this.bookPaymentRepository.update(
+          { id },
+          {
+            ...dto,
+            bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
+            updatedBy,
+          } as Partial<BookPaymentEntity>,
+          em,
+        );
       }
 
       return { message: BOOK_PAYMENT_RESPONSES.UPDATED };
@@ -353,23 +312,8 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_HAS_TRANSFER);
       }
 
-      // Block deletion if TDS payment has been released against this book payment.
-      const tdsPaid = await em.query(
-        `SELECT 1 FROM tds_register_entries
-         WHERE "bookPaymentId" = $1 AND "tdsPaymentId" IS NOT NULL
-         LIMIT 1`,
-        [id],
-      );
-      if (tdsPaid.length > 0) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_TDS_PAID);
-      }
-
-      // Remove the projected TDS register row so summaries don't include a
-      // dangling deduction for a deleted book payment.
-      await em.query(deleteTdsRegisterEntryForBookPaymentQuery, [id]);
-
-      // Reverse the full effective amount that was added at create time (payment + TDS)
-      const effectiveAmount = Number(bp.paymentTotalAmount) + Number(bp.tdsDeductionAmount ?? 0);
+      // Reverse the booked amount that was added at create time
+      const effectiveAmount = Number(bp.paymentTotalAmount);
       await em
         .getRepository(SiteInvoiceEntity)
         .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
@@ -380,14 +324,6 @@ export class BookPaymentService {
 
       return { message: BOOK_PAYMENT_RESPONSES.DELETED };
     });
-  }
-
-  private computePaymentTotal(taxable: number, tds: number): number {
-    // paymentTotalAmount = taxableAmount - tdsDeductionAmount
-    // GST is NOT included here — it is tracked separately in the GST register
-    // and paid to the government via the GST payment flow.
-    // TDS is deducted at source from the taxable amount before paying the vendor.
-    return Number((taxable - tds).toFixed(2));
   }
 
   // ── Service methods exposed for downstream modules (proper service-to-service communication) ────────────
@@ -418,9 +354,6 @@ export class BookPaymentService {
   /**
    * Dropdown endpoint — returns Book Payments for an Invoice with eligibility
    * flags for PURCHASE Bank Transfer creation.
-   *
-   * A Book Payment is eligible when it does NOT yet have a Bank Transfer
-   * (1 BookPayment = 1 BankTransfer, BRD §11 confirmed-2).
    */
   async getDropdown(invoiceId: string) {
     const rows = await this.dataSource.query(
@@ -430,11 +363,10 @@ export class BookPaymentService {
         bp."paymentTotalAmount",
         bp."taxableAmount",
         bp."gstAmount",
-        bp."tdsDeductionAmount",
+        bp."paymentHoldAmount",
         to_char(bp."bookingDate", 'YYYY-MM-DD') AS "bookingDate",
         bp."hasTransfer",
         bp."approvalStatus",
-        -- eligibility: only one bank transfer per book payment
         CASE
           WHEN bp."hasTransfer" = true THEN false
           ELSE true
@@ -448,7 +380,7 @@ export class BookPaymentService {
       WHERE bp."invoiceId" = $1
         AND bp."deletedAt" IS NULL
       ORDER BY bp."createdAt" DESC
-      `,
+`,
       [invoiceId],
     );
 
@@ -464,7 +396,8 @@ export class BookPaymentService {
           paymentTotalAmount: Number(r.paymentTotalAmount),
           taxableAmount: Number(r.taxableAmount),
           gstAmount: Number(r.gstAmount),
-          tdsDeductionAmount: Number(r.tdsDeductionAmount),
+          paymentHoldAmount: Number(r.paymentHoldAmount ?? 0),
+          expectedTransferAmount: Number(r.paymentTotalAmount) - Number(r.paymentHoldAmount ?? 0),
           bookingDate: r.bookingDate,
           hasTransfer: r.hasTransfer,
           approvalStatus: r.approvalStatus,

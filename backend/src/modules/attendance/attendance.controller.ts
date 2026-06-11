@@ -24,7 +24,7 @@ import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { ApiBearerAuth, ApiTags, ApiResponse, ApiOperation } from '@nestjs/swagger';
 import { AttendanceUserInterceptor } from './interceptors/attendance-user.interceptor';
 import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-history-user.interceptor';
-import { AttendanceCurrentStatusInterceptor } from './interceptors/attendance-current-status.interceptor';
+// import { AttendanceCurrentStatusInterceptor } from './interceptors/attendance-current-status.interceptor';
 import { CurrentStatusQueryDto } from './dto/current-status-query.dto';
 import { RequestWithTimezone } from './attendance.types';
 @ApiTags('Attendance')
@@ -112,7 +112,7 @@ export class AttendanceController {
   }
 
   @Get('current-status')
-  @UseInterceptors(AttendanceCurrentStatusInterceptor)
+  // @UseInterceptors(AttendanceCurrentStatusInterceptor)
   @ApiOperation({
     summary: 'Get current attendance status',
     description:

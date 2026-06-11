@@ -54,15 +54,13 @@ export class BookPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   gstPercentage: number | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  tdsDeductionAmount: number;
-
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  tdsPercentage: number | null;
-
-  // The actual payment amount = taxableAmount - tdsDeductionAmount (GST excluded — tracked separately in GST register)
+  // Actual cash amount to the vendor = taxableAmount (TDS deducted at invoice level; GST excluded — tracked in GST register)
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   paymentTotalAmount: number;
+
+  // Net payment hold amount (non-GST operational reasons; transferAmount = paymentTotalAmount − paymentHoldAmount)
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  paymentHoldAmount: number;
 
   @Column({ type: 'text', nullable: true })
   paymentHoldReason: string | null;

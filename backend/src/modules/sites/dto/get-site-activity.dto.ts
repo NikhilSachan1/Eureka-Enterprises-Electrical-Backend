@@ -53,6 +53,16 @@ export class GetSiteActivityDto extends BaseGetDto {
   vendorId?: string[];
 
   @ApiPropertyOptional({
+    description: 'Filter by site type (supports multiple values)',
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  siteTypes?: string[];
+
+  @ApiPropertyOptional({
     description: 'Filter by employee name (first name, last name, or full name)',
     example: 'Rahul',
   })

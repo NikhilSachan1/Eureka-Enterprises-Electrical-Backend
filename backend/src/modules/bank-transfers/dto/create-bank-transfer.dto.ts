@@ -40,24 +40,6 @@ export class CreateBankTransferDto {
   @IsOptional()
   proofFileName?: string;
 
-  @ApiPropertyOptional({
-    description: 'TDS deducted by contractor (SALE side only) — auto-creates TDS register entry',
-    example: 200,
-  })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @IsOptional()
-  tdsDeducted?: number;
-
-  @ApiPropertyOptional({
-    description: 'TDS percentage (informational, SALE side only)',
-    example: 2,
-  })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @IsOptional()
-  tdsPercentage?: number;
-
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()
   @IsOptional()

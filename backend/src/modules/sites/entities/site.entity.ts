@@ -85,6 +85,10 @@ export class SiteEntity extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true })
   workTypes: string[];
 
+  // Site types (e.g. ['Civil', 'Electrical'] — multiple allowed)
+  @Column({ type: 'jsonb', nullable: true })
+  siteTypes: string[];
+
   // Additional notes
   @Column({ type: 'text', nullable: true })
   notes: string;

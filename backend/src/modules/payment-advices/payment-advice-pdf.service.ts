@@ -4,6 +4,7 @@ import * as http from 'http';
 import puppeteer from 'puppeteer';
 import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { PAYMENT_ADVICE_COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
+import { GST_HOLD_REMARK } from 'src/modules/book-payments/constants/book-payment.constants';
 
 export interface PaymentAdvicePdfData {
   referenceNumber: string;
@@ -34,7 +35,14 @@ export interface PaymentAdvicePdfData {
   gstAmount: number;
   tdsDeductionAmount: number;
   paymentTotalAmount: number;
+  gstHoldAmount?: number;
+  paymentHoldAmount?: number;
   paymentHoldReason: string | null;
+  // Invoice-level data for outstanding balance section
+  invoiceTaxableAmount?: number;
+  invoiceGstAmount?: number;
+  invoiceTdsAmount?: number;
+  invoicePaidTotal?: number;
   // Invoice / PO references
   invoiceNumber: string | null;
   invoiceDate: string | null;
@@ -186,7 +194,6 @@ export class PaymentAdvicePdfService {
   }
 
   private buildHtml(d: PaymentAdvicePdfData, logoBase64: string | null = null): string {
-    // Currency formatter (with ₹ symbol, 2 decimals)
     const fmt = (n: number) =>
       new Intl.NumberFormat('en-IN', {
         style: 'currency',
@@ -194,14 +201,12 @@ export class PaymentAdvicePdfService {
         minimumFractionDigits: 2,
       }).format(n);
 
-    // Number formatter (no symbol, 2 decimals — for table cells)
     const fmtN = (n: number) =>
       new Intl.NumberFormat('en-IN', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }).format(n);
 
-    // Date formatter
     const fmtDate = (v: Date | string | null | undefined) => {
       if (!v) return '-';
       return new Date(v).toLocaleDateString('en-IN', {
@@ -211,52 +216,54 @@ export class PaymentAdvicePdfService {
       });
     };
 
-    // Amounts used in tables
-    const grossAmount = Number(d.taxableAmount);
-    const tdsAmount = Number(d.tdsDeductionAmount);
+    const taxableAmount = Number(d.taxableAmount);
     const gstAmount = Number(d.gstAmount);
-    const netAmount = Number(d.paymentTotalAmount);
-    const totalDeduction = tdsAmount; // GST tracked separately in GST register, not deducted from payment
+    const tdsAmount = Number(d.tdsDeductionAmount);
+    const payHoldAmt = Number(d.paymentHoldAmount ?? 0);
+    const gstHoldAmt = Number(d.gstHoldAmount ?? 0);
+
+    // Gross = full invoice value (invoice taxable + invoice GST)
+    const invTaxable = Number(d.invoiceTaxableAmount ?? taxableAmount);
+    const invGst = Number((d as any).invoiceGstAmount ?? gstHoldAmt ?? gstAmount);
+    const grossAmount = invTaxable + invGst;
+    // Total Deduction = TDS only
+    const totalDeduction = tdsAmount;
+    // Net Amount = Gross − TDS (before holds; actual transfer shown in payment message)
+    const netAmount = grossAmount - totalDeduction;
 
     const inWords = this.numberToWords(d.transferAmount);
 
-    // Conditional rows for the left info column
+    // ── Left info column ─────────────────────────────────
     const leftRows: string[] = [];
     leftRows.push(
       `<tr><td class="lbl">Vendor Name</td><td class="sep">:</td><td class="val"><strong>${d.vendorName}</strong></td></tr>`,
     );
-    if (d.vendorAddress) {
+    if (d.vendorAddress)
       leftRows.push(
         `<tr><td class="lbl">Address</td><td class="sep">:</td><td class="val">${d.vendorAddress}</td></tr>`,
       );
-    }
-    if (d.vendorCity) {
+    if (d.vendorCity)
       leftRows.push(
         `<tr><td class="lbl">City</td><td class="sep">:</td><td class="val">${d.vendorCity}</td></tr>`,
       );
-    }
-    if (d.vendorGstNumber) {
+    if (d.vendorGstNumber)
       leftRows.push(
         `<tr><td class="lbl">GST No.</td><td class="sep">:</td><td class="val">${d.vendorGstNumber}</td></tr>`,
       );
-    }
-    if (d.vendorIfscCode) {
+    if (d.vendorIfscCode)
       leftRows.push(
         `<tr><td class="lbl">Bank IFSC</td><td class="sep">:</td><td class="val">${d.vendorIfscCode}</td></tr>`,
       );
-    }
-    if (d.vendorAccountNumber) {
+    if (d.vendorAccountNumber)
       leftRows.push(
         `<tr><td class="lbl">Bank A/c No.</td><td class="sep">:</td><td class="val">${d.vendorAccountNumber}</td></tr>`,
       );
-    }
-    if (d.vendorAccountHolderName) {
+    if (d.vendorAccountHolderName)
       leftRows.push(
         `<tr><td class="lbl">A/c Holder</td><td class="sep">:</td><td class="val">${d.vendorAccountHolderName}</td></tr>`,
       );
-    }
 
-    // Conditional rows for the right info column
+    // ── Right info column ────────────────────────────────
     const rightRows: string[] = [];
     rightRows.push(
       `<tr><td class="lbl">Document No.</td><td class="sep">:</td><td class="val"><strong>${d.referenceNumber}</strong></td></tr>`,
@@ -269,16 +276,14 @@ export class PaymentAdvicePdfService {
     rightRows.push(
       `<tr><td class="lbl">UTR No.</td><td class="sep">:</td><td class="val">${d.utrNumber}</td></tr>`,
     );
-    if (d.poNumber) {
+    if (d.poNumber)
       rightRows.push(
         `<tr><td class="lbl">PO Number</td><td class="sep">:</td><td class="val">${d.poNumber}</td></tr>`,
       );
-    }
-    if (d.invoiceNumber) {
+    if (d.invoiceNumber)
       rightRows.push(
         `<tr><td class="lbl">Vendor Bill No.</td><td class="sep">:</td><td class="val">${d.invoiceNumber}</td></tr>`,
       );
-    }
     rightRows.push(
       `<tr><td class="lbl">Site</td><td class="sep">:</td><td class="val">${d.siteName}</td></tr>`,
     );
@@ -289,20 +294,7 @@ export class PaymentAdvicePdfService {
       )}-${d.financialYear.slice(2)}</td></tr>`,
     );
 
-    // GST note (informational — tracked separately)
-    const gstNote =
-      gstAmount > 0
-        ? `<p style="font-size:10px;color:#555;margin-top:6px;">Note: GST of ${fmt(
-            gstAmount,
-          )} is tracked separately in the GST register.</p>`
-        : '';
-
-    // Payment hold reason block
-    const holdReasonHtml = d.paymentHoldReason
-      ? `<div class="hold-reason"><strong>Payment Hold Reason:</strong> ${d.paymentHoldReason}</div>`
-      : '';
-
-    // Deduction details table (only if TDS > 0)
+    // ── Deduction Details table (legacy — only if TDS > 0 at book-payment level) ──
     const deductionTableHtml =
       tdsAmount > 0
         ? `
@@ -329,6 +321,46 @@ export class PaymentAdvicePdfService {
       </table>`
         : '';
 
+    // ── Hold Details table + Remarks ─────────────────────
+    const hasHold = gstHoldAmt > 0 || payHoldAmt > 0;
+    let holdSection = '';
+    if (hasHold) {
+      const holdRows: string[] = [];
+      const remarkLines: string[] = [];
+      let serial = 1;
+
+      if (gstHoldAmt > 0) {
+        holdRows.push(
+          `<tr><td>${serial}</td><td>GST Hold</td><td class="r">${fmtN(gstHoldAmt)}</td></tr>`,
+        );
+        remarkLines.push(`<p><strong>${serial}. GST Hold:</strong> ${GST_HOLD_REMARK}</p>`);
+        serial++;
+      }
+      if (payHoldAmt > 0 && d.paymentHoldReason) {
+        holdRows.push(
+          `<tr><td>${serial}</td><td>Payment Hold</td><td class="r">${fmtN(payHoldAmt)}</td></tr>`,
+        );
+        remarkLines.push(`<p><strong>${serial}. Payment Hold:</strong> ${d.paymentHoldReason}</p>`);
+      }
+
+      holdSection = `
+      <div class="section-label">Hold Details</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">S.No</th>
+            <th>Hold Type</th>
+            <th class="r">Amount (Rs.)</th>
+          </tr>
+        </thead>
+        <tbody>${holdRows.join('')}</tbody>
+      </table>
+      <div class="remarks-block">
+        <strong>Remarks:</strong>
+        ${remarkLines.join('')}
+      </div>`;
+    }
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -349,7 +381,7 @@ export class PaymentAdvicePdfService {
   .header .company-gst { font-size: 10px; color: #333; margin-top: 2px; }
   .header .doc-title { font-size: 13px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-top: 8px; }
 
-  /* ── Info block (two-column layout) ─────────────────── */
+  /* ── Info block ──────────────────────────────────────── */
   .info-block { width: 100%; border-collapse: collapse; margin-bottom: 16px; border-bottom: 1px solid #ccc; }
   .info-block td { vertical-align: top; padding: 8px 10px; border: none; }
   .info-block .divider { border-left: 1px solid #ddd; width: 1px; padding: 0; border-top: none; border-bottom: none; border-right: none; }
@@ -357,13 +389,11 @@ export class PaymentAdvicePdfService {
   .info-cell table td { border: none; padding: 0 0 4px 0; vertical-align: top; }
   .info-cell table .lbl { white-space: nowrap; color: #555; padding-right: 6px; width: 110px; }
   .info-cell table .sep { padding: 0 4px 0 0; color: #555; }
-  .info-cell table .val { }
 
   /* ── Body text ───────────────────────────────────────── */
   .greeting { margin-bottom: 10px; }
   .payment-msg { margin-bottom: 14px; line-height: 1.6; }
   .amount-highlight { font-weight: bold; }
-  .hold-reason { border-left: 3px solid #999; padding: 8px 10px; margin-bottom: 14px; }
 
   /* ── Section labels ──────────────────────────────────── */
   .section-label { font-weight: bold; font-size: 11px; margin-bottom: 4px; text-decoration: underline; }
@@ -374,6 +404,11 @@ export class PaymentAdvicePdfService {
   th.r { text-align: right; }
   td { border: 1px solid #000; padding: 5px 8px; }
   td.r { text-align: right; }
+
+  /* ── Remarks block ───────────────────────────────────── */
+  .remarks-block { font-size: 10px; border: 1px solid #ddd; background: #fafafa; padding: 8px 10px; margin-bottom: 14px; line-height: 1.6; }
+  .remarks-block p { margin-bottom: 6px; }
+  .remarks-block p:last-child { margin-bottom: 0; }
 
   /* ── Footer ──────────────────────────────────────────── */
   .footer { margin-top: 24px; }
@@ -445,11 +480,9 @@ export class PaymentAdvicePdfService {
     </tbody>
   </table>
 
-  ${gstNote}
-
   ${deductionTableHtml}
 
-  ${holdReasonHtml}
+  ${holdSection}
 
   <!-- ── Footer ─────────────────────────────────────────── -->
   <div class="footer">
