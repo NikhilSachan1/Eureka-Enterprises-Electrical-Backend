@@ -44,30 +44,30 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_APPROVED);
       }
 
-      const gstAmount = dto.gstAmount ?? 0;
+      // Snapshot amounts from invoice (informational)
+      const invoiceTaxable = Number(invoice.taxableAmount);
+      const gstAmount = Number(invoice.gstAmount ?? 0);
+      const gstPercentage = invoice.gstPercentage ?? null;
 
-      // TDS is captured at invoice level — paymentTotalAmount is the exact cash amount to the vendor.
-      const paymentTotalAmount = dto.taxableAmount;
-
-      // Ceiling: isGstHold=true → taxable−tds; isGstHold=false → taxable+gst−tds
+      // invoiceNetPayable: isGstHold=true → taxable−tds; isGstHold=false → taxable+gst−tds
       const invoiceNetPayable = invoice.isGstHold
-        ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
-        : Number(invoice.taxableAmount) +
-          Number(invoice.gstAmount ?? 0) -
-          Number(invoice.tdsAmount ?? 0);
+        ? invoiceTaxable - Number(invoice.tdsAmount ?? 0)
+        : invoiceTaxable + gstAmount - Number(invoice.tdsAmount ?? 0);
+
+      // Ceiling: sum of existing book payments must not exceed invoiceNetPayable
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      if (existingBooked + paymentTotalAmount > invoiceNetPayable) {
+      const remaining = invoiceNetPayable - existingBooked;
+      if (remaining <= 0) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
-      // Payment hold validation
-      const paymentHoldAmount = Number(dto.paymentHoldAmount ?? 0);
-      if (paymentHoldAmount > 0 && !dto.paymentHoldReason) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
+      const transferAmount = Number(dto.transferAmount);
+      if (transferAmount > remaining) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
-      if (paymentHoldAmount >= paymentTotalAmount) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
-      }
+
+      // Each book payment books exactly what is transferred — no per-payment hold
+      const paymentTotalAmount = transferAmount;
 
       // Create book payment (auto-approved)
       const created = await this.bookPaymentRepository.create(
@@ -77,11 +77,11 @@ export class BookPaymentService {
           vendorId: invoice.vendorId,
           poId: invoice.poId,
           bookingDate: new Date(dto.bookingDate),
-          taxableAmount: dto.taxableAmount,
+          taxableAmount: invoiceTaxable,
           gstAmount,
-          gstPercentage: dto.gstPercentage ?? null,
+          gstPercentage,
           paymentTotalAmount,
-          paymentHoldAmount,
+          paymentHoldAmount: 0,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
           approvalStatus: FinancialApprovalStatus.APPROVED,
@@ -93,14 +93,14 @@ export class BookPaymentService {
         em,
       );
 
-      // Update invoice bookedTotal + PO bookedTotal
+      // Increment invoice.bookedTotal and PO.bookedTotal by transferAmount
       await em
         .getRepository(SiteInvoiceEntity)
-        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${paymentTotalAmount}` });
+        .update({ id: invoice.id }, { bookedTotal: () => `"bookedTotal" + ${transferAmount}` });
 
       await this.purchaseOrderService.adjustRollups(
         invoice.poId,
-        { bookedTotal: paymentTotalAmount },
+        { bookedTotal: transferAmount },
         em,
       );
 
@@ -208,9 +208,11 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
       }
 
-      const amountsChanged = dto.taxableAmount !== undefined || dto.gstAmount !== undefined;
+      if (dto.transferAmount !== undefined) {
+        const newTransferAmount = Number(dto.transferAmount);
+        const oldTransferAmount = Number(bp.paymentTotalAmount);
 
-      if (amountsChanged) {
+        // Re-check ceiling: remove old amount, add new amount
         const invoice = await em
           .getRepository(SiteInvoiceEntity)
           .createQueryBuilder('inv')
@@ -220,23 +222,18 @@ export class BookPaymentService {
           .getOne();
         if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
 
-        const newTaxable = dto.taxableAmount ?? Number(bp.taxableAmount);
-        const newPaymentTotal = newTaxable;
-
-        const oldPaymentTotal = Number(bp.paymentTotalAmount);
+        const invoiceTaxable = Number(invoice.taxableAmount);
         const invoiceNetPayable = invoice.isGstHold
-          ? Number(invoice.taxableAmount) - Number(invoice.tdsAmount ?? 0)
-          : Number(invoice.taxableAmount) +
-            Number(invoice.gstAmount ?? 0) -
-            Number(invoice.tdsAmount ?? 0);
+          ? invoiceTaxable - Number(invoice.tdsAmount ?? 0)
+          : invoiceTaxable + Number(invoice.gstAmount ?? 0) - Number(invoice.tdsAmount ?? 0);
 
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
-        const adjustedBooked = existingBooked - oldPaymentTotal + newPaymentTotal;
+        const adjustedBooked = existingBooked - oldTransferAmount + newTransferAmount;
         if (adjustedBooked > invoiceNetPayable) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
-        const delta = newPaymentTotal - oldPaymentTotal;
+        const delta = newTransferAmount - oldTransferAmount;
         if (delta !== 0) {
           await em
             .getRepository(SiteInvoiceEntity)
@@ -244,55 +241,26 @@ export class BookPaymentService {
           await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: delta }, em);
         }
 
-        // Payment hold validations against updated amounts
-        const newPaymentHoldAmount =
-          dto.paymentHoldAmount !== undefined
-            ? Number(dto.paymentHoldAmount)
-            : Number(bp.paymentHoldAmount);
-        const newPaymentHoldReason =
-          dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
-
-        if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
-        }
-        if (newPaymentHoldAmount >= newPaymentTotal) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
-        }
-
-        const { taxableAmount, gstAmount, ...restDto } = dto;
         await this.bookPaymentRepository.update(
           { id },
           {
-            ...restDto,
-            ...(taxableAmount !== undefined && { taxableAmount }),
-            ...(gstAmount !== undefined && { gstAmount }),
-            paymentTotalAmount: newPaymentTotal,
+            paymentTotalAmount: newTransferAmount,
+            paymentHoldReason:
+              dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason,
             bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
+            remarks: dto.remarks !== undefined ? dto.remarks : bp.remarks,
             updatedBy,
           } as Partial<BookPaymentEntity>,
           em,
         );
       } else {
-        // Payment hold validations for non-amount updates
-        const newPaymentHoldAmount =
-          dto.paymentHoldAmount !== undefined
-            ? Number(dto.paymentHoldAmount)
-            : Number(bp.paymentHoldAmount);
-        const newPaymentHoldReason =
-          dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason;
-
-        if (newPaymentHoldAmount > 0 && !newPaymentHoldReason) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_REASON_REQUIRED);
-        }
-        if (newPaymentHoldAmount >= Number(bp.paymentTotalAmount)) {
-          throw new BadRequestException(BOOK_PAYMENT_ERRORS.PAYMENT_HOLD_EXCEEDS_TOTAL);
-        }
-
         await this.bookPaymentRepository.update(
           { id },
           {
-            ...dto,
+            paymentHoldReason:
+              dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason,
             bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
+            remarks: dto.remarks !== undefined ? dto.remarks : bp.remarks,
             updatedBy,
           } as Partial<BookPaymentEntity>,
           em,

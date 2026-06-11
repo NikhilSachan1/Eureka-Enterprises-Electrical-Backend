@@ -336,11 +336,15 @@ export class PaymentAdvicePdfService {
         remarkLines.push(`<p><strong>${serial}. GST Hold:</strong> ${GST_HOLD_REMARK}</p>`);
         serial++;
       }
-      if (payHoldAmt > 0 && d.paymentHoldReason) {
+      if (payHoldAmt > 0) {
         holdRows.push(
           `<tr><td>${serial}</td><td>Payment Hold</td><td class="r">${fmtN(payHoldAmt)}</td></tr>`,
         );
-        remarkLines.push(`<p><strong>${serial}. Payment Hold:</strong> ${d.paymentHoldReason}</p>`);
+        if (d.paymentHoldReason) {
+          remarkLines.push(
+            `<p><strong>${serial}. Payment Hold:</strong> ${d.paymentHoldReason}</p>`,
+          );
+        }
       }
 
       holdSection = `
