@@ -68,7 +68,7 @@ export class UpdateSalaryStructureDto {
   @Type(() => Number)
   tds?: number;
 
-  @ApiProperty({ description: 'ESIC (applicable if gross <= 21000)', example: 0 })
+  @ApiProperty({ description: 'ESIC deduction amount', example: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
