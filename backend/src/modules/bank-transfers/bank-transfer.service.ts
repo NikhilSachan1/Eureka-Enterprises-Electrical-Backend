@@ -267,6 +267,7 @@ export class BankTransferService {
             : null,
           poNumber: poForPdf?.poNumber ?? null,
         },
+        new Date(dto.transferDate),
       );
 
       return {

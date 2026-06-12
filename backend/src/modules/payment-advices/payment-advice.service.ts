@@ -41,12 +41,13 @@ export class PaymentAdviceService {
     createdBy: string,
     em: EntityManager,
     pdfData?: Omit<PaymentAdvicePdfData, 'referenceNumber' | 'generatedAt' | 'financialYear'>,
+    transferDate?: Date,
   ): Promise<{ id: string; referenceNumber: string }> {
     // Allocate sequence number (with advisory lock)
     const { sequenceNumber, referenceNumber } =
       await this.paymentAdviceRepository.allocateSequenceNumber(financialYear, em);
 
-    const generatedAt = new Date();
+    const generatedAt = transferDate ?? new Date();
     const advice = await this.paymentAdviceRepository.create(
       {
         bankTransferId,
