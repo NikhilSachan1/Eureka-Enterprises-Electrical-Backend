@@ -19,12 +19,6 @@ import {
 import { buildSalaryHistoryQuery } from './queries/salary-structure.queries';
 import { IsNull, LessThanOrEqual } from 'typeorm';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
-import { ConfigurationService } from '../configurations/configuration.service';
-import { ConfigSettingService } from '../config-settings/config-setting.service';
-import {
-  CONFIGURATION_KEYS,
-  CONFIGURATION_MODULES,
-} from 'src/utils/master-constants/master-constants';
 import { DateTimeService } from 'src/utils/datetime';
 import { UtilityService } from 'src/utils/utility/utility.service';
 
@@ -33,8 +27,6 @@ export class SalaryStructureService {
   constructor(
     private readonly salaryStructureRepository: SalaryStructureRepository,
     private readonly salaryChangeLogRepository: SalaryChangeLogRepository,
-    private readonly configurationService: ConfigurationService,
-    private readonly configSettingService: ConfigSettingService,
     @InjectDataSource() private dataSource: DataSource,
     private readonly dateTimeService: DateTimeService,
     private readonly utilityService: UtilityService,
@@ -45,8 +37,6 @@ export class SalaryStructureService {
     createdBy: string,
     entityManager?: EntityManager,
   ): Promise<SalaryStructureEntity> {
-    const esic = await this.calculateEsic(createDto.basic);
-
     // Check if active salary structure already exists
     const existingActive = await this.getActiveByUserId(createDto.userId);
     if (existingActive) {
@@ -58,7 +48,7 @@ export class SalaryStructureService {
       const salaryStructure = await this.salaryStructureRepository.create(
         {
           ...createDto,
-          esic,
+          esic: createDto.esic ?? 0,
           effectiveFrom: new Date(createDto.effectiveFrom),
           incrementType: IncrementType.INITIAL,
           createdBy,
@@ -106,11 +96,6 @@ export class SalaryStructureService {
       ...updateDto,
       updatedBy,
     };
-
-    if (this.isSalaryComponentUpdate(updateDto)) {
-      const effectiveBasic = updateDto.basic ?? existing.basic;
-      updatedData['esic'] = await this.calculateEsic(effectiveBasic);
-    }
 
     await this.dataSource.transaction(async (manager) => {
       await this.salaryStructureRepository.update({ id }, updatedData, manager);
@@ -160,10 +145,9 @@ export class SalaryStructureService {
       employeePf,
       employerPf,
       tds,
+      esic,
       professionalTax,
     } = incrementDto;
-
-    const esic = await this.calculateEsic(basic);
 
     // Validate effective date is not in past (timezone-aware)
     const effectiveDateStr =
@@ -196,7 +180,7 @@ export class SalaryStructureService {
         employeePf,
         employerPf,
         tds,
-        esic,
+        esic: esic ?? 0,
         professionalTax,
         effectiveFrom: effectiveDate,
         incrementPercentage: incrementPercentage || 0,
@@ -302,38 +286,6 @@ export class SalaryStructureService {
 
   // ==================== Private Helpers ====================
 
-  private async getEsicGrossLimit(): Promise<number> {
-    const configuration = await this.configurationService.findOne({
-      where: {
-        key: CONFIGURATION_KEYS.ESIC_GROSS_LIMIT,
-        module: CONFIGURATION_MODULES.SALARY,
-      },
-    });
-
-    if (!configuration) {
-      throw new BadRequestException(SALARY_STRUCTURE_ERRORS.ESIC_CONFIG_NOT_FOUND);
-    }
-
-    const configSetting = await this.configSettingService.findOne({
-      where: { configId: configuration.id, isActive: true },
-    });
-
-    if (!configSetting?.value) {
-      throw new BadRequestException(SALARY_STRUCTURE_ERRORS.ESIC_CONFIG_SETTING_NOT_FOUND);
-    }
-
-    return Number(configSetting.value);
-  }
-
-  private async calculateEsic(basic: number): Promise<number> {
-    const esicLimit = await this.getEsicGrossLimit();
-    const basicHalf = Number(basic) / 2;
-    if (basicHalf <= esicLimit) {
-      return Math.round(basicHalf * 0.0075 * 100) / 100;
-    }
-    return 0;
-  }
-
   private getSalarySnapshot(structure: SalaryStructureEntity): Record<string, any> {
     // Normalize effectiveFrom to YYYY-MM-DD string format for consistent storage
     let effectiveFromStr: string | null = null;
@@ -365,14 +317,4 @@ export class SalaryStructureService {
     };
   }
 
-  private isSalaryComponentUpdate(dto: UpdateSalaryStructureDto): boolean {
-    return (
-      dto.basic !== undefined ||
-      dto.hra !== undefined ||
-      dto.foodAllowance !== undefined ||
-      dto.conveyanceAllowance !== undefined ||
-      dto.medicalAllowance !== undefined ||
-      dto.specialAllowance !== undefined
-    );
-  }
 }
