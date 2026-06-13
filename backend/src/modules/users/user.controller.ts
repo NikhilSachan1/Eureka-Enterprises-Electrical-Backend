@@ -198,7 +198,7 @@ export class UserController {
             esic: {
               type: 'number',
               example: 0,
-              description: 'ESIC (applicable if gross <= 21000)',
+              description: 'ESIC deduction amount',
               default: 0,
             },
             professionalTax: {
