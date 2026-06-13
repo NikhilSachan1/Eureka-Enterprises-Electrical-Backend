@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SiteReportRepository } from './site-report.repository';
 import { SiteReportEntity } from './entities/site-report.entity';
@@ -41,13 +46,41 @@ export class SiteReportService {
       fileKey: dto.fileKey,
       fileName: dto.fileName,
       remarks: dto.remarks,
-      approvalStatus: FinancialApprovalStatus.APPROVED,
-      approvalBy: createdBy,
-      approvalAt: new Date(),
+      approvalStatus: FinancialApprovalStatus.PENDING,
+      approvalBy: null,
+      approvalAt: null,
       createdBy,
     });
 
     return { message: REPORT_RESPONSES.CREATED, id: created.id };
+  }
+
+  async approve(id: string, approvedBy: string) {
+    const report = await this.findActiveById(id);
+    if (report.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(REPORT_ERRORS.ALREADY_APPROVED);
+    }
+    await this.reportRepository.update({ id }, {
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: approvedBy,
+      approvalAt: new Date(),
+      updatedBy: approvedBy,
+    } as Partial<SiteReportEntity>);
+    return { message: REPORT_RESPONSES.APPROVED };
+  }
+
+  async reject(id: string, rejectedBy: string) {
+    const report = await this.findActiveById(id);
+    if (report.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(REPORT_ERRORS.CANNOT_REJECT_APPROVED);
+    }
+    await this.reportRepository.update({ id }, {
+      approvalStatus: FinancialApprovalStatus.REJECTED,
+      approvalBy: rejectedBy,
+      approvalAt: new Date(),
+      updatedBy: rejectedBy,
+    } as Partial<SiteReportEntity>);
+    return { message: REPORT_RESPONSES.REJECTED };
   }
 
   async findAll(query: GetSiteReportDto) {
@@ -144,7 +177,10 @@ export class SiteReportService {
   }
 
   async update(id: string, dto: UpdateSiteReportDto, updatedBy: string) {
-    await this.findActiveById(id);
+    const report = await this.findActiveById(id);
+    if (report.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(REPORT_ERRORS.CANNOT_EDIT_APPROVED);
+    }
     await this.reportRepository.update({ id }, {
       ...dto,
       reportDate: dto.reportDate ? new Date(dto.reportDate) : undefined,
@@ -154,7 +190,10 @@ export class SiteReportService {
   }
 
   async remove(id: string, deletedBy: string) {
-    await this.findActiveById(id);
+    const report = await this.findActiveById(id);
+    if (report.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(REPORT_ERRORS.CANNOT_DELETE_APPROVED);
+    }
     await this.reportRepository.update({ id }, { deletedBy });
     await this.reportRepository.softDelete({ id });
     return { message: REPORT_RESPONSES.DELETED };

@@ -21,9 +21,23 @@ import { RequiredPermission } from 'src/modules/auth/decorators/required-permiss
 export class BookPaymentController {
   constructor(private readonly bookPaymentService: BookPaymentService) {}
 
+  @Patch(':id/approve')
+  @RequiredPermission('financials.book-payments.approve')
+  @ApiOperation({ summary: 'Approve a pending book payment' })
+  approve(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
+    return this.bookPaymentService.approve(id, userId);
+  }
+
+  @Patch(':id/reject')
+  @RequiredPermission('financials.book-payments.approve')
+  @ApiOperation({ summary: 'Reject a pending book payment' })
+  reject(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
+    return this.bookPaymentService.reject(id, userId);
+  }
+
   @Post()
   @RequiredPermission('financials.book-payments.create')
-  @ApiOperation({ summary: 'Create a book payment (PURCHASE side only, auto-approved)' })
+  @ApiOperation({ summary: 'Create a book payment (PURCHASE side only)' })
   create(@Body() dto: CreateBookPaymentDto, @GetUser('id') userId: string) {
     return this.bookPaymentService.create(dto, userId);
   }

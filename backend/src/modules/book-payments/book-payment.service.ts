@@ -69,7 +69,7 @@ export class BookPaymentService {
       // Each book payment books exactly what is transferred — no per-payment hold
       const paymentTotalAmount = transferAmount;
 
-      // Create book payment (auto-approved)
+      // Create book payment — PENDING until approved
       const created = await this.bookPaymentRepository.create(
         {
           invoiceId: invoice.id,
@@ -84,9 +84,9 @@ export class BookPaymentService {
           paymentHoldAmount: 0,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
-          approvalStatus: FinancialApprovalStatus.APPROVED,
-          approvalBy: createdBy,
-          approvalAt: new Date(),
+          approvalStatus: FinancialApprovalStatus.PENDING,
+          approvalBy: null,
+          approvalAt: null,
           hasTransfer: false,
           createdBy,
         },
@@ -204,6 +204,9 @@ export class BookPaymentService {
       const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
       if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
 
+      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_EDIT_APPROVED);
+      }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
       }
@@ -276,6 +279,9 @@ export class BookPaymentService {
       const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
       if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
 
+      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_APPROVED);
+      }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_HAS_TRANSFER);
       }
@@ -291,6 +297,52 @@ export class BookPaymentService {
       await this.bookPaymentRepository.softDelete({ id }, em);
 
       return { message: BOOK_PAYMENT_RESPONSES.DELETED };
+    });
+  }
+
+  async approve(id: string, approvedBy: string) {
+    const bp = await this.bookPaymentRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
+    if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
+    if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.ALREADY_APPROVED);
+    }
+    await this.bookPaymentRepository.update({ id }, {
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: approvedBy,
+      approvalAt: new Date(),
+      updatedBy: approvedBy,
+    } as Partial<BookPaymentEntity>);
+    return { message: BOOK_PAYMENT_RESPONSES.APPROVED };
+  }
+
+  async reject(id: string, rejectedBy: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
+      if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
+      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_REJECT_APPROVED);
+      }
+
+      // Reverse bookedTotal that was incremented on create
+      const effectiveAmount = Number(bp.paymentTotalAmount);
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
+
+      await this.bookPaymentRepository.update(
+        { id },
+        {
+          approvalStatus: FinancialApprovalStatus.REJECTED,
+          approvalBy: rejectedBy,
+          approvalAt: new Date(),
+          updatedBy: rejectedBy,
+        } as Partial<BookPaymentEntity>,
+        em,
+      );
+      return { message: BOOK_PAYMENT_RESPONSES.REJECTED };
     });
   }
 

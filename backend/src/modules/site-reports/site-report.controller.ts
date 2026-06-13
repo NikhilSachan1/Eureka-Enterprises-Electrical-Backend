@@ -21,9 +21,29 @@ import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dt
 export class SiteReportController {
   constructor(private readonly reportService: SiteReportService) {}
 
+  @Patch(':id/approve')
+  @RequiredPermission('financials.site-reports.approve')
+  @ApiOperation({ summary: 'Approve a pending site report' })
+  async approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: approvedBy } }: { user: { id: string } },
+  ) {
+    return await this.reportService.approve(id, approvedBy);
+  }
+
+  @Patch(':id/reject')
+  @RequiredPermission('financials.site-reports.approve')
+  @ApiOperation({ summary: 'Reject a pending site report' })
+  async reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: rejectedBy } }: { user: { id: string } },
+  ) {
+    return await this.reportService.reject(id, rejectedBy);
+  }
+
   @Post()
   @RequiredPermission('financials.site-reports.create')
-  @ApiOperation({ summary: 'Create a Report against an APPROVED JMC (auto-approved)' })
+  @ApiOperation({ summary: 'Create a Report against an APPROVED JMC' })
   async create(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() dto: CreateSiteReportDto,

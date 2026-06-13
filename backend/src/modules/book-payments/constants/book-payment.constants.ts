@@ -17,6 +17,11 @@ export const BOOK_PAYMENT_ERRORS = {
     'paymentHoldReason is required when paymentHoldAmount is greater than 0.',
   PAYMENT_HOLD_EXCEEDS_TOTAL:
     'paymentHoldAmount must be less than paymentTotalAmount — at least ₹1 must be transferred.',
+  CANNOT_EDIT_APPROVED: 'Cannot edit an approved book payment — it is locked.',
+  CANNOT_DELETE_APPROVED: 'Cannot delete an approved book payment — it is locked.',
+  ALREADY_APPROVED: 'Book payment is already approved.',
+  CANNOT_REJECT_APPROVED: 'Cannot reject an already approved book payment.',
+  BOOK_PAYMENT_NOT_APPROVED: 'Book payment must be approved before creating a bank transfer.',
 };
 
 export const GST_HOLD_REMARK =
@@ -26,4 +31,6 @@ export const BOOK_PAYMENT_RESPONSES = {
   CREATED: 'Book payment created successfully.',
   UPDATED: 'Book payment updated successfully.',
   DELETED: 'Book payment deleted successfully.',
+  APPROVED: 'Book payment approved successfully.',
+  REJECTED: 'Book payment rejected successfully.',
 };

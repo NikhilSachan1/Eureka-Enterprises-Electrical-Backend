@@ -95,9 +95,12 @@ export class BankTransferEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
 
-  // Auto-approved (BRD §5.1.8)
+  // Auto-approved and auto-locked on creation — admin must unlock to edit/delete
   @Column({ type: 'varchar', length: 20, default: FinancialApprovalStatus.APPROVED })
   approvalStatus: string;
+
+  @Column({ type: 'boolean', default: false })
+  isLocked: boolean;
 
   @Column({ type: 'uuid', nullable: true })
   approvalBy: string | null;
