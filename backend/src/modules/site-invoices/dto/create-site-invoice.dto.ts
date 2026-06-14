@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
-  IsNotEmpty,
   IsUUID,
   IsOptional,
   IsNumber,
@@ -16,28 +15,29 @@ export class CreateSiteInvoiceDto {
   @IsUUID('4')
   jmcId: string;
 
-  @ApiProperty({ description: 'Invoice Number' })
+  @ApiPropertyOptional({ description: 'Invoice Number (can be filled later)' })
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  invoiceNumber: string;
+  @IsOptional()
+  invoiceNumber?: string;
 
-  @ApiProperty({ description: 'Invoice Date (ISO)' })
+  @ApiPropertyOptional({ description: 'Invoice Date (ISO) — can be filled later' })
   @IsDateString()
-  invoiceDate: string;
+  @IsOptional()
+  invoiceDate?: string;
 
-  @ApiProperty({ description: 'Taxable amount' })
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  taxableAmount: number;
-
-  @ApiPropertyOptional({ description: 'GST amount', default: 0 })
+  @ApiPropertyOptional({ description: 'Taxable amount — can be filled later' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
-  gstAmount?: number = 0;
+  taxableAmount?: number;
+
+  @ApiPropertyOptional({ description: 'GST amount' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @IsOptional()
+  gstAmount?: number;
 
   @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
   @Type(() => Number)
@@ -46,12 +46,12 @@ export class CreateSiteInvoiceDto {
   @IsOptional()
   gstPercentage?: number;
 
-  @ApiPropertyOptional({ description: 'TDS amount (manual entry)', default: 0 })
+  @ApiPropertyOptional({ description: 'TDS amount (manual entry)' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
-  tdsAmount?: number = 0;
+  tdsAmount?: number;
 
   @ApiPropertyOptional({ description: 'TDS percentage (informational only)', example: 2 })
   @Type(() => Number)
@@ -60,23 +60,24 @@ export class CreateSiteInvoiceDto {
   @IsOptional()
   tdsPercentage?: number;
 
-  @ApiProperty({ description: 'Total amount (= taxable + GST)' })
+  @ApiPropertyOptional({ description: 'Total amount (= taxable + GST) — can be filled later' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  totalAmount: number;
+  @IsOptional()
+  totalAmount?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'S3 file key — can be attached later' })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(500)
-  fileKey: string;
+  fileKey?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Original file name — can be attached later' })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(255)
-  fileName: string;
+  fileName?: string;
 
   @ApiPropertyOptional({
     description:
