@@ -11,6 +11,8 @@ import {
   ExpenseQueryDto,
   ForceExpenseDto,
   BulkDeleteExpenseDto,
+  PendingSettlementQueryDto,
+  PendingSettlementResponseDto,
 } from './dto';
 import {
   CONFIGURATION_MODULES,
@@ -40,6 +42,7 @@ import {
   buildExpenseBalanceQuery,
   buildProjectedBalanceQuery,
   buildExpenseSummaryQuery,
+  buildPendingSettlementQuery,
 } from './queries/expense-tracker.queries';
 import { ExpenseFilesService } from '../expense-files/expense-files.service';
 import { DateTimeService } from 'src/utils/datetime';
@@ -1429,5 +1432,36 @@ export class ExpenseTrackerService {
   private formatDateForEmail(date: Date | string): string {
     const d = new Date(date);
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  async getPendingSettlement(
+    queryDto: PendingSettlementQueryDto,
+  ): Promise<PendingSettlementResponseDto> {
+    const { recordsQuery, recordParams, countQuery, summaryQuery, baseParams } =
+      buildPendingSettlementQuery(queryDto);
+
+    const [records, [{ total }], [summaryResult]] = await Promise.all([
+      this.expenseTrackerRepository.executeRawQuery(recordsQuery, recordParams),
+      this.expenseTrackerRepository.executeRawQuery(countQuery, baseParams),
+      this.expenseTrackerRepository.executeRawQuery(summaryQuery, baseParams),
+    ]);
+
+    return {
+      records: records.map((r: any) => ({
+        userId: r.userId,
+        userName: `${r.firstName} ${r.lastName}`.trim(),
+        employeeId: r.employeeId,
+        email: r.email,
+        totalApprovedAmount: Number(r.totalApprovedAmount),
+        totalSettledAmount: Number(r.totalSettledAmount),
+        pendingAmount: Number(r.pendingAmount),
+      })),
+      totalRecords: Number(total),
+      summary: {
+        totalApprovedAmount: Number(summaryResult?.totalApprovedAmount ?? 0),
+        totalSettledAmount: Number(summaryResult?.totalSettledAmount ?? 0),
+        totalPendingAmount: Number(summaryResult?.totalPendingAmount ?? 0),
+      },
+    };
   }
 }

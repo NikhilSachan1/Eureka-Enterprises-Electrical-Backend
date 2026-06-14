@@ -1,4 +1,5 @@
 import { ExpenseQueryDto } from '../dto/expense-query.dto';
+import { PendingSettlementQueryDto } from '../dto/pending-settlement-query.dto';
 import {
   EXPENSE_SORT_FIELD_MAPPING,
   TransactionType,
@@ -395,5 +396,87 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
   return {
     summaryQuery,
     params,
+  };
+};
+
+export const buildPendingSettlementQuery = (filters: PendingSettlementQueryDto) => {
+  const { startDate, endDate, userIds, page = 1, pageSize, sortOrder = 'DESC' } = filters;
+
+  const whereConditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  whereConditions.push(`e."isActive" = $${paramIndex}`);
+  params.push(true);
+  paramIndex++;
+
+  if (userIds && userIds.length > 0) {
+    whereConditions.push(`e."userId" = ANY($${paramIndex})`);
+    params.push(userIds);
+    paramIndex++;
+  }
+
+  if (startDate) {
+    whereConditions.push(`e."expenseDate" >= $${paramIndex}`);
+    params.push(startDate);
+    paramIndex++;
+  }
+
+  if (endDate) {
+    whereConditions.push(`e."expenseDate" <= $${paramIndex}`);
+    params.push(endDate);
+    paramIndex++;
+  }
+
+  const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+  const approvedDebitExpr = `COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' AND e."approvalStatus" = 'approved' THEN e."amount"::numeric ELSE 0 END), 0)`;
+  const settledExpr = `COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount"::numeric ELSE 0 END), 0)`;
+
+  const baseSelectQuery = `
+    SELECT
+      u."id" AS "userId",
+      u."firstName",
+      u."lastName",
+      u."email",
+      u."employeeId",
+      ${approvedDebitExpr} AS "totalApprovedAmount",
+      ${settledExpr} AS "totalSettledAmount",
+      (${approvedDebitExpr} - ${settledExpr}) AS "pendingAmount"
+    FROM "expenses" e
+    LEFT JOIN "users" u ON e."userId" = u."id"
+    ${whereClause}
+    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId"
+    HAVING (${approvedDebitExpr} - ${settledExpr}) > 0
+  `;
+
+  const order = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+  let recordsQuery = `${baseSelectQuery} ORDER BY "pendingAmount" ${order}`;
+
+  const recordParams = [...params];
+
+  if (pageSize !== undefined) {
+    const offset = (page - 1) * pageSize;
+    recordsQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    recordParams.push(pageSize, offset);
+  }
+
+  const countQuery = `SELECT COUNT(*) AS total FROM (${baseSelectQuery}) subq`;
+
+  const summaryQuery = `
+    SELECT
+      COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalApprovedAmount",
+      COALESCE(SUM(subq."totalSettledAmount"), 0) AS "totalSettledAmount",
+      COALESCE(SUM(subq."pendingAmount"), 0) AS "totalPendingAmount"
+    FROM (${baseSelectQuery}) subq
+  `;
+
+  return {
+    recordsQuery,
+    recordParams,
+    countQuery,
+    summaryQuery,
+    baseParams: params,
   };
 };
