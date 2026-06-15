@@ -2,7 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
-import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
+import {
+  CreateBookPaymentDto,
+  UpdateBookPaymentDto,
+  GetBookPaymentDto,
+  GetVendorListQueryDto,
+  VendorListResponseDto,
+} from './dto';
+import { buildVendorListQuery } from './queries/book-payment.queries';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
@@ -423,6 +430,143 @@ export class BookPaymentService {
           approvalStatus: r.approvalStatus,
         },
       })),
+    };
+  }
+
+  async getVendorList(query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
+    const {
+      countQuery,
+      countParams,
+      vendorIdsQuery,
+      vendorIdsParams,
+      detailQuery,
+      summaryQuery,
+      summaryParams,
+    } = buildVendorListQuery(query);
+
+    // Run count and summary in parallel with vendor-id pagination
+    const [vendorIdRows, [{ total }], [summaryRow]] = await Promise.all([
+      this.bookPaymentRepository.executeRawQuery(vendorIdsQuery, vendorIdsParams),
+      this.bookPaymentRepository.executeRawQuery(countQuery, countParams),
+      this.bookPaymentRepository.executeRawQuery(summaryQuery, summaryParams),
+    ]);
+
+    const totalRecords = Number(total);
+
+    if (vendorIdRows.length === 0) {
+      return {
+        records: [],
+        totalRecords,
+        summary: {
+          totalVendors: 0,
+          totalBookPayments: 0,
+          totalTaxableAmount: 0,
+          totalGstAmount: 0,
+          totalPaymentAmount: 0,
+          totalHoldAmount: 0,
+        },
+      };
+    }
+
+    const pageVendorIds = vendorIdRows.map((r: any) => r.vendorId);
+
+    // Fetch all book payment rows for the current vendor page in one query
+    const rows: any[] = await this.bookPaymentRepository.executeRawQuery(detailQuery, [
+      pageVendorIds,
+    ]);
+
+    // Group rows by vendorId
+    const vendorMap = new Map<string, any[]>();
+    for (const row of rows) {
+      if (!vendorMap.has(row.vendorId)) vendorMap.set(row.vendorId, []);
+      vendorMap.get(row.vendorId)?.push(row);
+    }
+
+    // Preserve the pagination order from vendorIdRows
+    const records = pageVendorIds
+      .filter((vid: string) => vendorMap.has(vid))
+      .map((vid: string) => {
+        const bpRows = vendorMap.get(vid) ?? [];
+        const first = bpRows[0];
+
+        const vendor = {
+          id: first.vendorId,
+          name: first.vendorName,
+          city: first.vendorCity,
+          state: first.vendorState,
+          contactNumber: first.vendorContact,
+          email: first.vendorEmail ?? null,
+        };
+
+        const bookPayments = bpRows.map((r) => {
+          const displayName = [r.vendorName, r.siteName, r.companyName, r.siteCity, r.siteState]
+            .filter(Boolean)
+            .join(' | ');
+
+          return {
+            id: r.bpId,
+            bookingDate: r.bookingDate,
+            taxableAmount: Number(r.taxableAmount),
+            gstAmount: Number(r.gstAmount),
+            gstPercentage: r.gstPercentage !== null ? Number(r.gstPercentage) : null,
+            paymentTotalAmount: Number(r.paymentTotalAmount),
+            paymentHoldAmount: Number(r.paymentHoldAmount),
+            paymentHoldReason: r.paymentHoldReason ?? null,
+            remarks: r.remarks ?? null,
+            approvalStatus: r.approvalStatus,
+            hasTransfer: r.hasTransfer,
+            displayName,
+            invoice: {
+              id: r.invoiceId,
+              invoiceNumber: r.invoiceNumber ?? null,
+              invoiceDate: r.invoiceDate ?? null,
+              totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
+              approvalStatus: r.invoiceApprovalStatus,
+            },
+            jmc: r.jmcId ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate } : null,
+            po: r.poId
+              ? {
+                  id: r.poId,
+                  poNumber: r.poNumber,
+                  poDate: r.poDate,
+                  totalAmount: Number(r.poTotalAmount),
+                }
+              : null,
+            site: {
+              id: r.siteId,
+              name: r.siteName,
+              city: r.siteCity ?? null,
+              state: r.siteState ?? null,
+            },
+            company: {
+              id: r.companyId,
+              name: r.companyName,
+            },
+          };
+        });
+
+        const vendorSummary = {
+          totalBookPayments: bookPayments.length,
+          totalTaxableAmount: bookPayments.reduce((s, b) => s + b.taxableAmount, 0),
+          totalGstAmount: bookPayments.reduce((s, b) => s + b.gstAmount, 0),
+          totalPaymentAmount: bookPayments.reduce((s, b) => s + b.paymentTotalAmount, 0),
+          totalHoldAmount: bookPayments.reduce((s, b) => s + b.paymentHoldAmount, 0),
+        };
+
+        return { vendor, vendorSummary, bookPayments };
+      });
+
+    return {
+      records,
+      totalRecords,
+      summary: {
+        totalVendors: Number(summaryRow?.totalVendors ?? 0),
+        totalBookPayments: Number(summaryRow?.totalBookPayments ?? 0),
+        totalTaxableAmount: Number(summaryRow?.totalTaxableAmount ?? 0),
+        totalGstAmount: Number(summaryRow?.totalGstAmount ?? 0),
+        totalPaymentAmount: Number(summaryRow?.totalPaymentAmount ?? 0),
+        totalHoldAmount: Number(summaryRow?.totalHoldAmount ?? 0),
+      },
     };
   }
 }

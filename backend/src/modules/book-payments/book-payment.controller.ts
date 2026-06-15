@@ -11,7 +11,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BookPaymentService } from './book-payment.service';
-import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
+import {
+  CreateBookPaymentDto,
+  UpdateBookPaymentDto,
+  GetBookPaymentDto,
+  GetVendorListQueryDto,
+  VendorListResponseDto,
+} from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
@@ -40,6 +46,17 @@ export class BookPaymentController {
   @ApiOperation({ summary: 'Create a book payment (PURCHASE side only)' })
   create(@Body() dto: CreateBookPaymentDto, @GetUser('id') userId: string) {
     return this.bookPaymentService.create(dto, userId);
+  }
+
+  @Get('vendor-list')
+  @RequiredPermission('financials.book-payments.view')
+  @ApiOperation({
+    summary: 'Vendor book payments list',
+    description:
+      'Returns all vendors with their approved book payments, each enriched with invoice, JMC, PO, site and company details. Paginated on vendor level.',
+  })
+  getVendorList(@Query() query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
+    return this.bookPaymentService.getVendorList(query);
   }
 
   @Get('dropdown')
