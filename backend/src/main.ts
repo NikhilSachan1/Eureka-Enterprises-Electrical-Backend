@@ -29,8 +29,8 @@ async function bootstrap() {
   const globalPrefix = 'api/v1';
   const customLogger = new CustomLoggerService();
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ limit: '50mb', extended: true }));
+  app.use(json({ limit: '100mb' }));
+  app.use(urlencoded({ limit: '100mb', extended: true }));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
