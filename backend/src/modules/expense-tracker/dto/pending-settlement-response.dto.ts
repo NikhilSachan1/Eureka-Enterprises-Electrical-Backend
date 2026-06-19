@@ -1,4 +1,18 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class PendingSettlementBankDetailsDto {
+  @ApiPropertyOptional({ example: 'John Doe' })
+  bankHolderName: string | null;
+
+  @ApiPropertyOptional({ example: 'HDFC Bank' })
+  bankName: string | null;
+
+  @ApiPropertyOptional({ example: '1234567890' })
+  accountNumber: string | null;
+
+  @ApiPropertyOptional({ example: 'HDFC0001234' })
+  ifscCode: string | null;
+}
 
 export class PendingSettlementRecordDto {
   @ApiProperty({ example: 'uuid' })
@@ -21,6 +35,9 @@ export class PendingSettlementRecordDto {
 
   @ApiProperty({ example: 3000.0 })
   pendingAmount: number;
+
+  @ApiProperty({ type: () => PendingSettlementBankDetailsDto })
+  bankDetails: PendingSettlementBankDetailsDto;
 }
 
 export class PendingSettlementSummaryDto {

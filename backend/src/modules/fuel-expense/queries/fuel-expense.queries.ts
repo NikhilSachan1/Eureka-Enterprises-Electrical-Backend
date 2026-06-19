@@ -584,13 +584,18 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
       u."lastName",
       u."email",
       u."employeeId",
+      u."bankHolderName",
+      u."bankName",
+      u."accountNumber",
+      u."ifscCode",
       ${approvedDebitExpr} AS "totalApprovedAmount",
       ${settledExpr} AS "totalSettledAmount",
       (${approvedDebitExpr} - ${settledExpr}) AS "pendingAmount"
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     ${whereClause}
-    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId"
+    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId",
+             u."bankHolderName", u."bankName", u."accountNumber", u."ifscCode"
     HAVING (${approvedDebitExpr} - ${settledExpr}) > 0
   `;
 

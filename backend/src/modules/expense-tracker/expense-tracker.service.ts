@@ -1455,6 +1455,12 @@ export class ExpenseTrackerService {
         totalApprovedAmount: Number(r.totalApprovedAmount),
         totalSettledAmount: Number(r.totalSettledAmount),
         pendingAmount: Number(r.pendingAmount),
+        bankDetails: {
+          bankHolderName: r.bankHolderName ?? null,
+          bankName: r.bankName ?? null,
+          accountNumber: r.accountNumber ?? null,
+          ifscCode: r.ifscCode ?? null,
+        },
       })),
       totalRecords: Number(total),
       summary: {

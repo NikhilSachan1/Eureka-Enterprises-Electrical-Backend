@@ -440,13 +440,18 @@ export const buildPendingSettlementQuery = (filters: PendingSettlementQueryDto) 
       u."lastName",
       u."email",
       u."employeeId",
+      u."bankHolderName",
+      u."bankName",
+      u."accountNumber",
+      u."ifscCode",
       ${approvedDebitExpr} AS "totalApprovedAmount",
       ${settledExpr} AS "totalSettledAmount",
       (${approvedDebitExpr} - ${settledExpr}) AS "pendingAmount"
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
     ${whereClause}
-    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId"
+    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId",
+             u."bankHolderName", u."bankName", u."accountNumber", u."ifscCode"
     HAVING (${approvedDebitExpr} - ${settledExpr}) > 0
   `;
 

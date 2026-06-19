@@ -1,4 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class VendorBankDetailsDto {
+  @ApiPropertyOptional() accountHolderName: string | null;
+  @ApiPropertyOptional() bankName: string | null;
+  @ApiPropertyOptional() accountNumber: string | null;
+  @ApiPropertyOptional() ifscCode: string | null;
+}
 
 export class VendorInfoDto {
   @ApiProperty() id: string;
@@ -7,6 +14,7 @@ export class VendorInfoDto {
   @ApiProperty() state: string;
   @ApiProperty() contactNumber: string;
   @ApiProperty({ nullable: true }) email: string | null;
+  @ApiProperty({ type: () => VendorBankDetailsDto }) bankDetails: VendorBankDetailsDto;
 }
 
 export class SiteInfoDto {

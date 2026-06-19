@@ -496,6 +496,12 @@ export class BookPaymentService {
           state: first.vendorState,
           contactNumber: first.vendorContact,
           email: first.vendorEmail ?? null,
+          bankDetails: {
+            accountHolderName: first.vendorAccountHolderName ?? null,
+            bankName: first.vendorBankName ?? null,
+            accountNumber: first.vendorAccountNumber ?? null,
+            ifscCode: first.vendorIfscCode ?? null,
+          },
         };
 
         const bookPayments = bpRows.map((r) => {

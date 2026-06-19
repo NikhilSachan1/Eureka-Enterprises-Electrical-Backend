@@ -127,6 +127,10 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       v."state"                 AS "vendorState",
       v."contactNumber"         AS "vendorContact",
       v."email"                 AS "vendorEmail",
+      v."accountHolderName"     AS "vendorAccountHolderName",
+      v."bankName"              AS "vendorBankName",
+      v."accountNumber"         AS "vendorAccountNumber",
+      v."ifscCode"              AS "vendorIfscCode",
 
       inv."id"                  AS "invoiceId",
       inv."invoiceNumber",
