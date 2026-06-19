@@ -544,7 +544,7 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
 };
 
 export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQueryDto) => {
-  const { startDate, endDate, userIds, page = 1, pageSize, sortOrder = 'DESC' } = filters;
+  const { startDate, endDate, userIds, page = 1, pageSize, sortOrder = 'DESC', search } = filters;
 
   const whereConditions: string[] = [];
   const params: any[] = [];
@@ -572,6 +572,16 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
     paramIndex++;
   }
 
+  if (search) {
+    whereConditions.push(`(
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(CONCAT(u."firstName", ' ', u."lastName")) LIKE LOWER($${paramIndex})
+    )`);
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+
   const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
 
   const approvedDebitExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)`;
@@ -596,7 +606,6 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
     ${whereClause}
     GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId",
              u."bankHolderName", u."bankName", u."accountNumber", u."ifscCode"
-    HAVING (${approvedDebitExpr} - ${settledExpr}) > 0
   `;
 
   const order = sortOrder === 'ASC' ? 'ASC' : 'DESC';

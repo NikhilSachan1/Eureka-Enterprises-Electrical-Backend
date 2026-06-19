@@ -1,6 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsDateString, IsArray, IsNumber, IsEnum, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsDateString,
+  IsArray,
+  IsNumber,
+  IsEnum,
+  IsString,
+  Min,
+  Max,
+} from 'class-validator';
 import { SortOrder } from '../../../utils/utility/constants/utility.constants';
 
 export class PendingSettlementQueryDto {
@@ -52,4 +61,9 @@ export class PendingSettlementQueryDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiProperty({ description: 'Search by employee first name or last name', required: false })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
