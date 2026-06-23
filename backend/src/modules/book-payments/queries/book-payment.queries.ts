@@ -136,6 +136,8 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       inv."invoiceNumber",
       inv."invoiceDate",
       inv."totalAmount"         AS "invoiceTotalAmount",
+      inv."tdsAmount"           AS "invoiceTdsAmount",
+      inv."isGstHold"           AS "invoiceIsGstHold",
       inv."approvalStatus"      AS "invoiceApprovalStatus",
 
       jmc."id"                  AS "jmcId",
@@ -170,7 +172,14 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       COALESCE(SUM(bp."taxableAmount"::numeric), 0)                           AS "totalTaxableAmount",
       COALESCE(SUM(bp."gstAmount"::numeric), 0)                               AS "totalGstAmount",
       COALESCE(SUM(bp."paymentTotalAmount"::numeric), 0)                      AS "totalPaymentAmount",
-      COALESCE(SUM(bp."paymentHoldAmount"::numeric), 0)                       AS "totalHoldAmount"
+      COALESCE(SUM(bp."paymentHoldAmount"::numeric), 0)                       AS "totalHoldAmount",
+      COALESCE(SUM(COALESCE(inv."tdsAmount"::numeric, 0)), 0)                 AS "totalTdsAmount",
+      COALESCE(SUM(
+        CASE WHEN inv."isGstHold" = true
+          THEN bp."taxableAmount"::numeric - COALESCE(inv."tdsAmount"::numeric, 0)
+          ELSE bp."taxableAmount"::numeric + bp."gstAmount"::numeric - COALESCE(inv."tdsAmount"::numeric, 0)
+        END
+      ), 0)                                                                    AS "totalNetPayableAmount"
     ${baseJoin}
     ${whereClause}
   `;

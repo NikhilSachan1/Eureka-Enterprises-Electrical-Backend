@@ -56,6 +56,10 @@ export class VendorBookPaymentItemDto {
   @ApiProperty() taxableAmount: number;
   @ApiProperty() gstAmount: number;
   @ApiProperty({ nullable: true }) gstPercentage: number | null;
+  @ApiProperty({ description: 'TDS deduction amount from the invoice' }) tdsAmount: number;
+  @ApiProperty({ description: 'Whether GST is held on the invoice' }) isGstHold: boolean;
+  @ApiProperty({ description: 'isGstHold=true: taxable−tds; isGstHold=false: taxable+gst−tds' })
+  netPayableAmount: number;
   @ApiProperty() paymentTotalAmount: number;
   @ApiProperty() paymentHoldAmount: number;
   @ApiProperty({ nullable: true }) paymentHoldReason: string | null;
@@ -75,6 +79,8 @@ export class VendorSummaryDto {
   @ApiProperty() totalBookPayments: number;
   @ApiProperty() totalTaxableAmount: number;
   @ApiProperty() totalGstAmount: number;
+  @ApiProperty() totalTdsAmount: number;
+  @ApiProperty() totalNetPayableAmount: number;
   @ApiProperty() totalPaymentAmount: number;
   @ApiProperty() totalHoldAmount: number;
 }
@@ -90,6 +96,8 @@ export class GlobalSummaryDto {
   @ApiProperty() totalBookPayments: number;
   @ApiProperty() totalTaxableAmount: number;
   @ApiProperty() totalGstAmount: number;
+  @ApiProperty() totalTdsAmount: number;
+  @ApiProperty() totalNetPayableAmount: number;
   @ApiProperty() totalPaymentAmount: number;
   @ApiProperty() totalHoldAmount: number;
 }

@@ -462,6 +462,8 @@ export class BookPaymentService {
           totalBookPayments: 0,
           totalTaxableAmount: 0,
           totalGstAmount: 0,
+          totalTdsAmount: 0,
+          totalNetPayableAmount: 0,
           totalPaymentAmount: 0,
           totalHoldAmount: 0,
         },
@@ -509,12 +511,21 @@ export class BookPaymentService {
             .filter(Boolean)
             .join(' | ');
 
+          const tdsAmount = r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : 0;
+          const isGstHold: boolean = r.invoiceIsGstHold;
+          const netPayableAmount = isGstHold
+            ? Number(r.taxableAmount) - tdsAmount
+            : Number(r.taxableAmount) + Number(r.gstAmount) - tdsAmount;
+
           return {
             id: r.bpId,
             bookingDate: r.bookingDate,
             taxableAmount: Number(r.taxableAmount),
             gstAmount: Number(r.gstAmount),
             gstPercentage: r.gstPercentage !== null ? Number(r.gstPercentage) : null,
+            tdsAmount,
+            isGstHold,
+            netPayableAmount,
             paymentTotalAmount: Number(r.paymentTotalAmount),
             paymentHoldAmount: Number(r.paymentHoldAmount),
             paymentHoldReason: r.paymentHoldReason ?? null,
@@ -555,6 +566,8 @@ export class BookPaymentService {
           totalBookPayments: bookPayments.length,
           totalTaxableAmount: bookPayments.reduce((s, b) => s + b.taxableAmount, 0),
           totalGstAmount: bookPayments.reduce((s, b) => s + b.gstAmount, 0),
+          totalTdsAmount: bookPayments.reduce((s, b) => s + b.tdsAmount, 0),
+          totalNetPayableAmount: bookPayments.reduce((s, b) => s + b.netPayableAmount, 0),
           totalPaymentAmount: bookPayments.reduce((s, b) => s + b.paymentTotalAmount, 0),
           totalHoldAmount: bookPayments.reduce((s, b) => s + b.paymentHoldAmount, 0),
         };
@@ -570,6 +583,8 @@ export class BookPaymentService {
         totalBookPayments: Number(summaryRow?.totalBookPayments ?? 0),
         totalTaxableAmount: Number(summaryRow?.totalTaxableAmount ?? 0),
         totalGstAmount: Number(summaryRow?.totalGstAmount ?? 0),
+        totalTdsAmount: Number(summaryRow?.totalTdsAmount ?? 0),
+        totalNetPayableAmount: Number(summaryRow?.totalNetPayableAmount ?? 0),
         totalPaymentAmount: Number(summaryRow?.totalPaymentAmount ?? 0),
         totalHoldAmount: Number(summaryRow?.totalHoldAmount ?? 0),
       },
