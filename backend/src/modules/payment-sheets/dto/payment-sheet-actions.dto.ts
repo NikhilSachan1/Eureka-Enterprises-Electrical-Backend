@@ -1,0 +1,106 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+/** HR/Admin edit of a single item amount (reason mandatory at admin stage). */
+export class EditItemAmountDto {
+  @ApiProperty({ example: 800 })
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount: number;
+
+  @ApiPropertyOptional({ description: 'Required at ADMIN_REVIEW stage' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+/** Generic reason payload — forward (optional), return/reject/hold (required). */
+export class StageActionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+/** One bank transfer to create for a vendor item's book-payment allocation. */
+export class VendorTransferInputDto {
+  @ApiProperty()
+  @IsUUID()
+  bookPaymentId: string;
+
+  @ApiProperty({ example: 'UTR123456789' })
+  @IsString()
+  utrNumber: string;
+
+  @ApiProperty({ example: '2026-06-24' })
+  @IsDateString()
+  transferDate: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  proofFileKey?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  proofFileName?: string;
+}
+
+/**
+ * Accountant pays an item.
+ * USER (expense/fuel): supply paymentMode + paidDate (+ optional transactionId).
+ * VENDOR: supply one transfer per allocated book payment.
+ */
+export class PayItemDto {
+  // ── USER settlement fields ──
+  @ApiPropertyOptional({ example: 'BANK_TRANSFER' })
+  @IsOptional()
+  @IsString()
+  paymentMode?: string;
+
+  @ApiPropertyOptional({ description: 'Expense category (required when paying an EXPENSE item)' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'Settlement note written to the ledger entry' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ example: '2026-06-24' })
+  @IsOptional()
+  @IsDateString()
+  paidDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  transactionId?: string;
+
+  // ── VENDOR settlement fields ──
+  @ApiPropertyOptional({ type: [VendorTransferInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => VendorTransferInputDto)
+  transfers?: VendorTransferInputDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  remarks?: string;
+}

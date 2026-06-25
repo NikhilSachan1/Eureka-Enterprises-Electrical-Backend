@@ -64,6 +64,11 @@ import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
 import { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
+import { PaymentSheetEntity } from 'src/modules/payment-sheets/entities/payment-sheet.entity';
+import { PaymentSheetItemEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item.entity';
+import { PaymentSheetItemBookPaymentEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-book-payment.entity';
+import { PaymentSheetItemHistoryEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-history.entity';
+import { PaymentSheetStageLogEntity } from 'src/modules/payment-sheets/entities/payment-sheet-stage-log.entity';
 import { PaymentAdviceEntity } from 'src/modules/payment-advices/entities/payment-advice.entity';
 import { PaymentAdviceSequenceEntity } from 'src/modules/payment-advices/entities/payment-advice-sequence.entity';
 import { PaymentAdviceEmailLogEntity } from 'src/modules/payment-advices/entities/payment-advice-email-log.entity';
@@ -172,6 +177,11 @@ export class ConfigService {
         SiteInvoiceEntity,
         BookPaymentEntity,
         BankTransferEntity,
+        PaymentSheetEntity,
+        PaymentSheetItemEntity,
+        PaymentSheetItemBookPaymentEntity,
+        PaymentSheetItemHistoryEntity,
+        PaymentSheetStageLogEntity,
         PaymentAdviceEntity,
         PaymentAdviceSequenceEntity,
         PaymentAdviceEmailLogEntity,
