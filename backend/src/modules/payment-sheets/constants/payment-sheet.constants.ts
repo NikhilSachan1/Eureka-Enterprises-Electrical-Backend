@@ -113,6 +113,9 @@ export const PAYMENT_SHEET_CONFIG = {
   APPROVAL_FLOW_KEY: 'payments.approval_flow',
   SHEET_NUMBER_FORMAT_KEY: 'payments.sheet_number_format',
   ADMIN_EDIT_POLICY_KEY: 'payments.admin_edit_policy',
+  SHEET_STATUSES_KEY: 'payments.sheet_statuses',
+  SHEET_STAGES_KEY: 'payments.sheet_stages',
+  ITEM_STATUSES_KEY: 'payments.item_statuses',
 } as const;
 
 export const PAYMENT_SHEET_DEFAULTS = {
