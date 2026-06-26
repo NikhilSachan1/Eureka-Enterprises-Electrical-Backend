@@ -165,9 +165,6 @@ export class PaymentSheetService {
     item: PaymentSheetItemEntity;
     allocations: Array<{ bookPaymentId: string; allocatedAmount: number }>;
   }> {
-    const requested = Number(input.requestedAmount);
-    if (requested <= 0) throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
-
     if (input.beneficiaryType === BeneficiaryType.VENDOR) {
       if (input.sourceType !== PaymentSourceType.VENDOR_PAYMENT) {
         throw new BadRequestException('Vendor items must use sourceType VENDOR_PAYMENT');
@@ -195,12 +192,20 @@ export class PaymentSheetService {
         pending += transferable;
         allocations.push({ bookPaymentId: r.bookPaymentId, allocatedAmount: transferable });
       }
-      // Vendor amount is allocation-based: must equal Σ selected (exact 1:1 transfers).
-      if (Math.abs(requested - pending) > 0.01) {
-        throw new BadRequestException(
-          `Vendor amount must equal the sum of selected book payments (${pending.toFixed(2)})`,
-        );
+      // Vendor amount is allocation-based and DERIVED from the selected book payments.
+      // requestedAmount is optional for vendors; if the client sends it, treat it as a
+      // checksum and reject a mismatch (catches stale UI).
+      if (input.requestedAmount !== undefined && input.requestedAmount !== null) {
+        if (Math.abs(Number(input.requestedAmount) - pending) > 0.01) {
+          throw new BadRequestException(
+            `Vendor amount must equal the sum of selected book payments (${pending.toFixed(2)})`,
+          );
+        }
       }
+      if (pending <= 0) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
+      }
+      const requested = pending;
       const bank = await this.repo.raw(
         `SELECT "accountHolderName", "bankName", "accountNumber", "ifscCode" FROM "vendors" WHERE id = $1`,
         [input.vendorId],
@@ -239,6 +244,10 @@ export class PaymentSheetService {
       input.sourceType !== PaymentSourceType.FUEL_EXPENSE
     ) {
       throw new BadRequestException('User items must use EXPENSE or FUEL_EXPENSE');
+    }
+    const requested = Number(input.requestedAmount);
+    if (!(requested > 0)) {
+      throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
     }
     const pendingQuery =
       input.sourceType === PaymentSourceType.EXPENSE

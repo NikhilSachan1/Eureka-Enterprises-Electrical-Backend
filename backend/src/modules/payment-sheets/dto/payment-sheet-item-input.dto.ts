@@ -26,10 +26,16 @@ export class PaymentSheetItemInputDto {
   @IsEnum(PaymentSourceType)
   sourceType: PaymentSourceType;
 
-  @ApiProperty({ description: 'Amount to pay this beneficiary (≤ live pending)', example: 1000 })
+  @ApiPropertyOptional({
+    description:
+      'Amount to pay (≤ live pending). Required for USER items. For VENDOR items it is ' +
+      'derived from bookPaymentIds and may be omitted; if sent it must equal that sum.',
+    example: 1000,
+  })
+  @ValidateIf((o) => o.beneficiaryType === BeneficiaryType.USER || o.requestedAmount !== undefined)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  requestedAmount: number;
+  requestedAmount?: number;
 
   @ApiPropertyOptional({
     description: 'Book payment ids backing a VENDOR item (Σ transfer amounts = requestedAmount)',
