@@ -9,7 +9,7 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PaymentSheetService, ActingUser } from './payment-sheet.service';
 import {
   CreatePaymentSheetDto,
@@ -22,7 +22,11 @@ import {
 } from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
-import { PAYMENT_SHEET_PERMISSIONS } from './constants/payment-sheet.constants';
+import {
+  PAYMENT_SHEET_PERMISSIONS,
+  PaymentSourceType,
+  BeneficiaryType,
+} from './constants/payment-sheet.constants';
 
 @ApiTags('Payment Sheets')
 @ApiBearerAuth('JWT-auth')
@@ -53,9 +57,20 @@ export class PaymentSheetController {
 
   @Get(':id/pdf')
   @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.DOWNLOAD)
-  @ApiOperation({ summary: 'Get a download URL for the payment sheet PDF' })
-  pdf(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.getPdfUrl(id);
+  @ApiOperation({
+    summary: 'Get a download URL for the payment sheet PDF',
+    description:
+      'Omit filters for the full sheet. Pass sourceType (EXPENSE|FUEL_EXPENSE|VENDOR_PAYMENT) ' +
+      'and/or beneficiaryType (USER|VENDOR) to export only those lines with their own subtotal.',
+  })
+  @ApiQuery({ name: 'sourceType', required: false, enum: PaymentSourceType })
+  @ApiQuery({ name: 'beneficiaryType', required: false, enum: BeneficiaryType })
+  pdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('sourceType') sourceType?: string,
+    @Query('beneficiaryType') beneficiaryType?: string,
+  ) {
+    return this.service.getPdfUrl(id, { sourceType, beneficiaryType });
   }
 
   @Get(':id')

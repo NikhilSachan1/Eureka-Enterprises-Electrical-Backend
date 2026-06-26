@@ -4,9 +4,14 @@ import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { PaymentSheetRepository } from './payment-sheet.repository';
 import { PaymentSheetEntity } from './entities/payment-sheet.entity';
 import { PaymentSheetItemEntity } from './entities/payment-sheet-item.entity';
-import { PaymentSheetStatus } from './constants/payment-sheet.constants';
+import { PaymentSheetStatus, PaymentSheetItemStatus } from './constants/payment-sheet.constants';
 
 type SheetDetail = PaymentSheetEntity & { items: PaymentSheetItemEntity[] };
+
+interface GenerateOpts {
+  keySuffix?: string;
+  filterLabel?: string;
+}
 
 @Injectable()
 export class PaymentSheetPdfService {
@@ -17,13 +22,23 @@ export class PaymentSheetPdfService {
     private readonly repo: PaymentSheetRepository,
   ) {}
 
-  /** Returns an existing pdfKey, or generates one if missing / sheet is still mutable. */
+  /** Full-sheet PDF: returns an existing pdfKey when final, else generates + caches it. */
   async ensurePdf(detail: SheetDetail): Promise<string> {
     const isFinal = detail.status === PaymentSheetStatus.COMPLETED;
     if (detail.pdfKey && isFinal) return detail.pdfKey;
-    const key = await this.generate(detail);
+    const key = await this.generate(detail, detail.items ?? []);
     await this.repo.updateSheet({ id: detail.id }, { pdfKey: key });
     return key;
+  }
+
+  /** Filtered PDF (e.g. vendor-only): always regenerated, distinct key, never cached on the sheet. */
+  async generateVariant(
+    detail: SheetDetail,
+    items: PaymentSheetItemEntity[],
+    keySuffix: string,
+    filterLabel: string,
+  ): Promise<string> {
+    return this.generate(detail, items, { keySuffix, filterLabel });
   }
 
   async getDownloadUrl(key: string) {
@@ -41,8 +56,12 @@ export class PaymentSheetPdfService {
       .replace(/>/g, '&gt;');
   }
 
-  private buildHtml(detail: SheetDetail): string {
-    const rows = (detail.items ?? [])
+  private buildHtml(
+    detail: SheetDetail,
+    items: PaymentSheetItemEntity[],
+    filterLabel?: string,
+  ): string {
+    const rows = items
       .map((it, idx) => {
         const bank = it.bankSnapshot;
         const beneficiary = it.beneficiaryType === 'VENDOR' ? 'Vendor' : 'Employee';
@@ -62,6 +81,13 @@ export class PaymentSheetPdfService {
       })
       .join('');
 
+    // Totals computed from the rendered items, so filtered exports get a correct subtotal.
+    const totalCurrent = items
+      .filter((i) => i.itemStatus !== PaymentSheetItemStatus.REJECTED)
+      .reduce((s, i) => s + Number(i.currentAmount), 0);
+    const totalPaid = items.reduce((s, i) => s + Number(i.paidAmount ?? 0), 0);
+    const totalsLabel = filterLabel ? 'Subtotal' : 'Totals';
+
     return `<!doctype html><html><head><meta charset="utf-8"/>
       <style>
         * { font-family: Arial, Helvetica, sans-serif; }
@@ -69,6 +95,7 @@ export class PaymentSheetPdfService {
         h1 { font-size: 18px; margin: 0 0 4px; }
         .meta { margin-bottom: 12px; color: #444; }
         .meta div { margin: 2px 0; }
+        .filter { display:inline-block; margin-top:4px; padding:2px 10px; border-radius:12px; background:#eef; color:#224; font-size:11px; }
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
         th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
         th { background: #f2f2f2; }
@@ -83,6 +110,7 @@ export class PaymentSheetPdfService {
           detail.status,
         )} &nbsp; <strong>Stage:</strong> ${this.esc(detail.currentStage ?? '—')}</div>
         <div><strong>Financial Year:</strong> ${this.esc(detail.financialYear)}</div>
+        ${filterLabel ? `<div class="filter">Filtered: ${this.esc(filterLabel)}</div>` : ''}
       </div>
       <table>
         <thead>
@@ -91,18 +119,22 @@ export class PaymentSheetPdfService {
         <tbody>${rows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="4" class="r">Totals</td>
-            <td class="r">${this.money(Number(detail.totalCurrentAmount))}</td>
+            <td colspan="4" class="r">${totalsLabel}</td>
+            <td class="r">${this.money(totalCurrent)}</td>
             <td></td>
-            <td class="r">${this.money(Number(detail.totalPaidAmount))}</td>
+            <td class="r">${this.money(totalPaid)}</td>
           </tr>
         </tfoot>
       </table>
     </body></html>`;
   }
 
-  private async generate(detail: SheetDetail): Promise<string> {
-    const html = this.buildHtml(detail);
+  private async generate(
+    detail: SheetDetail,
+    items: PaymentSheetItemEntity[],
+    opts: GenerateOpts = {},
+  ): Promise<string> {
+    const html = this.buildHtml(detail, items, opts.filterLabel);
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
     try {
       browser = await puppeteer.launch({
@@ -126,10 +158,11 @@ export class PaymentSheetPdfService {
           margin: { top: '20px', bottom: '20px', left: '30px', right: '30px' },
         }),
       );
-      const key = `payment-sheets/${detail.financialYear}/${detail.sheetNumber.replace(
+      const base = `payment-sheets/${detail.financialYear}/${detail.sheetNumber.replace(
         /\//g,
         '-',
-      )}.pdf`;
+      )}`;
+      const key = opts.keySuffix ? `${base}-${opts.keySuffix}.pdf` : `${base}.pdf`;
       await this.filesService.uploadFile(pdfBuffer, key, 'application/pdf');
       return key;
     } catch (err) {

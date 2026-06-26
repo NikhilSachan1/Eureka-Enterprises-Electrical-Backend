@@ -1049,9 +1049,42 @@ export class PaymentSheetService {
 
   // ─────────────────────────── PDF ───────────────────────────
 
-  async getPdfUrl(id: string) {
+  async getPdfUrl(id: string, filter?: { sourceType?: string; beneficiaryType?: string }) {
     const detail = await this.findOne(id);
-    const key = await this.pdfService.ensurePdf(detail as any);
+
+    const sourceType = filter?.sourceType;
+    const beneficiaryType = filter?.beneficiaryType;
+    if (sourceType && !Object.values(PaymentSourceType).includes(sourceType as PaymentSourceType)) {
+      throw new BadRequestException(`Invalid sourceType: ${sourceType}`);
+    }
+    if (
+      beneficiaryType &&
+      !Object.values(BeneficiaryType).includes(beneficiaryType as BeneficiaryType)
+    ) {
+      throw new BadRequestException(`Invalid beneficiaryType: ${beneficiaryType}`);
+    }
+
+    // No filter → cached full-sheet PDF.
+    if (!sourceType && !beneficiaryType) {
+      const key = await this.pdfService.ensurePdf(detail as any);
+      return await this.pdfService.getDownloadUrl(key);
+    }
+
+    // Filtered → render only the matching lines into a distinct, non-cached key.
+    let items = (detail as any).items as PaymentSheetItemEntity[];
+    if (sourceType) items = items.filter((i) => i.sourceType === sourceType);
+    if (beneficiaryType) items = items.filter((i) => i.beneficiaryType === beneficiaryType);
+    if (!items.length) {
+      throw new BadRequestException('No items on this sheet match the requested filter');
+    }
+
+    const parts = [beneficiaryType, sourceType].filter(Boolean) as string[];
+    const filterLabel = parts.join(' / ');
+    const keySuffix = parts
+      .join('-')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
+    const key = await this.pdfService.generateVariant(detail as any, items, keySuffix, filterLabel);
     return await this.pdfService.getDownloadUrl(key);
   }
 
