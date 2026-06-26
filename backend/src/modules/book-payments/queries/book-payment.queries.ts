@@ -35,6 +35,9 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
 
   whereConditions.push(`bp."deletedAt" IS NULL`);
 
+  // Only book payments still awaiting a bank transfer (payout pending)
+  whereConditions.push(`bp."hasTransfer" = false`);
+
   if (vendorIds && vendorIds.length > 0) {
     whereConditions.push(`bp."vendorId" = ANY($${pi++})`);
     params.push(vendorIds);
@@ -160,6 +163,7 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
     ${baseJoin}
     WHERE bp."approvalStatus" = 'APPROVED'
       AND bp."deletedAt" IS NULL
+      AND bp."hasTransfer" = false
       AND bp."vendorId" = ANY($1)
     ORDER BY v."name" ASC, bp."bookingDate" ${order}
   `;
