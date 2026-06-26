@@ -140,7 +140,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/forward')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.REVIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
   @ApiOperation({ summary: 'Forward the sheet to the next configured stage' })
   forward(
     @Param('id', ParseUUIDPipe) id: string,
@@ -151,7 +151,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/return')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.REVIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
   @ApiOperation({ summary: 'Return the sheet to the initiator for rework' })
   returnSheet(
     @Param('id', ParseUUIDPipe) id: string,
@@ -162,7 +162,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/reject')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.REVIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
   @ApiOperation({ summary: 'Reject the sheet (terminal)' })
   reject(
     @Param('id', ParseUUIDPipe) id: string,
