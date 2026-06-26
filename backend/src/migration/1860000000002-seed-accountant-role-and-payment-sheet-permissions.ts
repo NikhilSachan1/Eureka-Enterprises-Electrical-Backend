@@ -86,10 +86,10 @@ export class SeedAccountantRoleAndPaymentSheetPermissions1860000000002
     await queryRunner.query(
       `DELETE FROM permissions WHERE name LIKE 'financials.payment-sheets.%'`,
     );
-    // Remove the ACCOUNTANT role's user mappings then the role.
-    await queryRunner.query(`
-      DELETE FROM user_roles WHERE "roleId" IN (SELECT id FROM roles WHERE name = 'ACCOUNTANT')
-    `);
-    await queryRunner.query(`DELETE FROM roles WHERE name = 'ACCOUNTANT'`);
+    // NOTE: We intentionally do NOT delete the ACCOUNTANT role or its user_roles here.
+    // The role pre-exists in some environments (e.g. production) with real users assigned;
+    // up() only inserts it idempotently (ON CONFLICT DO NOTHING) and maps permissions onto it.
+    // Deleting it on rollback would destroy pre-existing data this migration never created.
+    // Removing the payment-sheet permission rows above already revokes everything up() granted.
   }
 }
