@@ -55,6 +55,18 @@ export class PaymentSheetController {
     return this.service.reconcile(id);
   }
 
+  @Post(':id/sync-amounts')
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.CREATE)
+  @ApiOperation({
+    summary: 'Sync line amounts to latest pending (initiator only, DRAFT/RETURNED)',
+    description:
+      'Re-pulls live pending and saves it onto each line. Vendor lines refresh their ' +
+      'book-payment allocations; lines with zero remaining pending are removed. All changes logged.',
+  })
+  syncAmounts(@Param('id', ParseUUIDPipe) id: string, @GetUser() user: ActingUser) {
+    return this.service.syncToLatest(id, user);
+  }
+
   @Get(':id/pdf')
   @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.DOWNLOAD)
   @ApiOperation({

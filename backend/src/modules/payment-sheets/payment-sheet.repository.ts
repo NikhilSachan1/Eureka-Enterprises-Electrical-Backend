@@ -116,6 +116,12 @@ export class PaymentSheetRepository {
   ) {
     await this.allocs(em).update(where, data);
   }
+  async softDeleteAllocation(
+    where: FindOptionsWhere<PaymentSheetItemBookPaymentEntity>,
+    em?: EntityManager,
+  ) {
+    await this.allocs(em).softDelete(where);
+  }
 
   // ── History & stage logs ──
   async addHistory(data: Partial<PaymentSheetItemHistoryEntity>, em?: EntityManager) {

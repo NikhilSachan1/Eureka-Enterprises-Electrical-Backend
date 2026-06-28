@@ -466,7 +466,56 @@ export class PaymentSheetService {
       where: { paymentSheetId: id },
       order: { createdAt: 'ASC' },
     });
-    return { ...sheet, items, stageLogs, history };
+
+    // Enrich each item with the beneficiary's identity (employee / vendor details).
+    const userIds = [...new Set(items.filter((i) => i.userId).map((i) => i.userId))];
+    const vendorIds = [...new Set(items.filter((i) => i.vendorId).map((i) => i.vendorId))];
+    const [userRows, vendorRows] = await Promise.all([
+      userIds.length
+        ? this.repo.raw(
+            `SELECT id, "firstName", "lastName", "email", "employeeId" FROM users WHERE id = ANY($1)`,
+            [userIds],
+          )
+        : Promise.resolve([]),
+      vendorIds.length
+        ? this.repo.raw(
+            `SELECT id, name, email, "contactNumber", city, state FROM vendors WHERE id = ANY($1)`,
+            [vendorIds],
+          )
+        : Promise.resolve([]),
+    ]);
+    const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
+    const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
+
+    const enrichedItems = items.map((i) => {
+      const u = i.userId ? userMap.get(i.userId) : null;
+      const v = i.vendorId ? vendorMap.get(i.vendorId) : null;
+      return {
+        ...i,
+        user: u
+          ? {
+              id: u.id,
+              firstName: u.firstName,
+              lastName: u.lastName,
+              fullName: [u.firstName, u.lastName].filter(Boolean).join(' '),
+              email: u.email ?? null,
+              employeeId: u.employeeId ?? null,
+            }
+          : null,
+        vendor: v
+          ? {
+              id: v.id,
+              name: v.name,
+              email: v.email ?? null,
+              contactNumber: v.contactNumber ?? null,
+              city: v.city ?? null,
+              state: v.state ?? null,
+            }
+          : null,
+      };
+    });
+
+    return { ...sheet, items: enrichedItems, stageLogs, history };
   }
 
   private async loadEditableSheet(id: string, em: EntityManager) {
@@ -1054,6 +1103,180 @@ export class PaymentSheetService {
       });
     }
     return { sheetId: id, sheetNumber: sheet.sheetNumber, status: sheet.status, lines };
+  }
+
+  // ─────────────────────────── sync to latest pending (OM stage only) ───────────────────────────
+
+  /**
+   * Re-pull live pending and save it onto each line. Allowed ONLY while the sheet is with
+   * the initiator (DRAFT/RETURNED at INITIATION) — nothing is approved yet there, so syncing
+   * up or down is safe. Vendor lines refresh their book-payment allocations (dropping any
+   * transferred elsewhere); lines whose live pending is now 0 are removed. All changes logged.
+   * Downstream drift is still caught by the pay-time conflict guard.
+   */
+  async syncToLatest(id: string, user: ActingUser) {
+    return await this.dataSource.transaction(async (em) => {
+      const sheet = await this.loadEditableSheet(id, em);
+      const flow = await this.getApprovalFlow(em);
+
+      const atInitiation =
+        [PaymentSheetStatus.DRAFT, PaymentSheetStatus.RETURNED].includes(
+          sheet.status as PaymentSheetStatus,
+        ) && sheet.currentStage === PaymentSheetStage.INITIATION;
+      if (!atInitiation) {
+        throw new BadRequestException(
+          'Amounts can be synced to latest pending only while the sheet is with the initiator (DRAFT/RETURNED)',
+        );
+      }
+      if (user.activeRole !== flow[0].role && user.activeRole !== SUPER_ADMIN) {
+        throw new ForbiddenException(PAYMENT_SHEET_ERRORS.NOT_EDITABLE_STAGE);
+      }
+
+      const items = await this.repo.findItems(
+        { where: { paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      const updated: Array<{ itemId: string; previousAmount: number; newAmount: number }> = [];
+      const removed: Array<{ itemId: string; reason: string }> = [];
+
+      for (const item of items) {
+        const prev = Number(item.currentAmount);
+
+        if (item.beneficiaryType === BeneficiaryType.VENDOR) {
+          const allocs = await this.repo.findAllocations(
+            { where: { itemId: item.id, deletedAt: IsNull() } },
+            em,
+          );
+          let newPending = 0;
+          if (allocs.length) {
+            const { query, params } = bookPaymentsTransferableQuery(
+              allocs.map((a) => a.bookPaymentId),
+            );
+            const rows = await this.repo.raw(query, params, em);
+            const byId = new Map<string, any>(rows.map((r: any) => [r.bookPaymentId, r]));
+            for (const a of allocs) {
+              const r = byId.get(a.bookPaymentId);
+              const eligible = r && r.hasTransfer === false && r.approvalStatus === 'APPROVED';
+              if (!eligible) {
+                await this.repo.softDeleteAllocation({ id: a.id }, em);
+                continue;
+              }
+              const t = Number(r.transferable);
+              newPending += t;
+              if (Math.abs(Number(a.allocatedAmount) - t) > 0.01) {
+                await this.repo.updateAllocation(
+                  { id: a.id },
+                  { allocatedAmount: t, updatedBy: user.id },
+                  em,
+                );
+              }
+            }
+          }
+          if (newPending <= 0) {
+            await this.removeLineOnSync(
+              item,
+              'No transferable book payments remaining (synced)',
+              user,
+              em,
+            );
+            removed.push({ itemId: item.id, reason: 'no transferable book payments' });
+            continue;
+          }
+          if (Math.abs(newPending - prev) > 0.01) {
+            await this.repo.updateItem(
+              { id: item.id },
+              {
+                currentAmount: newPending,
+                requestedAmount: newPending,
+                pendingSnapshot: newPending,
+                updatedBy: user.id,
+              },
+              em,
+            );
+            await this.addHistory(
+              item,
+              ItemHistoryAction.AMOUNT_EDIT,
+              PaymentSheetStage.INITIATION,
+              user.id,
+              em,
+              {
+                previousAmount: prev,
+                newAmount: newPending,
+                reason: 'Synced to latest pending',
+              },
+            );
+            updated.push({ itemId: item.id, previousAmount: prev, newAmount: newPending });
+          } else {
+            await this.repo.updateItem({ id: item.id }, { pendingSnapshot: newPending }, em);
+          }
+          continue;
+        }
+
+        // USER (expense / fuel)
+        const live = await this.computeLivePending(item, em);
+        if (live <= 0) {
+          await this.removeLineOnSync(item, 'No pending remaining (synced)', user, em);
+          removed.push({ itemId: item.id, reason: 'no pending remaining' });
+          continue;
+        }
+        if (Math.abs(live - prev) > 0.01) {
+          await this.repo.updateItem(
+            { id: item.id },
+            {
+              currentAmount: live,
+              requestedAmount: live,
+              pendingSnapshot: live,
+              updatedBy: user.id,
+            },
+            em,
+          );
+          await this.addHistory(
+            item,
+            ItemHistoryAction.AMOUNT_EDIT,
+            PaymentSheetStage.INITIATION,
+            user.id,
+            em,
+            {
+              previousAmount: prev,
+              newAmount: live,
+              reason: 'Synced to latest pending',
+            },
+          );
+          updated.push({ itemId: item.id, previousAmount: prev, newAmount: live });
+        } else {
+          await this.repo.updateItem({ id: item.id }, { pendingSnapshot: live }, em);
+        }
+      }
+
+      await this.recomputeTotals(id, em);
+      return {
+        message: 'Amounts synced to latest pending',
+        updatedCount: updated.length,
+        removedCount: removed.length,
+        updated,
+        removed,
+      };
+    });
+  }
+
+  private async removeLineOnSync(
+    item: PaymentSheetItemEntity,
+    reason: string,
+    user: ActingUser,
+    em: EntityManager,
+  ) {
+    await this.addHistory(
+      item,
+      ItemHistoryAction.ITEM_REMOVED,
+      PaymentSheetStage.INITIATION,
+      user.id,
+      em,
+      {
+        previousAmount: Number(item.currentAmount),
+        reason,
+      },
+    );
+    await this.repo.softDeleteItem({ id: item.id }, em);
   }
 
   // ─────────────────────────── PDF ───────────────────────────
