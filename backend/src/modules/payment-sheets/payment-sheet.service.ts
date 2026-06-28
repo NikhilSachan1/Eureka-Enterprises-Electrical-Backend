@@ -840,8 +840,11 @@ export class PaymentSheetService {
     // 2. Settle in the source module(s).
     let paymentRef = traceRef;
     if (item.sourceType === PaymentSourceType.EXPENSE) {
-      if (!dto.paymentMode || !dto.paidDate || !dto.category) {
+      if (!dto.paymentMode || !dto.paidDate) {
         throw new BadRequestException(PAYMENT_SHEET_ERRORS.PAYMENT_DETAILS_REQUIRED);
+      }
+      if (!dto.category) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.CATEGORY_REQUIRED);
       }
       await this.expenseService.createCreditExpense({
         userId: item.userId as string,

@@ -145,6 +145,7 @@ export const PAYMENT_SHEET_ERRORS = {
     'utrNumber and transferDate are required for each vendor book-payment transfer',
   VENDOR_ALLOCATION_MISMATCH: 'Provided transfers do not match the vendor book-payment allocations',
   PAYMENT_DETAILS_REQUIRED: 'paymentMode and paidDate are required to pay this item',
+  CATEGORY_REQUIRED: 'category is required to pay an expense item',
   PENDING_CONFLICT: 'Live pending is now lower than the amount to pay; reconcile the sheet first',
   ALREADY_TERMINAL: 'This sheet is already in a terminal state',
 } as const;
