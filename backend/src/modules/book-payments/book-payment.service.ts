@@ -2,7 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
-import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
+import {
+  CreateBookPaymentDto,
+  UpdateBookPaymentDto,
+  GetBookPaymentDto,
+  GetVendorListQueryDto,
+  VendorListResponseDto,
+} from './dto';
+import { buildVendorListQuery } from './queries/book-payment.queries';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
@@ -69,7 +76,7 @@ export class BookPaymentService {
       // Each book payment books exactly what is transferred — no per-payment hold
       const paymentTotalAmount = transferAmount;
 
-      // Create book payment (auto-approved)
+      // Create book payment — PENDING until approved
       const created = await this.bookPaymentRepository.create(
         {
           invoiceId: invoice.id,
@@ -84,9 +91,9 @@ export class BookPaymentService {
           paymentHoldAmount: 0,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
-          approvalStatus: FinancialApprovalStatus.APPROVED,
-          approvalBy: createdBy,
-          approvalAt: new Date(),
+          approvalStatus: FinancialApprovalStatus.PENDING,
+          approvalBy: null,
+          approvalAt: null,
           hasTransfer: false,
           createdBy,
         },
@@ -204,6 +211,9 @@ export class BookPaymentService {
       const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
       if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
 
+      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_EDIT_APPROVED);
+      }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
       }
@@ -276,6 +286,9 @@ export class BookPaymentService {
       const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
       if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
 
+      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_APPROVED);
+      }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_HAS_TRANSFER);
       }
@@ -291,6 +304,52 @@ export class BookPaymentService {
       await this.bookPaymentRepository.softDelete({ id }, em);
 
       return { message: BOOK_PAYMENT_RESPONSES.DELETED };
+    });
+  }
+
+  async approve(id: string, approvedBy: string) {
+    const bp = await this.bookPaymentRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
+    if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
+    if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.ALREADY_APPROVED);
+    }
+    await this.bookPaymentRepository.update({ id }, {
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: approvedBy,
+      approvalAt: new Date(),
+      updatedBy: approvedBy,
+    } as Partial<BookPaymentEntity>);
+    return { message: BOOK_PAYMENT_RESPONSES.APPROVED };
+  }
+
+  async reject(id: string, rejectedBy: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
+      if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
+      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_REJECT_APPROVED);
+      }
+
+      // Reverse bookedTotal that was incremented on create
+      const effectiveAmount = Number(bp.paymentTotalAmount);
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
+
+      await this.bookPaymentRepository.update(
+        { id },
+        {
+          approvalStatus: FinancialApprovalStatus.REJECTED,
+          approvalBy: rejectedBy,
+          approvalAt: new Date(),
+          updatedBy: rejectedBy,
+        } as Partial<BookPaymentEntity>,
+        em,
+      );
+      return { message: BOOK_PAYMENT_RESPONSES.REJECTED };
     });
   }
 
@@ -371,6 +430,164 @@ export class BookPaymentService {
           approvalStatus: r.approvalStatus,
         },
       })),
+    };
+  }
+
+  async getVendorList(query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
+    const {
+      countQuery,
+      countParams,
+      vendorIdsQuery,
+      vendorIdsParams,
+      detailQuery,
+      summaryQuery,
+      summaryParams,
+    } = buildVendorListQuery(query);
+
+    // Run count and summary in parallel with vendor-id pagination
+    const [vendorIdRows, [{ total }], [summaryRow]] = await Promise.all([
+      this.bookPaymentRepository.executeRawQuery(vendorIdsQuery, vendorIdsParams),
+      this.bookPaymentRepository.executeRawQuery(countQuery, countParams),
+      this.bookPaymentRepository.executeRawQuery(summaryQuery, summaryParams),
+    ]);
+
+    const totalRecords = Number(total);
+
+    if (vendorIdRows.length === 0) {
+      return {
+        records: [],
+        totalRecords,
+        summary: {
+          totalVendors: 0,
+          totalBookPayments: 0,
+          totalTaxableAmount: 0,
+          totalGstAmount: 0,
+          totalTdsAmount: 0,
+          totalNetPayableAmount: 0,
+          totalPaymentAmount: 0,
+          totalHoldAmount: 0,
+        },
+      };
+    }
+
+    const pageVendorIds = vendorIdRows.map((r: any) => r.vendorId);
+
+    // Fetch all book payment rows for the current vendor page in one query
+    const rows: any[] = await this.bookPaymentRepository.executeRawQuery(detailQuery, [
+      pageVendorIds,
+    ]);
+
+    // Group rows by vendorId
+    const vendorMap = new Map<string, any[]>();
+    for (const row of rows) {
+      if (!vendorMap.has(row.vendorId)) vendorMap.set(row.vendorId, []);
+      vendorMap.get(row.vendorId)?.push(row);
+    }
+
+    // Preserve the pagination order from vendorIdRows
+    const records = pageVendorIds
+      .filter((vid: string) => vendorMap.has(vid))
+      .map((vid: string) => {
+        const bpRows = vendorMap.get(vid) ?? [];
+        const first = bpRows[0];
+
+        const vendor = {
+          id: first.vendorId,
+          name: first.vendorName,
+          city: first.vendorCity,
+          state: first.vendorState,
+          contactNumber: first.vendorContact,
+          email: first.vendorEmail ?? null,
+          bankDetails: {
+            accountHolderName: first.vendorAccountHolderName ?? null,
+            bankName: first.vendorBankName ?? null,
+            accountNumber: first.vendorAccountNumber ?? null,
+            ifscCode: first.vendorIfscCode ?? null,
+          },
+        };
+
+        const bookPayments = bpRows.map((r) => {
+          const displayName = [r.vendorName, r.siteName, r.companyName, r.siteCity, r.siteState]
+            .filter(Boolean)
+            .join(' | ');
+
+          const tdsAmount = r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : 0;
+          const isGstHold: boolean = r.invoiceIsGstHold;
+          const netPayableAmount = isGstHold
+            ? Number(r.taxableAmount) - tdsAmount
+            : Number(r.taxableAmount) + Number(r.gstAmount) - tdsAmount;
+
+          return {
+            id: r.bpId,
+            bookingDate: r.bookingDate,
+            taxableAmount: Number(r.taxableAmount),
+            gstAmount: Number(r.gstAmount),
+            gstPercentage: r.gstPercentage !== null ? Number(r.gstPercentage) : null,
+            tdsAmount,
+            isGstHold,
+            netPayableAmount,
+            paymentTotalAmount: Number(r.paymentTotalAmount),
+            paymentHoldAmount: Number(r.paymentHoldAmount),
+            paymentHoldReason: r.paymentHoldReason ?? null,
+            remarks: r.remarks ?? null,
+            approvalStatus: r.approvalStatus,
+            hasTransfer: r.hasTransfer,
+            displayName,
+            invoice: {
+              id: r.invoiceId,
+              invoiceNumber: r.invoiceNumber ?? null,
+              invoiceDate: r.invoiceDate ?? null,
+              totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
+              approvalStatus: r.invoiceApprovalStatus,
+            },
+            jmc: r.jmcId ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate } : null,
+            po: r.poId
+              ? {
+                  id: r.poId,
+                  poNumber: r.poNumber,
+                  poDate: r.poDate,
+                  totalAmount: Number(r.poTotalAmount),
+                }
+              : null,
+            site: {
+              id: r.siteId,
+              name: r.siteName,
+              city: r.siteCity ?? null,
+              state: r.siteState ?? null,
+            },
+            company: {
+              id: r.companyId,
+              name: r.companyName,
+            },
+          };
+        });
+
+        const vendorSummary = {
+          totalBookPayments: bookPayments.length,
+          totalTaxableAmount: bookPayments.reduce((s, b) => s + b.taxableAmount, 0),
+          totalGstAmount: bookPayments.reduce((s, b) => s + b.gstAmount, 0),
+          totalTdsAmount: bookPayments.reduce((s, b) => s + b.tdsAmount, 0),
+          totalNetPayableAmount: bookPayments.reduce((s, b) => s + b.netPayableAmount, 0),
+          totalPaymentAmount: bookPayments.reduce((s, b) => s + b.paymentTotalAmount, 0),
+          totalHoldAmount: bookPayments.reduce((s, b) => s + b.paymentHoldAmount, 0),
+        };
+
+        return { vendor, vendorSummary, bookPayments };
+      });
+
+    return {
+      records,
+      totalRecords,
+      summary: {
+        totalVendors: Number(summaryRow?.totalVendors ?? 0),
+        totalBookPayments: Number(summaryRow?.totalBookPayments ?? 0),
+        totalTaxableAmount: Number(summaryRow?.totalTaxableAmount ?? 0),
+        totalGstAmount: Number(summaryRow?.totalGstAmount ?? 0),
+        totalTdsAmount: Number(summaryRow?.totalTdsAmount ?? 0),
+        totalNetPayableAmount: Number(summaryRow?.totalNetPayableAmount ?? 0),
+        totalPaymentAmount: Number(summaryRow?.totalPaymentAmount ?? 0),
+        totalHoldAmount: Number(summaryRow?.totalHoldAmount ?? 0),
+      },
     };
   }
 }

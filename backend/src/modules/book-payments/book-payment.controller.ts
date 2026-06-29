@@ -11,7 +11,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BookPaymentService } from './book-payment.service';
-import { CreateBookPaymentDto, UpdateBookPaymentDto, GetBookPaymentDto } from './dto';
+import {
+  CreateBookPaymentDto,
+  UpdateBookPaymentDto,
+  GetBookPaymentDto,
+  GetVendorListQueryDto,
+  VendorListResponseDto,
+} from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
@@ -21,11 +27,36 @@ import { RequiredPermission } from 'src/modules/auth/decorators/required-permiss
 export class BookPaymentController {
   constructor(private readonly bookPaymentService: BookPaymentService) {}
 
+  @Patch(':id/approve')
+  @RequiredPermission('financials.book-payments.approve')
+  @ApiOperation({ summary: 'Approve a pending book payment' })
+  approve(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
+    return this.bookPaymentService.approve(id, userId);
+  }
+
+  @Patch(':id/reject')
+  @RequiredPermission('financials.book-payments.approve')
+  @ApiOperation({ summary: 'Reject a pending book payment' })
+  reject(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
+    return this.bookPaymentService.reject(id, userId);
+  }
+
   @Post()
   @RequiredPermission('financials.book-payments.create')
-  @ApiOperation({ summary: 'Create a book payment (PURCHASE side only, auto-approved)' })
+  @ApiOperation({ summary: 'Create a book payment (PURCHASE side only)' })
   create(@Body() dto: CreateBookPaymentDto, @GetUser('id') userId: string) {
     return this.bookPaymentService.create(dto, userId);
+  }
+
+  @Get('vendor-list')
+  @RequiredPermission('financials.book-payments.view')
+  @ApiOperation({
+    summary: 'Vendor book payments list',
+    description:
+      'Returns all vendors with their approved book payments, each enriched with invoice, JMC, PO, site and company details. Paginated on vendor level.',
+  })
+  getVendorList(@Query() query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
+    return this.bookPaymentService.getVendorList(query);
   }
 
   @Get('dropdown')

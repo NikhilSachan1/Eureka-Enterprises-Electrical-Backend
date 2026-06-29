@@ -34,6 +34,8 @@ import {
   FuelExpenseBulkApprovalDto,
   FuelExpenseListResponseDto,
   BulkDeleteFuelExpenseDto,
+  FuelPendingSettlementQueryDto,
+  FuelPendingSettlementResponseDto,
 } from './dto';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators/source-detector.decorator';
@@ -179,6 +181,17 @@ export class FuelExpenseController {
     @Query() fuelExpenseQueryDto: FuelExpenseQueryDto,
   ) {
     return this.fuelExpenseService.getFuelExpenseRecords(fuelExpenseQueryDto, req.user.id);
+  }
+
+  @Get('pending-settlement')
+  @ApiOperation({
+    summary: 'Get pending settlement amounts',
+    description:
+      'Returns per-user pending fuel expense settlement amounts (approved debits minus settled credits). Omit pageSize to return all records.',
+  })
+  @ApiResponse({ status: 200, type: FuelPendingSettlementResponseDto })
+  async getPendingSettlement(@Query() queryDto: FuelPendingSettlementQueryDto) {
+    return this.fuelExpenseService.getPendingSettlement(queryDto);
   }
 
   @Get(':id/history')

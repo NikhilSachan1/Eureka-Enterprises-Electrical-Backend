@@ -16,6 +16,8 @@ import {
   FuelExpenseBulkApprovalDto,
   FuelExpenseListResponseDto,
   BulkDeleteFuelExpenseDto,
+  FuelPendingSettlementQueryDto,
+  FuelPendingSettlementResponseDto,
 } from './dto';
 import {
   FUEL_EXPENSE_ERRORS,
@@ -60,6 +62,7 @@ import {
   buildFuelExpenseBalanceQuery,
   buildProjectedFuelBalanceQuery,
   buildFuelExpenseSummaryQuery,
+  buildFuelPendingSettlementQuery,
 } from './queries/fuel-expense.queries';
 import { EmailService } from '../common/email/email.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
@@ -1682,5 +1685,42 @@ export class FuelExpenseService {
   private formatDateForEmail(date: Date | string): string {
     const d = new Date(date);
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  async getPendingSettlement(
+    queryDto: FuelPendingSettlementQueryDto,
+  ): Promise<FuelPendingSettlementResponseDto> {
+    const { recordsQuery, recordParams, countQuery, summaryQuery, baseParams } =
+      buildFuelPendingSettlementQuery(queryDto);
+
+    const [records, [{ total }], [summaryResult]] = await Promise.all([
+      this.fuelExpenseRepository.executeRawQuery(recordsQuery, recordParams),
+      this.fuelExpenseRepository.executeRawQuery(countQuery, baseParams),
+      this.fuelExpenseRepository.executeRawQuery(summaryQuery, baseParams),
+    ]);
+
+    return {
+      records: records.map((r: any) => ({
+        userId: r.userId,
+        userName: `${r.firstName} ${r.lastName}`.trim(),
+        employeeId: r.employeeId,
+        email: r.email,
+        totalApprovedAmount: Number(r.totalApprovedAmount),
+        totalSettledAmount: Number(r.totalSettledAmount),
+        pendingAmount: Number(r.pendingAmount),
+        bankDetails: {
+          bankHolderName: r.bankHolderName ?? null,
+          bankName: r.bankName ?? null,
+          accountNumber: r.accountNumber ?? null,
+          ifscCode: r.ifscCode ?? null,
+        },
+      })),
+      totalRecords: Number(total),
+      summary: {
+        totalApprovedAmount: Number(summaryResult?.totalApprovedAmount ?? 0),
+        totalSettledAmount: Number(summaryResult?.totalSettledAmount ?? 0),
+        totalPendingAmount: Number(summaryResult?.totalPendingAmount ?? 0),
+      },
+    };
   }
 }

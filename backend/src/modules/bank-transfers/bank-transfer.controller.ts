@@ -60,8 +60,22 @@ export class BankTransferController {
 
   @Delete(':id')
   @RequiredPermission('financials.bank-transfers.delete')
-  @ApiOperation({ summary: 'Delete a bank transfer (only if no payment advice exists)' })
+  @ApiOperation({ summary: 'Delete a bank transfer (must be unlocked first)' })
   remove(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bankTransferService.remove(id, userId);
+  }
+
+  @Patch(':id/lock')
+  @RequiredPermission('financials.bank-transfers.lock')
+  @ApiOperation({ summary: 'Lock a bank transfer (admin only)' })
+  lock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
+    return this.bankTransferService.lock(id, userId);
+  }
+
+  @Patch(':id/unlock')
+  @RequiredPermission('financials.bank-transfers.lock')
+  @ApiOperation({ summary: 'Unlock a bank transfer to allow edit/delete (admin only)' })
+  unlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
+    return this.bankTransferService.unlock(id, userId);
   }
 }

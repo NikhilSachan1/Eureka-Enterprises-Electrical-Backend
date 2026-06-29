@@ -12,6 +12,8 @@ export const INVOICE_ERRORS = {
   CANNOT_DELETE_HAS_CHILDREN: 'Cannot delete invoice — payments / book payments exist against it.',
   PO_CEILING_EXCEEDED_ON_SAVE:
     'Invoice total amount exceeds the remaining PO capacity. Reduce the amount or check other pending/approved invoices on this PO.',
+  INVOICE_INCOMPLETE:
+    'Invoice is incomplete — invoiceNumber, invoiceDate, amounts, and attachment must all be filled before approving.',
 };
 
 export const INVOICE_RESPONSES = {

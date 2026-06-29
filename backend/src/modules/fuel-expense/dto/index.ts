@@ -7,3 +7,5 @@ export * from './fuel-expense-query.dto';
 export * from './fuel-expense-approval.dto';
 export * from './fuel-expense-response.dto';
 export * from './bulk-delete-fuel-expense.dto';
+export * from './pending-settlement-query.dto';
+export * from './pending-settlement-response.dto';

@@ -142,6 +142,11 @@ export class BankTransferService {
       const bp = await this.bookPaymentService.findOneForUpdate(dto.bookPaymentId, em);
       if (!bp) throw new NotFoundException(BANK_TRANSFER_ERRORS.BOOK_PAYMENT_NOT_FOUND);
 
+      // Book payment must be approved before creating a transfer
+      if (bp.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.BOOK_PAYMENT_NOT_APPROVED);
+      }
+
       // Check 1:1 constraint
       const existsTransfer = await this.bankTransferRepository.existsByBookPaymentId(
         dto.bookPaymentId,
@@ -180,6 +185,7 @@ export class BankTransferService {
           approvalStatus: FinancialApprovalStatus.APPROVED,
           approvalBy: createdBy,
           approvalAt: new Date(),
+          isLocked: true,
           createdBy,
         },
         em,
@@ -397,6 +403,10 @@ export class BankTransferService {
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
 
+      if (bt.isLocked) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.LOCKED);
+      }
+
       // PURCHASE side: amount is fixed (1:1 with book payment — must equal paymentTotalAmount)
       if (bt.partyType === PartyType.PURCHASE && dto.transferAmount !== undefined) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_PURCHASE);
@@ -438,6 +448,7 @@ export class BankTransferService {
         {
           ...dto,
           transferDate: dto.transferDate ? new Date(dto.transferDate) : undefined,
+          isLocked: true,
           updatedBy,
         } as Partial<BankTransferEntity>,
         em,
@@ -531,6 +542,10 @@ export class BankTransferService {
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
 
+      if (bt.isLocked) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.LOCKED);
+      }
+
       // Cascade soft-delete payment advice if it exists
       await em.query(
         `UPDATE payment_advices SET "deletedAt" = NOW(), "deletedBy" = $2
@@ -565,5 +580,27 @@ export class BankTransferService {
 
       return { message: BANK_TRANSFER_RESPONSES.DELETED };
     });
+  }
+
+  async lock(id: string, updatedBy: string) {
+    const bt = await this.bankTransferRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
+    if (bt.isLocked) throw new BadRequestException(BANK_TRANSFER_ERRORS.ALREADY_LOCKED);
+    await this.bankTransferRepository.update({ id }, {
+      isLocked: true,
+      updatedBy,
+    } as Partial<BankTransferEntity>);
+    return { message: BANK_TRANSFER_RESPONSES.LOCKED };
+  }
+
+  async unlock(id: string, updatedBy: string) {
+    const bt = await this.bankTransferRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
+    if (!bt.isLocked) throw new BadRequestException(BANK_TRANSFER_ERRORS.ALREADY_UNLOCKED);
+    await this.bankTransferRepository.update({ id }, {
+      isLocked: false,
+      updatedBy,
+    } as Partial<BankTransferEntity>);
+    return { message: BANK_TRANSFER_RESPONSES.UNLOCKED };
   }
 }
