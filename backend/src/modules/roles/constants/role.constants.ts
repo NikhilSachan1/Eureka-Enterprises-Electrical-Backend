@@ -6,7 +6,7 @@ export enum Roles {
   OPERATION_MANAGER = 'OPERATION_MANAGER',
   HR = 'HR',
   DRIVER = 'DRIVER',
-  ACCOUNTANT = 'ACCOUNTANT',
+  ACCOUNTS = 'ACCOUNTS',
 }
 
 export const ROLE_ERRORS = {
