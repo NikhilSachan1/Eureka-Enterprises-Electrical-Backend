@@ -1,14 +1,20 @@
 import { GetVendorListQueryDto } from '../dto/get-vendor-list-query.dto';
 
 /**
- * Builds three queries for the vendor-list endpoint:
- *   1. vendorIdsQuery  — paginates over distinct vendorIds that match the filters
- *   2. detailQuery     — fetches all fully-joined book payment rows for those vendors
- *   3. countQuery      — total distinct-vendor count (for totalRecords)
- *   4. summaryQuery    — global aggregate across all matching book payments
+ * Builds the queries for the vendor-list endpoint.
  *
- * Strategy: paginate on vendor, then pull all their book payments in one join query
- * and group in JS. This avoids a cartesian explosion while keeping a single round-trip.
+ * The vendor set is the UNION of:
+ *   (a) vendors with approved, un-transferred book payments (payout pending), and
+ *   (b) vendors with approved PURCHASE invoices that still have an un-booked balance
+ *       (bookedTotal < net payable) — i.e. money yet to be booked.
+ *
+ * For the paginated page of vendors we then pull, per vendor:
+ *   - their pending book payments  (bookPaymentDetailQuery)
+ *   - their un-booked invoices      (unbookedInvoiceDetailQuery)
+ * and two global summaries (book payments + un-booked invoices).
+ *
+ * Net payable (invoice): isGstHold ? taxable − tds : taxable + gst − tds.
+ * Pending to book        = net payable − bookedTotal.
  */
 export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
   const {
@@ -25,58 +31,21 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
 
   const order = sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
-  const whereConditions: string[] = [];
-  const params: any[] = [];
-  let pi = 1; // param index
+  // Placeholder helper bound to a specific params array.
+  const mkPh = (params: any[]) => (val: any) => {
+    params.push(val);
+    return `$${params.length}`;
+  };
 
-  // Only approved, non-deleted book payments
-  whereConditions.push(`bp."approvalStatus" = $${pi++}`);
-  params.push('APPROVED');
+  // ── Invoice net-payable / pending-to-book expressions (inv alias) ──
+  const invNetPayable = `(CASE WHEN inv."isGstHold" = true
+      THEN COALESCE(inv."taxableAmount"::numeric, 0) - COALESCE(inv."tdsAmount"::numeric, 0)
+      ELSE COALESCE(inv."taxableAmount"::numeric, 0) + COALESCE(inv."gstAmount"::numeric, 0) - COALESCE(inv."tdsAmount"::numeric, 0)
+    END)`;
+  const invPendingToBook = `(${invNetPayable} - COALESCE(inv."bookedTotal"::numeric, 0))`;
 
-  whereConditions.push(`bp."deletedAt" IS NULL`);
-
-  // Only book payments still awaiting a bank transfer (payout pending)
-  whereConditions.push(`bp."hasTransfer" = false`);
-
-  if (vendorIds && vendorIds.length > 0) {
-    whereConditions.push(`bp."vendorId" = ANY($${pi++})`);
-    params.push(vendorIds);
-  }
-
-  if (siteIds && siteIds.length > 0) {
-    whereConditions.push(`bp."siteId" = ANY($${pi++})`);
-    params.push(siteIds);
-  }
-
-  if (companyIds && companyIds.length > 0) {
-    whereConditions.push(`s."companyId" = ANY($${pi++})`);
-    params.push(companyIds);
-  }
-
-  if (startDate) {
-    whereConditions.push(`bp."bookingDate" >= $${pi++}`);
-    params.push(startDate);
-  }
-
-  if (endDate) {
-    whereConditions.push(`bp."bookingDate" <= $${pi++}`);
-    params.push(endDate);
-  }
-
-  if (search) {
-    whereConditions.push(`(
-      LOWER(v."name") LIKE LOWER($${pi}) OR
-      LOWER(inv."invoiceNumber") LIKE LOWER($${pi}) OR
-      LOWER(po."poNumber") LIKE LOWER($${pi})
-    )`);
-    params.push(`%${search}%`);
-    pi++;
-  }
-
-  const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-  // Base join fragment shared by all queries
-  const baseJoin = `
+  // ── Join fragments ──
+  const bookPaymentJoin = `
     FROM "book_payments" bp
     INNER JOIN "site_invoices" inv  ON inv."id"        = bp."invoiceId"  AND inv."deletedAt" IS NULL
     LEFT  JOIN "jmcs"          jmc  ON jmc."id"        = inv."jmcId"     AND jmc."deletedAt" IS NULL
@@ -85,32 +54,88 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
     INNER JOIN "companies"     c    ON c."id"          = s."companyId"   AND c."deletedAt" IS NULL
     INNER JOIN "vendors"       v    ON v."id"          = bp."vendorId"   AND v."deletedAt" IS NULL
   `;
-
-  // 1. Count of distinct vendors
-  const countQuery = `
-    SELECT COUNT(DISTINCT bp."vendorId") AS total
-    ${baseJoin}
-    ${whereClause}
+  const invoiceJoin = `
+    FROM "site_invoices" inv
+    LEFT  JOIN "jmcs"          jmc  ON jmc."id"        = inv."jmcId"     AND jmc."deletedAt" IS NULL
+    LEFT  JOIN "purchase_orders" po ON po."id"         = jmc."poId"      AND po."deletedAt" IS NULL
+    INNER JOIN "sites"         s    ON s."id"          = inv."siteId"    AND s."deletedAt" IS NULL
+    INNER JOIN "companies"     c    ON c."id"          = s."companyId"   AND c."deletedAt" IS NULL
+    INNER JOIN "vendors"       v    ON v."id"          = inv."vendorId"  AND v."deletedAt" IS NULL
   `;
 
-  // 2. Paginated vendor IDs
+  // ── WHERE builders (filters applied per source) ──
+  const bookPaymentWhere = (ph: (v: any) => string) => {
+    const c = [
+      `bp."approvalStatus" = 'APPROVED'`,
+      `bp."deletedAt" IS NULL`,
+      `bp."hasTransfer" = false`,
+    ];
+    if (vendorIds?.length) c.push(`bp."vendorId" = ANY(${ph(vendorIds)})`);
+    if (siteIds?.length) c.push(`bp."siteId" = ANY(${ph(siteIds)})`);
+    if (companyIds?.length) c.push(`s."companyId" = ANY(${ph(companyIds)})`);
+    if (startDate) c.push(`bp."bookingDate" >= ${ph(startDate)}`);
+    if (endDate) c.push(`bp."bookingDate" <= ${ph(endDate)}`);
+    if (search) {
+      const p = ph(`%${search}%`);
+      c.push(
+        `(LOWER(v."name") LIKE LOWER(${p}) OR LOWER(inv."invoiceNumber") LIKE LOWER(${p}) OR LOWER(po."poNumber") LIKE LOWER(${p}))`,
+      );
+    }
+    return c.join(' AND ');
+  };
+  const invoiceWhere = (ph: (v: any) => string) => {
+    const c = [
+      `inv."partyType" = 'PURCHASE'`,
+      `inv."approvalStatus" = 'APPROVED'`,
+      `inv."deletedAt" IS NULL`,
+      `inv."vendorId" IS NOT NULL`,
+      `${invPendingToBook} > 0.01`,
+    ];
+    if (vendorIds?.length) c.push(`inv."vendorId" = ANY(${ph(vendorIds)})`);
+    if (siteIds?.length) c.push(`inv."siteId" = ANY(${ph(siteIds)})`);
+    if (companyIds?.length) c.push(`s."companyId" = ANY(${ph(companyIds)})`);
+    if (startDate) c.push(`inv."invoiceDate" >= ${ph(startDate)}`);
+    if (endDate) c.push(`inv."invoiceDate" <= ${ph(endDate)}`);
+    if (search) {
+      const p = ph(`%${search}%`);
+      c.push(
+        `(LOWER(v."name") LIKE LOWER(${p}) OR LOWER(inv."invoiceNumber") LIKE LOWER(${p}) OR LOWER(po."poNumber") LIKE LOWER(${p}))`,
+      );
+    }
+    return c.join(' AND ');
+  };
+
+  // ── 1+2. Union vendor set → count + paginated vendor ids ──
+  const unionParams: any[] = [];
+  const uph = mkPh(unionParams);
+  const unionSql = `
+    SELECT bp."vendorId" AS vid
+    ${bookPaymentJoin}
+    WHERE ${bookPaymentWhere(uph)}
+    UNION
+    SELECT inv."vendorId" AS vid
+    ${invoiceJoin}
+    WHERE ${invoiceWhere(uph)}
+  `;
+
+  const countQuery = `SELECT COUNT(*) AS total FROM (${unionSql}) u`;
+  const countParams = unionParams;
+
   let vendorIdsQuery = `
-    SELECT DISTINCT bp."vendorId"
-    ${baseJoin}
-    ${whereClause}
-    ORDER BY bp."vendorId"
+    SELECT u.vid AS "vendorId"
+    FROM (${unionSql}) u
+    INNER JOIN "vendors" v ON v."id" = u.vid AND v."deletedAt" IS NULL
+    ORDER BY v."name" ASC, u.vid
   `;
-
-  const vendorIdsParams = [...params];
+  const vendorIdsParams = [...unionParams];
   if (pageSize !== undefined) {
     const offset = (page - 1) * pageSize;
-    vendorIdsQuery += ` LIMIT $${pi} OFFSET $${pi + 1}`;
+    vendorIdsQuery += ` LIMIT $${vendorIdsParams.length + 1} OFFSET $${vendorIdsParams.length + 2}`;
     vendorIdsParams.push(pageSize, offset);
   }
 
-  // 3. Full detail query — called after we have the vendor IDs page
-  //    Caller passes vendorIds as an extra param at the end.
-  const detailQuery = `
+  // ── 3. Book payment detail (by vendor page) — $1 = vendorIds ──
+  const bookPaymentDetailQuery = `
     SELECT
       bp."id"                   AS "bpId",
       bp."bookingDate",
@@ -160,7 +185,7 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       c."id"                    AS "companyId",
       c."name"                  AS "companyName"
 
-    ${baseJoin}
+    ${bookPaymentJoin}
     WHERE bp."approvalStatus" = 'APPROVED'
       AND bp."deletedAt" IS NULL
       AND bp."hasTransfer" = false
@@ -168,10 +193,65 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
     ORDER BY v."name" ASC, bp."bookingDate" ${order}
   `;
 
-  // 4. Global summary query (across all matching book payments, not just page)
-  const summaryQuery = `
+  // ── 4. Un-booked invoice detail (by vendor page) — $1 = vendorIds ──
+  const unbookedInvoiceDetailQuery = `
     SELECT
-      COUNT(DISTINCT bp."vendorId")                                            AS "totalVendors",
+      inv."id"                  AS "invoiceId",
+      inv."invoiceNumber",
+      inv."invoiceDate",
+      inv."taxableAmount",
+      inv."gstAmount",
+      inv."gstPercentage",
+      inv."tdsAmount",
+      inv."isGstHold",
+      inv."totalAmount"         AS "invoiceTotalAmount",
+      inv."bookedTotal",
+      inv."approvalStatus"      AS "invoiceApprovalStatus",
+      ${invNetPayable}          AS "netPayableAmount",
+      ${invPendingToBook}       AS "pendingToBook",
+
+      v."id"                    AS "vendorId",
+      v."name"                  AS "vendorName",
+      v."city"                  AS "vendorCity",
+      v."state"                 AS "vendorState",
+      v."contactNumber"         AS "vendorContact",
+      v."email"                 AS "vendorEmail",
+      v."accountHolderName"     AS "vendorAccountHolderName",
+      v."bankName"              AS "vendorBankName",
+      v."accountNumber"         AS "vendorAccountNumber",
+      v."ifscCode"              AS "vendorIfscCode",
+
+      jmc."id"                  AS "jmcId",
+      jmc."jmcNumber",
+      jmc."jmcDate",
+
+      po."id"                   AS "poId",
+      po."poNumber",
+      po."poDate",
+      po."totalAmount"          AS "poTotalAmount",
+
+      s."id"                    AS "siteId",
+      s."name"                  AS "siteName",
+      s."city"                  AS "siteCity",
+      s."state"                 AS "siteState",
+
+      c."id"                    AS "companyId",
+      c."name"                  AS "companyName"
+
+    ${invoiceJoin}
+    WHERE inv."partyType" = 'PURCHASE'
+      AND inv."approvalStatus" = 'APPROVED'
+      AND inv."deletedAt" IS NULL
+      AND inv."vendorId" = ANY($1)
+      AND ${invPendingToBook} > 0.01
+    ORDER BY v."name" ASC, inv."invoiceDate" ${order}
+  `;
+
+  // ── 5. Book payment global summary ──
+  const bookPaymentSummaryParams: any[] = [];
+  const bsph = mkPh(bookPaymentSummaryParams);
+  const bookPaymentSummaryQuery = `
+    SELECT
       COUNT(bp."id")                                                           AS "totalBookPayments",
       COALESCE(SUM(bp."taxableAmount"::numeric), 0)                           AS "totalTaxableAmount",
       COALESCE(SUM(bp."gstAmount"::numeric), 0)                               AS "totalGstAmount",
@@ -184,17 +264,31 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
           ELSE bp."taxableAmount"::numeric + bp."gstAmount"::numeric - COALESCE(inv."tdsAmount"::numeric, 0)
         END
       ), 0)                                                                    AS "totalNetPayableAmount"
-    ${baseJoin}
-    ${whereClause}
+    ${bookPaymentJoin}
+    WHERE ${bookPaymentWhere(bsph)}
+  `;
+
+  // ── 6. Un-booked invoice global summary ──
+  const unbookedInvoiceSummaryParams: any[] = [];
+  const isph = mkPh(unbookedInvoiceSummaryParams);
+  const unbookedInvoiceSummaryQuery = `
+    SELECT
+      COUNT(inv."id")                          AS "totalUnbookedInvoices",
+      COALESCE(SUM(${invPendingToBook}), 0)    AS "totalPendingToBook"
+    ${invoiceJoin}
+    WHERE ${invoiceWhere(isph)}
   `;
 
   return {
     countQuery,
-    countParams: params,
+    countParams,
     vendorIdsQuery,
     vendorIdsParams,
-    detailQuery,
-    summaryQuery,
-    summaryParams: params,
+    bookPaymentDetailQuery,
+    unbookedInvoiceDetailQuery,
+    bookPaymentSummaryQuery,
+    bookPaymentSummaryParams,
+    unbookedInvoiceSummaryQuery,
+    unbookedInvoiceSummaryParams,
   };
 };
