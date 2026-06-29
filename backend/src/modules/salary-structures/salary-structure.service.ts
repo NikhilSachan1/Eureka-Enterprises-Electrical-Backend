@@ -316,4 +316,5 @@ export class SalaryStructureService {
       effectiveFrom: effectiveFromStr,
     };
   }
+
 }

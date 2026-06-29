@@ -68,7 +68,7 @@ export class UpdateSalaryStructureDto {
   @Type(() => Number)
   tds?: number;
 
-  @ApiProperty({ description: 'ESIC deduction amount', example: 0, required: true })
+  @ApiProperty({ description: 'ESIC deduction amount', example: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)

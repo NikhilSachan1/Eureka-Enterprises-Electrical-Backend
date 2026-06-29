@@ -9,7 +9,10 @@ import { SalaryChangeLogRepository } from '../salary-change-logs/salary-change-l
 import { SharedModule } from '../shared/shared.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SalaryStructureEntity, SalaryChangeLogEntity]), SharedModule],
+  imports: [
+    TypeOrmModule.forFeature([SalaryStructureEntity, SalaryChangeLogEntity]),
+    SharedModule,
+  ],
   controllers: [SalaryStructureController],
   providers: [SalaryStructureService, SalaryStructureRepository, SalaryChangeLogRepository],
   exports: [SalaryStructureService, SalaryStructureRepository],
