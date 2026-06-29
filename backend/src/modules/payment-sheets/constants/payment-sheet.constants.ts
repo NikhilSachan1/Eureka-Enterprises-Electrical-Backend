@@ -80,7 +80,7 @@ export const DEFAULT_APPROVAL_FLOW: ApprovalStageConfig[] = [
   },
   {
     stage: PaymentSheetStage.PROCESSING,
-    role: 'ACCOUNTANT',
+    role: 'ACCOUNTS',
     amountEdit: 'none',
     addRemove: false,
     processItems: true,
