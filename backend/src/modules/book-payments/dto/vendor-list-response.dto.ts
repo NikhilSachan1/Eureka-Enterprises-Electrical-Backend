@@ -75,6 +75,29 @@ export class VendorBookPaymentItemDto {
   @ApiProperty({ type: CompanyInfoDto }) company: CompanyInfoDto;
 }
 
+export class UnbookedInvoiceItemDto {
+  @ApiProperty() id: string;
+  @ApiProperty({ nullable: true }) invoiceNumber: string | null;
+  @ApiProperty({ nullable: true }) invoiceDate: string | null;
+  @ApiProperty() taxableAmount: number;
+  @ApiProperty() gstAmount: number;
+  @ApiProperty({ nullable: true }) gstPercentage: number | null;
+  @ApiProperty() tdsAmount: number;
+  @ApiProperty() isGstHold: boolean;
+  @ApiProperty({ description: 'isGstHold ? taxable−tds : taxable+gst−tds' })
+  netPayableAmount: number;
+  @ApiProperty({ description: 'Amount already booked (Σ book payments)' }) bookedTotal: number;
+  @ApiProperty({ description: 'netPayable − bookedTotal (still to be booked)' })
+  pendingToBook: number;
+  @ApiProperty({ nullable: true }) totalAmount: number | null;
+  @ApiProperty() approvalStatus: string;
+  @ApiProperty() displayName: string;
+  @ApiProperty({ type: JmcInfoDto, nullable: true }) jmc: JmcInfoDto | null;
+  @ApiProperty({ type: PoInfoDto, nullable: true }) po: PoInfoDto | null;
+  @ApiProperty({ type: SiteInfoDto }) site: SiteInfoDto;
+  @ApiProperty({ type: CompanyInfoDto }) company: CompanyInfoDto;
+}
+
 export class VendorSummaryDto {
   @ApiProperty() totalBookPayments: number;
   @ApiProperty() totalTaxableAmount: number;
@@ -83,12 +106,15 @@ export class VendorSummaryDto {
   @ApiProperty() totalNetPayableAmount: number;
   @ApiProperty() totalPaymentAmount: number;
   @ApiProperty() totalHoldAmount: number;
+  @ApiProperty() totalUnbookedInvoices: number;
+  @ApiProperty() totalPendingToBook: number;
 }
 
 export class VendorListRecordDto {
   @ApiProperty({ type: VendorInfoDto }) vendor: VendorInfoDto;
   @ApiProperty({ type: VendorSummaryDto }) vendorSummary: VendorSummaryDto;
   @ApiProperty({ type: [VendorBookPaymentItemDto] }) bookPayments: VendorBookPaymentItemDto[];
+  @ApiProperty({ type: [UnbookedInvoiceItemDto] }) unbookedInvoices: UnbookedInvoiceItemDto[];
 }
 
 export class GlobalSummaryDto {
@@ -100,6 +126,8 @@ export class GlobalSummaryDto {
   @ApiProperty() totalNetPayableAmount: number;
   @ApiProperty() totalPaymentAmount: number;
   @ApiProperty() totalHoldAmount: number;
+  @ApiProperty() totalUnbookedInvoices: number;
+  @ApiProperty() totalPendingToBook: number;
 }
 
 export class VendorListResponseDto {
