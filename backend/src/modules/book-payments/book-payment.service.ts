@@ -548,6 +548,18 @@ export class BookPaymentService {
               invoiceNumber: r.invoiceNumber ?? null,
               invoiceDate: r.invoiceDate ?? null,
               totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
+              taxableAmount:
+                r.invoiceTaxableAmount !== null ? Number(r.invoiceTaxableAmount) : null,
+              gstAmount: r.invoiceGstAmount !== null ? Number(r.invoiceGstAmount) : null,
+              gstPercentage:
+                r.invoiceGstPercentage !== null ? Number(r.invoiceGstPercentage) : null,
+              tdsAmount: r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : null,
+              isGstHold: r.invoiceIsGstHold,
+              netPayableAmount:
+                r.invoiceNetPayableAmount !== null ? Number(r.invoiceNetPayableAmount) : null,
+              bookedTotal: r.invoiceBookedTotal !== null ? Number(r.invoiceBookedTotal) : null,
+              pendingToBook:
+                r.invoicePendingToBook !== null ? Number(r.invoicePendingToBook) : null,
               approvalStatus: r.invoiceApprovalStatus,
             },
             jmc: r.jmcId ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate } : null,
