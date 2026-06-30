@@ -34,6 +34,18 @@ export class InvoiceInfoDto {
   @ApiProperty({ nullable: true }) invoiceNumber: string | null;
   @ApiProperty({ nullable: true }) invoiceDate: string | null;
   @ApiProperty({ nullable: true }) totalAmount: number | null;
+  @ApiProperty({ nullable: true }) taxableAmount: number | null;
+  @ApiProperty({ nullable: true }) gstAmount: number | null;
+  @ApiProperty({ nullable: true }) gstPercentage: number | null;
+  @ApiProperty({ nullable: true }) tdsAmount: number | null;
+  @ApiProperty() isGstHold: boolean;
+  @ApiProperty({ nullable: true, description: 'isGstHold ? taxable−tds : taxable+gst−tds' })
+  netPayableAmount: number | null;
+  @ApiProperty({ nullable: true, description: 'Amount already booked (Σ book payments)' })
+  bookedTotal: number | null;
+  @ApiProperty({ nullable: true, description: 'netPayable − bookedTotal' }) pendingToBook:
+    | number
+    | null;
   @ApiProperty() approvalStatus: string;
 }
 
