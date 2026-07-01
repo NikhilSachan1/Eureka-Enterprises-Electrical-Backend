@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { PaymentSheetStatus } from '../constants/payment-sheet.constants';
 
@@ -44,4 +53,34 @@ export class QueryPaymentSheetDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Only sheets with at least one item paid from this company bank account',
+  })
+  @IsOptional()
+  @IsUUID()
+  paidFromAccountId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Only sheets with at least one item paid from an account matching this name (partial match)',
+  })
+  @IsOptional()
+  @IsString()
+  paidFromAccountName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'true = only sheets with at least one item that has a paying account linked; ' +
+      'false = only sheets with at least one item that has none',
+  })
+  @IsOptional()
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false') return false;
+    if (raw === true || raw === 'true') return true;
+    return undefined;
+  })
+  @IsBoolean()
+  hasPaidFromAccount?: boolean;
 }

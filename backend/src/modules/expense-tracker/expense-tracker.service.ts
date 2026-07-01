@@ -56,6 +56,7 @@ import {
   EMAIL_REDIRECT_ROUTES,
 } from '../common/email/constants/email.constants';
 import { SYSTEM_USER_ID } from '../users/constants/user.constants';
+import { CompanyBankAccountService } from '../company-bank-accounts/company-bank-account.service';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -70,7 +71,15 @@ export class ExpenseTrackerService {
     private readonly emailService: EmailService,
     private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
+    private readonly companyBankAccountService: CompanyBankAccountService,
   ) {}
+
+  /** Validates the paying company bank account, if one was supplied (throws if invalid). */
+  private async validatePaidFromAccount(paidFromAccountId?: string): Promise<string | null> {
+    if (!paidFromAccountId) return null;
+    const account = await this.companyBankAccountService.findActiveOrFail(paidFromAccountId);
+    return account.id;
+  }
 
   async createDebitExpense(
     createExpenseDto: CreateDebitExpenseDto & {
@@ -417,6 +426,9 @@ export class ExpenseTrackerService {
       } = createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
+      const paidFromAccountId = await this.validatePaidFromAccount(
+        createExpenseDto.paidFromAccountId,
+      );
 
       // Use timezone-aware date comparison
       const expenseDateStr = this.dateTimeService.toDateString(new Date(expenseDate));
@@ -438,6 +450,7 @@ export class ExpenseTrackerService {
             expenseEntryType: ExpenseEntryType.SELF,
             entrySourceType: sourceType,
             createdBy,
+            paidFromAccountId,
           },
           entityManager,
         );
@@ -758,6 +771,7 @@ export class ExpenseTrackerService {
         approvalReason: record.approvalReason,
         transactionType: record.transactionType,
         paymentMode: record.paymentMode,
+        paidFromAccountId: record.paidFromAccountId ?? null,
         entrySourceType: record.entrySourceType,
         expenseEntryType: record.expenseEntryType,
         createdAt: record.createdAt,
@@ -860,6 +874,7 @@ export class ExpenseTrackerService {
           transactionId: record.transactionId,
           transactionType: record.transactionType,
           paymentMode: record.paymentMode,
+          paidFromAccountId: record.paidFromAccountId ?? null,
           entrySourceType: record.entrySourceType,
           expenseEntryType: record.expenseEntryType,
           approvalStatus: record.approvalStatus,

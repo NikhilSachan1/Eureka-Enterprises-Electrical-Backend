@@ -44,4 +44,9 @@ export class CreateBankTransferDto {
   @IsString()
   @IsOptional()
   remarks?: string;
+
+  @ApiPropertyOptional({ description: 'The company bank account this was paid from' })
+  @IsUUID()
+  @IsOptional()
+  paidFromAccountId?: string;
 }

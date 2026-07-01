@@ -9,6 +9,7 @@ import {
   Min,
   IsEnum,
   IsDateString,
+  IsBoolean,
 } from 'class-validator';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 
@@ -120,4 +121,30 @@ export class GetBankTransferDto {
   @Min(1)
   @IsOptional()
   pageSize?: number;
+
+  @ApiPropertyOptional({ description: 'Filter by the paying company bank account id' })
+  @IsUUID()
+  @IsOptional()
+  paidFromAccountId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by paying company bank account name (partial match)',
+  })
+  @IsString()
+  @IsOptional()
+  paidFromAccountName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'true = only transfers with a paying account linked; false = only ones without one',
+  })
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false') return false;
+    if (raw === true || raw === 'true') return true;
+    return undefined;
+  })
+  @IsBoolean()
+  @IsOptional()
+  hasPaidFromAccount?: boolean;
 }

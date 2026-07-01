@@ -1,6 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsDateString, IsEnum, IsArray, IsString, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsDateString,
+  IsEnum,
+  IsArray,
+  IsString,
+  IsUUID,
+  IsBoolean,
+} from 'class-validator';
 import { BaseGetDto } from '../../../utils/base-dto/base-get-dto';
 import {
   ApprovalStatus,
@@ -107,4 +115,30 @@ export class FuelExpenseQueryDto extends BaseGetDto {
   @IsEnum(PaymentMode, { each: true })
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   paymentModes?: PaymentMode[];
+
+  @ApiPropertyOptional({ description: 'Filter by the paying company bank account id' })
+  @IsOptional()
+  @IsUUID()
+  paidFromAccountId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by paying company bank account name (partial match)',
+  })
+  @IsOptional()
+  @IsString()
+  paidFromAccountName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'true = only records with a paying account linked; false = only records without one',
+  })
+  @IsOptional()
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false') return false;
+    if (raw === true || raw === 'true') return true;
+    return undefined;
+  })
+  @IsBoolean()
+  hasPaidFromAccount?: boolean;
 }

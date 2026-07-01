@@ -65,6 +65,7 @@ import {
   buildFuelPendingSettlementQuery,
 } from './queries/fuel-expense.queries';
 import { EmailService } from '../common/email/email.service';
+import { CompanyBankAccountService } from '../company-bank-accounts/company-bank-account.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { Environments } from 'env-configs';
 import {
@@ -90,7 +91,15 @@ export class FuelExpenseService {
     private readonly dateTimeService: DateTimeService,
     private readonly emailService: EmailService,
     private readonly whatsAppService: WhatsAppService,
+    private readonly companyBankAccountService: CompanyBankAccountService,
   ) {}
+
+  /** Validates the paying company bank account, if one was supplied (throws if invalid). */
+  private async validatePaidFromAccount(paidFromAccountId?: string): Promise<string | null> {
+    if (!paidFromAccountId) return null;
+    const account = await this.companyBankAccountService.findActiveOrFail(paidFromAccountId);
+    return account.id;
+  }
 
   async create(
     createFuelExpenseDto: CreateFuelExpenseDto & {
@@ -335,6 +344,9 @@ export class FuelExpenseService {
 
       // Validate payment mode
       await this.validatePaymentMode(paymentMode);
+      const paidFromAccountId = await this.validatePaidFromAccount(
+        createCreditFuelExpenseDto.paidFromAccountId,
+      );
 
       // Validate user exists
       const employee = await this.userService.findOneOrFail({ where: { id: userId } });
@@ -355,6 +367,7 @@ export class FuelExpenseService {
             transactionType: TransactionType.CREDIT,
             expenseEntryType: ExpenseEntryType.SELF,
             entrySourceType,
+            paidFromAccountId,
           },
           entityManager,
         );
@@ -781,6 +794,7 @@ export class FuelExpenseService {
           fuelAmount: Number(record.fuelAmount),
           pumpMeterReading: record.pumpMeterReading ? Number(record.pumpMeterReading) : null,
           paymentMode: record.paymentMode,
+          paidFromAccountId: record.paidFromAccountId ?? null,
           transactionId: record.transactionId,
           description: record.description,
           transactionType: record.transactionType,
@@ -888,6 +902,7 @@ export class FuelExpenseService {
           fuelAmount: record.fuelAmount,
           pumpMeterReading: record.pumpMeterReading,
           paymentMode: record.paymentMode,
+          paidFromAccountId: record.paidFromAccountId ?? null,
           transactionId: record.transactionId,
           description: record.description,
           transactionType: record.transactionType,

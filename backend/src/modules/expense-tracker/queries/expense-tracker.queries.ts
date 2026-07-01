@@ -19,6 +19,9 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     page,
     pageSize,
     sortOrder,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
   } = filters;
 
   const whereConditions = [];
@@ -83,12 +86,29 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`e."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`e."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`e."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   // Main query for expense records
   const offset = (page - 1) * pageSize;
   const query = `
-    SELECT 
+    SELECT
       e."id",
       e."userId",
       e."category",
@@ -102,6 +122,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       e."approvalReason",
       e."transactionType",
       e."paymentMode",
+      e."paidFromAccountId",
       e."entrySourceType",
       e."expenseEntryType",
       e."createdBy",
@@ -114,6 +135,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     LEFT JOIN "users" u ON e."userId" = u."id"
     LEFT JOIN "users" cb ON e."createdBy" = cb."id"
     LEFT JOIN "users" ab ON e."approvalBy" = ab."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = e."paidFromAccountId"
     ${whereClause}
     ORDER BY ${EXPENSE_SORT_FIELD_MAPPING[sortField] || 'e."createdAt"'} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -126,6 +148,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     SELECT COUNT(*) as total
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = e."paidFromAccountId"
     ${whereClause}
   `;
 
@@ -335,7 +358,16 @@ export const buildProjectedBalanceQuery = (filters: ExpenseQueryDto) => {
 };
 
 export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, categories } = filters;
+  const {
+    startDate,
+    endDate,
+    date,
+    userIds,
+    categories,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
+  } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -378,10 +410,27 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`e."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`e."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`e."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   const summaryQuery = `
-    SELECT 
+    SELECT
       COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount" ELSE 0 END), 0) as "totalCredit",
       COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' THEN e."amount" ELSE 0 END), 0) as "totalDebit",
       COUNT(*) as "totalRecords",
@@ -390,6 +439,7 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
       COUNT(CASE WHEN e."approvalStatus" = 'rejected' THEN 1 END) as "rejectedCount"
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = e."paidFromAccountId"
     ${whereClause}
   `;
 

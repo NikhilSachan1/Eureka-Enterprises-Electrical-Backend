@@ -70,6 +70,7 @@ import { PaymentSheetItemBookPaymentEntity } from 'src/modules/payment-sheets/en
 import { PaymentSheetItemHistoryEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-history.entity';
 import { PaymentSheetStageLogEntity } from 'src/modules/payment-sheets/entities/payment-sheet-stage-log.entity';
 import { PaymentSheetItemVerificationEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-verification.entity';
+import { CompanyBankAccountEntity } from 'src/modules/company-bank-accounts/entities/company-bank-account.entity';
 import { PaymentAdviceEntity } from 'src/modules/payment-advices/entities/payment-advice.entity';
 import { PaymentAdviceSequenceEntity } from 'src/modules/payment-advices/entities/payment-advice-sequence.entity';
 import { PaymentAdviceEmailLogEntity } from 'src/modules/payment-advices/entities/payment-advice-email-log.entity';
@@ -184,6 +185,7 @@ export class ConfigService {
         PaymentSheetItemHistoryEntity,
         PaymentSheetStageLogEntity,
         PaymentSheetItemVerificationEntity,
+        CompanyBankAccountEntity,
         PaymentAdviceEntity,
         PaymentAdviceSequenceEntity,
         PaymentAdviceEmailLogEntity,
