@@ -113,6 +113,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       fe."fuelAmount",
       fe."pumpMeterReading",
       fe."paymentMode",
+      fe."paidFromAccountId",
       fe."transactionId",
       fe."description",
       fe."transactionType",

@@ -102,6 +102,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       e."approvalReason",
       e."transactionType",
       e."paymentMode",
+      e."paidFromAccountId",
       e."entrySourceType",
       e."expenseEntryType",
       e."createdBy",
