@@ -626,7 +626,7 @@ export class PaymentSheetService {
     if (!sheet) throw new NotFoundException(PAYMENT_SHEET_ERRORS.NOT_FOUND);
     const items = await this.repo.findItems({
       where: { paymentSheetId: id, deletedAt: IsNull() },
-      relations: ['bookPaymentAllocations'],
+      relations: ['bookPaymentAllocations', 'paidFromAccount'],
       order: { createdAt: 'ASC' },
     });
     const stageLogs = await this.repo.findStageLogs({
@@ -765,6 +765,17 @@ export class PaymentSheetService {
         verifications: vers,
         verifiedStages,
         isVerifiedForCurrentStage: currentStage ? verifiedStages.includes(currentStage) : false,
+        paidFromAccount: i.paidFromAccount
+          ? {
+              id: i.paidFromAccount.id,
+              accountName: i.paidFromAccount.accountName,
+              accountHolderName: i.paidFromAccount.accountHolderName,
+              bankName: i.paidFromAccount.bankName,
+              accountNumber: i.paidFromAccount.accountNumber,
+              ifscCode: i.paidFromAccount.ifscCode,
+              branchName: i.paidFromAccount.branchName ?? null,
+            }
+          : null,
         ...this.buildSettlementBreakdown(i, bpDetailMap, expensePendingMap, fuelPendingMap),
       };
     });
