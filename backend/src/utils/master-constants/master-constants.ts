@@ -156,7 +156,7 @@ export const COMPANY_DETAILS = {
 };
 
 export const PAYMENT_ADVICE_COMPANY_DETAILS = {
-  NAME: 'EUREKA ENTERPRISES, JHANSI',
+  NAME: 'EUREKA ENTERPRISES',
   LOGO_URL: 'https://5.imimg.com/data5/AY/VX/BQ/SELLER-107173792/vvv-120x120.jpeg',
   EMAIL_HR: 'hr@eurekaenterprises.org',
   PHONE: '+91 510 123 4567',

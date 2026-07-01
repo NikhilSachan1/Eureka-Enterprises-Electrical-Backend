@@ -127,7 +127,19 @@ GET /payment-sheets/:id        (perm: view)
     pendingSnapshot, requestedAmount, currentAmount,
     bankSnapshot: { accountHolderName, bankName, accountNumber, ifscCode } | null,
     itemStatus, paidAmount, paidAt, paymentRef, holdReason, heldBy, rejectReason,
-    bookPaymentAllocations: [{ id, bookPaymentId, allocatedAmount, bankTransferId }]
+    bookPaymentAllocations: [{ id, bookPaymentId, allocatedAmount, bankTransferId }],
+
+    // Settlement breakdown (added for the "actual due vs payable vs remaining" ask):
+    actualDueAmount,   // outstanding balance independent of this sheet
+    payableAmount,     // what this line pays out (== currentAmount)
+    remainingAmount,   // actualDueAmount − payableAmount, what stays due after this payment
+    invoices: [{       // VENDOR items only — one entry per allocated book payment/invoice
+      invoiceId, invoiceNumber, invoiceDate,
+      actualDueAmount, payableAmount, remainingAmount,
+      companyName, projectName, city, state
+    }]
+    // Expense/fuel items get actualDueAmount/payableAmount/remainingAmount only —
+    // no `invoices` array, no company/project/city/state (no single site to attach it to).
   }],
   stageLogs: [{ fromStage, toStage, action, actedBy, actedRole, remarks, createdAt }],
   history:   [{ itemId, action, previousAmount, newAmount, reason, stage, createdBy, createdAt }]
