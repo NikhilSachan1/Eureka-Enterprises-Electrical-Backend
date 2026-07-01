@@ -18,6 +18,9 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     sortOrder,
     vehicleId,
     cardId,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
   } = filters;
 
   const whereConditions = [];
@@ -97,6 +100,23 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`fe."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`fe."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`fe."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   // Main query for fuel expense records
@@ -156,6 +176,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
     LEFT JOIN "vehicle_versions" vv ON v."id" = vv."vehicleMasterId" AND vv."isActive" = true
     LEFT JOIN "cards" c ON fe."cardId" = c."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = fe."paidFromAccountId"
     ${whereClause}
     ORDER BY fe."${sortField}" ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -169,6 +190,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = fe."paidFromAccountId"
     ${whereClause}
   `;
 
@@ -451,7 +473,19 @@ export const buildProjectedFuelBalanceQuery = (filters: FuelExpenseQueryDto) => 
 };
 
 export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, paymentModes, search, vehicleId, cardId } = filters;
+  const {
+    startDate,
+    endDate,
+    date,
+    userIds,
+    paymentModes,
+    search,
+    vehicleId,
+    cardId,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
+  } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -520,6 +554,23 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`fe."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`fe."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`fe."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   const summaryQuery = `
@@ -535,6 +586,7 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = fe."paidFromAccountId"
     ${whereClause}
   `;
 

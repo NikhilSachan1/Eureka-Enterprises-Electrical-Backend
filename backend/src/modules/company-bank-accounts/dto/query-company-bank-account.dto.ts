@@ -5,7 +5,12 @@ import { IsBoolean, IsNumber, IsOptional, IsString, Min } from 'class-validator'
 export class QueryCompanyBankAccountDto {
   @ApiPropertyOptional({ description: 'Filter by active/inactive' })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false') return false;
+    if (raw === true || raw === 'true') return true;
+    return undefined;
+  })
   @IsBoolean()
   isActive?: boolean;
 

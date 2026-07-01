@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DataSource, EntityManager, IsNull } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { PaymentSheetRepository } from './payment-sheet.repository';
 import { PaymentSheetEntity } from './entities/payment-sheet.entity';
 import { PaymentSheetItemEntity } from './entities/payment-sheet-item.entity';
@@ -508,11 +508,44 @@ export class PaymentSheetService {
       status,
       currentStage,
       financialYear,
+      paidFromAccountId,
+      paidFromAccountName,
+      hasPaidFromAccount,
     } = query;
     const where: any = { deletedAt: IsNull() };
     if (status) where.status = status;
     if (currentStage) where.currentStage = currentStage;
     if (financialYear) where.financialYear = financialYear;
+
+    // paidFromAccountId/Name/hasPaidFromAccount live on payment_sheet_items, not the sheet
+    // header — resolve to matching sheet ids first (sheets with at least one matching line).
+    if (paidFromAccountId || paidFromAccountName || hasPaidFromAccount !== undefined) {
+      const conditions: string[] = ['i."deletedAt" IS NULL'];
+      const params: any[] = [];
+      if (paidFromAccountId) {
+        params.push(paidFromAccountId);
+        conditions.push(`i."paidFromAccountId" = $${params.length}`);
+      }
+      if (paidFromAccountName) {
+        params.push(`%${paidFromAccountName}%`);
+        conditions.push(`LOWER(cba."accountName") LIKE LOWER($${params.length})`);
+      }
+      if (hasPaidFromAccount === true) conditions.push(`i."paidFromAccountId" IS NOT NULL`);
+      else if (hasPaidFromAccount === false) conditions.push(`i."paidFromAccountId" IS NULL`);
+
+      const rows = await this.repo.raw(
+        `
+        SELECT DISTINCT i."paymentSheetId" AS id
+        FROM "payment_sheet_items" i
+        LEFT JOIN "company_bank_accounts" cba ON cba."id" = i."paidFromAccountId"
+        WHERE ${conditions.join(' AND ')}
+        `,
+        params,
+      );
+      const matchingIds = rows.map((r: any) => r.id);
+      if (!matchingIds.length) return { records: [], totalRecords: 0 };
+      where.id = In(matchingIds);
+    }
 
     const [records, totalRecords] = await Promise.all([
       this.repo.findSheets({

@@ -4,7 +4,16 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Not,
+} from 'typeorm';
 import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
 import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
@@ -314,6 +323,9 @@ export class BankTransferService {
       search,
       poNumber,
       invoiceNumber,
+      paidFromAccountId,
+      paidFromAccountName,
+      hasPaidFromAccount,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -333,6 +345,11 @@ export class BankTransferService {
     else if (dateFrom) where.transferDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.transferDate = LessThanOrEqual(dateTo);
     if (search) where.utrNumber = ILike(`%${search}%`);
+    if (paidFromAccountId) where.paidFromAccountId = paidFromAccountId;
+    if (paidFromAccountName)
+      where.paidFromAccount = { accountName: ILike(`%${paidFromAccountName}%`) };
+    if (hasPaidFromAccount === true) where.paidFromAccountId = Not(IsNull());
+    else if (hasPaidFromAccount === false) where.paidFromAccountId = IsNull();
     if (invoiceNumber || poNumber) {
       const invCond: any = {};
       if (invoiceNumber) invCond.invoiceNumber = ILike(`%${invoiceNumber}%`);
