@@ -85,4 +85,21 @@ export class BookPaymentEntity extends BaseEntity {
   // Flag if a bank transfer has been created for this book payment (1:1)
   @Column({ type: 'boolean', default: false })
   hasTransfer: boolean;
+
+  // Lock / unlock — auto-locked on approval (created auto-approved+locked); JMC-style unlock workflow
+  @Column({ type: 'boolean', default: false })
+  isLocked: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  unlockRequestedAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  unlockRequestedBy: string | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'unlockRequestedBy' })
+  unlockRequestedByUser: UserEntity | null;
+
+  @Column({ type: 'text', nullable: true })
+  unlockReason: string | null;
 }

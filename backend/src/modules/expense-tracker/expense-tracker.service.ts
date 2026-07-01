@@ -772,6 +772,17 @@ export class ExpenseTrackerService {
         transactionType: record.transactionType,
         paymentMode: record.paymentMode,
         paidFromAccountId: record.paidFromAccountId ?? null,
+        paidFromAccount: record.paidFromAccountId
+          ? {
+              id: record.paidFromAccountId,
+              accountName: record.pfaAccountName ?? null,
+              accountHolderName: record.pfaAccountHolderName ?? null,
+              bankName: record.pfaBankName ?? null,
+              accountNumber: record.pfaAccountNumber ?? null,
+              ifscCode: record.pfaIfscCode ?? null,
+              branchName: record.pfaBranchName ?? null,
+            }
+          : null,
         entrySourceType: record.entrySourceType,
         expenseEntryType: record.expenseEntryType,
         createdAt: record.createdAt,
@@ -841,7 +852,7 @@ export class ExpenseTrackerService {
           { id: originalExpenseId }, // The original expense itself
           { originalExpenseId }, // All subsequent versions
         ],
-        relations: ['user', 'approvalByUser', 'createdByUser', 'updatedByUser'],
+        relations: ['user', 'approvalByUser', 'createdByUser', 'updatedByUser', 'paidFromAccount'],
         order: { versionNumber: SortOrder.ASC },
       });
 
@@ -875,6 +886,17 @@ export class ExpenseTrackerService {
           transactionType: record.transactionType,
           paymentMode: record.paymentMode,
           paidFromAccountId: record.paidFromAccountId ?? null,
+          paidFromAccount: record.paidFromAccount
+            ? {
+                id: record.paidFromAccount.id,
+                accountName: record.paidFromAccount.accountName,
+                accountHolderName: record.paidFromAccount.accountHolderName,
+                bankName: record.paidFromAccount.bankName,
+                accountNumber: record.paidFromAccount.accountNumber,
+                ifscCode: record.paidFromAccount.ifscCode,
+                branchName: record.paidFromAccount.branchName ?? null,
+              }
+            : null,
           entrySourceType: record.entrySourceType,
           expenseEntryType: record.expenseEntryType,
           approvalStatus: record.approvalStatus,

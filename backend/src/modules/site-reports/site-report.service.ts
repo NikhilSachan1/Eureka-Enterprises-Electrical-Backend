@@ -11,7 +11,11 @@ import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dt
 import { REPORT_ERRORS, REPORT_RESPONSES } from './constants/site-report.constants';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
-import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
+import {
+  FinancialApprovalStatus,
+  FINANCIAL_ERRORS,
+} from 'src/modules/common/financials/financial.constants';
+import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
 @Injectable()
@@ -35,6 +39,7 @@ export class SiteReportService {
       throw new ConflictException(REPORT_ERRORS.REPORT_ALREADY_EXISTS_FOR_JMC);
     }
 
+    // Auto-approved + auto-locked on creation.
     const created = await this.reportRepository.create({
       jmcId: jmc.id,
       siteId: jmc.siteId,
@@ -46,9 +51,10 @@ export class SiteReportService {
       fileKey: dto.fileKey,
       fileName: dto.fileName,
       remarks: dto.remarks,
-      approvalStatus: FinancialApprovalStatus.PENDING,
-      approvalBy: null,
-      approvalAt: null,
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: createdBy,
+      approvalAt: new Date(),
+      isLocked: true,
       createdBy,
     });
 
@@ -136,6 +142,7 @@ export class SiteReportService {
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
+          'unlockRequestedByUser',
         ],
       }),
       this.reportRepository.count({ where }),
@@ -147,6 +154,7 @@ export class SiteReportService {
         createdByUser: formatUser(r.createdByUser),
         updatedByUser: formatUser(r.updatedByUser),
         approvalByUser: formatUser(r.approvalByUser),
+        unlockRequestedByUser: formatUser(r.unlockRequestedByUser),
       })),
       totalRecords,
     };
@@ -165,6 +173,7 @@ export class SiteReportService {
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
+        'unlockRequestedByUser',
       ],
     });
     if (!report) throw new NotFoundException(REPORT_ERRORS.NOT_FOUND);
@@ -173,17 +182,24 @@ export class SiteReportService {
       createdByUser: formatUser(report.createdByUser),
       updatedByUser: formatUser(report.updatedByUser),
       approvalByUser: formatUser(report.approvalByUser),
+      unlockRequestedByUser: formatUser(report.unlockRequestedByUser),
     };
   }
 
   async update(id: string, dto: UpdateSiteReportDto, updatedBy: string) {
     const report = await this.findActiveById(id);
-    if (report.approvalStatus === FinancialApprovalStatus.APPROVED) {
-      throw new BadRequestException(REPORT_ERRORS.CANNOT_EDIT_APPROVED);
+    // Must be unlocked first (via the unlock workflow) before it can be edited.
+    if (report.isLocked) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
     }
+    // Editing re-approves + re-locks (reports are always auto-approved + locked).
     await this.reportRepository.update({ id }, {
       ...dto,
       reportDate: dto.reportDate ? new Date(dto.reportDate) : undefined,
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: updatedBy,
+      approvalAt: new Date(),
+      isLocked: true,
       updatedBy,
     } as Partial<SiteReportEntity>);
     return { message: REPORT_RESPONSES.UPDATED };
@@ -191,12 +207,60 @@ export class SiteReportService {
 
   async remove(id: string, deletedBy: string) {
     const report = await this.findActiveById(id);
-    if (report.approvalStatus === FinancialApprovalStatus.APPROVED) {
-      throw new BadRequestException(REPORT_ERRORS.CANNOT_DELETE_APPROVED);
+    if (report.isLocked) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
     }
     await this.reportRepository.update({ id }, { deletedBy });
     await this.reportRepository.softDelete({ id });
     return { message: REPORT_RESPONSES.DELETED };
+  }
+
+  // ── Unlock workflow (JMC-style) ───────────────────────────────────────────
+
+  async requestUnlock(id: string, dto: UnlockRequestDto, requestedBy: string) {
+    const report = await this.findActiveById(id);
+    if (!report.isLocked || report.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(REPORT_ERRORS.ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK);
+    }
+    await this.reportRepository.update({ id }, {
+      unlockRequestedAt: new Date(),
+      unlockRequestedBy: requestedBy,
+      unlockReason: dto.reason,
+      updatedBy: requestedBy,
+    } as Partial<SiteReportEntity>);
+    return { message: REPORT_RESPONSES.UNLOCK_REQUESTED };
+  }
+
+  async grantUnlock(id: string, grantedBy: string) {
+    const report = await this.findActiveById(id);
+    if (!report.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_NOT_REQUESTED);
+    }
+    await this.reportRepository.update({ id }, {
+      approvalStatus: FinancialApprovalStatus.PENDING,
+      approvalBy: null,
+      approvalAt: null,
+      isLocked: false,
+      unlockRequestedAt: null,
+      unlockRequestedBy: null,
+      unlockReason: null,
+      updatedBy: grantedBy,
+    } as Partial<SiteReportEntity>);
+    return { message: REPORT_RESPONSES.UNLOCK_GRANTED };
+  }
+
+  async rejectUnlock(id: string, rejectedBy: string) {
+    const report = await this.findActiveById(id);
+    if (!report.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_REJECT_NO_REQUEST);
+    }
+    await this.reportRepository.update({ id }, {
+      unlockRequestedAt: null,
+      unlockRequestedBy: null,
+      unlockReason: null,
+      updatedBy: rejectedBy,
+    } as Partial<SiteReportEntity>);
+    return { message: REPORT_RESPONSES.UNLOCK_REJECTED };
   }
 
   private async findActiveById(id: string): Promise<SiteReportEntity> {

@@ -22,6 +22,9 @@ export const BOOK_PAYMENT_ERRORS = {
   ALREADY_APPROVED: 'Book payment is already approved.',
   CANNOT_REJECT_APPROVED: 'Cannot reject an already approved book payment.',
   BOOK_PAYMENT_NOT_APPROVED: 'Book payment must be approved before creating a bank transfer.',
+  ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK: 'Only APPROVED locked book payments can request unlock.',
+  CANNOT_UNLOCK_HAS_TRANSFER:
+    'Cannot unlock — a bank transfer exists against this book payment. Reverse the bank transfer first.',
 };
 
 export const GST_HOLD_REMARK =
@@ -33,4 +36,7 @@ export const BOOK_PAYMENT_RESPONSES = {
   DELETED: 'Book payment deleted successfully.',
   APPROVED: 'Book payment approved successfully.',
   REJECTED: 'Book payment rejected successfully.',
+  UNLOCK_REQUESTED: 'Unlock request submitted',
+  UNLOCK_GRANTED: 'Book payment unlocked',
+  UNLOCK_REJECTED: 'Unlock request rejected — book payment remains locked',
 };
