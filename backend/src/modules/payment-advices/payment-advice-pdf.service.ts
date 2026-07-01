@@ -464,7 +464,7 @@ export class PaymentAdvicePdfService {
         <th>Invoice Date</th>
         <th class="r">Gross Amount (Rs.)</th>
         <th class="r">Total Deduction (Rs.)</th>
-        <th class="r">Net Invoice Amount (Rs.)</th>
+        <th class="r">Amount to be Paid (Rs.)</th>
       </tr>
     </thead>
     <tbody>
