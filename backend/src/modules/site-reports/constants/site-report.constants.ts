@@ -8,6 +8,7 @@ export const REPORT_ERRORS = {
   CANNOT_DELETE_APPROVED: 'Cannot delete an approved report — it is locked.',
   ALREADY_APPROVED: 'Report is already approved.',
   CANNOT_REJECT_APPROVED: 'Cannot reject an already approved report.',
+  ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK: 'Only APPROVED locked reports can request unlock.',
 };
 
 export const REPORT_RESPONSES = {
@@ -16,4 +17,7 @@ export const REPORT_RESPONSES = {
   DELETED: 'Report deleted successfully',
   APPROVED: 'Report approved successfully.',
   REJECTED: 'Report rejected successfully.',
+  UNLOCK_REQUESTED: 'Unlock request submitted',
+  UNLOCK_GRANTED: 'Report unlocked',
+  UNLOCK_REJECTED: 'Unlock request rejected — report remains locked',
 };
