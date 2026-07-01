@@ -1102,6 +1102,7 @@ export class PaymentSheetService {
         createdBy: user.id,
         sourceType: EntrySourceType.WEB,
         fileKeys: [],
+        paidFromAccountId: dto.paidFromAccountId,
       } as any);
     } else if (item.sourceType === PaymentSourceType.FUEL_EXPENSE) {
       if (!dto.paymentMode || !dto.paidDate) {
@@ -1118,6 +1119,7 @@ export class PaymentSheetService {
         createdBy: user.id,
         fileKeys: [],
         entrySourceType: EntrySourceType.WEB,
+        paidFromAccountId: dto.paidFromAccountId,
       } as any);
     } else {
       // Vendor — create a bank transfer per allocation.
@@ -1148,6 +1150,7 @@ export class PaymentSheetService {
             proofFileKey: t.proofFileKey,
             proofFileName: t.proofFileName,
             remarks: dto.remarks,
+            paidFromAccountId: dto.paidFromAccountId,
           } as any,
           user.id,
         );
@@ -1171,6 +1174,7 @@ export class PaymentSheetService {
           paidAmount: amount,
           paidAt: new Date(),
           paymentRef,
+          paidFromAccountId: dto.paidFromAccountId ?? null,
           updatedBy: user.id,
         },
         em,

@@ -24,6 +24,7 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+import { CompanyBankAccountService } from 'src/modules/company-bank-accounts/company-bank-account.service';
 
 @Injectable()
 export class BankTransferService {
@@ -32,8 +33,16 @@ export class BankTransferService {
     private readonly bookPaymentService: BookPaymentService,
     private readonly purchaseOrderService: PurchaseOrderService,
     private readonly paymentAdviceService: PaymentAdviceService,
+    private readonly companyBankAccountService: CompanyBankAccountService,
     private readonly dataSource: DataSource,
   ) {}
+
+  /** Validates the paying company bank account, if one was supplied (throws if invalid). */
+  private async validatePaidFromAccount(paidFromAccountId?: string): Promise<string | null> {
+    if (!paidFromAccountId) return null;
+    const account = await this.companyBankAccountService.findActiveOrFail(paidFromAccountId);
+    return account.id;
+  }
 
   /**
    * Create a bank transfer. For PURCHASE side, auto-generates a payment advice.
@@ -89,6 +98,7 @@ export class BankTransferService {
       }
 
       const financialYear = getFinancialYear(dto.transferDate);
+      const paidFromAccountId = await this.validatePaidFromAccount(dto.paidFromAccountId);
 
       const created = await this.bankTransferRepository.create(
         {
@@ -110,6 +120,7 @@ export class BankTransferService {
           approvalBy: createdBy,
           approvalAt: new Date(),
           createdBy,
+          paidFromAccountId,
         },
         em,
       );
@@ -165,6 +176,7 @@ export class BankTransferService {
       }
 
       const financialYear = getFinancialYear(dto.transferDate);
+      const paidFromAccountId = await this.validatePaidFromAccount(dto.paidFromAccountId);
 
       const created = await this.bankTransferRepository.create(
         {
@@ -187,6 +199,7 @@ export class BankTransferService {
           approvalAt: new Date(),
           isLocked: true,
           createdBy,
+          paidFromAccountId,
         },
         em,
       );
@@ -346,6 +359,7 @@ export class BankTransferService {
           'contractor',
           'vendor',
           'paymentAdvice',
+          'paidFromAccount',
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
@@ -381,6 +395,7 @@ export class BankTransferService {
         'contractor',
         'vendor',
         'paymentAdvice',
+        'paidFromAccount',
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
