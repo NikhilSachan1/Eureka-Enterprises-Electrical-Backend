@@ -5,6 +5,7 @@ import { PaymentSheetItemEntity } from './entities/payment-sheet-item.entity';
 import { PaymentSheetItemBookPaymentEntity } from './entities/payment-sheet-item-book-payment.entity';
 import { PaymentSheetItemHistoryEntity } from './entities/payment-sheet-item-history.entity';
 import { PaymentSheetStageLogEntity } from './entities/payment-sheet-stage-log.entity';
+import { PaymentSheetItemVerificationEntity } from './entities/payment-sheet-item-verification.entity';
 import { PaymentSheetRepository } from './payment-sheet.repository';
 import { PaymentSheetService } from './payment-sheet.service';
 import { PaymentSheetPdfService } from './payment-sheet-pdf.service';
@@ -23,6 +24,7 @@ import { FilesModule } from 'src/modules/common/file-upload/files.module';
       PaymentSheetItemBookPaymentEntity,
       PaymentSheetItemHistoryEntity,
       PaymentSheetStageLogEntity,
+      PaymentSheetItemVerificationEntity,
     ]),
     ExpenseTrackerModule,
     FuelExpenseModule,

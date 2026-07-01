@@ -33,6 +33,27 @@ export class StageActionDto {
   reason?: string;
 }
 
+/** Bulk verify — verify the listed item ids; omit `itemIds` to verify ALL lines at the stage. */
+export class VerifyItemsDto {
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Item ids to verify. Omit or empty to verify every line at the current stage.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  itemIds?: string[];
+}
+
+/** Bulk unverify — remove the current stage's verification from the listed item ids. */
+export class UnverifyItemsDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('all', { each: true })
+  itemIds: string[];
+}
+
 /** One bank transfer to create for a vendor item's book-payment allocation. */
 export class VendorTransferInputDto {
   @ApiProperty()

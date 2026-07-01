@@ -12,6 +12,7 @@ import { PaymentSheetItemEntity } from './entities/payment-sheet-item.entity';
 import { PaymentSheetItemBookPaymentEntity } from './entities/payment-sheet-item-book-payment.entity';
 import { PaymentSheetItemHistoryEntity } from './entities/payment-sheet-item-history.entity';
 import { PaymentSheetStageLogEntity } from './entities/payment-sheet-stage-log.entity';
+import { PaymentSheetItemVerificationEntity } from './entities/payment-sheet-item-verification.entity';
 
 @Injectable()
 export class PaymentSheetRepository {
@@ -26,6 +27,8 @@ export class PaymentSheetRepository {
     private readonly historyRepo: Repository<PaymentSheetItemHistoryEntity>,
     @InjectRepository(PaymentSheetStageLogEntity)
     private readonly stageLogRepo: Repository<PaymentSheetStageLogEntity>,
+    @InjectRepository(PaymentSheetItemVerificationEntity)
+    private readonly verificationRepo: Repository<PaymentSheetItemVerificationEntity>,
   ) {}
 
   private sheets(em?: EntityManager) {
@@ -135,6 +138,34 @@ export class PaymentSheetRepository {
   }
   async findStageLogs(options: FindManyOptions<PaymentSheetStageLogEntity>, em?: EntityManager) {
     return await this.stageLogs(em).find(options);
+  }
+
+  // ── Item verifications (per item × stage) ──
+  private verifications(em?: EntityManager) {
+    return em ? em.getRepository(PaymentSheetItemVerificationEntity) : this.verificationRepo;
+  }
+  async createVerification(data: Partial<PaymentSheetItemVerificationEntity>, em?: EntityManager) {
+    return await this.verifications(em).save(this.verifications(em).create(data));
+  }
+  async findVerifications(
+    options: FindManyOptions<PaymentSheetItemVerificationEntity>,
+    em?: EntityManager,
+  ) {
+    return await this.verifications(em).find(options);
+  }
+  async findVerification(
+    options: FindOneOptions<PaymentSheetItemVerificationEntity>,
+    em?: EntityManager,
+  ) {
+    return await this.verifications(em).findOne(options);
+  }
+  /** Hard-delete all verification rows for an item (used when its amount changes). */
+  async deleteVerificationsByItem(itemId: string, em?: EntityManager) {
+    await this.verifications(em).delete({ itemId });
+  }
+  /** Hard-delete the verification row for a specific (item, stage). */
+  async deleteVerification(itemId: string, stage: string, em?: EntityManager) {
+    await this.verifications(em).delete({ itemId, stage });
   }
 
   // ── Raw ──
