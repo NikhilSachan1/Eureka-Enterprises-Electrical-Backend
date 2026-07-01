@@ -18,6 +18,8 @@ import {
   StageActionDto,
   PayItemDto,
   QueryPaymentSheetDto,
+  VerifyItemsDto,
+  UnverifyItemsDto,
 } from './dto';
 import {
   PaymentSheetStatus,
@@ -122,6 +124,79 @@ export class PaymentSheetService {
     const count = await this.repo.countSheets({ where: { financialYear } }, em);
     const seq = String(count + 1).padStart(4, '0');
     return `${PAYMENT_SHEET_DEFAULTS.SHEET_NUMBER_PREFIX}/${financialYear}/${seq}`;
+  }
+
+  // ─────────────────────────── verification helpers ───────────────────────────
+
+  private stageIndex(flow: ApprovalStageConfig[], stage: string | null): number {
+    return flow.findIndex((s) => s.stage === stage);
+  }
+
+  /** True if the item is verified by a stage LATER than the actor's current stage. */
+  private async isEditLocked(
+    itemId: string,
+    currentStage: string | null,
+    flow: ApprovalStageConfig[],
+    em?: EntityManager,
+  ): Promise<boolean> {
+    const actorIdx = this.stageIndex(flow, currentStage);
+    if (actorIdx < 0) return false;
+    const rows = await this.repo.findVerifications({ where: { itemId } }, em);
+    return rows.some((v) => {
+      const vIdx = this.stageIndex(flow, v.stage);
+      return vIdx > actorIdx;
+    });
+  }
+
+  private async assertNotEditLocked(
+    itemId: string,
+    currentStage: string | null,
+    flow: ApprovalStageConfig[],
+    em?: EntityManager,
+  ) {
+    if (await this.isEditLocked(itemId, currentStage, flow, em)) {
+      throw new ForbiddenException(PAYMENT_SHEET_ERRORS.EDIT_LOCKED_VERIFIED);
+    }
+  }
+
+  private async clearItemVerifications(itemId: string, em: EntityManager) {
+    await this.repo.deleteVerificationsByItem(itemId, em);
+  }
+
+  /** Idempotently record a verification row for (item, stage). */
+  private async upsertVerification(
+    item: PaymentSheetItemEntity,
+    stage: string,
+    userId: string,
+    em: EntityManager,
+  ): Promise<boolean> {
+    const existing = await this.repo.findVerification({ where: { itemId: item.id, stage } }, em);
+    if (existing) return false;
+    await this.repo.createVerification(
+      {
+        itemId: item.id,
+        paymentSheetId: item.paymentSheetId,
+        stage,
+        verifiedBy: userId,
+        createdBy: userId,
+      },
+      em,
+    );
+    return true;
+  }
+
+  /** After a reviewer edits a line, their edit counts as their own verification (Q3). */
+  private async autoVerifyOnEdit(
+    item: PaymentSheetItemEntity,
+    sheet: PaymentSheetEntity,
+    flow: ApprovalStageConfig[],
+    user: ActingUser,
+    em: EntityManager,
+  ) {
+    const cfg = this.stageConfig(flow, sheet.currentStage);
+    if (cfg?.verifyItems && sheet.currentStage) {
+      await this.upsertVerification(item, sheet.currentStage, user.id, em);
+    }
   }
 
   // ─────────────────────────── live pending recompute ───────────────────────────
@@ -467,8 +542,22 @@ export class PaymentSheetService {
       order: { createdAt: 'ASC' },
     });
 
-    // Enrich each item with the beneficiary's identity (employee / vendor details).
-    const userIds = [...new Set(items.filter((i) => i.userId).map((i) => i.userId))];
+    // Per-item verification rows (grouped by item) + who verified.
+    const verifications = await this.repo.findVerifications({ where: { paymentSheetId: id } });
+    const verByItem = new Map<string, typeof verifications>();
+    for (const v of verifications) {
+      const arr = verByItem.get(v.itemId) ?? [];
+      arr.push(v);
+      verByItem.set(v.itemId, arr);
+    }
+
+    // Enrich each item with beneficiary + verifier identities (single batched user fetch).
+    const userIds = [
+      ...new Set([
+        ...items.filter((i) => i.userId).map((i) => i.userId as string),
+        ...verifications.map((v) => v.verifiedBy),
+      ]),
+    ];
     const vendorIds = [...new Set(items.filter((i) => i.vendorId).map((i) => i.vendorId))];
     const [userRows, vendorRows] = await Promise.all([
       userIds.length
@@ -486,10 +575,24 @@ export class PaymentSheetService {
     ]);
     const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
     const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
+    const nameOf = (uid: string) => {
+      const u = userMap.get(uid);
+      return u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : null;
+    };
+
+    const flow = await this.getApprovalFlow();
+    const currentStage = sheet.currentStage;
 
     const enrichedItems = items.map((i) => {
       const u = i.userId ? userMap.get(i.userId) : null;
       const v = i.vendorId ? vendorMap.get(i.vendorId) : null;
+      const vers = (verByItem.get(i.id) ?? []).map((row) => ({
+        stage: row.stage,
+        verifiedBy: row.verifiedBy,
+        verifiedByName: nameOf(row.verifiedBy),
+        verifiedAt: row.verifiedAt,
+      }));
+      const verifiedStages = vers.map((x) => x.stage);
       return {
         ...i,
         user: u
@@ -512,10 +615,34 @@ export class PaymentSheetService {
               state: v.state ?? null,
             }
           : null,
+        verifications: vers,
+        verifiedStages,
+        isVerifiedForCurrentStage: currentStage ? verifiedStages.includes(currentStage) : false,
       };
     });
 
-    return { ...sheet, items: enrichedItems, stageLogs, history };
+    // Per-current-stage verification summary (only when the current stage verifies).
+    let verificationSummary: {
+      stage: string;
+      verified: number;
+      total: number;
+      allVerified: boolean;
+    } | null = null;
+    const currentCfg = this.stageConfig(flow, currentStage);
+    if (currentCfg?.verifyItems && currentStage) {
+      const active = items.filter((i) => i.itemStatus !== PaymentSheetItemStatus.REJECTED);
+      const verified = active.filter((i) =>
+        (verByItem.get(i.id) ?? []).some((row) => row.stage === currentStage),
+      ).length;
+      verificationSummary = {
+        stage: currentStage,
+        verified,
+        total: active.length,
+        allVerified: verified === active.length,
+      };
+    }
+
+    return { ...sheet, items: enrichedItems, stageLogs, history, verificationSummary };
   }
 
   private async loadEditableSheet(id: string, em: EntityManager) {
@@ -599,6 +726,9 @@ export class PaymentSheetService {
       );
       if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
 
+      // Edit-lock: an earlier stage cannot edit a line a later stage has verified.
+      await this.assertNotEditLocked(itemId, sheet.currentStage, flow, em);
+
       if (item.beneficiaryType === BeneficiaryType.VENDOR) {
         throw new BadRequestException(
           'Vendor amounts are allocation-based; remove the line and re-add with fewer book payments to reduce.',
@@ -635,6 +765,12 @@ export class PaymentSheetService {
         newAmount,
         reason: dto.reason ?? null,
       });
+      // A changed amount clears everyone's verification of this line; the editing
+      // reviewer's own edit then counts as their verification for their stage.
+      if (Math.abs(newAmount - prev) > 0.01) {
+        await this.clearItemVerifications(itemId, em);
+      }
+      await this.autoVerifyOnEdit(item, sheet, flow, user, em);
       await this.recomputeTotals(id, em);
       return { message: PAYMENT_SHEET_RESPONSES.ITEM_UPDATED };
     });
@@ -664,6 +800,9 @@ export class PaymentSheetService {
       );
       if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
 
+      // Edit-lock: an earlier stage cannot remove a line a later stage has verified.
+      await this.assertNotEditLocked(itemId, sheet.currentStage, flow, em);
+
       await this.addHistory(item, ItemHistoryAction.ITEM_REMOVED, sheet.currentStage, user.id, em, {
         previousAmount: Number(item.currentAmount),
         reason: dto.reason ?? null,
@@ -671,6 +810,93 @@ export class PaymentSheetService {
       await this.repo.softDeleteItem({ id: itemId }, em);
       await this.recomputeTotals(id, em);
       return { message: PAYMENT_SHEET_RESPONSES.ITEM_REMOVED };
+    });
+  }
+
+  // ─────────────────────────── item verification (review stages) ───────────────────────────
+
+  private assertVerifyStage(cfg: ApprovalStageConfig, currentStage: string | null): string {
+    if (!cfg.verifyItems || !currentStage) {
+      throw new BadRequestException(PAYMENT_SHEET_ERRORS.NOT_A_VERIFY_STAGE);
+    }
+    return currentStage;
+  }
+
+  /**
+   * Verify lines at the current review stage. Pass `itemIds` to verify specific lines, or
+   * omit them to verify every active line. Idempotent — already-verified lines are skipped.
+   */
+  async verifyItems(id: string, dto: VerifyItemsDto, user: ActingUser) {
+    return await this.dataSource.transaction(async (em) => {
+      const sheet = await this.loadEditableSheet(id, em);
+      const flow = await this.getApprovalFlow(em);
+      const cfg = this.assertStageAuthority(flow, sheet, user);
+      const stage = this.assertVerifyStage(cfg, sheet.currentStage);
+
+      const items = await this.repo.findItems(
+        { where: { paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      const active = items.filter((i) => i.itemStatus !== PaymentSheetItemStatus.REJECTED);
+
+      let targets = active;
+      if (dto.itemIds?.length) {
+        const byId = new Map(active.map((i) => [i.id, i]));
+        const invalid = dto.itemIds.filter((x) => !byId.has(x));
+        if (invalid.length) {
+          throw new BadRequestException(
+            `Items not on this sheet (or rejected): ${invalid.join(', ')}`,
+          );
+        }
+        targets = dto.itemIds.map((x) => byId.get(x)!);
+      }
+
+      let verifiedCount = 0;
+      for (const item of targets) {
+        const created = await this.upsertVerification(item, stage, user.id, em);
+        if (created) {
+          verifiedCount++;
+          await this.addHistory(item, ItemHistoryAction.VERIFIED, stage, user.id, em, {});
+        }
+      }
+      return { message: PAYMENT_SHEET_RESPONSES.ITEM_VERIFIED, verifiedCount };
+    });
+  }
+
+  /** Remove the current stage's verification from the listed lines. */
+  async unverifyItems(id: string, dto: UnverifyItemsDto, user: ActingUser) {
+    return await this.dataSource.transaction(async (em) => {
+      const sheet = await this.loadEditableSheet(id, em);
+      const flow = await this.getApprovalFlow(em);
+      const cfg = this.assertStageAuthority(flow, sheet, user);
+      const stage = this.assertVerifyStage(cfg, sheet.currentStage);
+
+      const items = await this.repo.findItems(
+        { where: { paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const invalid = dto.itemIds.filter((x) => !byId.has(x));
+      if (invalid.length) {
+        throw new BadRequestException(`Items not on this sheet: ${invalid.join(', ')}`);
+      }
+
+      let unverifiedCount = 0;
+      for (const itemId of dto.itemIds) {
+        const existing = await this.repo.findVerification({ where: { itemId, stage } }, em);
+        if (!existing) continue;
+        await this.repo.deleteVerification(itemId, stage, em);
+        await this.addHistory(
+          byId.get(itemId)!,
+          ItemHistoryAction.UNVERIFIED,
+          stage,
+          user.id,
+          em,
+          {},
+        );
+        unverifiedCount++;
+      }
+      return { message: PAYMENT_SHEET_RESPONSES.ITEM_UNVERIFIED, unverifiedCount };
     });
   }
 
@@ -716,7 +942,25 @@ export class PaymentSheetService {
     const result = await this.dataSource.transaction(async (em) => {
       const sheet = await this.loadEditableSheet(id, em);
       const flow = await this.getApprovalFlow(em);
-      this.assertStageAuthority(flow, sheet, user);
+      const cfg = this.assertStageAuthority(flow, sheet, user);
+
+      // Verify gate: at a verifyItems stage, every active line must be verified for it.
+      if (cfg.verifyItems && sheet.currentStage) {
+        const items = await this.repo.findItems(
+          { where: { paymentSheetId: id, deletedAt: IsNull() } },
+          em,
+        );
+        const active = items.filter((i) => i.itemStatus !== PaymentSheetItemStatus.REJECTED);
+        const verified = await this.repo.findVerifications(
+          { where: { paymentSheetId: id, stage: sheet.currentStage } },
+          em,
+        );
+        const verifiedItemIds = new Set(verified.map((v) => v.itemId));
+        const allVerified = active.every((i) => verifiedItemIds.has(i.id));
+        if (!allVerified) {
+          throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEMS_NOT_ALL_VERIFIED);
+        }
+      }
 
       const next = this.nextStage(flow, sheet.currentStage);
       if (!next) throw new BadRequestException('No next stage to forward to');
@@ -1141,9 +1385,16 @@ export class PaymentSheetService {
       );
       const updated: Array<{ itemId: string; previousAmount: number; newAmount: number }> = [];
       const removed: Array<{ itemId: string; reason: string }> = [];
+      const skipped: Array<{ itemId: string; reason: string }> = [];
 
       for (const item of items) {
         const prev = Number(item.currentAmount);
+
+        // Verified-by-a-later-stage lines are locked for the initiator — leave untouched.
+        if (await this.isEditLocked(item.id, sheet.currentStage, flow, em)) {
+          skipped.push({ itemId: item.id, reason: 'verified by a later stage (locked)' });
+          continue;
+        }
 
         if (item.beneficiaryType === BeneficiaryType.VENDOR) {
           const allocs = await this.repo.findAllocations(
@@ -1256,8 +1507,10 @@ export class PaymentSheetService {
         message: 'Amounts synced to latest pending',
         updatedCount: updated.length,
         removedCount: removed.length,
+        skippedCount: skipped.length,
         updated,
         removed,
+        skipped,
       };
     });
   }

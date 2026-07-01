@@ -69,6 +69,7 @@ import { PaymentSheetItemEntity } from 'src/modules/payment-sheets/entities/paym
 import { PaymentSheetItemBookPaymentEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-book-payment.entity';
 import { PaymentSheetItemHistoryEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-history.entity';
 import { PaymentSheetStageLogEntity } from 'src/modules/payment-sheets/entities/payment-sheet-stage-log.entity';
+import { PaymentSheetItemVerificationEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item-verification.entity';
 import { PaymentAdviceEntity } from 'src/modules/payment-advices/entities/payment-advice.entity';
 import { PaymentAdviceSequenceEntity } from 'src/modules/payment-advices/entities/payment-advice-sequence.entity';
 import { PaymentAdviceEmailLogEntity } from 'src/modules/payment-advices/entities/payment-advice-email-log.entity';
@@ -182,6 +183,7 @@ export class ConfigService {
         PaymentSheetItemBookPaymentEntity,
         PaymentSheetItemHistoryEntity,
         PaymentSheetStageLogEntity,
+        PaymentSheetItemVerificationEntity,
         PaymentAdviceEntity,
         PaymentAdviceSequenceEntity,
         PaymentAdviceEmailLogEntity,

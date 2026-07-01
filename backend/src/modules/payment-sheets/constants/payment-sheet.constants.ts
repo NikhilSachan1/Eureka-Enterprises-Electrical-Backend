@@ -52,6 +52,7 @@ export interface ApprovalStageConfig {
   canReturn?: boolean;
   canReject?: boolean;
   processItems?: boolean;
+  verifyItems?: boolean;
 }
 
 /** Fallback chain used when the `payments.approval_flow` config row is absent. */
@@ -69,6 +70,7 @@ export const DEFAULT_APPROVAL_FLOW: ApprovalStageConfig[] = [
     addRemove: false,
     canReturn: true,
     canReject: true,
+    verifyItems: true,
   },
   {
     stage: PaymentSheetStage.ADMIN_REVIEW,
@@ -77,6 +79,7 @@ export const DEFAULT_APPROVAL_FLOW: ApprovalStageConfig[] = [
     addRemove: true,
     canReturn: true,
     canReject: true,
+    verifyItems: true,
   },
   {
     stage: PaymentSheetStage.PROCESSING,
@@ -105,6 +108,8 @@ export enum ItemHistoryAction {
   HOLD = 'HOLD',
   RELEASE = 'RELEASE',
   REJECTED = 'REJECTED',
+  VERIFIED = 'VERIFIED',
+  UNVERIFIED = 'UNVERIFIED',
 }
 
 // ── DB config keys ─────────────────────────────────────────────────
@@ -148,6 +153,12 @@ export const PAYMENT_SHEET_ERRORS = {
   CATEGORY_REQUIRED: 'category is required to pay an expense item',
   PENDING_CONFLICT: 'Live pending is now lower than the amount to pay; reconcile the sheet first',
   ALREADY_TERMINAL: 'This sheet is already in a terminal state',
+  NOT_A_VERIFY_STAGE: 'Verification is not applicable at the current stage',
+  ITEMS_NOT_ALL_VERIFIED: 'All items must be verified before forwarding',
+  ALREADY_VERIFIED: 'This item is already verified for the current stage',
+  ITEM_NOT_VERIFIED: 'This item is not verified for the current stage',
+  EDIT_LOCKED_VERIFIED:
+    'This item has been verified by a later stage and can no longer be edited or removed here',
 } as const;
 
 export const PAYMENT_SHEET_RESPONSES = {
@@ -165,6 +176,9 @@ export const PAYMENT_SHEET_RESPONSES = {
   ITEM_HELD: 'Item placed on hold',
   ITEM_RELEASED: 'Item released from hold',
   ITEM_REJECTED: 'Item rejected',
+  ITEM_VERIFIED: 'Item verified',
+  ITEM_UNVERIFIED: 'Item verification removed',
+  ALL_VERIFIED: 'All items verified for the current stage',
   COMPLETED: 'Payment sheet completed',
   PDF_GENERATING: 'Payment sheet PDF is being generated; try again in a moment',
 } as const;
