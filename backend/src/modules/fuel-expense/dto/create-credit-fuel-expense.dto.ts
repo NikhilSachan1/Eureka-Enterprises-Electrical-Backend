@@ -75,4 +75,12 @@ export class CreateCreditFuelExpenseDto {
   })
   @IsOptional()
   files?: any;
+
+  @ApiProperty({
+    description: 'The company bank account this settlement was paid from',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  paidFromAccountId?: string;
 }

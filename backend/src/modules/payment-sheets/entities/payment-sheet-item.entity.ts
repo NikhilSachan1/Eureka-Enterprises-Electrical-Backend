@@ -3,6 +3,7 @@ import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { PaymentSheetItemStatus } from '../constants/payment-sheet.constants';
 import { PaymentSheetEntity } from './payment-sheet.entity';
 import { PaymentSheetItemBookPaymentEntity } from './payment-sheet-item-book-payment.entity';
+import { CompanyBankAccountEntity } from 'src/modules/company-bank-accounts/entities/company-bank-account.entity';
 
 export interface BankSnapshot {
   accountHolderName: string | null;
@@ -64,6 +65,14 @@ export class PaymentSheetItemEntity extends BaseEntity {
   // UTR / bank_transfer id(s) / credit-txn id recorded on PAID.
   @Column({ type: 'varchar', length: 500, nullable: true })
   paymentRef: string | null;
+
+  // Which of the org's own bank accounts this item was paid from (set at pay-time).
+  @Column({ type: 'uuid', nullable: true })
+  paidFromAccountId: string | null;
+
+  @ManyToOne(() => CompanyBankAccountEntity, { nullable: true })
+  @JoinColumn({ name: 'paidFromAccountId' })
+  paidFromAccount: CompanyBankAccountEntity | null;
 
   @Column({ type: 'text', nullable: true })
   holdReason: string | null;

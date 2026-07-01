@@ -8,6 +8,7 @@ import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
 import { PaymentAdviceEntity } from 'src/modules/payment-advices/entities/payment-advice.entity';
+import { CompanyBankAccountEntity } from 'src/modules/company-bank-accounts/entities/company-bank-account.entity';
 
 /**
  * Bank Transfer — both SALE and PURCHASE sides (§5.1.8)
@@ -115,4 +116,12 @@ export class BankTransferEntity extends BaseEntity {
   // Inverse side of PaymentAdvice.bankTransfer (PURCHASE only)
   @OneToOne(() => PaymentAdviceEntity, (pa) => pa.bankTransfer, { nullable: true, eager: false })
   paymentAdvice: PaymentAdviceEntity | null;
+
+  // Which of the org's own bank accounts this was paid from.
+  @Column({ type: 'uuid', nullable: true })
+  paidFromAccountId: string | null;
+
+  @ManyToOne(() => CompanyBankAccountEntity, { nullable: true })
+  @JoinColumn({ name: 'paidFromAccountId' })
+  paidFromAccount: CompanyBankAccountEntity | null;
 }

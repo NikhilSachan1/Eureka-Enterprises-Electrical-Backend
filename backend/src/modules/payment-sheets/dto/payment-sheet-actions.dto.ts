@@ -85,6 +85,11 @@ export class VendorTransferInputDto {
  * VENDOR: supply one transfer per allocated book payment.
  */
 export class PayItemDto {
+  @ApiPropertyOptional({ description: 'The company bank account to pay this item from' })
+  @IsOptional()
+  @IsUUID()
+  paidFromAccountId?: string;
+
   // ── USER settlement fields ──
   @ApiPropertyOptional({ example: 'BANK_TRANSFER' })
   @IsOptional()

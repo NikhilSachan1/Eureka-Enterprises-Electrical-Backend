@@ -73,6 +73,7 @@ import { SiteInvoiceModule } from 'src/modules/site-invoices/site-invoice.module
 import { BookPaymentModule } from 'src/modules/book-payments/book-payment.module';
 import { BankTransferModule } from 'src/modules/bank-transfers/bank-transfer.module';
 import { PaymentSheetModule } from 'src/modules/payment-sheets/payment-sheet.module';
+import { CompanyBankAccountModule } from 'src/modules/company-bank-accounts/company-bank-account.module';
 import { PaymentAdviceModule } from 'src/modules/payment-advices/payment-advice.module';
 import { NoteModule } from 'src/modules/debit-credit-notes/note.module';
 import { GstModule } from 'src/modules/gst/gst.module';
@@ -152,6 +153,7 @@ import { DocumentStatusModule } from 'src/modules/document-status/document-statu
     BookPaymentModule,
     BankTransferModule,
     PaymentSheetModule,
+    CompanyBankAccountModule,
     PaymentAdviceModule,
     NoteModule,
     GstModule,
