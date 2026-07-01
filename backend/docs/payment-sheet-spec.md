@@ -273,3 +273,35 @@ transition). Exact templates TBD during build.
 5. Wire settlement write-back (§7) through existing expense/fuel/bank-transfer services (service-to-service, no cross-module raw writes).
 6. Reconcile endpoint + PDF.
 7. Email notifications on stage hand-offs (§12.1), reusing existing mail infra.
+
+---
+
+## 14. Item Verification (per-line, per-stage)
+
+Added so that on a **returned** sheet, reviewers only re-check **new or changed** lines, and
+approved lines can't be tampered with by earlier stages.
+
+**Model:** table `payment_sheet_item_verifications (itemId, paymentSheetId, stage, verifiedBy,
+verifiedAt)`, unique `(itemId, stage)`. A line is "verified for stage X" iff a row exists.
+Rows are hard-deleted when cleared.
+
+**Verifying stages:** stages flagged `verifyItems: true` in `payments.approval_flow`
+(HR_REVIEW, ADMIN_REVIEW). INITIATION/PROCESSING don't verify.
+
+**Rules**
+1. **Forward gate** — from a `verifyItems` stage, `forward` requires every active (non-rejected)
+   line verified for that stage (`ITEMS_NOT_ALL_VERIFIED` otherwise).
+2. **Clear on change** — any amount change clears that line's verifications for **all** stages.
+3. **Reviewer edit auto-verifies** the line for the editor's own stage; new lines start
+   unverified; **Return clears nothing** (only edits do) — unchanged lines stay verified.
+4. **Edit-lock** — a line can be edited/removed only if **no later stage has verified it**
+   (HR-verified ⇒ OM locked; Admin-verified ⇒ HR & OM locked). An earlier stage may still
+   *verify* a locked line; it just can't change the amount. `sync-amounts` (OM) **skips**
+   locked lines.
+
+**Endpoints (bulk):** `POST /:id/verify` `{ itemIds?: [] }` (omit `itemIds` = verify all lines
+at the stage), `POST /:id/unverify` `{ itemIds: [] }` (perm `view`; stage/role enforced in service).
+
+**GET:** each item gains `verifications[] {stage, verifiedBy, verifiedByName, verifiedAt}`,
+`verifiedStages[]`, `isVerifiedForCurrentStage`; sheet gains `verificationSummary
+{stage, verified, total, allVerified}` for the current stage.

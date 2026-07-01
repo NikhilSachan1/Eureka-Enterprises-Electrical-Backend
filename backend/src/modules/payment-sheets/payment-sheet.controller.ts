@@ -19,6 +19,8 @@ import {
   StageActionDto,
   PayItemDto,
   QueryPaymentSheetDto,
+  VerifyItemsDto,
+  UnverifyItemsDto,
 } from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
@@ -137,6 +139,32 @@ export class PaymentSheetController {
     @GetUser() user: ActingUser,
   ) {
     return this.service.removeItem(id, itemId, dto, user);
+  }
+
+  // ── verification (HR / Admin review stages) ──
+  @Post(':id/verify')
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @ApiOperation({
+    summary: 'Verify lines for the current review stage (bulk)',
+    description: 'Pass { itemIds: [...] } to verify specific lines, or omit itemIds to verify all.',
+  })
+  verify(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VerifyItemsDto,
+    @GetUser() user: ActingUser,
+  ) {
+    return this.service.verifyItems(id, dto, user);
+  }
+
+  @Post(':id/unverify')
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @ApiOperation({ summary: 'Remove this stage’s verification from the listed lines (bulk)' })
+  unverify(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UnverifyItemsDto,
+    @GetUser() user: ActingUser,
+  ) {
+    return this.service.unverifyItems(id, dto, user);
   }
 
   // ── workflow ──
