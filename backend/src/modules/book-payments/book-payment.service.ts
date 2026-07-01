@@ -17,8 +17,10 @@ import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order
 import {
   PartyType,
   FinancialApprovalStatus,
+  FINANCIAL_ERRORS,
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 
 @Injectable()
 export class BookPaymentService {
@@ -76,7 +78,7 @@ export class BookPaymentService {
       // Each book payment books exactly what is transferred — no per-payment hold
       const paymentTotalAmount = transferAmount;
 
-      // Create book payment — PENDING until approved
+      // Auto-approved + auto-locked on creation.
       const created = await this.bookPaymentRepository.create(
         {
           invoiceId: invoice.id,
@@ -91,9 +93,10 @@ export class BookPaymentService {
           paymentHoldAmount: 0,
           paymentHoldReason: dto.paymentHoldReason ?? null,
           remarks: dto.remarks ?? null,
-          approvalStatus: FinancialApprovalStatus.PENDING,
-          approvalBy: null,
-          approvalAt: null,
+          approvalStatus: FinancialApprovalStatus.APPROVED,
+          approvalBy: createdBy,
+          approvalAt: new Date(),
+          isLocked: true,
           hasTransfer: false,
           createdBy,
         },
@@ -166,6 +169,7 @@ export class BookPaymentService {
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
+          'unlockRequestedByUser',
         ],
       }),
       this.bookPaymentRepository.count({ where }),
@@ -177,6 +181,7 @@ export class BookPaymentService {
         createdByUser: formatUser(bp.createdByUser),
         updatedByUser: formatUser(bp.updatedByUser),
         approvalByUser: formatUser(bp.approvalByUser),
+        unlockRequestedByUser: formatUser(bp.unlockRequestedByUser),
       })),
       totalRecords,
     };
@@ -195,6 +200,7 @@ export class BookPaymentService {
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
+        'unlockRequestedByUser',
       ],
     });
     if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
@@ -203,6 +209,7 @@ export class BookPaymentService {
       createdByUser: formatUser(bp.createdByUser),
       updatedByUser: formatUser(bp.updatedByUser),
       approvalByUser: formatUser(bp.approvalByUser),
+      unlockRequestedByUser: formatUser(bp.unlockRequestedByUser),
     };
   }
 
@@ -211,8 +218,9 @@ export class BookPaymentService {
       const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
       if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
 
-      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_EDIT_APPROVED);
+      // Must be unlocked first (via the unlock workflow) before it can be edited.
+      if (bp.isLocked) {
+        throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
       }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
@@ -259,6 +267,11 @@ export class BookPaymentService {
               dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason,
             bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
             remarks: dto.remarks !== undefined ? dto.remarks : bp.remarks,
+            // Editing re-approves + re-locks (book payments are always auto-approved + locked).
+            approvalStatus: FinancialApprovalStatus.APPROVED,
+            approvalBy: updatedBy,
+            approvalAt: new Date(),
+            isLocked: true,
             updatedBy,
           } as Partial<BookPaymentEntity>,
           em,
@@ -271,6 +284,10 @@ export class BookPaymentService {
               dto.paymentHoldReason !== undefined ? dto.paymentHoldReason : bp.paymentHoldReason,
             bookingDate: dto.bookingDate ? new Date(dto.bookingDate) : undefined,
             remarks: dto.remarks !== undefined ? dto.remarks : bp.remarks,
+            approvalStatus: FinancialApprovalStatus.APPROVED,
+            approvalBy: updatedBy,
+            approvalAt: new Date(),
+            isLocked: true,
             updatedBy,
           } as Partial<BookPaymentEntity>,
           em,
@@ -286,8 +303,9 @@ export class BookPaymentService {
       const bp = await this.bookPaymentRepository.findOneForUpdate(id, em);
       if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
 
-      if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_APPROVED);
+      // Must be unlocked first (via the unlock workflow) before it can be deleted.
+      if (bp.isLocked) {
+        throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
       }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_DELETE_HAS_TRANSFER);
@@ -351,6 +369,70 @@ export class BookPaymentService {
       );
       return { message: BOOK_PAYMENT_RESPONSES.REJECTED };
     });
+  }
+
+  // ── Unlock workflow (JMC-style) ───────────────────────────────────────────
+
+  async requestUnlock(id: string, dto: UnlockRequestDto, requestedBy: string) {
+    const bp = await this.findActiveById(id);
+    if (bp.hasTransfer) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UNLOCK_HAS_TRANSFER);
+    }
+    if (!bp.isLocked || bp.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK);
+    }
+    await this.bookPaymentRepository.update({ id }, {
+      unlockRequestedAt: new Date(),
+      unlockRequestedBy: requestedBy,
+      unlockReason: dto.reason,
+      updatedBy: requestedBy,
+    } as Partial<BookPaymentEntity>);
+    return { message: BOOK_PAYMENT_RESPONSES.UNLOCK_REQUESTED };
+  }
+
+  async grantUnlock(id: string, grantedBy: string) {
+    const bp = await this.findActiveById(id);
+    if (!bp.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_NOT_REQUESTED);
+    }
+    // A transfer must never exist here (blocked at request time), but re-check defensively.
+    if (bp.hasTransfer) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UNLOCK_HAS_TRANSFER);
+    }
+    // NOTE: bookedTotal is intentionally NOT reversed — it is tied to the row existing
+    // (added at create, reversed only on reject/delete), not to approval state. The
+    // booking stays live through APPROVED→PENDING; a subsequent edit re-adjusts by delta.
+    await this.bookPaymentRepository.update({ id }, {
+      approvalStatus: FinancialApprovalStatus.PENDING,
+      approvalBy: null,
+      approvalAt: null,
+      isLocked: false,
+      unlockRequestedAt: null,
+      unlockRequestedBy: null,
+      unlockReason: null,
+      updatedBy: grantedBy,
+    } as Partial<BookPaymentEntity>);
+    return { message: BOOK_PAYMENT_RESPONSES.UNLOCK_GRANTED };
+  }
+
+  async rejectUnlock(id: string, rejectedBy: string) {
+    const bp = await this.findActiveById(id);
+    if (!bp.unlockRequestedAt) {
+      throw new BadRequestException(FINANCIAL_ERRORS.UNLOCK_REJECT_NO_REQUEST);
+    }
+    await this.bookPaymentRepository.update({ id }, {
+      unlockRequestedAt: null,
+      unlockRequestedBy: null,
+      unlockReason: null,
+      updatedBy: rejectedBy,
+    } as Partial<BookPaymentEntity>);
+    return { message: BOOK_PAYMENT_RESPONSES.UNLOCK_REJECTED };
+  }
+
+  private async findActiveById(id: string): Promise<BookPaymentEntity> {
+    const bp = await this.bookPaymentRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
+    return bp;
   }
 
   // ── Service methods exposed for downstream modules (proper service-to-service communication) ────────────

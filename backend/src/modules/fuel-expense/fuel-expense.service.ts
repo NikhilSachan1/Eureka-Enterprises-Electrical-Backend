@@ -795,6 +795,17 @@ export class FuelExpenseService {
           pumpMeterReading: record.pumpMeterReading ? Number(record.pumpMeterReading) : null,
           paymentMode: record.paymentMode,
           paidFromAccountId: record.paidFromAccountId ?? null,
+          paidFromAccount: record.paidFromAccountId
+            ? {
+                id: record.paidFromAccountId,
+                accountName: record.pfaAccountName ?? null,
+                accountHolderName: record.pfaAccountHolderName ?? null,
+                bankName: record.pfaBankName ?? null,
+                accountNumber: record.pfaAccountNumber ?? null,
+                ifscCode: record.pfaIfscCode ?? null,
+                branchName: record.pfaBranchName ?? null,
+              }
+            : null,
           transactionId: record.transactionId,
           description: record.description,
           transactionType: record.transactionType,
@@ -868,6 +879,7 @@ export class FuelExpenseService {
           'card',
           'createdByUser',
           'updatedByUser',
+          'paidFromAccount',
         ],
         order: { versionNumber: SortOrder.ASC },
       });
@@ -903,6 +915,17 @@ export class FuelExpenseService {
           pumpMeterReading: record.pumpMeterReading,
           paymentMode: record.paymentMode,
           paidFromAccountId: record.paidFromAccountId ?? null,
+          paidFromAccount: record.paidFromAccount
+            ? {
+                id: record.paidFromAccount.id,
+                accountName: record.paidFromAccount.accountName,
+                accountHolderName: record.paidFromAccount.accountHolderName,
+                bankName: record.paidFromAccount.bankName,
+                accountNumber: record.paidFromAccount.accountNumber,
+                ifscCode: record.paidFromAccount.ifscCode,
+                branchName: record.paidFromAccount.branchName ?? null,
+              }
+            : null,
           transactionId: record.transactionId,
           description: record.description,
           transactionType: record.transactionType,

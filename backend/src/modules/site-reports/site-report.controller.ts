@@ -14,6 +14,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { SiteReportService } from './site-report.service';
 import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dto';
+import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 
 @ApiTags('Site Reports')
 @ApiBearerAuth('JWT-auth')
@@ -80,5 +81,36 @@ export class SiteReportController {
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
   ) {
     return await this.reportService.remove(id, deletedBy);
+  }
+
+  @Post(':id/unlock-request')
+  @RequiredPermission('financials.site-reports.update')
+  @ApiOperation({ summary: 'Request unlock for an approved+locked site report' })
+  async requestUnlock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: requestedBy } }: { user: { id: string } },
+    @Body() dto: UnlockRequestDto,
+  ) {
+    return await this.reportService.requestUnlock(id, dto, requestedBy);
+  }
+
+  @Post(':id/unlock-grant')
+  @RequiredPermission('financials.site-reports.unlock')
+  @ApiOperation({ summary: 'Grant unlock request — admin (report becomes editable)' })
+  async grantUnlock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: grantedBy } }: { user: { id: string } },
+  ) {
+    return await this.reportService.grantUnlock(id, grantedBy);
+  }
+
+  @Post(':id/unlock-reject')
+  @RequiredPermission('financials.site-reports.unlock')
+  @ApiOperation({ summary: 'Reject unlock request — admin (report stays locked)' })
+  async rejectUnlock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: rejectedBy } }: { user: { id: string } },
+  ) {
+    return await this.reportService.rejectUnlock(id, rejectedBy);
   }
 }

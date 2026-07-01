@@ -40,6 +40,9 @@ import {
   userExpensePendingQuery,
   userFuelPendingQuery,
   bookPaymentsTransferableQuery,
+  usersExpensePendingQuery,
+  usersFuelPendingQuery,
+  bookPaymentInvoiceDetailQuery,
 } from './queries/payment-sheet.queries';
 import { ExpenseTrackerService } from 'src/modules/expense-tracker/expense-tracker.service';
 import { FuelExpenseService } from 'src/modules/fuel-expense/fuel-expense.service';
@@ -558,12 +561,72 @@ export class PaymentSheetService {
     return { records, totalRecords };
   }
 
+  /**
+   * Per-item settlement breakdown for GET :id, in front-of-house terms:
+   *  - actualDueAmount: what's outstanding, independent of this sheet
+   *  - payableAmount:   what this sheet line is paying out
+   *  - remainingAmount: actualDueAmount − payableAmount, what stays due after this payment
+   *
+   * Vendor items additionally get a per-invoice `invoices[]` breakdown (with
+   * company/project/city/state) since one item can allocate across several invoices.
+   * Expense/fuel items have no single invoice/site to attach that to, so they only
+   * get the three summary amounts.
+   */
+  private buildSettlementBreakdown(
+    item: PaymentSheetItemEntity,
+    bpDetailMap: Map<string, any>,
+    expensePendingMap: Map<string, number>,
+    fuelPendingMap: Map<string, number>,
+  ) {
+    if (item.beneficiaryType === BeneficiaryType.VENDOR) {
+      const invoices = (item.bookPaymentAllocations ?? [])
+        .map((alloc) => {
+          const row = bpDetailMap.get(alloc.bookPaymentId);
+          if (!row) return null;
+          const payableAmount = Number(alloc.allocatedAmount);
+          const netPayable = Number(row.invoiceNetPayableAmount);
+          const bookedTotal = Number(row.invoiceBookedTotal);
+          const remainingAmount = Number(row.invoicePendingToBook);
+          const actualDueAmount = netPayable - (bookedTotal - payableAmount);
+          return {
+            invoiceId: row.invoiceId,
+            invoiceNumber: row.invoiceNumber,
+            invoiceDate: row.invoiceDate,
+            actualDueAmount,
+            payableAmount,
+            remainingAmount,
+            companyName: row.companyName,
+            projectName: row.siteName,
+            city: row.siteCity,
+            state: row.siteState,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      return {
+        actualDueAmount: invoices.reduce((s, x) => s + x.actualDueAmount, 0),
+        payableAmount: invoices.reduce((s, x) => s + x.payableAmount, 0),
+        remainingAmount: invoices.reduce((s, x) => s + x.remainingAmount, 0),
+        invoices,
+      };
+    }
+
+    const pendingMap =
+      item.sourceType === PaymentSourceType.EXPENSE ? expensePendingMap : fuelPendingMap;
+    const actualDueAmount = Math.max(0, pendingMap.get(item.userId as string) ?? 0);
+    const payableAmount = Number(item.currentAmount);
+    return {
+      actualDueAmount,
+      payableAmount,
+      remainingAmount: Math.max(0, actualDueAmount - payableAmount),
+    };
+  }
+
   async findOne(id: string) {
     const sheet = await this.repo.findSheet({ where: { id, deletedAt: IsNull() } });
     if (!sheet) throw new NotFoundException(PAYMENT_SHEET_ERRORS.NOT_FOUND);
     const items = await this.repo.findItems({
       where: { paymentSheetId: id, deletedAt: IsNull() },
-      relations: ['bookPaymentAllocations'],
+      relations: ['bookPaymentAllocations', 'paidFromAccount'],
       order: { createdAt: 'ASC' },
     });
     const stageLogs = await this.repo.findStageLogs({
@@ -592,22 +655,73 @@ export class PaymentSheetService {
       ]),
     ];
     const vendorIds = [...new Set(items.filter((i) => i.vendorId).map((i) => i.vendorId))];
-    const [userRows, vendorRows] = await Promise.all([
-      userIds.length
-        ? this.repo.raw(
-            `SELECT id, "firstName", "lastName", "email", "employeeId" FROM users WHERE id = ANY($1)`,
-            [userIds],
-          )
-        : Promise.resolve([]),
-      vendorIds.length
-        ? this.repo.raw(
-            `SELECT id, name, email, "contactNumber", city, state FROM vendors WHERE id = ANY($1)`,
-            [vendorIds],
-          )
-        : Promise.resolve([]),
-    ]);
+
+    // Settlement breakdown inputs: book-payment/invoice detail for vendor items,
+    // batched live-pending for expense/fuel items.
+    const bookPaymentIds = [
+      ...new Set(
+        items
+          .filter((i) => i.beneficiaryType === BeneficiaryType.VENDOR)
+          .flatMap((i) => (i.bookPaymentAllocations ?? []).map((a) => a.bookPaymentId)),
+      ),
+    ];
+    const expenseUserIds = [
+      ...new Set(
+        items
+          .filter((i) => i.sourceType === PaymentSourceType.EXPENSE && i.userId)
+          .map((i) => i.userId as string),
+      ),
+    ];
+    const fuelUserIds = [
+      ...new Set(
+        items
+          .filter((i) => i.sourceType === PaymentSourceType.FUEL_EXPENSE && i.userId)
+          .map((i) => i.userId as string),
+      ),
+    ];
+
+    const [userRows, vendorRows, bpDetailRows, expensePendingRows, fuelPendingRows] =
+      await Promise.all([
+        userIds.length
+          ? this.repo.raw(
+              `SELECT id, "firstName", "lastName", "email", "employeeId" FROM users WHERE id = ANY($1)`,
+              [userIds],
+            )
+          : Promise.resolve([]),
+        vendorIds.length
+          ? this.repo.raw(
+              `SELECT id, name, email, "contactNumber", city, state FROM vendors WHERE id = ANY($1)`,
+              [vendorIds],
+            )
+          : Promise.resolve([]),
+        bookPaymentIds.length
+          ? (() => {
+              const q = bookPaymentInvoiceDetailQuery(bookPaymentIds);
+              return this.repo.raw(q.query, q.params);
+            })()
+          : Promise.resolve([]),
+        expenseUserIds.length
+          ? (() => {
+              const q = usersExpensePendingQuery(expenseUserIds);
+              return this.repo.raw(q.query, q.params);
+            })()
+          : Promise.resolve([]),
+        fuelUserIds.length
+          ? (() => {
+              const q = usersFuelPendingQuery(fuelUserIds);
+              return this.repo.raw(q.query, q.params);
+            })()
+          : Promise.resolve([]),
+      ]);
     const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
     const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
+    const bpDetailMap = new Map<string, any>(bpDetailRows.map((r: any) => [r.bookPaymentId, r]));
+    const expensePendingMap = new Map<string, number>(
+      expensePendingRows.map((r: any) => [r.userId, Number(r.pending)]),
+    );
+    const fuelPendingMap = new Map<string, number>(
+      fuelPendingRows.map((r: any) => [r.userId, Number(r.pending)]),
+    );
     const nameOf = (uid: string) => {
       const u = userMap.get(uid);
       return u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : null;
@@ -651,6 +765,18 @@ export class PaymentSheetService {
         verifications: vers,
         verifiedStages,
         isVerifiedForCurrentStage: currentStage ? verifiedStages.includes(currentStage) : false,
+        paidFromAccount: i.paidFromAccount
+          ? {
+              id: i.paidFromAccount.id,
+              accountName: i.paidFromAccount.accountName,
+              accountHolderName: i.paidFromAccount.accountHolderName,
+              bankName: i.paidFromAccount.bankName,
+              accountNumber: i.paidFromAccount.accountNumber,
+              ifscCode: i.paidFromAccount.ifscCode,
+              branchName: i.paidFromAccount.branchName ?? null,
+            }
+          : null,
+        ...this.buildSettlementBreakdown(i, bpDetailMap, expensePendingMap, fuelPendingMap),
       };
     });
 
