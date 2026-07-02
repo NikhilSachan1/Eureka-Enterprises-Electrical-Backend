@@ -70,6 +70,7 @@ export class SiteReportService {
       approvalStatus: FinancialApprovalStatus.APPROVED,
       approvalBy: approvedBy,
       approvalAt: new Date(),
+      isLocked: true, // approved ⇒ locked (e.g. re-approving after an unlock)
       updatedBy: approvedBy,
     } as Partial<SiteReportEntity>);
     return { message: REPORT_RESPONSES.APPROVED };
