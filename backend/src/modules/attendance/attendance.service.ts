@@ -2636,17 +2636,76 @@ export class AttendanceService {
 
     // Resolve who gets the food credit (engineer for drivers, self for others)
     const recipientUserId = await this.resolveFoodCreditRecipient(userId, assignmentSnapshot);
+    const isRedirected = recipientUserId !== userId;
+    const refDate = (id: string) => id.replace('{userId}', userId).replace('{date}', dateStr);
 
+    if (!isRedirected) {
+      // Non-driver, or driver with no assigned engineer → single DEBIT kept by the owner.
+      await this.expenseTrackerService.createSystemExpense({
+        userId,
+        category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+        amount: dailyFoodAllowance,
+        description: `Daily food allowance of ₹${dailyFoodAllowance} for your attendance on ${dateStr}.`,
+        createdBy: approvalBy,
+        referenceId: refDate(FOOD_EXPENSE_CONSTANTS.REFERENCE_ID),
+        referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+        expenseDate: calendarDate,
+        approvalAt: new Date(),
+        transactionType: TransactionType.DEBIT,
+      });
+      this.logger.log(
+        `Credited food expense ₹${dailyFoodAllowance} to user ${userId} (self) on ${dateStr}`,
+      );
+      this.sendFoodExpenseCreditedNotification(userId, dailyFoodAllowance, dateStr);
+      return;
+    }
+
+    // Driver → assigned engineer. The engineer actually receives the money (DEBIT). The driver
+    // gets an informational net-ZERO pair (earned DEBIT + redirect CREDIT) so they can see the
+    // amount and who it went to, without any balance impact.
+    const [driver, engineer] = await Promise.all([
+      this.userService.findOne({ id: userId }),
+      this.userService.findOne({ id: recipientUserId }),
+    ]);
+    const driverLabel = this.personLabel(driver, 'the driver');
+    const engineerLabel = this.personLabel(engineer, 'your assigned engineer');
+
+    // Row A — driver earned (DEBIT +X)
+    await this.expenseTrackerService.createSystemExpense({
+      userId,
+      category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+      amount: dailyFoodAllowance,
+      description: `Daily food allowance of ₹${dailyFoodAllowance} earned for your attendance on ${dateStr}.`,
+      createdBy: approvalBy,
+      referenceId: refDate(FOOD_EXPENSE_CONSTANTS.DRIVER_EARN_REFERENCE_ID),
+      referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+      expenseDate: calendarDate,
+      approvalAt: new Date(),
+      transactionType: TransactionType.DEBIT,
+    });
+
+    // Row B — driver redirect out (CREDIT +X) → nets the driver to ₹0
+    await this.expenseTrackerService.createSystemExpense({
+      userId,
+      category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+      amount: dailyFoodAllowance,
+      description: `Your food allowance of ₹${dailyFoodAllowance} for ${dateStr} was credited to your assigned engineer ${engineerLabel}. Net effect to you is ₹0 — this entry is for your information.`,
+      createdBy: approvalBy,
+      referenceId: refDate(FOOD_EXPENSE_CONSTANTS.DRIVER_REDIRECT_REFERENCE_ID),
+      referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+      expenseDate: calendarDate,
+      approvalAt: new Date(),
+      transactionType: TransactionType.CREDIT,
+    });
+
+    // Row C — engineer received on behalf of driver (DEBIT +X); keeps the existing key
     await this.expenseTrackerService.createSystemExpense({
       userId: recipientUserId,
       category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
       amount: dailyFoodAllowance,
-      description: FOOD_EXPENSE_CONSTANTS.DESCRIPTION.replace('{date}', dateStr),
+      description: `Food allowance of ₹${dailyFoodAllowance} for ${dateStr}, received on behalf of driver ${driverLabel} assigned to you.`,
       createdBy: approvalBy,
-      referenceId: FOOD_EXPENSE_CONSTANTS.REFERENCE_ID.replace('{userId}', userId).replace(
-        '{date}',
-        dateStr,
-      ),
+      referenceId: refDate(FOOD_EXPENSE_CONSTANTS.REFERENCE_ID),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
       expenseDate: calendarDate,
       approvalAt: new Date(),
@@ -2654,16 +2713,23 @@ export class AttendanceService {
     });
 
     this.logger.log(
-      `Credited food expense ₹${dailyFoodAllowance} for user ${userId} (recipient: ${recipientUserId}) on ${dateStr}`,
+      `Credited food expense ₹${dailyFoodAllowance} for driver ${userId} → engineer ${recipientUserId} on ${dateStr} (driver net ₹0)`,
     );
 
-    // Fire-and-forget WhatsApp notification to the recipient
-    this.sendFoodExpenseCreditedNotification(
-      recipientUserId,
-      dailyFoodAllowance,
-      dateStr,
-      recipientUserId !== userId ? userId : undefined,
-    );
+    // Notify the engineer (received on behalf of driver) and the driver (redirected out).
+    this.sendFoodExpenseCreditedNotification(recipientUserId, dailyFoodAllowance, dateStr, userId);
+    this.sendDriverFoodRedirectNotification(userId, dailyFoodAllowance, dateStr, recipientUserId);
+  }
+
+  /** "First Last (EMP-ID)" label for descriptions; falls back when the user isn't found. */
+  private personLabel(
+    user: { firstName?: string; lastName?: string; employeeId?: string } | null | undefined,
+    fallback: string,
+  ): string {
+    if (!user) return fallback;
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    if (!name) return fallback;
+    return user.employeeId ? `${name} (${user.employeeId})` : name;
   }
 
   private async sendFoodExpenseCreditedNotification(
@@ -2703,6 +2769,42 @@ export class AttendanceService {
   }
 
   /**
+   * Notify a driver that their food allowance for the day was credited to their assigned
+   * engineer (net ₹0 to the driver). Best-effort; gated by the driver's WhatsApp opt-in.
+   */
+  private async sendDriverFoodRedirectNotification(
+    driverUserId: string,
+    amount: number,
+    dateStr: string,
+    engineerUserId: string,
+  ) {
+    try {
+      const driver = await this.userService.findOne({ id: driverUserId });
+      if (!driver) return;
+      const whatsappNumber = driver.whatsappNumber || driver.contactNumber;
+      if (!driver.whatsappOptIn || !whatsappNumber) return;
+
+      const engineer = await this.userService.findOne({ id: engineerUserId });
+      const engineerName = engineer
+        ? `${engineer.firstName} ${engineer.lastName}`
+        : 'your assigned engineer';
+
+      await this.whatsAppService.sendDriverFoodCreditedToEngineer(
+        whatsappNumber,
+        {
+          driverName: `${driver.firstName} ${driver.lastName}`,
+          amount: amount.toString(),
+          date: this.formatDateForEmail(new Date(dateStr)),
+          engineerName,
+        },
+        { recipientId: driver.id },
+      );
+    } catch (error) {
+      Logger.error('Failed to send driver food redirect WhatsApp notification:', error);
+    }
+  }
+
+  /**
    * Reverse food expense when attendance is rejected after being approved.
    * Uses the same driver→engineer resolution to reverse from the correct recipient.
    */
@@ -2731,25 +2833,73 @@ export class AttendanceService {
 
     // Resolve recipient (must match who received the original credit)
     const recipientUserId = await this.resolveFoodCreditRecipient(userId, assignmentSnapshot);
+    const isRedirected = recipientUserId !== userId;
+    const refDate = (id: string) => id.replace('{userId}', userId).replace('{date}', dateStr);
 
+    if (!isRedirected) {
+      // Reverse the single self DEBIT.
+      await this.expenseTrackerService.createSystemExpense({
+        userId,
+        category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+        amount: -dailyFoodAllowance,
+        description: FOOD_EXPENSE_CONSTANTS.REVERSAL_DESCRIPTION.replace('{date}', dateStr),
+        createdBy: approvalBy,
+        referenceId: refDate(FOOD_EXPENSE_CONSTANTS.REVERSAL_REFERENCE_ID),
+        referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+        expenseDate: calendarDate,
+        approvalAt: new Date(),
+        transactionType: TransactionType.DEBIT,
+      });
+      this.logger.log(
+        `Reversed food expense ₹${dailyFoodAllowance} for user ${userId} (self) on ${dateStr}`,
+      );
+      return;
+    }
+
+    // Driver → engineer: reverse all three rows (engineer DEBIT, driver earned DEBIT,
+    // driver redirect CREDIT). Driver stays net ₹0, engineer returns to 0.
+    // Engineer DEBIT reversal (−X)
     await this.expenseTrackerService.createSystemExpense({
       userId: recipientUserId,
       category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
       amount: -dailyFoodAllowance,
-      description: FOOD_EXPENSE_CONSTANTS.REVERSAL_DESCRIPTION.replace('{date}', dateStr),
+      description: `Reversal: food allowance for ${dateStr} received on behalf of driver (attendance rejected)`,
       createdBy: approvalBy,
-      referenceId: FOOD_EXPENSE_CONSTANTS.REVERSAL_REFERENCE_ID.replace('{userId}', userId).replace(
-        '{date}',
-        dateStr,
-      ),
+      referenceId: refDate(FOOD_EXPENSE_CONSTANTS.REVERSAL_REFERENCE_ID),
       referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
       expenseDate: calendarDate,
       approvalAt: new Date(),
       transactionType: TransactionType.DEBIT,
     });
+    // Driver earned DEBIT reversal (−X)
+    await this.expenseTrackerService.createSystemExpense({
+      userId,
+      category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+      amount: -dailyFoodAllowance,
+      description: `Reversal: food allowance earned for ${dateStr} (attendance rejected)`,
+      createdBy: approvalBy,
+      referenceId: refDate(FOOD_EXPENSE_CONSTANTS.REVERSAL_DRIVER_EARN_REFERENCE_ID),
+      referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+      expenseDate: calendarDate,
+      approvalAt: new Date(),
+      transactionType: TransactionType.DEBIT,
+    });
+    // Driver redirect CREDIT reversal (−X)
+    await this.expenseTrackerService.createSystemExpense({
+      userId,
+      category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+      amount: -dailyFoodAllowance,
+      description: `Reversal: food allowance redirect for ${dateStr} (attendance rejected)`,
+      createdBy: approvalBy,
+      referenceId: refDate(FOOD_EXPENSE_CONSTANTS.REVERSAL_DRIVER_REDIRECT_REFERENCE_ID),
+      referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+      expenseDate: calendarDate,
+      approvalAt: new Date(),
+      transactionType: TransactionType.CREDIT,
+    });
 
     this.logger.log(
-      `Reversed food expense ₹${dailyFoodAllowance} for user ${userId} (recipient: ${recipientUserId}) on ${dateStr}`,
+      `Reversed food expense ₹${dailyFoodAllowance} for driver ${userId} → engineer ${recipientUserId} on ${dateStr}`,
     );
   }
 
