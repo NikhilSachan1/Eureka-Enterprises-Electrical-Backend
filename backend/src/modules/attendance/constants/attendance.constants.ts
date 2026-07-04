@@ -154,7 +154,7 @@ export const ATTENDANCE_SORTABLE_FIELDS = {
 
 // Food expense constants for attendance-based crediting
 export const FOOD_EXPENSE_CONSTANTS = {
-  CATEGORY: 'Food',
+  CATEGORY: 'fooding',
   REFERENCE_TYPE: 'ATTENDANCE_FOOD_ALLOWANCE',
   DESCRIPTION: 'Food allowance for attendance on {date}',
   REVERSAL_DESCRIPTION: 'Reversal: Food allowance for {date} (attendance rejected)',

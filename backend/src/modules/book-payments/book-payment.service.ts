@@ -337,6 +337,7 @@ export class BookPaymentService {
       approvalStatus: FinancialApprovalStatus.APPROVED,
       approvalBy: approvedBy,
       approvalAt: new Date(),
+      isLocked: true, // approved ⇒ locked (e.g. re-approving after an unlock)
       updatedBy: approvedBy,
     } as Partial<BookPaymentEntity>);
     return { message: BOOK_PAYMENT_RESPONSES.APPROVED };
