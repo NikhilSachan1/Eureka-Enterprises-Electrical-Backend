@@ -922,6 +922,34 @@ export class WhatsAppService {
     });
   }
 
+  async sendDriverFoodCreditedToEngineer(
+    phoneNumber: string,
+    data: {
+      driverName: string;
+      amount: string;
+      date: string;
+      engineerName: string;
+    },
+    options?: {
+      recipientId?: string;
+    },
+  ): Promise<WhatsAppSendResult> {
+    return this.sendMessage({
+      to: phoneNumber,
+      templateKey: WHATSAPP_TEMPLATE_KEYS.DRIVER_FOOD_CREDITED_TO_ENGINEER,
+      templateData: {
+        driverName: data.driverName,
+        amount: data.amount,
+        date: data.date,
+        engineerName: data.engineerName,
+      },
+      category: CommunicationCategory.FOOD_EXPENSE_CREDITED,
+      referenceType: 'EXPENSE',
+      recipientId: options?.recipientId,
+      recipientName: data.driverName,
+    });
+  }
+
   async sendAssetLost(
     phoneNumber: string,
     data: {
