@@ -302,14 +302,25 @@ export class SiteInvoiceService {
         throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
       }
 
+      // "No Invoice" case (FE checkbox): explicit 0/0 on both amounts means the JMC's work
+      // will be billed later via a future combined invoice — this entry never gets a real
+      // invoiceNumber/date/attachment. Explicit 0 (not null) is the signal, so an in-progress
+      // draft that simply hasn't been filled in yet still gets blocked below as normal.
+      const isZeroValueInvoice =
+        inv.taxableAmount !== null &&
+        Number(inv.taxableAmount) === 0 &&
+        inv.totalAmount !== null &&
+        Number(inv.totalAmount) === 0;
+
       // Invoice must be complete before it can be approved
       if (
-        inv.invoiceNumber == null ||
-        inv.invoiceDate == null ||
-        inv.taxableAmount == null ||
-        inv.totalAmount == null ||
-        inv.fileKey == null ||
-        inv.fileName == null
+        !isZeroValueInvoice &&
+        (inv.invoiceNumber == null ||
+          inv.invoiceDate == null ||
+          inv.taxableAmount == null ||
+          inv.totalAmount == null ||
+          inv.fileKey == null ||
+          inv.fileName == null)
       ) {
         throw new BadRequestException(INVOICE_ERRORS.INVOICE_INCOMPLETE);
       }
