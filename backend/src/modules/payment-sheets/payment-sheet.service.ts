@@ -567,8 +567,9 @@ export class PaymentSheetService {
    *  - payableAmount:   what this sheet line is paying out
    *  - remainingAmount: actualDueAmount − payableAmount, what stays due after this payment
    *
-   * Vendor items additionally get a per-invoice `invoices[]` breakdown (with
-   * company/project/city/state) since one item can allocate across several invoices.
+   * Vendor items: the per-invoice breakdown (with company/project/city/state) is nested
+   * inside each `bookPaymentAllocations[].invoice`, mirroring the real chain
+   * (vendor item → book payment → invoice); item-level amounts are the sum across them.
    * Expense/fuel items have no single invoice/site to attach that to, so they only
    * get the three summary amounts.
    */
@@ -579,34 +580,55 @@ export class PaymentSheetService {
     fuelPendingMap: Map<string, number>,
   ) {
     if (item.beneficiaryType === BeneficiaryType.VENDOR) {
-      const invoices = (item.bookPaymentAllocations ?? [])
-        .map((alloc) => {
-          const row = bpDetailMap.get(alloc.bookPaymentId);
-          if (!row) return null;
-          const payableAmount = Number(alloc.allocatedAmount);
+      // Real chain: vendor item → book payment (allocation) → invoice. So the invoice
+      // detail is nested inside each book-payment allocation, not flattened onto the item.
+      const bookPaymentAllocations = (item.bookPaymentAllocations ?? []).map((alloc) => {
+        const row = bpDetailMap.get(alloc.bookPaymentId);
+        const payableAmount = Number(alloc.allocatedAmount);
+        let invoice: {
+          invoiceId: string;
+          invoiceNumber: string;
+          invoiceDate: Date;
+          actualDueAmount: number;
+          payableAmount: number;
+          remainingAmount: number;
+          companyName: string;
+          projectName: string;
+          city: string;
+          state: string;
+        } | null = null;
+        if (row) {
           const netPayable = Number(row.invoiceNetPayableAmount);
           const bookedTotal = Number(row.invoiceBookedTotal);
-          const remainingAmount = Number(row.invoicePendingToBook);
-          const actualDueAmount = netPayable - (bookedTotal - payableAmount);
-          return {
+          invoice = {
             invoiceId: row.invoiceId,
             invoiceNumber: row.invoiceNumber,
             invoiceDate: row.invoiceDate,
-            actualDueAmount,
+            actualDueAmount: netPayable - (bookedTotal - payableAmount),
             payableAmount,
-            remainingAmount,
+            remainingAmount: Number(row.invoicePendingToBook),
             companyName: row.companyName,
             projectName: row.siteName,
             city: row.siteCity,
             state: row.siteState,
           };
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null);
+        }
+        return {
+          id: alloc.id,
+          bookPaymentId: alloc.bookPaymentId,
+          allocatedAmount: payableAmount,
+          bankTransferId: alloc.bankTransferId ?? null,
+          invoice,
+        };
+      });
+
+      // Item-level totals = sum across the allocations that resolved an invoice.
+      const withInvoice = bookPaymentAllocations.filter((a) => a.invoice);
       return {
-        actualDueAmount: invoices.reduce((s, x) => s + x.actualDueAmount, 0),
-        payableAmount: invoices.reduce((s, x) => s + x.payableAmount, 0),
-        remainingAmount: invoices.reduce((s, x) => s + x.remainingAmount, 0),
-        invoices,
+        bookPaymentAllocations,
+        actualDueAmount: withInvoice.reduce((s, a) => s + (a.invoice as any).actualDueAmount, 0),
+        payableAmount: withInvoice.reduce((s, a) => s + (a.invoice as any).payableAmount, 0),
+        remainingAmount: withInvoice.reduce((s, a) => s + (a.invoice as any).remainingAmount, 0),
       };
     }
 
