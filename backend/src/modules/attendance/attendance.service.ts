@@ -74,6 +74,8 @@ import {
 } from '../common/email/constants/email.constants';
 import { Roles } from '../roles/constants/role.constants';
 import { TransactionType } from '../expense-tracker/constants/expense-tracker.constants';
+import { AuditLogService } from '../audit-logs/audit-log.service';
+import { EntityAuditAction } from '../audit-logs/entities/entity-audit-log.entity';
 
 @Injectable()
 export class AttendanceService {
@@ -97,7 +99,47 @@ export class AttendanceService {
     private readonly leaveApplicationsService: LeaveApplicationsService,
     @Inject(forwardRef(() => LeaveBalancesService))
     private readonly leaveBalancesService: LeaveBalancesService,
+    private readonly auditLogService: AuditLogService,
   ) {}
+
+  /**
+   * Persist a silently-swallowed food-credit failure to entity_audit_logs so it is
+   * checkable in the DB (the credit failure never rolls back attendance). Best-effort:
+   * this must never throw — a logging failure cannot break attendance.
+   */
+  private async recordFoodCreditFailure(params: {
+    entityId: string;
+    userId: string;
+    attendanceDate: Date | string;
+    source: 'APPROVAL' | 'FORCE_STATUS_CHANGE';
+    changedBy?: string;
+    error: unknown;
+  }): Promise<void> {
+    try {
+      const err = params.error as { message?: string; stack?: string };
+      await this.auditLogService.createEntityLog({
+        entityName: 'AttendanceFoodAllowance',
+        entityId: params.entityId,
+        action: EntityAuditAction.SIDE_EFFECT_FAILURE,
+        newValues: {
+          failure: 'FOOD_CREDIT',
+          source: params.source,
+          userId: params.userId,
+          attendanceDate:
+            params.attendanceDate instanceof Date
+              ? params.attendanceDate.toISOString()
+              : String(params.attendanceDate),
+          errorMessage: err?.message ?? String(params.error),
+          errorStack: err?.stack ?? null,
+        },
+        changedBy: params.changedBy,
+      });
+    } catch (e) {
+      this.logger.error(
+        `Failed to persist food-credit failure audit entry: ${(e as Error)?.message}`,
+      );
+    }
+  }
 
   async create(attendance: Partial<AttendanceEntity>, entityManager?: EntityManager) {
     try {
@@ -2423,6 +2465,14 @@ export class AttendanceService {
       this.logger.error(
         `Failed to handle food expense for attendance ${attendance.id}: ${error.message}`,
       );
+      await this.recordFoodCreditFailure({
+        entityId: attendance.id,
+        userId: attendance.userId,
+        attendanceDate: attendance.attendanceDate,
+        source: 'APPROVAL',
+        changedBy: approvalBy,
+        error,
+      });
     }
   }
 
@@ -2493,6 +2543,14 @@ export class AttendanceService {
       this.logger.error(
         `Failed to handle food expense for status change (${previousStatus} -> ${newStatus}): ${error.message}`,
       );
+      await this.recordFoodCreditFailure({
+        entityId: userId,
+        userId,
+        attendanceDate,
+        source: 'FORCE_STATUS_CHANGE',
+        changedBy: actionBy,
+        error,
+      });
     }
   }
 

@@ -5,6 +5,9 @@ export enum EntityAuditAction {
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
   SOFT_DELETE = 'SOFT_DELETE',
+  // Non-mutation marker: a background side-effect failed silently (e.g. food-allowance
+  // credit on attendance). Persisted so such failures are checkable in the DB.
+  SIDE_EFFECT_FAILURE = 'SIDE_EFFECT_FAILURE',
 }
 
 @Entity('entity_audit_logs')
