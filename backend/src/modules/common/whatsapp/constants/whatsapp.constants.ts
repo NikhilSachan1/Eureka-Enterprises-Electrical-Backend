@@ -39,6 +39,7 @@ export const WHATSAPP_TEMPLATE_KEYS = {
   VEHICLE_HANDOVER_CANCELLED: 'VEHICLE_HANDOVER_CANCELLED',
   VEHICLE_DEALLOCATED: 'VEHICLE_DEALLOCATED',
   FOOD_EXPENSE_CREDITED: 'FOOD_EXPENSE_CREDITED',
+  DRIVER_FOOD_CREDITED_TO_ENGINEER: 'DRIVER_FOOD_CREDITED_TO_ENGINEER',
 } as const;
 
 export type WhatsAppTemplateKey = keyof typeof WHATSAPP_TEMPLATE_KEYS;
@@ -420,7 +421,11 @@ export const WHATSAPP_TEMPLATES = {
       lastSeenDate: string;
       recoveryAmount?: string;
     }) =>
-      `🚨 *Asset Marked as Lost*\n\nHi *${data.employeeName}*,\n\nThe asset *${data.assetName}* (ID: ${data.assetId}) previously assigned to you has been marked as lost by *${data.actorName}*.\n\n📝 *Reason:* ${data.reason}\n📅 *Last seen:* ${data.lastSeenDate}${
+      `🚨 *Asset Marked as Lost*\n\nHi *${data.employeeName}*,\n\nThe asset *${
+        data.assetName
+      }* (ID: ${data.assetId}) previously assigned to you has been marked as lost by *${
+        data.actorName
+      }*.\n\n📝 *Reason:* ${data.reason}\n📅 *Last seen:* ${data.lastSeenDate}${
         data.recoveryAmount && Number(data.recoveryAmount) > 0
           ? `\n\n💰 *Recovery:* ₹${data.recoveryAmount} has been added to your account as a debit. Please contact HR if you have any concerns.`
           : ''
@@ -438,7 +443,11 @@ export const WHATSAPP_TEMPLATES = {
       notes?: string;
       refundedAmount?: string;
     }) =>
-      `✅ *Asset Recovered*\n\nHi *${data.employeeName}*,\n\nGood news! The previously lost asset *${data.assetName}* (ID: ${data.assetId}) has been recovered by *${data.actorName}*.${
+      `✅ *Asset Recovered*\n\nHi *${
+        data.employeeName
+      }*,\n\nGood news! The previously lost asset *${data.assetName}* (ID: ${
+        data.assetId
+      }) has been recovered by *${data.actorName}*.${
         data.notes ? `\n\n📝 *Notes:* ${data.notes}` : ''
       }${
         data.refundedAmount && Number(data.refundedAmount) > 0
@@ -496,6 +505,18 @@ export const WHATSAPP_TEMPLATES = {
       }* has been credited for *${data.date}*.${
         data.creditedFor ? `\n\n👤 *On behalf of:* ${data.creditedFor}` : ''
       }\n\n- *${WHATSAPP_SENDER}*`,
+  },
+
+  DRIVER_FOOD_CREDITED_TO_ENGINEER: {
+    name: 'driver_food_credited_to_engineer',
+    contentSid: '',
+    sandboxMessage: (data: {
+      driverName: string;
+      amount: string;
+      date: string;
+      engineerName: string;
+    }) =>
+      `🍽️ *Food Allowance Update*\n\nHi *${data.driverName}*,\n\nYour food allowance of *₹${data.amount}* for *${data.date}* has been credited to your assigned engineer *${data.engineerName}*.\n\nℹ️ Net effect to you: *₹0* — shared for your information.\n\n- *${WHATSAPP_SENDER}*`,
   },
 };
 
