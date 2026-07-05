@@ -191,4 +191,6 @@ export const PAYMENT_SHEET_PERMISSIONS = {
   PROCESS: 'financials.payment-sheets.process',
   VIEW: 'financials.payment-sheets.view',
   DOWNLOAD: 'financials.payment-sheets.download',
+  BENEFICIARY_VERIFY: 'financials.payment-sheets.benificiary-verify',
+  BENEFICIARY_UNVERIFY: 'financials.payment-sheets.benificiary-unverify',
 } as const;
