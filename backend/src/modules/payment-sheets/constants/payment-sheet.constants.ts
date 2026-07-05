@@ -183,14 +183,32 @@ export const PAYMENT_SHEET_RESPONSES = {
   PDF_GENERATING: 'Payment sheet PDF is being generated; try again in a moment',
 } as const;
 
-// Permission names (seeded via migration)
+// Permission names (seeded via migration). One permission per endpoint/action.
 export const PAYMENT_SHEET_PERMISSIONS = {
-  CREATE: 'financials.payment-sheets.create',
-  REVIEW: 'financials.payment-sheets.review',
-  ADMIN_REVIEW: 'financials.payment-sheets.admin-review',
-  PROCESS: 'financials.payment-sheets.process',
-  VIEW: 'financials.payment-sheets.view',
+  // reads
+  VIEW_LIST: 'financials.payment-sheets.view-list',
+  VIEW_DETAIL: 'financials.payment-sheets.view-detail',
+  RECONCILE: 'financials.payment-sheets.reconcile',
   DOWNLOAD: 'financials.payment-sheets.download',
-  BENEFICIARY_VERIFY: 'financials.payment-sheets.benificiary-verify',
-  BENEFICIARY_UNVERIFY: 'financials.payment-sheets.benificiary-unverify',
+  // initiator
+  CREATE: 'financials.payment-sheets.create',
+  UPDATE: 'financials.payment-sheets.update',
+  SYNC_AMOUNTS: 'financials.payment-sheets.sync-amounts',
+  SUBMIT: 'financials.payment-sheets.submit',
+  // item editing
+  ITEM_ADD: 'financials.payment-sheets.item-add',
+  ITEM_EDIT: 'financials.payment-sheets.item-edit',
+  ITEM_REMOVE: 'financials.payment-sheets.item-remove',
+  // review verification
+  BENEFICIARY_VERIFY: 'financials.payment-sheets.beneficiary-verify',
+  BENEFICIARY_UNVERIFY: 'financials.payment-sheets.beneficiary-unverify',
+  // workflow transitions
+  FORWARD: 'financials.payment-sheets.forward',
+  RETURN: 'financials.payment-sheets.return',
+  SHEET_REJECT: 'financials.payment-sheets.sheet-reject',
+  // accountant processing
+  ITEM_PAY: 'financials.payment-sheets.item-pay',
+  ITEM_HOLD: 'financials.payment-sheets.item-hold',
+  ITEM_RELEASE: 'financials.payment-sheets.item-release',
+  ITEM_REJECT: 'financials.payment-sheets.item-reject',
 } as const;

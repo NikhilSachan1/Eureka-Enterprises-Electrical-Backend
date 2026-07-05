@@ -44,21 +44,21 @@ export class PaymentSheetController {
   }
 
   @Get()
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW_LIST)
   @ApiOperation({ summary: 'List payment sheets with filters' })
   findAll(@Query() query: QueryPaymentSheetDto) {
     return this.service.findAll(query);
   }
 
   @Get(':id/reconcile')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.RECONCILE)
   @ApiOperation({ summary: 'Live pending vs sheet amount per item, with conflict flags' })
   reconcile(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.reconcile(id);
   }
 
   @Post(':id/sync-amounts')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.CREATE)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.SYNC_AMOUNTS)
   @ApiOperation({
     summary: 'Sync line amounts to latest pending (initiator only, DRAFT/RETURNED)',
     description:
@@ -88,14 +88,14 @@ export class PaymentSheetController {
   }
 
   @Get(':id')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW_DETAIL)
   @ApiOperation({ summary: 'Get a payment sheet with items, history and stage logs' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.findOne(id);
   }
 
   @Patch(':id')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.CREATE)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.UPDATE)
   @ApiOperation({ summary: 'Edit DRAFT/RETURNED sheet title/remarks' })
   updateMeta(
     @Param('id', ParseUUIDPipe) id: string,
@@ -107,7 +107,7 @@ export class PaymentSheetController {
 
   // ── items ──
   @Post(':id/items')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_ADD)
   @ApiOperation({ summary: 'Add beneficiaries (initiator in DRAFT, or admin at ADMIN_REVIEW)' })
   addItems(
     @Param('id', ParseUUIDPipe) id: string,
@@ -118,7 +118,7 @@ export class PaymentSheetController {
   }
 
   @Patch(':id/items/:itemId')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_EDIT)
   @ApiOperation({ summary: 'Edit an item amount (HR free / Admin decrease-only)' })
   editItem(
     @Param('id', ParseUUIDPipe) id: string,
@@ -130,7 +130,7 @@ export class PaymentSheetController {
   }
 
   @Delete(':id/items/:itemId')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_REMOVE)
   @ApiOperation({ summary: 'Remove a beneficiary (initiator in DRAFT, or admin with reason)' })
   removeItem(
     @Param('id', ParseUUIDPipe) id: string,
@@ -169,7 +169,7 @@ export class PaymentSheetController {
 
   // ── workflow ──
   @Post(':id/submit')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.CREATE)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.SUBMIT)
   @ApiOperation({ summary: 'Submit the sheet into the approval chain' })
   submit(
     @Param('id', ParseUUIDPipe) id: string,
@@ -180,7 +180,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/forward')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.FORWARD)
   @ApiOperation({ summary: 'Forward the sheet to the next configured stage' })
   forward(
     @Param('id', ParseUUIDPipe) id: string,
@@ -191,7 +191,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/return')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.RETURN)
   @ApiOperation({ summary: 'Return the sheet to the initiator for rework' })
   returnSheet(
     @Param('id', ParseUUIDPipe) id: string,
@@ -202,7 +202,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/reject')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.SHEET_REJECT)
   @ApiOperation({ summary: 'Reject the sheet (terminal)' })
   reject(
     @Param('id', ParseUUIDPipe) id: string,
@@ -214,7 +214,7 @@ export class PaymentSheetController {
 
   // ── accountant processing ──
   @Post(':id/items/:itemId/pay')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.PROCESS)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_PAY)
   @ApiOperation({ summary: 'Pay an item — performs the settlement write-back' })
   pay(
     @Param('id', ParseUUIDPipe) id: string,
@@ -226,7 +226,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/items/:itemId/hold')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.PROCESS)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_HOLD)
   @ApiOperation({ summary: 'Place an item on hold' })
   hold(
     @Param('id', ParseUUIDPipe) id: string,
@@ -238,7 +238,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/items/:itemId/release')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.PROCESS)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_RELEASE)
   @ApiOperation({ summary: 'Release a held item (only the accountant who held it)' })
   release(
     @Param('id', ParseUUIDPipe) id: string,
@@ -249,7 +249,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/items/:itemId/reject')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.PROCESS)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_REJECT)
   @ApiOperation({ summary: 'Reject an item (terminal for that line)' })
   rejectItem(
     @Param('id', ParseUUIDPipe) id: string,
