@@ -143,7 +143,7 @@ export class PaymentSheetController {
 
   // ── verification (HR / Admin review stages) ──
   @Post(':id/verify')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.BENEFICIARY_VERIFY)
   @ApiOperation({
     summary: 'Verify lines for the current review stage (bulk)',
     description: 'Pass { itemIds: [...] } to verify specific lines, or omit itemIds to verify all.',
@@ -157,7 +157,7 @@ export class PaymentSheetController {
   }
 
   @Post(':id/unverify')
-  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.VIEW)
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.BENEFICIARY_UNVERIFY)
   @ApiOperation({ summary: 'Remove this stage’s verification from the listed lines (bulk)' })
   unverify(
     @Param('id', ParseUUIDPipe) id: string,
