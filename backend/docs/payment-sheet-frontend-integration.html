@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Payment Sheet — Frontend Integration Guide</title>
+<style>
+  :root { --fg:#1f2328; --muted:#656d76; --border:#d0d7de; --bg:#fff; --accent:#0969da; --code-bg:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#eef1f4; color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height:1.6; }
+  .wrap { max-width:960px; margin:32px auto; background:var(--bg); border:1px solid var(--border);
+    border-radius:10px; padding:40px 56px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  h1,h2,h3,h4 { line-height:1.25; margin:1.6em 0 .6em; }
+  h1 { font-size:2em; padding-bottom:.3em; border-bottom:1px solid var(--border); margin-top:0; }
+  h2 { font-size:1.5em; padding-bottom:.3em; border-bottom:1px solid var(--border); }
+  h3 { font-size:1.2em; } h4 { font-size:1em; }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  p, li { font-size:15px; }
+  code { background:var(--code-bg); padding:.15em .4em; border-radius:6px; font-size:85%;
+    font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:14px 16px;
+    overflow:auto; } pre code { background:none; padding:0; font-size:13px; line-height:1.45; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th, td { border:1px solid var(--border); padding:7px 12px; text-align:left; vertical-align:top; font-size:14px; }
+  th { background:var(--code-bg); font-weight:600; }
+  tr:nth-child(2n) td { background:#fbfcfd; }
+  blockquote { margin:1em 0; padding:.4em 1em; color:var(--muted); border-left:4px solid var(--border); background:#fafbfc; }
+  hr { border:none; border-top:1px solid var(--border); margin:2em 0; }
+  .toc-note { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+<h1>Payment Sheet — Frontend Integration Guide</h1>
+<blockquote>Audience: frontend team. Base path: <code>/api/v1</code>. All examples use that prefix.<br/>Companion design doc: <code>docs/payment-sheet-spec.md</code>.</blockquote>
+<p>A <strong>Payment Sheet</strong> batches money owed to employees (expense + fuel reimbursements) and vendors (book-payment payouts) into one document that moves through a configurable approval chain and ends with an accountant disbursing each line. This guide covers everything needed to build the UI against the API.</p>
+<hr/>
+<h2>1. Auth &amp; required headers</h2>
+<p>Every request (except login) needs the JWT <strong>and</strong> these headers — they are enforced globally:</p>
+<table><thead><tr><th>Header</th><th>Value</th><th>Notes</th></tr></thead><tbody><tr><td><code>Authorization</code></td><td><code>Bearer &lt;accessToken&gt;</code></td><td>from <code>POST /auth/sign-in</code></td></tr><tr><td><code>X-Active-Role</code></td><td>the user's current role, e.g. <code>OPERATION_MANAGER</code></td><td>must be one of the user's assigned roles</td></tr><tr><td><code>X-Correlation-Id</code></td><td><strong>a UUID</strong></td><td>⚠️ must be a valid UUID v4 — a non-UUID value causes a request-audit failure (HTTP 500). Generate one per request.</td></tr><tr><td><code>X-Source-Type</code></td><td><code>web</code></td><td>any non-empty string</td></tr><tr><td><code>X-Client-Type</code></td><td><code>web</code></td><td>any non-empty string</td></tr></tbody></table>
+<p>Login:</p>
+<pre><code>POST /auth/sign-in
+{ "email": "...", "password": "..." }
+→ 201 { "accessToken", "refreshToken", "roles": [...], "activeRole", "userId", ... }</code></pre>
+<hr/>
+<h2>2. Roles &amp; who can do what</h2>
+<p>Roles in the chain (default config): <code>OPERATION_MANAGER</code> → <code>HR</code> → <code>ADMIN</code> → <code>ACCOUNTANT</code> (plus <code>SUPER_ADMIN</code>, who can act at any stage). The chain is <strong>DB-configurable</strong> (see §9), so treat stage→role as data, not hard-coded.</p>
+<table><thead><tr><th>Capability</th><th>Role (default flow)</th></tr></thead><tbody><tr><td>Create / edit draft / submit</td><td>OPERATION_MANAGER</td></tr><tr><td>Review: edit amount (free), forward, return, reject</td><td>HR</td></tr><tr><td>Admin: decrease amount, add/remove beneficiaries, forward, return, reject</td><td>ADMIN</td></tr><tr><td>Process: pay / hold / release / reject each line</td><td>ACCOUNTANT</td></tr></tbody></table>
+<p>Permission names (for menu/visibility gating on the FE): `financials.payment-sheets.{create, review, admin-review, process, view, download}`. <strong>Important:</strong> the API authorizes *workflow actions* by the sheet's <strong>current stage vs. the user's active role</strong> (enforced server-side), not purely by permission. So the same <code>/forward</code> endpoint serves HR and ADMIN; the server decides if the caller owns the current stage. Use the user's role + the sheet's <code>currentStage</code> to decide which buttons to show.</p>
+<hr/>
+<h2>3. Status &amp; stage model</h2>
+<p><strong>Sheet <code>status</code></strong> (header lifecycle): <code>DRAFT → SUBMITTED → IN_REVIEW → PROCESSING → COMPLETED</code>, plus <code>RETURNED</code>, <code>REJECTED</code>, <code>CANCELLED</code>.</p>
+<p><strong><code>currentStage</code></strong> (fine-grained position; drives which role can act): <code>INITIATION → HR_REVIEW → ADMIN_REVIEW → PROCESSING</code> (null when terminal). Stage keys come from the approval-flow config, so render labels from the sheet, don't hard-code.</p>
+<p><strong>Item <code>itemStatus</code></strong> (accountant level): <code>PENDING → PAID | HOLD | REJECTED</code>.</p>
+<p>A sheet auto-moves to <code>COMPLETED</code> when every item is <code>PAID</code>/<code>REJECTED</code> (no item left <code>HOLD</code>/<code>PENDING</code>).</p>
+<hr/>
+<h2>4. Building the picker (where beneficiaries come from)</h2>
+<p>The "select users/vendors to pay" screen is populated from the <strong>existing</strong> pending-settlement endpoints (not part of this module):</p>
+<ul><li>Employees with expense pending: <code>GET /expenses/pending-settlement</code></li><li>Employees with fuel pending: <code>GET /fuel-expenses/pending-settlement</code></li><li>Vendors with payable book payments: <code>GET /book-payments/vendor-list</code></li></ul>
+<p>Each returns the beneficiary, their pending amount, and bank details. For a <strong>vendor</strong>, the selectable unit is a <strong>book payment</strong> (the line is backed by one or more book-payment ids).</p>
+<hr/>
+<h2>5. Endpoint reference</h2>
+<h3>5.1 Create a sheet (DRAFT)</h3>
+<pre><code>POST /payment-sheets        (perm: create)
+{
+  "title": "June 2026 settlement",          // optional
+  "remarks": "...",                          // optional
+  "items": [
+    { "beneficiaryType": "USER", "userId": "&lt;uuid&gt;", "sourceType": "EXPENSE",      "requestedAmount": 5000 },
+    { "beneficiaryType": "USER", "userId": "&lt;uuid&gt;", "sourceType": "FUEL_EXPENSE", "requestedAmount": 3000 },
+    { "beneficiaryType": "VENDOR", "vendorId": "&lt;uuid&gt;", "sourceType": "VENDOR_PAYMENT",
+      "requestedAmount": 500, "bookPaymentIds": ["&lt;uuid&gt;"] }
+  ]
+}
+→ 201 { "message": "Payment sheet created successfully", "id": "&lt;uuid&gt;", "sheetNumber": "PS/2627/0005" }</code></pre>
+<p>Rules enforced on create:</p>
+<ul><li>USER item: <code>requestedAmount</code> must be <code>&gt; 0</code> and <code>≤ live pending</code> for that user+source.</li><li>VENDOR item: <code>requestedAmount</code> <strong>must equal the sum</strong> of the selected book payments'</li></ul>
+<p>  transferable amounts (vendor lines are allocation-based). Book payments must be APPROVED and   not yet transferred.</p>
+<ul><li>A <code>(beneficiary, sourceType)</code> pair can appear only once per sheet.</li></ul>
+<h3>5.2 List</h3>
+<pre><code>GET /payment-sheets?status=&amp;currentStage=&amp;financialYear=&amp;page=1&amp;pageSize=10&amp;sortOrder=DESC   (perm: view)
+→ 200 { "records": [ { id, sheetNumber, title, status, currentStage, totalRequestedAmount,
+                       totalCurrentAmount, totalPaidAmount, financialYear, createdAt, ... } ],
+        "totalRecords": 42 }</code></pre>
+<h3>5.3 Detail (items + history + stage logs)</h3>
+<pre><code>GET /payment-sheets/:id        (perm: view)
+→ 200 {
+  id, sheetNumber, title, remarks, financialYear,
+  status, currentStage,
+  totalRequestedAmount, totalCurrentAmount, totalPaidAmount, pdfKey,
+  items: [{
+    id, beneficiaryType, userId, vendorId, sourceType,
+    pendingSnapshot, requestedAmount, currentAmount,
+    bankSnapshot: { accountHolderName, bankName, accountNumber, ifscCode } | null,
+    itemStatus, paidAmount, paidAt, paymentRef, holdReason, heldBy, rejectReason,
+    bookPaymentAllocations: [{ id, bookPaymentId, allocatedAmount, bankTransferId }]
+  }],
+  stageLogs: [{ fromStage, toStage, action, actedBy, actedRole, remarks, createdAt }],
+  history:   [{ itemId, action, previousAmount, newAmount, reason, stage, createdBy, createdAt }]
+}</code></pre>
+<h3>5.4 Edit draft meta</h3>
+<pre><code>PATCH /payment-sheets/:id      (perm: create; only when DRAFT or RETURNED)
+{ "title": "...", "remarks": "..." }</code></pre>
+<h3>5.5 Items — add / edit amount / remove</h3>
+<pre><code>POST   /payment-sheets/:id/items                 (perm: view; initiator in DRAFT, or ADMIN at ADMIN_REVIEW)
+       { "items": [ &lt;same item shape as create&gt; ] }
+
+PATCH  /payment-sheets/:id/items/:itemId         (perm: view; HR free-edit, ADMIN decrease-only)
+       { "amount": 4000, "reason": "Admin trim" }   // reason required at ADMIN_REVIEW
+
+DELETE /payment-sheets/:id/items/:itemId         (perm: view; initiator in DRAFT, or ADMIN with reason)
+       { "reason": "Not approved this cycle" }</code></pre>
+<p>Amount-edit rules (server-enforced):</p>
+<ul><li>HR (<code>amountEdit: free</code>): any value <code>≤ live pending</code>.</li><li>ADMIN (<code>amountEdit: decrease-only</code>): <strong>cannot increase</strong> beyond current amount; <code>reason</code> required.</li><li><strong>Vendor items can't be amount-edited</strong> directly (they're allocation-based) — to reduce a</li></ul>
+<p>  vendor payout, remove the line and re-add it with fewer book payments.</p>
+<h3>5.6 Workflow transitions</h3>
+<pre><code>POST /payment-sheets/:id/submit    (perm: create; DRAFT/RETURNED → enters chain)   { "reason"?: "" }
+POST /payment-sheets/:id/forward   (perm: view; current-stage owner → next stage)  { "reason"?: "" }
+POST /payment-sheets/:id/return    (perm: view; HR/ADMIN → back to initiator)       { "reason": "..." }  // required
+POST /payment-sheets/:id/reject    (perm: view; HR/ADMIN → terminal REJECTED)       { "reason": "..." }  // required
+→ 200/201 { "message": "..." }</code></pre>
+<p>The server rejects the call (403/400) if the caller's active role doesn't own <code>currentStage</code>.</p>
+<h3>5.7 Accountant processing (at PROCESSING stage)</h3>
+<pre><code>POST /payment-sheets/:id/items/:itemId/pay        (perm: process)
+  // EXPENSE item:
+  { "paymentMode": "upi", "category": "tools", "paidDate": "2026-06-24", "description"?: "..." }
+  // FUEL_EXPENSE item:
+  { "paymentMode": "cash", "paidDate": "2026-06-24", "description"?: "..." }
+  // VENDOR item (one transfer per allocated book payment):
+  { "transfers": [ { "bookPaymentId": "&lt;uuid&gt;", "utrNumber": "UTR...", "transferDate": "2026-06-24",
+                     "proofFileKey"?: "...", "proofFileName"?: "..." } ], "remarks"?: "..." }
+→ 201 { "message": "Item marked as paid", "paymentRef": "&lt;credit-traceRef | bankTransferId(s)&gt;" }
+
+POST /payment-sheets/:id/items/:itemId/hold       (perm: process)  { "reason": "..." }   // required
+POST /payment-sheets/:id/items/:itemId/release    (perm: process)  // only the accountant who held it
+POST /payment-sheets/:id/items/:itemId/reject     (perm: process)  { "reason": "..." }   // required</code></pre>
+<p>Paying performs the real settlement:</p>
+<ul><li>EXPENSE/FUEL → writes an approved <code>credit</code> entry in that ledger (pending drops).</li><li>VENDOR → creates the bank transfer(s) (+ auto payment-advice); book payment flips <code>hasTransfer</code>.</li></ul>
+<p><code>category</code> is <strong>required</strong> for EXPENSE pays and must be a valid expense category; <code>paymentMode</code> must be a valid mode. <code>paidDate</code> cannot be in the future.</p>
+<h3>5.8 Reconcile (live pending vs sheet)</h3>
+<pre><code>GET /payment-sheets/:id/reconcile     (perm: view)
+→ 200 {
+  sheetId, sheetNumber, status,
+  lines: [{ itemId, beneficiaryType, userId, vendorId, sourceType, itemStatus,
+            pendingSnapshot, currentAmount, livePending, difference, conflict }]
+}</code></pre>
+<p>Call this before/while reviewing or paying. <code>conflict: true</code> means <code>currentAmount &gt; livePending</code> (the beneficiary's pending dropped since the sheet was built — paying would overpay). Surface a warning and let the reviewer reduce the amount. Pay-time re-checks this and returns <code>400 "Live pending is now lower…"</code> if violated.</p>
+<h3>5.9 PDF download (with optional filter)</h3>
+<pre><code>GET /payment-sheets/:id/pdf                              (perm: download) → full sheet
+GET /payment-sheets/:id/pdf?sourceType=VENDOR_PAYMENT                    → vendor lines only
+GET /payment-sheets/:id/pdf?sourceType=EXPENSE|FUEL_EXPENSE              → that source only
+GET /payment-sheets/:id/pdf?beneficiaryType=USER|VENDOR                  → that beneficiary type
+GET /payment-sheets/:id/pdf?beneficiaryType=VENDOR&amp;sourceType=VENDOR_PAYMENT   → combine
+→ 200 { "url": "&lt;presigned S3 url, ~15 min&gt;", "key": "payment-sheets/&lt;fy&gt;/&lt;sheetNo&gt;[-filter].pdf" }</code></pre>
+<p>Open <code>url</code> in a new tab to view/download. The URL expires (~15 min) — re-call to get a fresh one. Invalid filter → <code>400</code>; filter matching no lines → <code>400</code>.</p>
+<hr/>
+<h2>6. Enums (use these exact string values)</h2>
+<pre><code>beneficiaryType : "USER" | "VENDOR"
+sourceType      : "EXPENSE" | "FUEL_EXPENSE" | "VENDOR_PAYMENT"
+status          : "DRAFT" | "SUBMITTED" | "IN_REVIEW" | "PROCESSING" | "COMPLETED" | "RETURNED" | "REJECTED" | "CANCELLED"
+currentStage    : "INITIATION" | "HR_REVIEW" | "ADMIN_REVIEW" | "PROCESSING" | null
+itemStatus      : "PENDING" | "PAID" | "HOLD" | "REJECTED"</code></pre>
+<hr/>
+<h2>7. Suggested UI flows by role</h2>
+<ul><li><strong>Operation Manager:</strong> picker → create DRAFT → review reconcile → <code>submit</code>. Can edit/remove</li></ul>
+<p>  items and <code>PATCH</code> meta while <code>DRAFT</code>/<code>RETURNED</code>.</p>
+<ul><li><strong>HR:</strong> open sheets at <code>HR_REVIEW</code> → adjust amounts (free) → <code>forward</code> / <code>return</code> / <code>reject</code>.</li><li><strong>Admin:</strong> sheets at <code>ADMIN_REVIEW</code> → <code>decrease</code> amounts (reason), add/remove beneficiaries →</li></ul>
+<p>  <code>forward</code> (to accountant) / <code>return</code> / <code>reject</code>.</p>
+<ul><li><strong>Accountant:</strong> sheets at <code>PROCESSING</code> → per line <code>pay</code> / <code>hold</code> / <code>release</code> / <code>reject</code>.</li></ul>
+<p>  Sheet flips to <code>COMPLETED</code> automatically when all lines are resolved.</p>
+<p>Drive button visibility from <code>(user.activeRole, sheet.currentStage, item.itemStatus)</code>.</p>
+<hr/>
+<h2>8. Error handling</h2>
+<p>Errors use the platform's envelope:</p>
+<pre><code>{ "error": { "code": 400, "message": "Amount can only be decreased at this stage", "path": "...", "method": "..." } }</code></pre>
+<p>Common ones to handle: <code>400</code> amount &gt; pending / increase-not-allowed / reason-required / vendor amount mismatch / pending-conflict; <code>403</code> not the current-stage owner; <code>404</code> sheet/item not found. Show <code>error.message</code> to the user.</p>
+<hr/>
+<h2>9. Configurability (FYI, not a FE concern)</h2>
+<p>The approval chain (stages, roles, edit policies) lives in DB config (<code>payments.approval_flow</code>) and can change without a deploy. <strong>Do not hard-code the stage order or stage→role mapping</strong> — read <code>currentStage</code> from the sheet and decide actions from the user's role + server responses.</p>
+<hr/>
+<h2>10. Gotchas checklist</h2>
+<ul><li>✅ Send a <strong>UUID</strong> <code>X-Correlation-Id</code> on every call.</li><li>✅ Vendor line amount = Σ of selected book payments (no partial); reduce by removing the line.</li><li>✅ Re-fetch <code>/reconcile</code> before paying; respect <code>conflict</code>.</li><li>✅ EXPENSE pay requires a valid <code>category</code>; all pays need a valid <code>paymentMode</code> and non-future <code>paidDate</code>.</li><li>✅ PDF <code>url</code> is short-lived — fetch on demand.</li><li>✅ Decide buttons from <code>currentStage</code> + active role, not from permissions alone.</li></ul>
+  </div>
+</body>
+</html>

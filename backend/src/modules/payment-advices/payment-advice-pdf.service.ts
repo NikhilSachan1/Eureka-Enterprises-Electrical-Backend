@@ -381,7 +381,6 @@ export class PaymentAdvicePdfService {
   .header-logo img { height: 60px; width: auto; object-fit: contain; }
   .header-details { flex: 1; }
   .header .company { font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-  .header .company-address { font-size: 10px; color: #333; margin-top: 3px; }
   .header .company-gst { font-size: 10px; color: #333; margin-top: 2px; }
   .header .doc-title { font-size: 13px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-top: 8px; }
 
@@ -429,11 +428,6 @@ export class PaymentAdvicePdfService {
       ${logoBase64 ? `<div class="header-logo"><img src="${logoBase64}" alt="logo"/></div>` : ''}
       <div class="header-details">
         <div class="company">${PAYMENT_ADVICE_COMPANY_DETAILS.NAME}</div>
-        <div class="company-address">${PAYMENT_ADVICE_COMPANY_DETAILS.FULL_ADDRESS}, ${
-      PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.CITY
-    }, ${PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.STATE} - ${
-      PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.PINCODE
-    }</div>
         <div class="company-gst">GSTIN: ${PAYMENT_ADVICE_COMPANY_DETAILS.GSTIN}</div>
       </div>
     </div>
@@ -470,7 +464,7 @@ export class PaymentAdvicePdfService {
         <th>Invoice Date</th>
         <th class="r">Gross Amount (Rs.)</th>
         <th class="r">Total Deduction (Rs.)</th>
-        <th class="r">Net Amount Paid (Rs.)</th>
+        <th class="r">Amount to be Paid (Rs.)</th>
       </tr>
     </thead>
     <tbody>

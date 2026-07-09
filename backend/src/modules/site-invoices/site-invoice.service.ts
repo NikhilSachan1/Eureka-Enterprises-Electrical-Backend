@@ -72,11 +72,11 @@ export class SiteInvoiceService {
       resolvedReportId = report.id;
     }
 
-    this.validateAmounts(dto.taxableAmount, dto.gstAmount ?? 0, dto.totalAmount);
-
-    // Ceiling check at save time — soft guard before the pessimistic-lock check at approval.
-    // Sums all non-rejected invoices on this PO so users get immediate feedback.
-    await this.assertPoCeiling(jmc.poId, dto.totalAmount, null);
+    // Only validate amounts and PO ceiling when amounts are provided
+    if (dto.taxableAmount != null && dto.totalAmount != null) {
+      this.validateAmounts(dto.taxableAmount, dto.gstAmount ?? 0, dto.totalAmount);
+      await this.assertPoCeiling(jmc.poId, dto.totalAmount, null);
+    }
 
     const created = await this.invoiceRepository.create({
       jmcId: jmc.id,
@@ -86,17 +86,17 @@ export class SiteInvoiceService {
       contractorId: jmc.contractorId,
       vendorId: jmc.vendorId,
       poId: jmc.poId,
-      invoiceNumber: dto.invoiceNumber,
-      invoiceDate: new Date(dto.invoiceDate),
-      taxableAmount: dto.taxableAmount,
-      gstAmount: dto.gstAmount ?? 0,
+      invoiceNumber: dto.invoiceNumber ?? null,
+      invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : null,
+      taxableAmount: dto.taxableAmount ?? null,
+      gstAmount: dto.gstAmount ?? null,
       gstPercentage: dto.gstPercentage ?? null,
-      tdsAmount: dto.tdsAmount ?? 0,
+      tdsAmount: dto.tdsAmount ?? null,
       tdsPercentage: dto.tdsPercentage ?? null,
-      totalAmount: dto.totalAmount,
+      totalAmount: dto.totalAmount ?? null,
       isGstHold: dto.isGstHold ?? false,
-      fileKey: dto.fileKey,
-      fileName: dto.fileName,
+      fileKey: dto.fileKey ?? null,
+      fileName: dto.fileName ?? null,
       remarks: dto.remarks,
       approvalStatus: FinancialApprovalStatus.PENDING,
       isLocked: false,
@@ -300,6 +300,29 @@ export class SiteInvoiceService {
       if (!inv) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
       if (inv.approvalStatus === FinancialApprovalStatus.APPROVED) {
         throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
+      }
+
+      // "No Invoice" case (FE checkbox): explicit 0/0 on both amounts means the JMC's work
+      // will be billed later via a future combined invoice — this entry never gets a real
+      // invoiceNumber/date/attachment. Explicit 0 (not null) is the signal, so an in-progress
+      // draft that simply hasn't been filled in yet still gets blocked below as normal.
+      const isZeroValueInvoice =
+        inv.taxableAmount !== null &&
+        Number(inv.taxableAmount) === 0 &&
+        inv.totalAmount !== null &&
+        Number(inv.totalAmount) === 0;
+
+      // Invoice must be complete before it can be approved
+      if (
+        !isZeroValueInvoice &&
+        (inv.invoiceNumber == null ||
+          inv.invoiceDate == null ||
+          inv.taxableAmount == null ||
+          inv.totalAmount == null ||
+          inv.fileKey == null ||
+          inv.fileName == null)
+      ) {
+        throw new BadRequestException(INVOICE_ERRORS.INVOICE_INCOMPLETE);
       }
 
       // Bottom-up chain: JMC must be APPROVED before Invoice can be approved
@@ -679,6 +702,7 @@ export class SiteInvoiceService {
       WHERE i."siteId"    = $1
         AND i."partyType" = $2
         AND i."deletedAt" IS NULL
+        AND i."invoiceNumber" IS NOT NULL
       ORDER BY i."createdAt" DESC
       `,
       [siteId, partyType, forDocument, partyType],

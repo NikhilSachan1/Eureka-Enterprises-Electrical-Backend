@@ -11,6 +11,7 @@ import { ExpenseFilesModule } from '../expense-files/expense-files.module';
 import { DateTimeModule } from 'src/utils/datetime';
 import { EmailModule } from '../common/email/email.module';
 import { UsersModule } from '../users/user.module';
+import { CompanyBankAccountModule } from '../company-bank-accounts/company-bank-account.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from '../users/user.module';
     DateTimeModule,
     EmailModule,
     UsersModule,
+    CompanyBankAccountModule,
   ],
   controllers: [ExpenseTrackerController],
   providers: [ExpenseTrackerService, ExpenseTrackerRepository],

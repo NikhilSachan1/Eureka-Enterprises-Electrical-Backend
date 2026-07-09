@@ -4,7 +4,16 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Not,
+} from 'typeorm';
 import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
 import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
@@ -24,6 +33,7 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+import { CompanyBankAccountService } from 'src/modules/company-bank-accounts/company-bank-account.service';
 
 @Injectable()
 export class BankTransferService {
@@ -32,8 +42,16 @@ export class BankTransferService {
     private readonly bookPaymentService: BookPaymentService,
     private readonly purchaseOrderService: PurchaseOrderService,
     private readonly paymentAdviceService: PaymentAdviceService,
+    private readonly companyBankAccountService: CompanyBankAccountService,
     private readonly dataSource: DataSource,
   ) {}
+
+  /** Validates the paying company bank account, if one was supplied (throws if invalid). */
+  private async validatePaidFromAccount(paidFromAccountId?: string): Promise<string | null> {
+    if (!paidFromAccountId) return null;
+    const account = await this.companyBankAccountService.findActiveOrFail(paidFromAccountId);
+    return account.id;
+  }
 
   /**
    * Create a bank transfer. For PURCHASE side, auto-generates a payment advice.
@@ -89,6 +107,7 @@ export class BankTransferService {
       }
 
       const financialYear = getFinancialYear(dto.transferDate);
+      const paidFromAccountId = await this.validatePaidFromAccount(dto.paidFromAccountId);
 
       const created = await this.bankTransferRepository.create(
         {
@@ -110,6 +129,7 @@ export class BankTransferService {
           approvalBy: createdBy,
           approvalAt: new Date(),
           createdBy,
+          paidFromAccountId,
         },
         em,
       );
@@ -142,6 +162,11 @@ export class BankTransferService {
       const bp = await this.bookPaymentService.findOneForUpdate(dto.bookPaymentId, em);
       if (!bp) throw new NotFoundException(BANK_TRANSFER_ERRORS.BOOK_PAYMENT_NOT_FOUND);
 
+      // Book payment must be approved before creating a transfer
+      if (bp.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.BOOK_PAYMENT_NOT_APPROVED);
+      }
+
       // Check 1:1 constraint
       const existsTransfer = await this.bankTransferRepository.existsByBookPaymentId(
         dto.bookPaymentId,
@@ -160,6 +185,7 @@ export class BankTransferService {
       }
 
       const financialYear = getFinancialYear(dto.transferDate);
+      const paidFromAccountId = await this.validatePaidFromAccount(dto.paidFromAccountId);
 
       const created = await this.bankTransferRepository.create(
         {
@@ -180,7 +206,9 @@ export class BankTransferService {
           approvalStatus: FinancialApprovalStatus.APPROVED,
           approvalBy: createdBy,
           approvalAt: new Date(),
+          isLocked: true,
           createdBy,
+          paidFromAccountId,
         },
         em,
       );
@@ -295,6 +323,9 @@ export class BankTransferService {
       search,
       poNumber,
       invoiceNumber,
+      paidFromAccountId,
+      paidFromAccountName,
+      hasPaidFromAccount,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -314,6 +345,11 @@ export class BankTransferService {
     else if (dateFrom) where.transferDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.transferDate = LessThanOrEqual(dateTo);
     if (search) where.utrNumber = ILike(`%${search}%`);
+    if (paidFromAccountId) where.paidFromAccountId = paidFromAccountId;
+    if (paidFromAccountName)
+      where.paidFromAccount = { accountName: ILike(`%${paidFromAccountName}%`) };
+    if (hasPaidFromAccount === true) where.paidFromAccountId = Not(IsNull());
+    else if (hasPaidFromAccount === false) where.paidFromAccountId = IsNull();
     if (invoiceNumber || poNumber) {
       const invCond: any = {};
       if (invoiceNumber) invCond.invoiceNumber = ILike(`%${invoiceNumber}%`);
@@ -340,6 +376,7 @@ export class BankTransferService {
           'contractor',
           'vendor',
           'paymentAdvice',
+          'paidFromAccount',
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
@@ -375,6 +412,7 @@ export class BankTransferService {
         'contractor',
         'vendor',
         'paymentAdvice',
+        'paidFromAccount',
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
@@ -396,6 +434,10 @@ export class BankTransferService {
         em,
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
+
+      if (bt.isLocked) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.LOCKED);
+      }
 
       // PURCHASE side: amount is fixed (1:1 with book payment — must equal paymentTotalAmount)
       if (bt.partyType === PartyType.PURCHASE && dto.transferAmount !== undefined) {
@@ -438,6 +480,7 @@ export class BankTransferService {
         {
           ...dto,
           transferDate: dto.transferDate ? new Date(dto.transferDate) : undefined,
+          isLocked: true,
           updatedBy,
         } as Partial<BankTransferEntity>,
         em,
@@ -531,6 +574,10 @@ export class BankTransferService {
       );
       if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
 
+      if (bt.isLocked) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.LOCKED);
+      }
+
       // Cascade soft-delete payment advice if it exists
       await em.query(
         `UPDATE payment_advices SET "deletedAt" = NOW(), "deletedBy" = $2
@@ -565,5 +612,27 @@ export class BankTransferService {
 
       return { message: BANK_TRANSFER_RESPONSES.DELETED };
     });
+  }
+
+  async lock(id: string, updatedBy: string) {
+    const bt = await this.bankTransferRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
+    if (bt.isLocked) throw new BadRequestException(BANK_TRANSFER_ERRORS.ALREADY_LOCKED);
+    await this.bankTransferRepository.update({ id }, {
+      isLocked: true,
+      updatedBy,
+    } as Partial<BankTransferEntity>);
+    return { message: BANK_TRANSFER_RESPONSES.LOCKED };
+  }
+
+  async unlock(id: string, updatedBy: string) {
+    const bt = await this.bankTransferRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    if (!bt) throw new NotFoundException(BANK_TRANSFER_ERRORS.NOT_FOUND);
+    if (!bt.isLocked) throw new BadRequestException(BANK_TRANSFER_ERRORS.ALREADY_UNLOCKED);
+    await this.bankTransferRepository.update({ id }, {
+      isLocked: false,
+      updatedBy,
+    } as Partial<BankTransferEntity>);
+    return { message: BANK_TRANSFER_RESPONSES.UNLOCKED };
   }
 }

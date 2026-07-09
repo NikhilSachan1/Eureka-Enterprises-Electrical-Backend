@@ -154,12 +154,18 @@ export const ATTENDANCE_SORTABLE_FIELDS = {
 
 // Food expense constants for attendance-based crediting
 export const FOOD_EXPENSE_CONSTANTS = {
-  CATEGORY: 'Food',
+  CATEGORY: 'fooding',
   REFERENCE_TYPE: 'ATTENDANCE_FOOD_ALLOWANCE',
   DESCRIPTION: 'Food allowance for attendance on {date}',
   REVERSAL_DESCRIPTION: 'Reversal: Food allowance for {date} (attendance rejected)',
   REFERENCE_ID: 'ATT_FOOD_{userId}_{date}',
   REVERSAL_REFERENCE_ID: 'ATT_FOOD_REV_{userId}_{date}',
+  // Driver food routed to assigned engineer: driver gets an informational net-zero pair
+  // (earned DEBIT + redirect CREDIT); {userId} = driver id.
+  DRIVER_EARN_REFERENCE_ID: 'ATT_FOOD_EARN_{userId}_{date}',
+  DRIVER_REDIRECT_REFERENCE_ID: 'ATT_FOOD_REDIR_{userId}_{date}',
+  REVERSAL_DRIVER_EARN_REFERENCE_ID: 'ATT_FOOD_REV_EARN_{userId}_{date}',
+  REVERSAL_DRIVER_REDIRECT_REFERENCE_ID: 'ATT_FOOD_REV_REDIR_{userId}_{date}',
 };
 
 export const LEAVE_REGULARIZATION_CONSTANTS = {

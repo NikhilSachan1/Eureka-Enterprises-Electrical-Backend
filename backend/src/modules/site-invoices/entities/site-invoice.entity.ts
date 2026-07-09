@@ -58,35 +58,35 @@ export class SiteInvoiceEntity extends BaseEntity {
   @Column({ type: 'uuid' })
   poId: string;
 
-  @Column({ type: 'varchar', length: 100 })
-  invoiceNumber: string;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  invoiceNumber: string | null;
 
-  @Column({ type: 'date' })
-  invoiceDate: Date;
+  @Column({ type: 'date', nullable: true })
+  invoiceDate: Date | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
-  taxableAmount: number;
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  taxableAmount: number | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  gstAmount: number;
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  gstAmount: number | null;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   gstPercentage: number | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  tdsAmount: number;
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  tdsAmount: number | null;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   tdsPercentage: number | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
-  totalAmount: number;
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  totalAmount: number | null;
 
-  @Column({ type: 'varchar', length: 500 })
-  fileKey: string;
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  fileKey: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
-  fileName: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fileName: string | null;
 
   @Column({ type: 'text', nullable: true })
   remarks: string;

@@ -4,6 +4,7 @@ import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicle-master.entity';
 import { CardsEntity } from 'src/modules/cards/entities/card.entity';
 import { FuelExpenseFilesEntity } from '../../fuel-expense-files/entities/fuel-expense-files.entity';
+import { CompanyBankAccountEntity } from 'src/modules/company-bank-accounts/entities/company-bank-account.entity';
 
 @Entity('fuel_expenses')
 @Index('idx_fuel_expense_vehicle_id', ['vehicleId'])
@@ -83,6 +84,14 @@ export class FuelExpenseEntity extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   editReason: string;
+
+  // Which of the org's own bank accounts this settlement (credit) was paid from.
+  @Column({ type: 'uuid', nullable: true })
+  paidFromAccountId: string | null;
+
+  @ManyToOne(() => CompanyBankAccountEntity, { nullable: true })
+  @JoinColumn({ name: 'paidFromAccountId' })
+  paidFromAccount: CompanyBankAccountEntity | null;
 
   // Relationships
   @ManyToOne(() => VehicleMasterEntity, { nullable: true })

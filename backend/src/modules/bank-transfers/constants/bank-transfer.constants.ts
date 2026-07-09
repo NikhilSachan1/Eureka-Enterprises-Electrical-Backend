@@ -4,6 +4,7 @@ export const BANK_TRANSFER_ERRORS = {
   INVOICE_NOT_APPROVED: 'Invoice must be approved before creating a bank transfer.',
   INVOICE_NOT_SALE_SIDE: 'Invoice must belong to a SALE side for this operation.',
   BOOK_PAYMENT_NOT_FOUND: 'Book payment not found.',
+  BOOK_PAYMENT_NOT_APPROVED: 'Book payment must be approved before creating a bank transfer.',
   BOOK_PAYMENT_HAS_TRANSFER: 'This book payment already has a bank transfer (1:1).',
   AMOUNT_MISMATCH_PURCHASE:
     'Bank transfer amount must equal the book payment amount exactly for PURCHASE side.',
@@ -21,12 +22,17 @@ export const BANK_TRANSFER_ERRORS = {
     'Cannot update — TDS payment has already been released against this bank transfer.',
   CANNOT_DELETE_TDS_PAID:
     'Cannot delete — TDS payment has already been released against this bank transfer.',
+  LOCKED: 'Bank transfer is locked. Admin must unlock it before editing or deleting.',
+  ALREADY_LOCKED: 'Bank transfer is already locked.',
+  ALREADY_UNLOCKED: 'Bank transfer is already unlocked.',
 };
 
 export const BANK_TRANSFER_RESPONSES = {
   CREATED: 'Bank transfer created successfully.',
   UPDATED: 'Bank transfer updated successfully.',
   DELETED: 'Bank transfer deleted successfully.',
+  LOCKED: 'Bank transfer locked successfully.',
+  UNLOCKED: 'Bank transfer unlocked successfully.',
   PDF_GENERATING:
     'Payment advice PDF is being generated and will be ready within 2 minutes. You can download it from the payment advice details once ready.',
   TDS_AT_INVOICE:

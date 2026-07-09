@@ -38,6 +38,8 @@ import {
   ExpenseHistoryResponseDto,
   ExpenseBulkApprovalDto,
   BulkDeleteExpenseDto,
+  PendingSettlementQueryDto,
+  PendingSettlementResponseDto,
 } from './dto';
 import { ExpenseUserInterceptor } from './interceptors/expense-user.interceptor';
 import { RequestWithTimezone } from './expense-tracker.types';
@@ -222,6 +224,17 @@ export class ExpenseTrackerController {
     @Query() expenseQueryDto: ExpenseQueryDto,
   ) {
     return this.expenseTrackerService.getExpenseRecords(expenseQueryDto, req.user.id);
+  }
+
+  @Get('pending-settlement')
+  @ApiOperation({
+    summary: 'Get pending settlement amounts',
+    description:
+      'Returns per-user pending settlement amounts (approved debits minus settled credits). Omit pageSize to return all records.',
+  })
+  @ApiResponse({ status: 200, type: PendingSettlementResponseDto })
+  async getPendingSettlement(@Query() queryDto: PendingSettlementQueryDto) {
+    return this.expenseTrackerService.getPendingSettlement(queryDto);
   }
 
   @Get(':id/history')

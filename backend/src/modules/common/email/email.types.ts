@@ -128,6 +128,15 @@ export interface IEmailDataValues {
   durationMs?: number;
   serverName?: string;
 
+  // Payment Sheet Notification
+  sheetNumber?: string;
+  title?: string;
+  status?: string;
+  stage?: string;
+  action?: string;
+  audience?: string;
+  totalCurrentAmount?: string;
+
   // Asset Lost / Recovered
   assetId?: string;
   assetName?: string;

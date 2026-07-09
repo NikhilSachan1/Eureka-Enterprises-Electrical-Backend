@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #222; }
+      .card { max-width: 560px; margin: 0 auto; border: 1px solid #e2e2e2; border-radius: 8px; padding: 24px; }
+      h2 { margin: 0 0 12px; font-size: 18px; }
+      .row { margin: 6px 0; }
+      .label { color: #666; display: inline-block; width: 150px; }
+      .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; background: #eef; color: #224; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Payment Sheet {{sheetNumber}}</h2>
+      <div class="row"><span class="label">Action</span> <span class="badge">{{action}}</span></div>
+      <div class="row"><span class="label">Title</span> {{title}}</div>
+      <div class="row"><span class="label">Status</span> {{status}}</div>
+      <div class="row"><span class="label">Current Stage</span> {{stage}}</div>
+      <div class="row"><span class="label">Total Amount</span> ₹{{totalCurrentAmount}}</div>
+      <p>This payment sheet now requires your attention ({{audience}}). Please log in to review.</p>
+    </div>
+  </body>
+</html>

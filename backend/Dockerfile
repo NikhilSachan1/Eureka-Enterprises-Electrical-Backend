@@ -38,6 +38,9 @@ RUN npm ci --omit=dev --ignore-scripts \
     && chown -R node:node /app
 
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --chown=node:node entrypoint.sh ./entrypoint.sh
+
+RUN chmod +x entrypoint.sh
 
 USER node
 
@@ -48,4 +51,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
 
 ENTRYPOINT ["dumb-init", "--"]
 
-CMD ["node", "dist/src/main.js"]
+CMD ["sh", "entrypoint.sh"]

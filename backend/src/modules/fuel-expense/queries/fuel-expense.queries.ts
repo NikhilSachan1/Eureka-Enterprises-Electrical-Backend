@@ -1,4 +1,5 @@
 import { FuelExpenseQueryDto } from '../dto/fuel-expense-query.dto';
+import { FuelPendingSettlementQueryDto } from '../dto/pending-settlement-query.dto';
 import { TransactionType } from '../constants/fuel-expense.constants';
 import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
@@ -17,6 +18,9 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     sortOrder,
     vehicleId,
     cardId,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
   } = filters;
 
   const whereConditions = [];
@@ -96,6 +100,23 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`fe."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`fe."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`fe."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   // Main query for fuel expense records
@@ -112,6 +133,13 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
       fe."fuelAmount",
       fe."pumpMeterReading",
       fe."paymentMode",
+      fe."paidFromAccountId",
+      cba."accountName" AS "pfaAccountName",
+      cba."accountHolderName" AS "pfaAccountHolderName",
+      cba."bankName" AS "pfaBankName",
+      cba."accountNumber" AS "pfaAccountNumber",
+      cba."ifscCode" AS "pfaIfscCode",
+      cba."branchName" AS "pfaBranchName",
       fe."transactionId",
       fe."description",
       fe."transactionType",
@@ -154,6 +182,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
     LEFT JOIN "vehicle_versions" vv ON v."id" = vv."vehicleMasterId" AND vv."isActive" = true
     LEFT JOIN "cards" c ON fe."cardId" = c."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = fe."paidFromAccountId"
     ${whereClause}
     ORDER BY fe."${sortField}" ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -167,6 +196,7 @@ export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = fe."paidFromAccountId"
     ${whereClause}
   `;
 
@@ -449,7 +479,19 @@ export const buildProjectedFuelBalanceQuery = (filters: FuelExpenseQueryDto) => 
 };
 
 export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, paymentModes, search, vehicleId, cardId } = filters;
+  const {
+    startDate,
+    endDate,
+    date,
+    userIds,
+    paymentModes,
+    search,
+    vehicleId,
+    cardId,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
+  } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -518,6 +560,23 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`fe."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`fe."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`fe."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   const summaryQuery = `
@@ -533,11 +592,108 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = fe."paidFromAccountId"
     ${whereClause}
   `;
 
   return {
     summaryQuery,
     params,
+  };
+};
+
+export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQueryDto) => {
+  const { startDate, endDate, userIds, page = 1, pageSize, sortOrder = 'DESC', search } = filters;
+
+  const whereConditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  whereConditions.push(`fe."isActive" = $${paramIndex}`);
+  params.push(true);
+  paramIndex++;
+
+  if (userIds && userIds.length > 0) {
+    whereConditions.push(`fe."userId" = ANY($${paramIndex})`);
+    params.push(userIds);
+    paramIndex++;
+  }
+
+  if (startDate) {
+    whereConditions.push(`fe."fillDate" >= $${paramIndex}`);
+    params.push(startDate);
+    paramIndex++;
+  }
+
+  if (endDate) {
+    whereConditions.push(`fe."fillDate" <= $${paramIndex}`);
+    params.push(endDate);
+    paramIndex++;
+  }
+
+  if (search) {
+    whereConditions.push(`(
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(CONCAT(u."firstName", ' ', u."lastName")) LIKE LOWER($${paramIndex})
+    )`);
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+  const approvedDebitExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)`;
+  const settledExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)`;
+
+  const baseSelectQuery = `
+    SELECT
+      u."id" AS "userId",
+      u."firstName",
+      u."lastName",
+      u."email",
+      u."employeeId",
+      u."bankHolderName",
+      u."bankName",
+      u."accountNumber",
+      u."ifscCode",
+      ${approvedDebitExpr} AS "totalApprovedAmount",
+      ${settledExpr} AS "totalSettledAmount",
+      (${approvedDebitExpr} - ${settledExpr}) AS "pendingAmount"
+    FROM "fuel_expenses" fe
+    LEFT JOIN "users" u ON fe."userId" = u."id"
+    ${whereClause}
+    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId",
+             u."bankHolderName", u."bankName", u."accountNumber", u."ifscCode"
+  `;
+
+  const order = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+  let recordsQuery = `${baseSelectQuery} ORDER BY "pendingAmount" ${order}`;
+
+  const recordParams = [...params];
+
+  if (pageSize !== undefined) {
+    const offset = (page - 1) * pageSize;
+    recordsQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    recordParams.push(pageSize, offset);
+  }
+
+  const countQuery = `SELECT COUNT(*) AS total FROM (${baseSelectQuery}) subq`;
+
+  const summaryQuery = `
+    SELECT
+      COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalApprovedAmount",
+      COALESCE(SUM(subq."totalSettledAmount"), 0) AS "totalSettledAmount",
+      COALESCE(SUM(subq."pendingAmount"), 0) AS "totalPendingAmount"
+    FROM (${baseSelectQuery}) subq
+  `;
+
+  return {
+    recordsQuery,
+    recordParams,
+    countQuery,
+    summaryQuery,
+    baseParams: params,
   };
 };

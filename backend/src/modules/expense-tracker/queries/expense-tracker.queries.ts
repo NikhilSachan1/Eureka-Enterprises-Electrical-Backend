@@ -1,4 +1,5 @@
 import { ExpenseQueryDto } from '../dto/expense-query.dto';
+import { PendingSettlementQueryDto } from '../dto/pending-settlement-query.dto';
 import {
   EXPENSE_SORT_FIELD_MAPPING,
   TransactionType,
@@ -18,6 +19,9 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     page,
     pageSize,
     sortOrder,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
   } = filters;
 
   const whereConditions = [];
@@ -82,12 +86,29 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`e."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`e."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`e."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   // Main query for expense records
   const offset = (page - 1) * pageSize;
   const query = `
-    SELECT 
+    SELECT
       e."id",
       e."userId",
       e."category",
@@ -101,6 +122,13 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
       e."approvalReason",
       e."transactionType",
       e."paymentMode",
+      e."paidFromAccountId",
+      cba."accountName" AS "pfaAccountName",
+      cba."accountHolderName" AS "pfaAccountHolderName",
+      cba."bankName" AS "pfaBankName",
+      cba."accountNumber" AS "pfaAccountNumber",
+      cba."ifscCode" AS "pfaIfscCode",
+      cba."branchName" AS "pfaBranchName",
       e."entrySourceType",
       e."expenseEntryType",
       e."createdBy",
@@ -113,6 +141,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     LEFT JOIN "users" u ON e."userId" = u."id"
     LEFT JOIN "users" cb ON e."createdBy" = cb."id"
     LEFT JOIN "users" ab ON e."approvalBy" = ab."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = e."paidFromAccountId"
     ${whereClause}
     ORDER BY ${EXPENSE_SORT_FIELD_MAPPING[sortField] || 'e."createdAt"'} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -125,6 +154,7 @@ export const buildExpenseListQuery = (filters: ExpenseQueryDto) => {
     SELECT COUNT(*) as total
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = e."paidFromAccountId"
     ${whereClause}
   `;
 
@@ -334,7 +364,16 @@ export const buildProjectedBalanceQuery = (filters: ExpenseQueryDto) => {
 };
 
 export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
-  const { startDate, endDate, date, userIds, categories } = filters;
+  const {
+    startDate,
+    endDate,
+    date,
+    userIds,
+    categories,
+    paidFromAccountId,
+    paidFromAccountName,
+    hasPaidFromAccount,
+  } = filters;
 
   const whereConditions = [];
   const params: any[] = [];
@@ -377,10 +416,27 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
     paramIndex++;
   }
 
+  // Paying company bank account filters
+  if (paidFromAccountId) {
+    whereConditions.push(`e."paidFromAccountId" = $${paramIndex}`);
+    params.push(paidFromAccountId);
+    paramIndex++;
+  }
+  if (paidFromAccountName) {
+    whereConditions.push(`LOWER(cba."accountName") LIKE LOWER($${paramIndex})`);
+    params.push(`%${paidFromAccountName}%`);
+    paramIndex++;
+  }
+  if (hasPaidFromAccount === true) {
+    whereConditions.push(`e."paidFromAccountId" IS NOT NULL`);
+  } else if (hasPaidFromAccount === false) {
+    whereConditions.push(`e."paidFromAccountId" IS NULL`);
+  }
+
   const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
   const summaryQuery = `
-    SELECT 
+    SELECT
       COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount" ELSE 0 END), 0) as "totalCredit",
       COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' THEN e."amount" ELSE 0 END), 0) as "totalDebit",
       COUNT(*) as "totalRecords",
@@ -389,11 +445,108 @@ export const buildExpenseSummaryQuery = (filters: ExpenseQueryDto) => {
       COUNT(CASE WHEN e."approvalStatus" = 'rejected' THEN 1 END) as "rejectedCount"
     FROM "expenses" e
     LEFT JOIN "users" u ON e."userId" = u."id"
+    LEFT JOIN "company_bank_accounts" cba ON cba."id" = e."paidFromAccountId"
     ${whereClause}
   `;
 
   return {
     summaryQuery,
     params,
+  };
+};
+
+export const buildPendingSettlementQuery = (filters: PendingSettlementQueryDto) => {
+  const { startDate, endDate, userIds, page = 1, pageSize, sortOrder = 'DESC', search } = filters;
+
+  const whereConditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  whereConditions.push(`e."isActive" = $${paramIndex}`);
+  params.push(true);
+  paramIndex++;
+
+  if (userIds && userIds.length > 0) {
+    whereConditions.push(`e."userId" = ANY($${paramIndex})`);
+    params.push(userIds);
+    paramIndex++;
+  }
+
+  if (startDate) {
+    whereConditions.push(`e."expenseDate" >= $${paramIndex}`);
+    params.push(startDate);
+    paramIndex++;
+  }
+
+  if (endDate) {
+    whereConditions.push(`e."expenseDate" <= $${paramIndex}`);
+    params.push(endDate);
+    paramIndex++;
+  }
+
+  if (search) {
+    whereConditions.push(`(
+      LOWER(u."firstName") LIKE LOWER($${paramIndex}) OR
+      LOWER(u."lastName") LIKE LOWER($${paramIndex}) OR
+      LOWER(CONCAT(u."firstName", ' ', u."lastName")) LIKE LOWER($${paramIndex})
+    )`);
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+  const approvedDebitExpr = `COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.DEBIT}' AND e."approvalStatus" = 'approved' THEN e."amount"::numeric ELSE 0 END), 0)`;
+  const settledExpr = `COALESCE(SUM(CASE WHEN e."transactionType" = '${TransactionType.CREDIT}' THEN e."amount"::numeric ELSE 0 END), 0)`;
+
+  const baseSelectQuery = `
+    SELECT
+      u."id" AS "userId",
+      u."firstName",
+      u."lastName",
+      u."email",
+      u."employeeId",
+      u."bankHolderName",
+      u."bankName",
+      u."accountNumber",
+      u."ifscCode",
+      ${approvedDebitExpr} AS "totalApprovedAmount",
+      ${settledExpr} AS "totalSettledAmount",
+      (${approvedDebitExpr} - ${settledExpr}) AS "pendingAmount"
+    FROM "expenses" e
+    LEFT JOIN "users" u ON e."userId" = u."id"
+    ${whereClause}
+    GROUP BY u."id", u."firstName", u."lastName", u."email", u."employeeId",
+             u."bankHolderName", u."bankName", u."accountNumber", u."ifscCode"
+  `;
+
+  const order = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+  let recordsQuery = `${baseSelectQuery} ORDER BY "pendingAmount" ${order}`;
+
+  const recordParams = [...params];
+
+  if (pageSize !== undefined) {
+    const offset = (page - 1) * pageSize;
+    recordsQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    recordParams.push(pageSize, offset);
+  }
+
+  const countQuery = `SELECT COUNT(*) AS total FROM (${baseSelectQuery}) subq`;
+
+  const summaryQuery = `
+    SELECT
+      COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalApprovedAmount",
+      COALESCE(SUM(subq."totalSettledAmount"), 0) AS "totalSettledAmount",
+      COALESCE(SUM(subq."pendingAmount"), 0) AS "totalPendingAmount"
+    FROM (${baseSelectQuery}) subq
+  `;
+
+  return {
+    recordsQuery,
+    recordParams,
+    countQuery,
+    summaryQuery,
+    baseParams: params,
   };
 };

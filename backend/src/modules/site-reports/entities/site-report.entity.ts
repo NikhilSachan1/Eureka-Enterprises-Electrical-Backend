@@ -71,4 +71,21 @@ export class SiteReportEntity extends BaseEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   approvalAt: Date | null;
+
+  // Lock / unlock — auto-locked on approval (created auto-approved+locked); JMC-style unlock workflow
+  @Column({ type: 'boolean', default: false })
+  isLocked: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  unlockRequestedAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  unlockRequestedBy: string | null;
+
+  @ManyToOne(() => UserEntity, { nullable: true })
+  @JoinColumn({ name: 'unlockRequestedBy' })
+  unlockRequestedByUser: UserEntity | null;
+
+  @Column({ type: 'text', nullable: true })
+  unlockReason: string | null;
 }

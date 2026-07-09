@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+import { CompanyBankAccountEntity } from 'src/modules/company-bank-accounts/entities/company-bank-account.entity';
 
 @Entity('expenses')
 @Index('idx_expenses_userId', ['userId'])
@@ -71,6 +72,14 @@ export class ExpenseTrackerEntity extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   editReason: string;
+
+  // Which of the org's own bank accounts this settlement (credit) was paid from.
+  @Column({ type: 'uuid', nullable: true })
+  paidFromAccountId: string | null;
+
+  @ManyToOne(() => CompanyBankAccountEntity, { nullable: true })
+  @JoinColumn({ name: 'paidFromAccountId' })
+  paidFromAccount: CompanyBankAccountEntity | null;
 
   // Relationships
   @ManyToOne(() => UserEntity, (user) => user.id, { nullable: false })

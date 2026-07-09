@@ -14,6 +14,7 @@ import { ConfigurationsModule } from '../configurations/configuration.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { DateTimeModule } from 'src/utils/datetime';
 import { EmailModule } from '../common/email/email.module';
+import { CompanyBankAccountModule } from '../company-bank-accounts/company-bank-account.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { EmailModule } from '../common/email/email.module';
     ConfigSettingsModule,
     DateTimeModule,
     EmailModule,
+    CompanyBankAccountModule,
   ],
   controllers: [FuelExpenseController],
   providers: [FuelExpenseService, FuelExpenseRepository],

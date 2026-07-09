@@ -11,6 +11,8 @@ import {
   ExpenseQueryDto,
   ForceExpenseDto,
   BulkDeleteExpenseDto,
+  PendingSettlementQueryDto,
+  PendingSettlementResponseDto,
 } from './dto';
 import {
   CONFIGURATION_MODULES,
@@ -40,6 +42,7 @@ import {
   buildExpenseBalanceQuery,
   buildProjectedBalanceQuery,
   buildExpenseSummaryQuery,
+  buildPendingSettlementQuery,
 } from './queries/expense-tracker.queries';
 import { ExpenseFilesService } from '../expense-files/expense-files.service';
 import { DateTimeService } from 'src/utils/datetime';
@@ -53,6 +56,7 @@ import {
   EMAIL_REDIRECT_ROUTES,
 } from '../common/email/constants/email.constants';
 import { SYSTEM_USER_ID } from '../users/constants/user.constants';
+import { CompanyBankAccountService } from '../company-bank-accounts/company-bank-account.service';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -67,7 +71,15 @@ export class ExpenseTrackerService {
     private readonly emailService: EmailService,
     private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
+    private readonly companyBankAccountService: CompanyBankAccountService,
   ) {}
+
+  /** Validates the paying company bank account, if one was supplied (throws if invalid). */
+  private async validatePaidFromAccount(paidFromAccountId?: string): Promise<string | null> {
+    if (!paidFromAccountId) return null;
+    const account = await this.companyBankAccountService.findActiveOrFail(paidFromAccountId);
+    return account.id;
+  }
 
   async createDebitExpense(
     createExpenseDto: CreateDebitExpenseDto & {
@@ -414,6 +426,9 @@ export class ExpenseTrackerService {
       } = createExpenseDto;
       await this.validateExpenseCategory(category);
       await this.validatePaymentMode(paymentMode);
+      const paidFromAccountId = await this.validatePaidFromAccount(
+        createExpenseDto.paidFromAccountId,
+      );
 
       // Use timezone-aware date comparison
       const expenseDateStr = this.dateTimeService.toDateString(new Date(expenseDate));
@@ -435,6 +450,7 @@ export class ExpenseTrackerService {
             expenseEntryType: ExpenseEntryType.SELF,
             entrySourceType: sourceType,
             createdBy,
+            paidFromAccountId,
           },
           entityManager,
         );
@@ -755,6 +771,18 @@ export class ExpenseTrackerService {
         approvalReason: record.approvalReason,
         transactionType: record.transactionType,
         paymentMode: record.paymentMode,
+        paidFromAccountId: record.paidFromAccountId ?? null,
+        paidFromAccount: record.paidFromAccountId
+          ? {
+              id: record.paidFromAccountId,
+              accountName: record.pfaAccountName ?? null,
+              accountHolderName: record.pfaAccountHolderName ?? null,
+              bankName: record.pfaBankName ?? null,
+              accountNumber: record.pfaAccountNumber ?? null,
+              ifscCode: record.pfaIfscCode ?? null,
+              branchName: record.pfaBranchName ?? null,
+            }
+          : null,
         entrySourceType: record.entrySourceType,
         expenseEntryType: record.expenseEntryType,
         createdAt: record.createdAt,
@@ -824,7 +852,7 @@ export class ExpenseTrackerService {
           { id: originalExpenseId }, // The original expense itself
           { originalExpenseId }, // All subsequent versions
         ],
-        relations: ['user', 'approvalByUser', 'createdByUser', 'updatedByUser'],
+        relations: ['user', 'approvalByUser', 'createdByUser', 'updatedByUser', 'paidFromAccount'],
         order: { versionNumber: SortOrder.ASC },
       });
 
@@ -857,6 +885,18 @@ export class ExpenseTrackerService {
           transactionId: record.transactionId,
           transactionType: record.transactionType,
           paymentMode: record.paymentMode,
+          paidFromAccountId: record.paidFromAccountId ?? null,
+          paidFromAccount: record.paidFromAccount
+            ? {
+                id: record.paidFromAccount.id,
+                accountName: record.paidFromAccount.accountName,
+                accountHolderName: record.paidFromAccount.accountHolderName,
+                bankName: record.paidFromAccount.bankName,
+                accountNumber: record.paidFromAccount.accountNumber,
+                ifscCode: record.paidFromAccount.ifscCode,
+                branchName: record.paidFromAccount.branchName ?? null,
+              }
+            : null,
           entrySourceType: record.entrySourceType,
           expenseEntryType: record.expenseEntryType,
           approvalStatus: record.approvalStatus,
@@ -1429,5 +1469,42 @@ export class ExpenseTrackerService {
   private formatDateForEmail(date: Date | string): string {
     const d = new Date(date);
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  async getPendingSettlement(
+    queryDto: PendingSettlementQueryDto,
+  ): Promise<PendingSettlementResponseDto> {
+    const { recordsQuery, recordParams, countQuery, summaryQuery, baseParams } =
+      buildPendingSettlementQuery(queryDto);
+
+    const [records, [{ total }], [summaryResult]] = await Promise.all([
+      this.expenseTrackerRepository.executeRawQuery(recordsQuery, recordParams),
+      this.expenseTrackerRepository.executeRawQuery(countQuery, baseParams),
+      this.expenseTrackerRepository.executeRawQuery(summaryQuery, baseParams),
+    ]);
+
+    return {
+      records: records.map((r: any) => ({
+        userId: r.userId,
+        userName: `${r.firstName} ${r.lastName}`.trim(),
+        employeeId: r.employeeId,
+        email: r.email,
+        totalApprovedAmount: Number(r.totalApprovedAmount),
+        totalSettledAmount: Number(r.totalSettledAmount),
+        pendingAmount: Number(r.pendingAmount),
+        bankDetails: {
+          bankHolderName: r.bankHolderName ?? null,
+          bankName: r.bankName ?? null,
+          accountNumber: r.accountNumber ?? null,
+          ifscCode: r.ifscCode ?? null,
+        },
+      })),
+      totalRecords: Number(total),
+      summary: {
+        totalApprovedAmount: Number(summaryResult?.totalApprovedAmount ?? 0),
+        totalSettledAmount: Number(summaryResult?.totalSettledAmount ?? 0),
+        totalPendingAmount: Number(summaryResult?.totalPendingAmount ?? 0),
+      },
+    };
   }
 }
