@@ -466,6 +466,9 @@ export const buildPendingSettlementQuery = (filters: PendingSettlementQueryDto) 
   params.push(true);
   paramIndex++;
 
+  // Outstanding list must not include inactive employees — only ACTIVE users.
+  whereConditions.push(`u."status" = 'ACTIVE'`);
+
   if (userIds && userIds.length > 0) {
     whereConditions.push(`e."userId" = ANY($${paramIndex})`);
     params.push(userIds);

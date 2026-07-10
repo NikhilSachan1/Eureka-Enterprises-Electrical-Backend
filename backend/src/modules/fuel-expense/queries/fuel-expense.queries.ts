@@ -613,6 +613,9 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
   params.push(true);
   paramIndex++;
 
+  // Outstanding list must not include inactive employees — only ACTIVE users.
+  whereConditions.push(`u."status" = 'ACTIVE'`);
+
   if (userIds && userIds.length > 0) {
     whereConditions.push(`fe."userId" = ANY($${paramIndex})`);
     params.push(userIds);
