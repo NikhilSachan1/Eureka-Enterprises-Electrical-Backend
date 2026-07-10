@@ -1364,6 +1364,59 @@ export class PaymentSheetService {
     return { message: PAYMENT_SHEET_RESPONSES.REJECTED };
   }
 
+  /**
+   * Soft-delete a payment sheet. Only the initiator (their own) or a SUPER_ADMIN, only while
+   * the sheet is still with the initiator (DRAFT/RETURNED — not yet submitted to HR), and only
+   * if no line item has moved money (PAID/HOLD). Cascades to items + allocations.
+   */
+  async deleteSheet(id: string, user: ActingUser) {
+    return await this.dataSource.transaction(async (em) => {
+      const sheet = await this.repo.findSheet({ where: { id, deletedAt: IsNull() } }, em);
+      if (!sheet) throw new NotFoundException(PAYMENT_SHEET_ERRORS.NOT_FOUND);
+
+      const isInitiator = sheet.createdBy === user.id;
+      const isSuperAdmin = user.activeRole === SUPER_ADMIN;
+      if (!isInitiator && !isSuperAdmin) {
+        throw new ForbiddenException(PAYMENT_SHEET_ERRORS.DELETE_NOT_ALLOWED);
+      }
+
+      // Only before it moves to HR — i.e. still in the initiator's hands.
+      if (
+        ![PaymentSheetStatus.DRAFT, PaymentSheetStatus.RETURNED].includes(
+          sheet.status as PaymentSheetStatus,
+        )
+      ) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.DELETE_AFTER_SUBMIT);
+      }
+
+      // Defensive: never delete a sheet whose money has moved.
+      const items = await this.repo.findItems(
+        { where: { paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      if (
+        items.some(
+          (i) =>
+            i.itemStatus === PaymentSheetItemStatus.PAID ||
+            i.itemStatus === PaymentSheetItemStatus.HOLD,
+        )
+      ) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.HAS_SETTLED_ITEMS);
+      }
+
+      // Soft-delete cascade: allocations → items → sheet header (stamp deletedBy on header).
+      const itemIds = items.map((i) => i.id);
+      if (itemIds.length) {
+        await this.repo.softDeleteAllocation({ itemId: In(itemIds) }, em);
+        await this.repo.softDeleteItem({ paymentSheetId: id }, em);
+      }
+      await this.repo.updateSheet({ id }, { deletedBy: user.id, updatedBy: user.id }, em);
+      await this.repo.softDeleteSheet({ id }, em);
+
+      return { message: PAYMENT_SHEET_RESPONSES.DELETED };
+    });
+  }
+
   // ─────────────────────────── accountant item processing ───────────────────────────
 
   private async loadProcessingItem(

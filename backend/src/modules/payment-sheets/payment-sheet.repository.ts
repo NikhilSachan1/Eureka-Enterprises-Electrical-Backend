@@ -71,6 +71,9 @@ export class PaymentSheetRepository {
   ) {
     await this.sheets(em).update(where, data);
   }
+  async softDeleteSheet(where: FindOptionsWhere<PaymentSheetEntity>, em?: EntityManager) {
+    await this.sheets(em).softDelete(where);
+  }
   async findSheetForUpdate(id: string, em: EntityManager) {
     return await em
       .getRepository(PaymentSheetEntity)
