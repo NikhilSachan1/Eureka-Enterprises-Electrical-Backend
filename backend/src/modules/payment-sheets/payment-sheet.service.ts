@@ -681,11 +681,16 @@ export class PaymentSheetService {
 
     // Enrich each item with beneficiary + verifier identities (single batched user fetch).
     const userIds = [
-      ...new Set([
-        ...items.filter((i) => i.userId).map((i) => i.userId as string),
-        ...items.filter((i) => i.rejectedBy).map((i) => i.rejectedBy as string),
-        ...verifications.map((v) => v.verifiedBy),
-      ]),
+      ...new Set(
+        [
+          ...items.filter((i) => i.userId).map((i) => i.userId as string),
+          ...items.filter((i) => i.rejectedBy).map((i) => i.rejectedBy as string),
+          ...verifications.map((v) => v.verifiedBy),
+          sheet.createdBy, // who created the sheet
+          ...history.map((h) => h.createdBy), // who made each item-history change
+          ...stageLogs.map((s) => s.createdBy), // who performed each stage transition
+        ].filter((x): x is string => !!x),
+      ),
     ];
     const vendorIds = [...new Set(items.filter((i) => i.vendorId).map((i) => i.vendorId))];
 
@@ -779,6 +784,19 @@ export class PaymentSheetService {
     const nameOf = (uid: string) => {
       const u = userMap.get(uid);
       return u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : null;
+    };
+    // Compact actor object for createdBy fields (sheet / history / stage logs).
+    const userObj = (uid: string | null | undefined) => {
+      const u = uid ? userMap.get(uid) : null;
+      return u
+        ? {
+            id: u.id,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            email: u.email ?? null,
+            employeeId: u.employeeId ?? null,
+          }
+        : null;
     };
 
     const flow = await this.getApprovalFlow();
@@ -880,7 +898,17 @@ export class PaymentSheetService {
       };
     }
 
-    return { ...sheet, items: enrichedItems, stageLogs, history, verificationSummary };
+    const stageLogsEnriched = stageLogs.map((s) => ({ ...s, createdByUser: userObj(s.createdBy) }));
+    const historyEnriched = history.map((h) => ({ ...h, createdByUser: userObj(h.createdBy) }));
+
+    return {
+      ...sheet,
+      createdByUser: userObj(sheet.createdBy), // who created the payment sheet
+      items: enrichedItems,
+      stageLogs: stageLogsEnriched,
+      history: historyEnriched,
+      verificationSummary,
+    };
   }
 
   private async loadEditableSheet(id: string, em: EntityManager) {
