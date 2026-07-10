@@ -126,6 +126,33 @@ export class PaymentSheetPdfService {
     return `<span class="badge ${cls}">${this.esc(s || '—')}</span>`;
   }
 
+  /** Bottom-of-sheet approver signature block: OM / HR / Admin / Accountant.
+   * Name and Signature are left blank for manual fill-in on the printed sheet. */
+  private approverSignatures(): string {
+    const approvers = ['Operation Manager', 'HR', 'Admin', 'Accountant'];
+    const rows = approvers
+      .map(
+        (label) => `
+        <tr>
+          <td class="role">${this.esc(label)}</td>
+          <td class="name"></td>
+          <td class="sig"></td>
+          <td class="date"></td>
+        </tr>`,
+      )
+      .join('');
+    return `
+      <div class="sign-wrap">
+        <div class="section-label">Approvals &amp; Signatures</div>
+        <table class="sign">
+          <thead>
+            <tr><th style="width:22%">Approver</th><th style="width:30%">Name</th><th style="width:30%">Signature</th><th style="width:18%">Date</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
   private buildHtml(
     detail: SheetDetail,
     items: PaymentSheetItemEntity[],
@@ -221,6 +248,14 @@ export class PaymentSheetPdfService {
   .badge-rejected { background: #fee2e2; color: #b91c1c; }
 
   .empty { text-align: center; color: #9ca3af; padding: 24px; font-style: italic; }
+
+  /* ── Approver signatures ─────────────────────────────── */
+  .sign-wrap { margin-top: 22px; page-break-inside: avoid; }
+  table.sign { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table.sign th { background: #eef3fb; color: #1f3a5f; text-align: left; padding: 7px 10px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; border: 1px solid #d7deea; }
+  table.sign td { border: 1px solid #d7deea; padding: 10px; vertical-align: bottom; }
+  table.sign td.role { font-weight: 600; color: #1f3a5f; }
+  table.sign td.name, table.sign td.sig, table.sign td.date { height: 46px; }
 </style>
 </head>
 <body>
@@ -304,6 +339,8 @@ export class PaymentSheetPdfService {
       </tr>
     </tfoot>
   </table>
+
+  ${this.approverSignatures()}
 
 </div>
 </body>

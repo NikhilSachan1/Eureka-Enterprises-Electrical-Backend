@@ -742,6 +742,7 @@ export class PaymentSheetService {
         [
           ...items.filter((i) => i.userId).map((i) => i.userId as string),
           ...items.filter((i) => i.rejectedBy).map((i) => i.rejectedBy as string),
+          ...items.filter((i) => i.paidBy).map((i) => i.paidBy as string),
           ...verifications.map((v) => v.verifiedBy),
           sheet.createdBy, // who created the sheet
           ...history.map((h) => h.createdBy), // who made each item-history change
@@ -924,6 +925,7 @@ export class PaymentSheetService {
               branchName: i.paidFromAccount.branchName ?? null,
             }
           : null,
+        paidByUser: userObj(i.paidBy), // accountant who marked this item PAID
         ...this.buildSettlementBreakdown(
           i,
           bpDetailMap,
@@ -1502,6 +1504,7 @@ export class PaymentSheetService {
           itemStatus: PaymentSheetItemStatus.PAID,
           paidAmount: amount,
           paidAt: new Date(),
+          paidBy: user.id,
           paymentRef,
           paidFromAccountId: dto.paidFromAccountId ?? null,
           updatedBy: user.id,
