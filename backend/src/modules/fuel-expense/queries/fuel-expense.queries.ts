@@ -685,7 +685,9 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
     SELECT
       COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalApprovedAmount",
       COALESCE(SUM(subq."totalSettledAmount"), 0) AS "totalSettledAmount",
-      COALESCE(SUM(subq."pendingAmount"), 0) AS "totalPendingAmount"
+      -- Stats pending = sum of approved debits only (credits are NOT netted here).
+      -- Per-row "pendingAmount" (debit - credit) is unchanged.
+      COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalPendingAmount"
     FROM (${baseSelectQuery}) subq
   `;
 

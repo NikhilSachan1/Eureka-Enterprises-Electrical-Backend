@@ -53,6 +53,7 @@ export interface ApprovalStageConfig {
   canReject?: boolean;
   processItems?: boolean;
   verifyItems?: boolean;
+  rejectItems?: boolean; // stage may reject individual lines (HR/Admin review; accountant uses processItems)
 }
 
 /** Fallback chain used when the `payments.approval_flow` config row is absent. */
@@ -71,6 +72,7 @@ export const DEFAULT_APPROVAL_FLOW: ApprovalStageConfig[] = [
     canReturn: true,
     canReject: true,
     verifyItems: true,
+    rejectItems: true,
   },
   {
     stage: PaymentSheetStage.ADMIN_REVIEW,
@@ -80,6 +82,7 @@ export const DEFAULT_APPROVAL_FLOW: ApprovalStageConfig[] = [
     canReturn: true,
     canReject: true,
     verifyItems: true,
+    rejectItems: true,
   },
   {
     stage: PaymentSheetStage.PROCESSING,
@@ -142,6 +145,8 @@ export const PAYMENT_SHEET_ERRORS = {
   ADD_REMOVE_NOT_ALLOWED: 'Adding or removing beneficiaries is not allowed at this stage',
   REASON_REQUIRED: 'A reason is required for this action',
   NOT_PROCESSING_STAGE: 'The sheet must be at the processing stage for this action',
+  REJECT_NOT_ALLOWED_STAGE: 'Items can only be rejected at a review or processing stage',
+  ITEM_ALREADY_REJECTED: 'This line has been rejected and can no longer be modified',
   ITEM_NOT_PENDING: 'Only a PENDING item can be paid',
   ITEM_NOT_ON_HOLD: 'Only a HOLD item can be released',
   HOLD_NOT_OWNER: 'Only the accountant who placed the hold can release it',
