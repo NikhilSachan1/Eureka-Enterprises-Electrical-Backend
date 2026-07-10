@@ -541,9 +541,10 @@ export const buildPendingSettlementQuery = (filters: PendingSettlementQueryDto) 
     SELECT
       COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalApprovedAmount",
       COALESCE(SUM(subq."totalSettledAmount"), 0) AS "totalSettledAmount",
-      -- Stats pending = sum of approved debits only (credits are NOT netted here).
-      -- Per-row "pendingAmount" (debit - credit) is unchanged.
-      COALESCE(SUM(subq."totalApprovedAmount"), 0) AS "totalPendingAmount"
+      -- Stats pending = sum of positive net (debit - credit) per employee. Advance-paid
+      -- (negative) balances are clamped to 0 so they don't reduce the total.
+      -- Per-row "pendingAmount" (raw debit - credit, may be negative) is unchanged.
+      COALESCE(SUM(GREATEST(subq."pendingAmount", 0)), 0) AS "totalPendingAmount"
     FROM (${baseSelectQuery}) subq
   `;
 
