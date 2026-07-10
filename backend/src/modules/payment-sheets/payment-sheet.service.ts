@@ -520,6 +520,21 @@ export class PaymentSheetService {
     if (currentStage) where.currentStage = currentStage;
     if (financialYear) where.financialYear = financialYear;
 
+    // Status/stage stats ignore the status & currentStage filters (Option A) but respect
+    // financialYear + paidFromAccount scoping. matchedSheetIds is set when those filters apply.
+    let matchedSheetIds: string[] | null = null;
+    const zeroStats = {
+      draft: 0,
+      hrReview: 0,
+      adminReview: 0,
+      processing: 0,
+      completed: 0,
+      returned: 0,
+      rejected: 0,
+      cancelled: 0,
+      total: 0,
+    };
+
     // paidFromAccountId/Name/hasPaidFromAccount live on payment_sheet_items, not the sheet
     // header — resolve to matching sheet ids first (sheets with at least one matching line).
     if (paidFromAccountId || paidFromAccountName || hasPaidFromAccount !== undefined) {
@@ -545,20 +560,62 @@ export class PaymentSheetService {
         `,
         params,
       );
-      const matchingIds = rows.map((r: any) => r.id);
-      if (!matchingIds.length) return { records: [], totalRecords: 0 };
-      where.id = In(matchingIds);
+      matchedSheetIds = rows.map((r: any) => r.id);
+      if (!matchedSheetIds.length) return { records: [], totalRecords: 0, stats: zeroStats };
+      where.id = In(matchedSheetIds);
     }
 
-    const [records, totalRecords] = await Promise.all([
+    // Option A stats: same dataset scoping (financialYear + paidFromAccount) but NOT the
+    // status/currentStage filter, so the full status breakdown is always returned.
+    const statsConds: string[] = ['"deletedAt" IS NULL'];
+    const statsParams: any[] = [];
+    if (financialYear) {
+      statsParams.push(financialYear);
+      statsConds.push(`"financialYear" = $${statsParams.length}`);
+    }
+    if (matchedSheetIds) {
+      statsParams.push(matchedSheetIds);
+      statsConds.push(`"id" = ANY($${statsParams.length})`);
+    }
+    const statsSql = `
+      SELECT
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.DRAFT}') AS "draft",
+        COUNT(*) FILTER (WHERE "currentStage" = '${PaymentSheetStage.HR_REVIEW}') AS "hrReview",
+        COUNT(*) FILTER (WHERE "currentStage" = '${
+          PaymentSheetStage.ADMIN_REVIEW
+        }') AS "adminReview",
+        COUNT(*) FILTER (WHERE "currentStage" = '${PaymentSheetStage.PROCESSING}') AS "processing",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.COMPLETED}') AS "completed",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.RETURNED}') AS "returned",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.REJECTED}') AS "rejected",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.CANCELLED}') AS "cancelled",
+        COUNT(*) AS "total"
+      FROM payment_sheets
+      WHERE ${statsConds.join(' AND ')}
+    `;
+
+    const [records, totalRecords, statsRows] = await Promise.all([
       this.repo.findSheets({
         where,
         order: { createdAt: sortOrder as SortOrder },
         ...(pageSize !== undefined ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
       }),
       this.repo.countSheets({ where }),
+      this.repo.raw(statsSql, statsParams),
     ]);
-    return { records, totalRecords };
+    const s = statsRows[0] ?? {};
+    const stats = {
+      draft: Number(s.draft ?? 0),
+      hrReview: Number(s.hrReview ?? 0),
+      adminReview: Number(s.adminReview ?? 0),
+      processing: Number(s.processing ?? 0),
+      completed: Number(s.completed ?? 0),
+      returned: Number(s.returned ?? 0),
+      rejected: Number(s.rejected ?? 0),
+      cancelled: Number(s.cancelled ?? 0),
+      total: Number(s.total ?? 0),
+    };
+    return { records, totalRecords, stats };
   }
 
   /**
