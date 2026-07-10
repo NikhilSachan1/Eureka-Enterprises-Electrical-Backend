@@ -578,6 +578,7 @@ export class PaymentSheetService {
     bpDetailMap: Map<string, any>,
     expensePendingMap: Map<string, number>,
     fuelPendingMap: Map<string, number>,
+    adviceMap: Map<string, any> = new Map(),
   ) {
     if (item.beneficiaryType === BeneficiaryType.VENDOR) {
       // Real chain: vendor item → book payment (allocation) → invoice. So the invoice
@@ -613,12 +614,21 @@ export class PaymentSheetService {
             state: row.siteState,
           };
         }
+        const advice = alloc.bankTransferId ? adviceMap.get(alloc.bankTransferId) : null;
         return {
           id: alloc.id,
           bookPaymentId: alloc.bookPaymentId,
           allocatedAmount: payableAmount,
           bankTransferId: alloc.bankTransferId ?? null,
           invoice,
+          paymentAdvice: advice
+            ? {
+                id: advice.id,
+                referenceNumber: advice.referenceNumber,
+                generatedAt: advice.generatedAt,
+                pdfKey: advice.pdfKey ?? null,
+              }
+            : null,
         };
       });
 
@@ -688,6 +698,18 @@ export class PaymentSheetService {
           .flatMap((i) => (i.bookPaymentAllocations ?? []).map((a) => a.bookPaymentId)),
       ),
     ];
+    // Bank transfers behind disbursed vendor allocations → their auto-generated payment advices.
+    const bankTransferIds = [
+      ...new Set(
+        items
+          .filter((i) => i.beneficiaryType === BeneficiaryType.VENDOR)
+          .flatMap((i) =>
+            (i.bookPaymentAllocations ?? [])
+              .map((a) => a.bankTransferId)
+              .filter((x): x is string => !!x),
+          ),
+      ),
+    ];
     const expenseUserIds = [
       ...new Set(
         items
@@ -703,7 +725,7 @@ export class PaymentSheetService {
       ),
     ];
 
-    const [userRows, vendorRows, bpDetailRows, expensePendingRows, fuelPendingRows] =
+    const [userRows, vendorRows, bpDetailRows, expensePendingRows, fuelPendingRows, adviceRows] =
       await Promise.all([
         userIds.length
           ? this.repo.raw(
@@ -735,10 +757,19 @@ export class PaymentSheetService {
               return this.repo.raw(q.query, q.params);
             })()
           : Promise.resolve([]),
+        bankTransferIds.length
+          ? this.repo.raw(
+              `SELECT id, "bankTransferId", "referenceNumber", "generatedAt", "pdfKey"
+               FROM payment_advices WHERE "bankTransferId" = ANY($1) AND "deletedAt" IS NULL`,
+              [bankTransferIds],
+            )
+          : Promise.resolve([]),
       ]);
     const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
     const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
     const bpDetailMap = new Map<string, any>(bpDetailRows.map((r: any) => [r.bookPaymentId, r]));
+    // bankTransferId → payment advice (1:1). Attached per vendor allocation in the breakdown.
+    const adviceMap = new Map<string, any>(adviceRows.map((r: any) => [r.bankTransferId, r]));
     const expensePendingMap = new Map<string, number>(
       expensePendingRows.map((r: any) => [r.userId, Number(r.pending)]),
     );
@@ -818,7 +849,13 @@ export class PaymentSheetService {
               branchName: i.paidFromAccount.branchName ?? null,
             }
           : null,
-        ...this.buildSettlementBreakdown(i, bpDetailMap, expensePendingMap, fuelPendingMap),
+        ...this.buildSettlementBreakdown(
+          i,
+          bpDetailMap,
+          expensePendingMap,
+          fuelPendingMap,
+          adviceMap,
+        ),
       };
     });
 
