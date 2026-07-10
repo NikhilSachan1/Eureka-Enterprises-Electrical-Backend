@@ -84,6 +84,17 @@ export class PaymentSheetItemEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   rejectReason: string | null;
 
+  // Who rejected this line, when, and at which stage (HR_REVIEW / ADMIN_REVIEW / PROCESSING).
+  // Reject is one-time & terminal, so a single set of columns suffices.
+  @Column({ type: 'uuid', nullable: true })
+  rejectedBy: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  rejectedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  rejectStage: string | null;
+
   @OneToMany(() => PaymentSheetItemBookPaymentEntity, (alloc) => alloc.item)
   bookPaymentAllocations: PaymentSheetItemBookPaymentEntity[];
 }

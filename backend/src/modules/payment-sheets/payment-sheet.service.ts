@@ -673,6 +673,7 @@ export class PaymentSheetService {
     const userIds = [
       ...new Set([
         ...items.filter((i) => i.userId).map((i) => i.userId as string),
+        ...items.filter((i) => i.rejectedBy).map((i) => i.rejectedBy as string),
         ...verifications.map((v) => v.verifiedBy),
       ]),
     ];
@@ -787,6 +788,25 @@ export class PaymentSheetService {
         verifications: vers,
         verifiedStages,
         isVerifiedForCurrentStage: currentStage ? verifiedStages.includes(currentStage) : false,
+        rejectDetail: i.rejectStage
+          ? {
+              stage: i.rejectStage,
+              rejectedBy: (() => {
+                const rj = i.rejectedBy ? userMap.get(i.rejectedBy) : null;
+                return rj
+                  ? {
+                      id: rj.id,
+                      firstName: rj.firstName,
+                      lastName: rj.lastName,
+                      email: rj.email ?? null,
+                      employeeId: rj.employeeId ?? null,
+                    }
+                  : null;
+              })(),
+              rejectedAt: i.rejectedAt,
+              reason: i.rejectReason,
+            }
+          : null,
         paidFromAccount: i.paidFromAccount
           ? {
               id: i.paidFromAccount.id,
@@ -906,6 +926,9 @@ export class PaymentSheetService {
         em,
       );
       if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
+      if (item.itemStatus === PaymentSheetItemStatus.REJECTED) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEM_ALREADY_REJECTED);
+      }
 
       // Edit-lock: an earlier stage cannot edit a line a later stage has verified.
       await this.assertNotEditLocked(itemId, sheet.currentStage, flow, em);
@@ -980,6 +1003,9 @@ export class PaymentSheetService {
         em,
       );
       if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
+      if (item.itemStatus === PaymentSheetItemStatus.REJECTED) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEM_ALREADY_REJECTED);
+      }
 
       // Edit-lock: an earlier stage cannot remove a line a later stage has verified.
       await this.assertNotEditLocked(itemId, sheet.currentStage, flow, em);
@@ -1445,7 +1471,19 @@ export class PaymentSheetService {
 
   async rejectItem(id: string, itemId: string, dto: StageActionDto, user: ActingUser) {
     const res = await this.dataSource.transaction(async (em) => {
-      const { item } = await this.loadProcessingItem(id, itemId, user, em);
+      // Reject is allowed at any stage flagged rejectItems (HR/Admin review) or processItems
+      // (accountant). assertStageAuthority already restricts to the current stage's role.
+      const sheet = await this.loadEditableSheet(id, em);
+      const flow = await this.getApprovalFlow(em);
+      const cfg = this.assertStageAuthority(flow, sheet, user);
+      if (!cfg.processItems && !cfg.rejectItems) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.REJECT_NOT_ALLOWED_STAGE);
+      }
+      const item = await this.repo.findItem(
+        { where: { id: itemId, paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
       if (
         item.itemStatus !== PaymentSheetItemStatus.PENDING &&
         item.itemStatus !== PaymentSheetItemStatus.HOLD
@@ -1460,20 +1498,16 @@ export class PaymentSheetService {
         {
           itemStatus: PaymentSheetItemStatus.REJECTED,
           rejectReason: dto.reason,
+          rejectedBy: user.id,
+          rejectedAt: new Date(),
+          rejectStage: sheet.currentStage,
           updatedBy: user.id,
         },
         em,
       );
-      await this.addHistory(
-        item,
-        ItemHistoryAction.REJECTED,
-        PaymentSheetStage.PROCESSING,
-        user.id,
-        em,
-        {
-          reason: dto.reason,
-        },
-      );
+      await this.addHistory(item, ItemHistoryAction.REJECTED, sheet.currentStage, user.id, em, {
+        reason: dto.reason,
+      });
       await this.recomputeTotals(id, em);
       const completed = await this.maybeComplete(id, user, em);
       return { completed };
