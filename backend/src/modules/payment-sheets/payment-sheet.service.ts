@@ -520,6 +520,21 @@ export class PaymentSheetService {
     if (currentStage) where.currentStage = currentStage;
     if (financialYear) where.financialYear = financialYear;
 
+    // Status/stage stats ignore the status & currentStage filters (Option A) but respect
+    // financialYear + paidFromAccount scoping. matchedSheetIds is set when those filters apply.
+    let matchedSheetIds: string[] | null = null;
+    const zeroStats = {
+      draft: 0,
+      hrReview: 0,
+      adminReview: 0,
+      processing: 0,
+      completed: 0,
+      returned: 0,
+      rejected: 0,
+      cancelled: 0,
+      total: 0,
+    };
+
     // paidFromAccountId/Name/hasPaidFromAccount live on payment_sheet_items, not the sheet
     // header — resolve to matching sheet ids first (sheets with at least one matching line).
     if (paidFromAccountId || paidFromAccountName || hasPaidFromAccount !== undefined) {
@@ -545,20 +560,62 @@ export class PaymentSheetService {
         `,
         params,
       );
-      const matchingIds = rows.map((r: any) => r.id);
-      if (!matchingIds.length) return { records: [], totalRecords: 0 };
-      where.id = In(matchingIds);
+      matchedSheetIds = rows.map((r: any) => r.id);
+      if (!matchedSheetIds.length) return { records: [], totalRecords: 0, stats: zeroStats };
+      where.id = In(matchedSheetIds);
     }
 
-    const [records, totalRecords] = await Promise.all([
+    // Option A stats: same dataset scoping (financialYear + paidFromAccount) but NOT the
+    // status/currentStage filter, so the full status breakdown is always returned.
+    const statsConds: string[] = ['"deletedAt" IS NULL'];
+    const statsParams: any[] = [];
+    if (financialYear) {
+      statsParams.push(financialYear);
+      statsConds.push(`"financialYear" = $${statsParams.length}`);
+    }
+    if (matchedSheetIds) {
+      statsParams.push(matchedSheetIds);
+      statsConds.push(`"id" = ANY($${statsParams.length})`);
+    }
+    const statsSql = `
+      SELECT
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.DRAFT}') AS "draft",
+        COUNT(*) FILTER (WHERE "currentStage" = '${PaymentSheetStage.HR_REVIEW}') AS "hrReview",
+        COUNT(*) FILTER (WHERE "currentStage" = '${
+          PaymentSheetStage.ADMIN_REVIEW
+        }') AS "adminReview",
+        COUNT(*) FILTER (WHERE "currentStage" = '${PaymentSheetStage.PROCESSING}') AS "processing",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.COMPLETED}') AS "completed",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.RETURNED}') AS "returned",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.REJECTED}') AS "rejected",
+        COUNT(*) FILTER (WHERE status = '${PaymentSheetStatus.CANCELLED}') AS "cancelled",
+        COUNT(*) AS "total"
+      FROM payment_sheets
+      WHERE ${statsConds.join(' AND ')}
+    `;
+
+    const [records, totalRecords, statsRows] = await Promise.all([
       this.repo.findSheets({
         where,
         order: { createdAt: sortOrder as SortOrder },
         ...(pageSize !== undefined ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
       }),
       this.repo.countSheets({ where }),
+      this.repo.raw(statsSql, statsParams),
     ]);
-    return { records, totalRecords };
+    const s = statsRows[0] ?? {};
+    const stats = {
+      draft: Number(s.draft ?? 0),
+      hrReview: Number(s.hrReview ?? 0),
+      adminReview: Number(s.adminReview ?? 0),
+      processing: Number(s.processing ?? 0),
+      completed: Number(s.completed ?? 0),
+      returned: Number(s.returned ?? 0),
+      rejected: Number(s.rejected ?? 0),
+      cancelled: Number(s.cancelled ?? 0),
+      total: Number(s.total ?? 0),
+    };
+    return { records, totalRecords, stats };
   }
 
   /**
@@ -578,6 +635,7 @@ export class PaymentSheetService {
     bpDetailMap: Map<string, any>,
     expensePendingMap: Map<string, number>,
     fuelPendingMap: Map<string, number>,
+    adviceMap: Map<string, any> = new Map(),
   ) {
     if (item.beneficiaryType === BeneficiaryType.VENDOR) {
       // Real chain: vendor item → book payment (allocation) → invoice. So the invoice
@@ -613,12 +671,21 @@ export class PaymentSheetService {
             state: row.siteState,
           };
         }
+        const advice = alloc.bankTransferId ? adviceMap.get(alloc.bankTransferId) : null;
         return {
           id: alloc.id,
           bookPaymentId: alloc.bookPaymentId,
           allocatedAmount: payableAmount,
           bankTransferId: alloc.bankTransferId ?? null,
           invoice,
+          paymentAdvice: advice
+            ? {
+                id: advice.id,
+                referenceNumber: advice.referenceNumber,
+                generatedAt: advice.generatedAt,
+                pdfKey: advice.pdfKey ?? null,
+              }
+            : null,
         };
       });
 
@@ -671,10 +738,16 @@ export class PaymentSheetService {
 
     // Enrich each item with beneficiary + verifier identities (single batched user fetch).
     const userIds = [
-      ...new Set([
-        ...items.filter((i) => i.userId).map((i) => i.userId as string),
-        ...verifications.map((v) => v.verifiedBy),
-      ]),
+      ...new Set(
+        [
+          ...items.filter((i) => i.userId).map((i) => i.userId as string),
+          ...items.filter((i) => i.rejectedBy).map((i) => i.rejectedBy as string),
+          ...verifications.map((v) => v.verifiedBy),
+          sheet.createdBy, // who created the sheet
+          ...history.map((h) => h.createdBy), // who made each item-history change
+          ...stageLogs.map((s) => s.createdBy), // who performed each stage transition
+        ].filter((x): x is string => !!x),
+      ),
     ];
     const vendorIds = [...new Set(items.filter((i) => i.vendorId).map((i) => i.vendorId))];
 
@@ -685,6 +758,18 @@ export class PaymentSheetService {
         items
           .filter((i) => i.beneficiaryType === BeneficiaryType.VENDOR)
           .flatMap((i) => (i.bookPaymentAllocations ?? []).map((a) => a.bookPaymentId)),
+      ),
+    ];
+    // Bank transfers behind disbursed vendor allocations → their auto-generated payment advices.
+    const bankTransferIds = [
+      ...new Set(
+        items
+          .filter((i) => i.beneficiaryType === BeneficiaryType.VENDOR)
+          .flatMap((i) =>
+            (i.bookPaymentAllocations ?? [])
+              .map((a) => a.bankTransferId)
+              .filter((x): x is string => !!x),
+          ),
       ),
     ];
     const expenseUserIds = [
@@ -702,7 +787,7 @@ export class PaymentSheetService {
       ),
     ];
 
-    const [userRows, vendorRows, bpDetailRows, expensePendingRows, fuelPendingRows] =
+    const [userRows, vendorRows, bpDetailRows, expensePendingRows, fuelPendingRows, adviceRows] =
       await Promise.all([
         userIds.length
           ? this.repo.raw(
@@ -734,10 +819,19 @@ export class PaymentSheetService {
               return this.repo.raw(q.query, q.params);
             })()
           : Promise.resolve([]),
+        bankTransferIds.length
+          ? this.repo.raw(
+              `SELECT id, "bankTransferId", "referenceNumber", "generatedAt", "pdfKey"
+               FROM payment_advices WHERE "bankTransferId" = ANY($1) AND "deletedAt" IS NULL`,
+              [bankTransferIds],
+            )
+          : Promise.resolve([]),
       ]);
     const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
     const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
     const bpDetailMap = new Map<string, any>(bpDetailRows.map((r: any) => [r.bookPaymentId, r]));
+    // bankTransferId → payment advice (1:1). Attached per vendor allocation in the breakdown.
+    const adviceMap = new Map<string, any>(adviceRows.map((r: any) => [r.bankTransferId, r]));
     const expensePendingMap = new Map<string, number>(
       expensePendingRows.map((r: any) => [r.userId, Number(r.pending)]),
     );
@@ -747,6 +841,19 @@ export class PaymentSheetService {
     const nameOf = (uid: string) => {
       const u = userMap.get(uid);
       return u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : null;
+    };
+    // Compact actor object for createdBy fields (sheet / history / stage logs).
+    const userObj = (uid: string | null | undefined) => {
+      const u = uid ? userMap.get(uid) : null;
+      return u
+        ? {
+            id: u.id,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            email: u.email ?? null,
+            employeeId: u.employeeId ?? null,
+          }
+        : null;
     };
 
     const flow = await this.getApprovalFlow();
@@ -787,6 +894,25 @@ export class PaymentSheetService {
         verifications: vers,
         verifiedStages,
         isVerifiedForCurrentStage: currentStage ? verifiedStages.includes(currentStage) : false,
+        rejectDetail: i.rejectStage
+          ? {
+              stage: i.rejectStage,
+              rejectedBy: (() => {
+                const rj = i.rejectedBy ? userMap.get(i.rejectedBy) : null;
+                return rj
+                  ? {
+                      id: rj.id,
+                      firstName: rj.firstName,
+                      lastName: rj.lastName,
+                      email: rj.email ?? null,
+                      employeeId: rj.employeeId ?? null,
+                    }
+                  : null;
+              })(),
+              rejectedAt: i.rejectedAt,
+              reason: i.rejectReason,
+            }
+          : null,
         paidFromAccount: i.paidFromAccount
           ? {
               id: i.paidFromAccount.id,
@@ -798,7 +924,13 @@ export class PaymentSheetService {
               branchName: i.paidFromAccount.branchName ?? null,
             }
           : null,
-        ...this.buildSettlementBreakdown(i, bpDetailMap, expensePendingMap, fuelPendingMap),
+        ...this.buildSettlementBreakdown(
+          i,
+          bpDetailMap,
+          expensePendingMap,
+          fuelPendingMap,
+          adviceMap,
+        ),
       };
     });
 
@@ -823,7 +955,17 @@ export class PaymentSheetService {
       };
     }
 
-    return { ...sheet, items: enrichedItems, stageLogs, history, verificationSummary };
+    const stageLogsEnriched = stageLogs.map((s) => ({ ...s, createdByUser: userObj(s.createdBy) }));
+    const historyEnriched = history.map((h) => ({ ...h, createdByUser: userObj(h.createdBy) }));
+
+    return {
+      ...sheet,
+      createdByUser: userObj(sheet.createdBy), // who created the payment sheet
+      items: enrichedItems,
+      stageLogs: stageLogsEnriched,
+      history: historyEnriched,
+      verificationSummary,
+    };
   }
 
   private async loadEditableSheet(id: string, em: EntityManager) {
@@ -906,6 +1048,9 @@ export class PaymentSheetService {
         em,
       );
       if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
+      if (item.itemStatus === PaymentSheetItemStatus.REJECTED) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEM_ALREADY_REJECTED);
+      }
 
       // Edit-lock: an earlier stage cannot edit a line a later stage has verified.
       await this.assertNotEditLocked(itemId, sheet.currentStage, flow, em);
@@ -980,6 +1125,9 @@ export class PaymentSheetService {
         em,
       );
       if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
+      if (item.itemStatus === PaymentSheetItemStatus.REJECTED) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEM_ALREADY_REJECTED);
+      }
 
       // Edit-lock: an earlier stage cannot remove a line a later stage has verified.
       await this.assertNotEditLocked(itemId, sheet.currentStage, flow, em);
@@ -1445,7 +1593,19 @@ export class PaymentSheetService {
 
   async rejectItem(id: string, itemId: string, dto: StageActionDto, user: ActingUser) {
     const res = await this.dataSource.transaction(async (em) => {
-      const { item } = await this.loadProcessingItem(id, itemId, user, em);
+      // Reject is allowed at any stage flagged rejectItems (HR/Admin review) or processItems
+      // (accountant). assertStageAuthority already restricts to the current stage's role.
+      const sheet = await this.loadEditableSheet(id, em);
+      const flow = await this.getApprovalFlow(em);
+      const cfg = this.assertStageAuthority(flow, sheet, user);
+      if (!cfg.processItems && !cfg.rejectItems) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.REJECT_NOT_ALLOWED_STAGE);
+      }
+      const item = await this.repo.findItem(
+        { where: { id: itemId, paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      if (!item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
       if (
         item.itemStatus !== PaymentSheetItemStatus.PENDING &&
         item.itemStatus !== PaymentSheetItemStatus.HOLD
@@ -1460,20 +1620,16 @@ export class PaymentSheetService {
         {
           itemStatus: PaymentSheetItemStatus.REJECTED,
           rejectReason: dto.reason,
+          rejectedBy: user.id,
+          rejectedAt: new Date(),
+          rejectStage: sheet.currentStage,
           updatedBy: user.id,
         },
         em,
       );
-      await this.addHistory(
-        item,
-        ItemHistoryAction.REJECTED,
-        PaymentSheetStage.PROCESSING,
-        user.id,
-        em,
-        {
-          reason: dto.reason,
-        },
-      );
+      await this.addHistory(item, ItemHistoryAction.REJECTED, sheet.currentStage, user.id, em, {
+        reason: dto.reason,
+      });
       await this.recomputeTotals(id, em);
       const completed = await this.maybeComplete(id, user, em);
       return { completed };
