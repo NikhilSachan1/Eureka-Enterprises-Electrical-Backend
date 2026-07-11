@@ -138,7 +138,6 @@ export class PaymentSheetPdfService {
           <td class="name"></td>
           <td class="sig"></td>
           <td class="date"></td>
-          <td class="utr"></td>
         </tr>`,
       )
       .join('');
@@ -147,11 +146,39 @@ export class PaymentSheetPdfService {
         <div class="section-label">Approvals &amp; Signatures</div>
         <table class="sign">
           <thead>
-            <tr><th style="width:20%">Approver</th><th style="width:26%">Name</th><th style="width:26%">Signature</th><th style="width:14%">Date</th><th style="width:14%">UTR No.</th></tr>
+            <tr><th style="width:22%">Approver</th><th style="width:30%">Name</th><th style="width:30%">Signature</th><th style="width:18%">Date</th></tr>
           </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+  }
+
+  /** Bank config value→label map (bank_names_dropdown), for rendering readable bank names. */
+  private async loadBankLabels(): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    try {
+      const rows = await this.repo.raw(
+        `SELECT cs.value FROM config_settings cs
+         JOIN configurations c ON c.id = cs."configId"
+         WHERE c.key = 'bank_names_dropdown' AND cs."deletedAt" IS NULL AND cs."isActive" = true
+         ORDER BY cs."createdAt" DESC LIMIT 1`,
+      );
+      const raw = rows?.[0]?.value;
+      const list = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(list)) {
+        for (const o of list) if (o?.value) map.set(String(o.value), String(o.label ?? o.value));
+      }
+    } catch {
+      /* fall back to the prettified raw value */
+    }
+    return map;
+  }
+
+  /** Resolve a stored bank value to its label; fall back to a prettified value. */
+  private bankLabel(value: unknown, map: Map<string, string>): string {
+    if (!value) return '';
+    const v = String(value);
+    return map.get(v) ?? v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   private buildHtml(
@@ -159,6 +186,7 @@ export class PaymentSheetPdfService {
     items: PaymentSheetItemEntity[],
     filterLabel: string | undefined,
     logoBase64: string | null,
+    bankLabels: Map<string, string> = new Map(),
   ): string {
     const rows = items
       .map((it: any, idx) => {
@@ -174,7 +202,7 @@ export class PaymentSheetPdfService {
             <td>${this.sourceLabel(it.sourceType)}</td>
             <td>
               <div>${this.esc(bank?.accountHolderName ?? '—')}</div>
-              <div class="muted">${this.esc(bank?.bankName ?? '')}${
+              <div class="muted">${this.esc(this.bankLabel(bank?.bankName, bankLabels))}${
           bank?.accountNumber ? ' · ' + this.esc(bank.accountNumber) : ''
         }</div>
               <div class="muted">${this.esc(bank?.ifscCode ?? '')}</div>
@@ -182,6 +210,7 @@ export class PaymentSheetPdfService {
             <td class="r strong">${this.money(Number(it.currentAmount))}</td>
             <td class="c">${this.statusBadge(it.itemStatus)}</td>
             <td class="r">${it.paidAmount != null ? this.money(Number(it.paidAmount)) : '—'}</td>
+            <td class="c"></td>
           </tr>`;
       })
       .join('');
@@ -256,7 +285,7 @@ export class PaymentSheetPdfService {
   table.sign th { background: #eef3fb; color: #1f3a5f; text-align: left; padding: 7px 10px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; border: 1px solid #d7deea; }
   table.sign td { border: 1px solid #d7deea; padding: 10px; vertical-align: bottom; }
   table.sign td.role { font-weight: 600; color: #1f3a5f; }
-  table.sign td.name, table.sign td.sig, table.sign td.date, table.sign td.utr { height: 46px; }
+  table.sign td.name, table.sign td.sig, table.sign td.date { height: 46px; }
 </style>
 </head>
 <body>
@@ -328,15 +357,17 @@ export class PaymentSheetPdfService {
         <th class="r">Amount</th>
         <th class="c">Status</th>
         <th class="r">Paid</th>
+        <th class="c" style="width:96px">UTR No.</th>
       </tr>
     </thead>
-    <tbody>${rows || `<tr><td colspan="7" class="empty">No line items</td></tr>`}</tbody>
+    <tbody>${rows || `<tr><td colspan="8" class="empty">No line items</td></tr>`}</tbody>
     <tfoot>
       <tr>
         <td colspan="4" class="r">${totalsLabel}</td>
         <td class="r">${this.money(totalCurrent)}</td>
         <td></td>
         <td class="r">${this.money(totalPaid)}</td>
+        <td></td>
       </tr>
     </tfoot>
   </table>
@@ -367,7 +398,8 @@ export class PaymentSheetPdfService {
     const logoBase64 = await this.fetchUrlAsBase64(PAYMENT_ADVICE_COMPANY_DETAILS.LOGO_URL).catch(
       () => null,
     );
-    const html = this.buildHtml(detail, items, opts.filterLabel, logoBase64);
+    const bankLabels = await this.loadBankLabels();
+    const html = this.buildHtml(detail, items, opts.filterLabel, logoBase64, bankLabels);
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
     try {
       browser = await puppeteer.launch({
