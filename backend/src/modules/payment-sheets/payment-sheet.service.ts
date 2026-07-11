@@ -377,14 +377,79 @@ export class PaymentSheetService {
     }
   }
 
-  private assertNoDuplicate(existing: PaymentSheetItemEntity[], input: PaymentSheetItemInputDto) {
+  /**
+   * Vendor lines are one-per-book-payment, so a vendor may appear multiple times on a sheet;
+   * uniqueness is per book payment. User lines remain unique per (userId + sourceType).
+   */
+  private assertNoDuplicate(
+    existing: PaymentSheetItemEntity[],
+    input: PaymentSheetItemInputDto,
+    seenBookPayments: Set<string>,
+  ) {
+    if (input.beneficiaryType === BeneficiaryType.VENDOR) {
+      const bpId = input.bookPaymentIds?.[0];
+      if (bpId && seenBookPayments.has(bpId)) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.DUPLICATE_BOOK_PAYMENT);
+      }
+      return;
+    }
     const dup = existing.find(
-      (i) =>
-        i.sourceType === input.sourceType &&
-        ((input.beneficiaryType === BeneficiaryType.USER && i.userId === input.userId) ||
-          (input.beneficiaryType === BeneficiaryType.VENDOR && i.vendorId === input.vendorId)),
+      (i) => i.sourceType === input.sourceType && i.userId === input.userId,
     );
     if (dup) throw new BadRequestException(PAYMENT_SHEET_ERRORS.DUPLICATE_BENEFICIARY);
+  }
+
+  /** One book payment per vendor line: split a multi-book-payment vendor input into N inputs. */
+  private expandVendorInputs(input: PaymentSheetItemInputDto): PaymentSheetItemInputDto[] {
+    if (
+      input.beneficiaryType !== BeneficiaryType.VENDOR ||
+      (input.bookPaymentIds?.length ?? 0) <= 1
+    ) {
+      return [input];
+    }
+    return input.bookPaymentIds!.map((bpId) => ({
+      ...input,
+      bookPaymentIds: [bpId],
+      requestedAmount: undefined, // per-line amount is derived from the single book payment
+    }));
+  }
+
+  /**
+   * Expand vendor inputs (one book payment per line), dedupe (user by userId+source, vendor by
+   * book payment), then build + persist each line. Shared by create() and addItems().
+   */
+  private async buildAndPersistItems(
+    sheetId: string,
+    inputs: PaymentSheetItemInputDto[],
+    existing: PaymentSheetItemEntity[],
+    stage: string | null,
+    userId: string,
+    em: EntityManager,
+  ) {
+    const seen: PaymentSheetItemEntity[] = [...existing];
+    const existingItemIds = existing.map((i) => i.id);
+    const seenBookPayments = new Set<string>(
+      existingItemIds.length
+        ? (
+            await this.repo.findAllocations({
+              where: { itemId: In(existingItemIds), deletedAt: IsNull() },
+            })
+          ).map((a) => a.bookPaymentId)
+        : [],
+    );
+
+    for (const raw of inputs) {
+      for (const input of this.expandVendorInputs(raw)) {
+        this.assertNoDuplicate(seen, input, seenBookPayments);
+        const { item, allocations } = await this.buildItem(sheetId, input, userId, em);
+        await this.persistAllocations(item.id, allocations, userId, em);
+        await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, stage, userId, em, {
+          newAmount: Number(item.requestedAmount),
+        });
+        allocations.forEach((a) => seenBookPayments.add(a.bookPaymentId));
+        seen.push(item);
+      }
+    }
   }
 
   private async recomputeTotals(sheetId: string, em: EntityManager) {
@@ -476,23 +541,14 @@ export class PaymentSheetService {
         em,
       );
 
-      const seen: PaymentSheetItemEntity[] = [];
-      for (const input of dto.items) {
-        this.assertNoDuplicate(seen, input);
-        const { item, allocations } = await this.buildItem(sheet.id, input, user.id, em);
-        await this.persistAllocations(item.id, allocations, user.id, em);
-        await this.addHistory(
-          item,
-          ItemHistoryAction.ITEM_ADDED,
-          PaymentSheetStage.INITIATION,
-          user.id,
-          em,
-          {
-            newAmount: Number(item.requestedAmount),
-          },
-        );
-        seen.push(item);
-      }
+      await this.buildAndPersistItems(
+        sheet.id,
+        dto.items,
+        [],
+        PaymentSheetStage.INITIATION,
+        user.id,
+        em,
+      );
 
       await this.recomputeTotals(sheet.id, em);
       return { message: PAYMENT_SHEET_RESPONSES.CREATED, id: sheet.id, sheetNumber };
@@ -1016,16 +1072,7 @@ export class PaymentSheetService {
         { where: { paymentSheetId: id, deletedAt: IsNull() } },
         em,
       );
-      const seen = [...existing];
-      for (const input of dto.items) {
-        this.assertNoDuplicate(seen, input);
-        const { item, allocations } = await this.buildItem(id, input, user.id, em);
-        await this.persistAllocations(item.id, allocations, user.id, em);
-        await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, sheet.currentStage, user.id, em, {
-          newAmount: Number(item.requestedAmount),
-        });
-        seen.push(item);
-      }
+      await this.buildAndPersistItems(id, dto.items, existing, sheet.currentStage, user.id, em);
       await this.recomputeTotals(id, em);
       return { message: PAYMENT_SHEET_RESPONSES.ITEM_ADDED };
     });

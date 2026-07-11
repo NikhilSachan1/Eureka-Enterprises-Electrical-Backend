@@ -154,6 +154,7 @@ export const PAYMENT_SHEET_ERRORS = {
   ITEM_NOT_ON_HOLD: 'Only a HOLD item can be released',
   HOLD_NOT_OWNER: 'Only the accountant who placed the hold can release it',
   DUPLICATE_BENEFICIARY: 'This beneficiary + source is already on the sheet',
+  DUPLICATE_BOOK_PAYMENT: 'This book payment is already on the sheet',
   VENDOR_TRANSFER_DETAILS_REQUIRED:
     'utrNumber and transferDate are required for each vendor book-payment transfer',
   VENDOR_ALLOCATION_MISMATCH: 'Provided transfers do not match the vendor book-payment allocations',
