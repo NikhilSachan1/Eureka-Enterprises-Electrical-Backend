@@ -138,6 +138,7 @@ export class PaymentSheetPdfService {
           <td class="name"></td>
           <td class="sig"></td>
           <td class="date"></td>
+          <td class="utr"></td>
         </tr>`,
       )
       .join('');
@@ -146,7 +147,7 @@ export class PaymentSheetPdfService {
         <div class="section-label">Approvals &amp; Signatures</div>
         <table class="sign">
           <thead>
-            <tr><th style="width:22%">Approver</th><th style="width:30%">Name</th><th style="width:30%">Signature</th><th style="width:18%">Date</th></tr>
+            <tr><th style="width:20%">Approver</th><th style="width:26%">Name</th><th style="width:26%">Signature</th><th style="width:14%">Date</th><th style="width:14%">UTR No.</th></tr>
           </thead>
           <tbody>${rows}</tbody>
         </table>
@@ -255,7 +256,7 @@ export class PaymentSheetPdfService {
   table.sign th { background: #eef3fb; color: #1f3a5f; text-align: left; padding: 7px 10px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; border: 1px solid #d7deea; }
   table.sign td { border: 1px solid #d7deea; padding: 10px; vertical-align: bottom; }
   table.sign td.role { font-weight: 600; color: #1f3a5f; }
-  table.sign td.name, table.sign td.sig, table.sign td.date { height: 46px; }
+  table.sign td.name, table.sign td.sig, table.sign td.date, table.sign td.utr { height: 46px; }
 </style>
 </head>
 <body>
