@@ -40,8 +40,6 @@ import {
   userExpensePendingQuery,
   userFuelPendingQuery,
   bookPaymentsTransferableQuery,
-  usersExpensePendingQuery,
-  usersFuelPendingQuery,
   bookPaymentInvoiceDetailQuery,
 } from './queries/payment-sheet.queries';
 import { ExpenseTrackerService } from 'src/modules/expense-tracker/expense-tracker.service';
@@ -685,8 +683,6 @@ export class PaymentSheetService {
   private buildSettlementBreakdown(
     item: PaymentSheetItemEntity,
     bpDetailMap: Map<string, any>,
-    expensePendingMap: Map<string, number>,
-    fuelPendingMap: Map<string, number>,
     adviceMap: Map<string, any> = new Map(),
   ) {
     if (item.beneficiaryType === BeneficiaryType.VENDOR) {
@@ -741,19 +737,24 @@ export class PaymentSheetService {
         };
       });
 
-      // Item-level totals = sum across the allocations that resolved an invoice.
-      const withInvoice = bookPaymentAllocations.filter((a) => a.invoice);
+      // Item-level "actual" is FIXED at sheet-creation time (pendingSnapshot) — it does not
+      // re-read live figures, so it never drifts after a partial settlement.
+      const payableTotal = bookPaymentAllocations.reduce(
+        (s, a) => s + Number(a.allocatedAmount),
+        0,
+      );
+      const actualDueAmount = Number(item.pendingSnapshot);
       return {
         bookPaymentAllocations,
-        actualDueAmount: withInvoice.reduce((s, a) => s + (a.invoice as any).actualDueAmount, 0),
-        payableAmount: withInvoice.reduce((s, a) => s + (a.invoice as any).payableAmount, 0),
-        remainingAmount: withInvoice.reduce((s, a) => s + (a.invoice as any).remainingAmount, 0),
+        actualDueAmount,
+        payableAmount: payableTotal,
+        remainingAmount: Math.max(0, actualDueAmount - payableTotal),
       };
     }
 
-    const pendingMap =
-      item.sourceType === PaymentSourceType.EXPENSE ? expensePendingMap : fuelPendingMap;
-    const actualDueAmount = Math.max(0, pendingMap.get(item.userId as string) ?? 0);
+    // "Actual" is FIXED at sheet-creation time (pendingSnapshot) — no live re-read, so it
+    // stays put after a partial settlement (e.g. was 100, paid 70 → remaining shows 30, actual stays 100).
+    const actualDueAmount = Number(item.pendingSnapshot);
     const payableAmount = Number(item.currentAmount);
     return {
       actualDueAmount,
@@ -825,72 +826,38 @@ export class PaymentSheetService {
           ),
       ),
     ];
-    const expenseUserIds = [
-      ...new Set(
-        items
-          .filter((i) => i.sourceType === PaymentSourceType.EXPENSE && i.userId)
-          .map((i) => i.userId as string),
-      ),
-    ];
-    const fuelUserIds = [
-      ...new Set(
-        items
-          .filter((i) => i.sourceType === PaymentSourceType.FUEL_EXPENSE && i.userId)
-          .map((i) => i.userId as string),
-      ),
-    ];
-
-    const [userRows, vendorRows, bpDetailRows, expensePendingRows, fuelPendingRows, adviceRows] =
-      await Promise.all([
-        userIds.length
-          ? this.repo.raw(
-              `SELECT id, "firstName", "lastName", "email", "employeeId" FROM users WHERE id = ANY($1)`,
-              [userIds],
-            )
-          : Promise.resolve([]),
-        vendorIds.length
-          ? this.repo.raw(
-              `SELECT id, name, email, "contactNumber", city, state FROM vendors WHERE id = ANY($1)`,
-              [vendorIds],
-            )
-          : Promise.resolve([]),
-        bookPaymentIds.length
-          ? (() => {
-              const q = bookPaymentInvoiceDetailQuery(bookPaymentIds);
-              return this.repo.raw(q.query, q.params);
-            })()
-          : Promise.resolve([]),
-        expenseUserIds.length
-          ? (() => {
-              const q = usersExpensePendingQuery(expenseUserIds);
-              return this.repo.raw(q.query, q.params);
-            })()
-          : Promise.resolve([]),
-        fuelUserIds.length
-          ? (() => {
-              const q = usersFuelPendingQuery(fuelUserIds);
-              return this.repo.raw(q.query, q.params);
-            })()
-          : Promise.resolve([]),
-        bankTransferIds.length
-          ? this.repo.raw(
-              `SELECT id, "bankTransferId", "referenceNumber", "generatedAt", "pdfKey"
+    const [userRows, vendorRows, bpDetailRows, adviceRows] = await Promise.all([
+      userIds.length
+        ? this.repo.raw(
+            `SELECT id, "firstName", "lastName", "email", "employeeId" FROM users WHERE id = ANY($1)`,
+            [userIds],
+          )
+        : Promise.resolve([]),
+      vendorIds.length
+        ? this.repo.raw(
+            `SELECT id, name, email, "contactNumber", city, state FROM vendors WHERE id = ANY($1)`,
+            [vendorIds],
+          )
+        : Promise.resolve([]),
+      bookPaymentIds.length
+        ? (() => {
+            const q = bookPaymentInvoiceDetailQuery(bookPaymentIds);
+            return this.repo.raw(q.query, q.params);
+          })()
+        : Promise.resolve([]),
+      bankTransferIds.length
+        ? this.repo.raw(
+            `SELECT id, "bankTransferId", "referenceNumber", "generatedAt", "pdfKey"
                FROM payment_advices WHERE "bankTransferId" = ANY($1) AND "deletedAt" IS NULL`,
-              [bankTransferIds],
-            )
-          : Promise.resolve([]),
-      ]);
+            [bankTransferIds],
+          )
+        : Promise.resolve([]),
+    ]);
     const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
     const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
     const bpDetailMap = new Map<string, any>(bpDetailRows.map((r: any) => [r.bookPaymentId, r]));
     // bankTransferId → payment advice (1:1). Attached per vendor allocation in the breakdown.
     const adviceMap = new Map<string, any>(adviceRows.map((r: any) => [r.bankTransferId, r]));
-    const expensePendingMap = new Map<string, number>(
-      expensePendingRows.map((r: any) => [r.userId, Number(r.pending)]),
-    );
-    const fuelPendingMap = new Map<string, number>(
-      fuelPendingRows.map((r: any) => [r.userId, Number(r.pending)]),
-    );
     const nameOf = (uid: string) => {
       const u = userMap.get(uid);
       return u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : null;
@@ -978,13 +945,7 @@ export class PaymentSheetService {
             }
           : null,
         paidByUser: userObj(i.paidBy), // accountant who marked this item PAID
-        ...this.buildSettlementBreakdown(
-          i,
-          bpDetailMap,
-          expensePendingMap,
-          fuelPendingMap,
-          adviceMap,
-        ),
+        ...this.buildSettlementBreakdown(i, bpDetailMap, adviceMap),
       };
     });
 
