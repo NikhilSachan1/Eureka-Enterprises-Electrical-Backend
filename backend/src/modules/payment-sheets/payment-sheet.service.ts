@@ -162,10 +162,6 @@ export class PaymentSheetService {
     }
   }
 
-  private async clearItemVerifications(itemId: string, em: EntityManager) {
-    await this.repo.deleteVerificationsByItem(itemId, em);
-  }
-
   /** Idempotently record a verification row for (item, stage). */
   private async upsertVerification(
     item: PaymentSheetItemEntity,
@@ -1093,11 +1089,11 @@ export class PaymentSheetService {
         newAmount,
         reason: dto.reason ?? null,
       });
-      // A changed amount clears everyone's verification of this line; the editing
-      // reviewer's own edit then counts as their verification for their stage.
-      if (Math.abs(newAmount - prev) > 0.01) {
-        await this.clearItemVerifications(itemId, em);
-      }
+      // Prior-stage verifications are PRESERVED as the sheet advances (lead decision):
+      // a later-stage edit does not wipe an earlier stage's sign-off. The editing
+      // reviewer's own edit still counts as their verification for their stage.
+      // (Safe here because ADMIN_REVIEW is decrease-only, so a later edit can never
+      // exceed what an earlier stage already approved.)
       await this.autoVerifyOnEdit(item, sheet, flow, user, em);
       await this.recomputeTotals(id, em);
       return { message: PAYMENT_SHEET_RESPONSES.ITEM_UPDATED };
