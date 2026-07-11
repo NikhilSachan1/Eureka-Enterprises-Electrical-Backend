@@ -69,6 +69,7 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       `bp."approvalStatus" = 'APPROVED'`,
       `bp."deletedAt" IS NULL`,
       `bp."hasTransfer" = false`,
+      `v."isActive" = true`, // outstanding list excludes inactive vendors
     ];
     if (vendorIds?.length) c.push(`bp."vendorId" = ANY(${ph(vendorIds)})`);
     if (siteIds?.length) c.push(`bp."siteId" = ANY(${ph(siteIds)})`);
@@ -90,6 +91,7 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       `inv."deletedAt" IS NULL`,
       `inv."vendorId" IS NOT NULL`,
       `${invPendingToBook} > 0.01`,
+      `v."isActive" = true`, // outstanding list excludes inactive vendors
     ];
     if (vendorIds?.length) c.push(`inv."vendorId" = ANY(${ph(vendorIds)})`);
     if (siteIds?.length) c.push(`inv."siteId" = ANY(${ph(siteIds)})`);

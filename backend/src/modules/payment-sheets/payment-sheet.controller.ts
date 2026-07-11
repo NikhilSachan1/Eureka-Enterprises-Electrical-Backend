@@ -105,6 +105,18 @@ export class PaymentSheetController {
     return this.service.updateMeta(id, dto, user);
   }
 
+  @Delete(':id')
+  @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.DELETE)
+  @ApiOperation({
+    summary: 'Delete a payment sheet (soft)',
+    description:
+      'Initiator (own) or SUPER_ADMIN. Only while DRAFT/RETURNED (before it moves to HR) ' +
+      'and only if no line item is PAID/HOLD. Cascades to items and allocations.',
+  })
+  deleteSheet(@Param('id', ParseUUIDPipe) id: string, @GetUser() user: ActingUser) {
+    return this.service.deleteSheet(id, user);
+  }
+
   // ── items ──
   @Post(':id/items')
   @RequiredPermission(PAYMENT_SHEET_PERMISSIONS.ITEM_ADD)
