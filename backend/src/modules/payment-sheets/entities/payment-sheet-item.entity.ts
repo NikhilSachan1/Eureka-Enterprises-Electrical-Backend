@@ -62,6 +62,10 @@ export class PaymentSheetItemEntity extends BaseEntity {
   @Column({ type: 'timestamp', nullable: true })
   paidAt: Date | null;
 
+  // Accountant who marked this item PAID.
+  @Column({ type: 'uuid', nullable: true })
+  paidBy: string | null;
+
   // UTR / bank_transfer id(s) / credit-txn id recorded on PAID.
   @Column({ type: 'varchar', length: 500, nullable: true })
   paymentRef: string | null;

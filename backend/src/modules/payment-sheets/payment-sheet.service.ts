@@ -162,10 +162,6 @@ export class PaymentSheetService {
     }
   }
 
-  private async clearItemVerifications(itemId: string, em: EntityManager) {
-    await this.repo.deleteVerificationsByItem(itemId, em);
-  }
-
   /** Idempotently record a verification row for (item, stage). */
   private async upsertVerification(
     item: PaymentSheetItemEntity,
@@ -381,14 +377,79 @@ export class PaymentSheetService {
     }
   }
 
-  private assertNoDuplicate(existing: PaymentSheetItemEntity[], input: PaymentSheetItemInputDto) {
+  /**
+   * Vendor lines are one-per-book-payment, so a vendor may appear multiple times on a sheet;
+   * uniqueness is per book payment. User lines remain unique per (userId + sourceType).
+   */
+  private assertNoDuplicate(
+    existing: PaymentSheetItemEntity[],
+    input: PaymentSheetItemInputDto,
+    seenBookPayments: Set<string>,
+  ) {
+    if (input.beneficiaryType === BeneficiaryType.VENDOR) {
+      const bpId = input.bookPaymentIds?.[0];
+      if (bpId && seenBookPayments.has(bpId)) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.DUPLICATE_BOOK_PAYMENT);
+      }
+      return;
+    }
     const dup = existing.find(
-      (i) =>
-        i.sourceType === input.sourceType &&
-        ((input.beneficiaryType === BeneficiaryType.USER && i.userId === input.userId) ||
-          (input.beneficiaryType === BeneficiaryType.VENDOR && i.vendorId === input.vendorId)),
+      (i) => i.sourceType === input.sourceType && i.userId === input.userId,
     );
     if (dup) throw new BadRequestException(PAYMENT_SHEET_ERRORS.DUPLICATE_BENEFICIARY);
+  }
+
+  /** One book payment per vendor line: split a multi-book-payment vendor input into N inputs. */
+  private expandVendorInputs(input: PaymentSheetItemInputDto): PaymentSheetItemInputDto[] {
+    if (
+      input.beneficiaryType !== BeneficiaryType.VENDOR ||
+      (input.bookPaymentIds?.length ?? 0) <= 1
+    ) {
+      return [input];
+    }
+    return input.bookPaymentIds!.map((bpId) => ({
+      ...input,
+      bookPaymentIds: [bpId],
+      requestedAmount: undefined, // per-line amount is derived from the single book payment
+    }));
+  }
+
+  /**
+   * Expand vendor inputs (one book payment per line), dedupe (user by userId+source, vendor by
+   * book payment), then build + persist each line. Shared by create() and addItems().
+   */
+  private async buildAndPersistItems(
+    sheetId: string,
+    inputs: PaymentSheetItemInputDto[],
+    existing: PaymentSheetItemEntity[],
+    stage: string | null,
+    userId: string,
+    em: EntityManager,
+  ) {
+    const seen: PaymentSheetItemEntity[] = [...existing];
+    const existingItemIds = existing.map((i) => i.id);
+    const seenBookPayments = new Set<string>(
+      existingItemIds.length
+        ? (
+            await this.repo.findAllocations({
+              where: { itemId: In(existingItemIds), deletedAt: IsNull() },
+            })
+          ).map((a) => a.bookPaymentId)
+        : [],
+    );
+
+    for (const raw of inputs) {
+      for (const input of this.expandVendorInputs(raw)) {
+        this.assertNoDuplicate(seen, input, seenBookPayments);
+        const { item, allocations } = await this.buildItem(sheetId, input, userId, em);
+        await this.persistAllocations(item.id, allocations, userId, em);
+        await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, stage, userId, em, {
+          newAmount: Number(item.requestedAmount),
+        });
+        allocations.forEach((a) => seenBookPayments.add(a.bookPaymentId));
+        seen.push(item);
+      }
+    }
   }
 
   private async recomputeTotals(sheetId: string, em: EntityManager) {
@@ -480,23 +541,14 @@ export class PaymentSheetService {
         em,
       );
 
-      const seen: PaymentSheetItemEntity[] = [];
-      for (const input of dto.items) {
-        this.assertNoDuplicate(seen, input);
-        const { item, allocations } = await this.buildItem(sheet.id, input, user.id, em);
-        await this.persistAllocations(item.id, allocations, user.id, em);
-        await this.addHistory(
-          item,
-          ItemHistoryAction.ITEM_ADDED,
-          PaymentSheetStage.INITIATION,
-          user.id,
-          em,
-          {
-            newAmount: Number(item.requestedAmount),
-          },
-        );
-        seen.push(item);
-      }
+      await this.buildAndPersistItems(
+        sheet.id,
+        dto.items,
+        [],
+        PaymentSheetStage.INITIATION,
+        user.id,
+        em,
+      );
 
       await this.recomputeTotals(sheet.id, em);
       return { message: PAYMENT_SHEET_RESPONSES.CREATED, id: sheet.id, sheetNumber };
@@ -742,6 +794,7 @@ export class PaymentSheetService {
         [
           ...items.filter((i) => i.userId).map((i) => i.userId as string),
           ...items.filter((i) => i.rejectedBy).map((i) => i.rejectedBy as string),
+          ...items.filter((i) => i.paidBy).map((i) => i.paidBy as string),
           ...verifications.map((v) => v.verifiedBy),
           sheet.createdBy, // who created the sheet
           ...history.map((h) => h.createdBy), // who made each item-history change
@@ -924,6 +977,7 @@ export class PaymentSheetService {
               branchName: i.paidFromAccount.branchName ?? null,
             }
           : null,
+        paidByUser: userObj(i.paidBy), // accountant who marked this item PAID
         ...this.buildSettlementBreakdown(
           i,
           bpDetailMap,
@@ -1018,16 +1072,7 @@ export class PaymentSheetService {
         { where: { paymentSheetId: id, deletedAt: IsNull() } },
         em,
       );
-      const seen = [...existing];
-      for (const input of dto.items) {
-        this.assertNoDuplicate(seen, input);
-        const { item, allocations } = await this.buildItem(id, input, user.id, em);
-        await this.persistAllocations(item.id, allocations, user.id, em);
-        await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, sheet.currentStage, user.id, em, {
-          newAmount: Number(item.requestedAmount),
-        });
-        seen.push(item);
-      }
+      await this.buildAndPersistItems(id, dto.items, existing, sheet.currentStage, user.id, em);
       await this.recomputeTotals(id, em);
       return { message: PAYMENT_SHEET_RESPONSES.ITEM_ADDED };
     });
@@ -1091,11 +1136,11 @@ export class PaymentSheetService {
         newAmount,
         reason: dto.reason ?? null,
       });
-      // A changed amount clears everyone's verification of this line; the editing
-      // reviewer's own edit then counts as their verification for their stage.
-      if (Math.abs(newAmount - prev) > 0.01) {
-        await this.clearItemVerifications(itemId, em);
-      }
+      // Prior-stage verifications are PRESERVED as the sheet advances (lead decision):
+      // a later-stage edit does not wipe an earlier stage's sign-off. The editing
+      // reviewer's own edit still counts as their verification for their stage.
+      // (Safe here because ADMIN_REVIEW is decrease-only, so a later edit can never
+      // exceed what an earlier stage already approved.)
       await this.autoVerifyOnEdit(item, sheet, flow, user, em);
       await this.recomputeTotals(id, em);
       return { message: PAYMENT_SHEET_RESPONSES.ITEM_UPDATED };
@@ -1362,6 +1407,59 @@ export class PaymentSheetService {
     return { message: PAYMENT_SHEET_RESPONSES.REJECTED };
   }
 
+  /**
+   * Soft-delete a payment sheet. Only the initiator (their own) or a SUPER_ADMIN, only while
+   * the sheet is still with the initiator (DRAFT/RETURNED — not yet submitted to HR), and only
+   * if no line item has moved money (PAID/HOLD). Cascades to items + allocations.
+   */
+  async deleteSheet(id: string, user: ActingUser) {
+    return await this.dataSource.transaction(async (em) => {
+      const sheet = await this.repo.findSheet({ where: { id, deletedAt: IsNull() } }, em);
+      if (!sheet) throw new NotFoundException(PAYMENT_SHEET_ERRORS.NOT_FOUND);
+
+      const isInitiator = sheet.createdBy === user.id;
+      const isSuperAdmin = user.activeRole === SUPER_ADMIN;
+      if (!isInitiator && !isSuperAdmin) {
+        throw new ForbiddenException(PAYMENT_SHEET_ERRORS.DELETE_NOT_ALLOWED);
+      }
+
+      // Only before it moves to HR — i.e. still in the initiator's hands.
+      if (
+        ![PaymentSheetStatus.DRAFT, PaymentSheetStatus.RETURNED].includes(
+          sheet.status as PaymentSheetStatus,
+        )
+      ) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.DELETE_AFTER_SUBMIT);
+      }
+
+      // Defensive: never delete a sheet whose money has moved.
+      const items = await this.repo.findItems(
+        { where: { paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      if (
+        items.some(
+          (i) =>
+            i.itemStatus === PaymentSheetItemStatus.PAID ||
+            i.itemStatus === PaymentSheetItemStatus.HOLD,
+        )
+      ) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.HAS_SETTLED_ITEMS);
+      }
+
+      // Soft-delete cascade: allocations → items → sheet header (stamp deletedBy on header).
+      const itemIds = items.map((i) => i.id);
+      if (itemIds.length) {
+        await this.repo.softDeleteAllocation({ itemId: In(itemIds) }, em);
+        await this.repo.softDeleteItem({ paymentSheetId: id }, em);
+      }
+      await this.repo.updateSheet({ id }, { deletedBy: user.id, updatedBy: user.id }, em);
+      await this.repo.softDeleteSheet({ id }, em);
+
+      return { message: PAYMENT_SHEET_RESPONSES.DELETED };
+    });
+  }
+
   // ─────────────────────────── accountant item processing ───────────────────────────
 
   private async loadProcessingItem(
@@ -1502,6 +1600,7 @@ export class PaymentSheetService {
           itemStatus: PaymentSheetItemStatus.PAID,
           paidAmount: amount,
           paidAt: new Date(),
+          paidBy: user.id,
           paymentRef,
           paidFromAccountId: dto.paidFromAccountId ?? null,
           updatedBy: user.id,
