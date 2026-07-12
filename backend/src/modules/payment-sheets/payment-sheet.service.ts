@@ -122,8 +122,17 @@ export class PaymentSheetService {
   }
 
   private async generateSheetNumber(financialYear: string, em: EntityManager): Promise<string> {
-    const count = await this.repo.countSheets({ where: { financialYear } }, em);
-    const seq = String(count + 1).padStart(4, '0');
+    // Base the sequence on the MAX existing number INCLUDING soft-deleted rows — the unique
+    // constraint on sheetNumber spans all rows, so a count()-of-non-deleted approach collides
+    // after a soft-delete (count drops but the number is still taken). Match the trailing digits
+    // so it stays correct regardless of the prefix/format.
+    const rows = await this.repo.raw(
+      `SELECT COALESCE(MAX(CAST(substring("sheetNumber" from '\\d+$') AS INTEGER)), 0) AS maxseq
+       FROM payment_sheets WHERE "financialYear" = $1`,
+      [financialYear],
+      em,
+    );
+    const seq = String(Number(rows?.[0]?.maxseq ?? 0) + 1).padStart(4, '0');
     return `${PAYMENT_SHEET_DEFAULTS.SHEET_NUMBER_PREFIX}/${financialYear}/${seq}`;
   }
 
