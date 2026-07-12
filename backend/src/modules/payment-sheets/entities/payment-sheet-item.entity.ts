@@ -70,6 +70,11 @@ export class PaymentSheetItemEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   paymentRef: string | null;
 
+  // Display copy of the UTR entered at pay time (vendor: bank transfer UTR; expense/fuel:
+  // transactionId). Source-of-truth stays in bank_transfers / the settlement entry.
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  utrNumber: string | null;
+
   // Which of the org's own bank accounts this item was paid from (set at pay-time).
   @Column({ type: 'uuid', nullable: true })
   paidFromAccountId: string | null;
