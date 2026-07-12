@@ -6,7 +6,7 @@ import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { PaymentSheetRepository } from './payment-sheet.repository';
 import { PaymentSheetEntity } from './entities/payment-sheet.entity';
 import { PaymentSheetItemEntity } from './entities/payment-sheet-item.entity';
-import { PaymentSheetStatus, PaymentSheetItemStatus } from './constants/payment-sheet.constants';
+import { PaymentSheetItemStatus } from './constants/payment-sheet.constants';
 import { PAYMENT_ADVICE_COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 
 type SheetDetail = PaymentSheetEntity & { items: PaymentSheetItemEntity[] };
@@ -25,10 +25,15 @@ export class PaymentSheetPdfService {
     private readonly repo: PaymentSheetRepository,
   ) {}
 
-  /** Full-sheet PDF: returns an existing pdfKey when final, else generates + caches it. */
+  /**
+   * Full-sheet PDF: always regenerated fresh from current item state, then stamped
+   * onto the sheet as `pdfKey`. Previously returned a cached key once COMPLETED, but
+   * that trusted the cache blindly with no way to detect the sheet's items changing
+   * afterward — a completed sheet's PDF could silently go stale forever. Puppeteer
+   * generation is cheap enough that always-fresh is worth the correctness guarantee
+   * for a financial document.
+   */
   async ensurePdf(detail: SheetDetail): Promise<string> {
-    const isFinal = detail.status === PaymentSheetStatus.COMPLETED;
-    if (detail.pdfKey && isFinal) return detail.pdfKey;
     const key = await this.generate(detail, detail.items ?? []);
     await this.repo.updateSheet({ id: detail.id }, { pdfKey: key });
     return key;
