@@ -1471,6 +1471,7 @@ export class PaymentSheetService {
 
     // 2. Settle in the source module(s).
     let paymentRef = traceRef;
+    let utrNumber: string | null = null; // display copy on the line; source-of-truth stays in bank_transfers / expense entry
     if (item.sourceType === PaymentSourceType.EXPENSE) {
       if (!dto.paymentMode || !dto.paidDate) {
         throw new BadRequestException(PAYMENT_SHEET_ERRORS.PAYMENT_DETAILS_REQUIRED);
@@ -1492,6 +1493,7 @@ export class PaymentSheetService {
         fileKeys: [],
         paidFromAccountId: dto.paidFromAccountId,
       } as any);
+      utrNumber = dto.transactionId ?? null;
     } else if (item.sourceType === PaymentSourceType.FUEL_EXPENSE) {
       if (!dto.paymentMode || !dto.paidDate) {
         throw new BadRequestException(PAYMENT_SHEET_ERRORS.PAYMENT_DETAILS_REQUIRED);
@@ -1509,6 +1511,7 @@ export class PaymentSheetService {
         entrySourceType: EntrySourceType.WEB,
         paidFromAccountId: dto.paidFromAccountId,
       } as any);
+      utrNumber = dto.transactionId ?? null;
     } else {
       // Vendor — create a bank transfer per allocation.
       const transfers = dto.transfers ?? [];
@@ -1521,6 +1524,7 @@ export class PaymentSheetService {
       }
       const byId = new Map(transfers.map((t) => [t.bookPaymentId, t]));
       const refs: string[] = [];
+      const utrs: string[] = [];
       for (const alloc of pending) {
         const t = byId.get(alloc.bookPaymentId);
         if (!t) throw new BadRequestException(PAYMENT_SHEET_ERRORS.VENDOR_ALLOCATION_MISMATCH);
@@ -1544,8 +1548,10 @@ export class PaymentSheetService {
         );
         await this.repo.updateAllocation({ id: alloc.id }, { bankTransferId: res.id });
         refs.push(res.id);
+        if (t.utrNumber) utrs.push(t.utrNumber);
       }
       paymentRef = refs.join(',');
+      utrNumber = utrs.join(', ') || null;
     }
 
     // 3. Stamp the item + roll up + maybe complete.
@@ -1563,6 +1569,7 @@ export class PaymentSheetService {
           paidAt: new Date(),
           paidBy: user.id,
           paymentRef,
+          utrNumber,
           paidFromAccountId: dto.paidFromAccountId ?? null,
           updatedBy: user.id,
         },

@@ -210,7 +210,7 @@ export class PaymentSheetPdfService {
             <td class="r strong">${this.money(Number(it.currentAmount))}</td>
             <td class="c">${this.statusBadge(it.itemStatus)}</td>
             <td class="r">${it.paidAmount != null ? this.money(Number(it.paidAmount)) : '—'}</td>
-            <td class="c"></td>
+            <td class="c">${this.esc(it.utrNumber ?? '')}</td>
           </tr>`;
       })
       .join('');
