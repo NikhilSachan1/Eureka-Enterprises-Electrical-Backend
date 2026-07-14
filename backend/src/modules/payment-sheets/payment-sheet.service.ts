@@ -835,7 +835,7 @@ export class PaymentSheetService {
           ),
       ),
     ];
-    const [userRows, vendorRows, bpDetailRows, adviceRows] = await Promise.all([
+    const [userRows, vendorRows, bpDetailRows, adviceRows, btUtrRows] = await Promise.all([
       userIds.length
         ? this.repo.raw(
             `SELECT id, "firstName", "lastName", "email", "employeeId" FROM users WHERE id = ANY($1)`,
@@ -861,12 +861,23 @@ export class PaymentSheetService {
             [bankTransferIds],
           )
         : Promise.resolve([]),
+      bankTransferIds.length
+        ? this.repo.raw(
+            `SELECT id, "utrNumber" FROM bank_transfers WHERE id = ANY($1) AND "deletedAt" IS NULL`,
+            [bankTransferIds],
+          )
+        : Promise.resolve([]),
     ]);
     const userMap = new Map<string, any>(userRows.map((u: any) => [u.id, u]));
     const vendorMap = new Map<string, any>(vendorRows.map((v: any) => [v.id, v]));
     const bpDetailMap = new Map<string, any>(bpDetailRows.map((r: any) => [r.bookPaymentId, r]));
     // bankTransferId → payment advice (1:1). Attached per vendor allocation in the breakdown.
     const adviceMap = new Map<string, any>(adviceRows.map((r: any) => [r.bankTransferId, r]));
+    // bankTransferId → UTR (source of truth for vendor lines; used to fill lines paid before
+    // utrNumber was copied onto the item).
+    const btUtrMap = new Map<string, string>(
+      btUtrRows.filter((r: any) => r.utrNumber).map((r: any) => [r.id, r.utrNumber]),
+    );
     const nameOf = (uid: string) => {
       const u = userMap.get(uid);
       return u ? [u.firstName, u.lastName].filter(Boolean).join(' ') : null;
@@ -953,6 +964,17 @@ export class PaymentSheetService {
               branchName: i.paidFromAccount.branchName ?? null,
             }
           : null,
+        // Vendor UTR = the bank transfer's UTR (source of truth); fills lines that were paid
+        // before the UTR was copied onto the item. Expense/fuel keep the stored copy.
+        utrNumber:
+          i.beneficiaryType === BeneficiaryType.VENDOR
+            ? (i.bookPaymentAllocations ?? [])
+                .map((a: any) => (a.bankTransferId ? btUtrMap.get(a.bankTransferId) : null))
+                .filter(Boolean)
+                .join(', ') ||
+              i.utrNumber ||
+              null
+            : i.utrNumber ?? null,
         paidByUser: userObj(i.paidBy), // accountant who marked this item PAID
         ...this.buildSettlementBreakdown(i, bpDetailMap, adviceMap),
       };
