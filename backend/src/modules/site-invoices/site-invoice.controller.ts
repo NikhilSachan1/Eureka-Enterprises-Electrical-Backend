@@ -37,7 +37,7 @@ export class SiteInvoiceController {
   }
 
   @Get('dropdown')
-  @RequiredPermission('financials.invoices.view')
+  @RequiredPermission('financials.invoices.view-list')
   @ApiOperation({
     summary: 'Invoice dropdown for Book Payment or Bank Transfer creation',
     description:
@@ -55,13 +55,13 @@ export class SiteInvoiceController {
   }
 
   @Get()
-  @RequiredPermission('financials.invoices.view')
+  @RequiredPermission('financials.invoices.view-list')
   async findAll(@Query() query: GetSiteInvoiceDto) {
     return await this.invoiceService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.invoices.view')
+  @RequiredPermission('financials.invoices.view-list')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.invoiceService.findById(id);
   }

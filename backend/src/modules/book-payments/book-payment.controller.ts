@@ -50,7 +50,7 @@ export class BookPaymentController {
   }
 
   @Get('vendor-list')
-  @RequiredPermission('financials.book-payments.view')
+  @RequiredPermission('financials.book-payments.view-list')
   @ApiOperation({
     summary: 'Vendor book payments list',
     description:
@@ -61,7 +61,7 @@ export class BookPaymentController {
   }
 
   @Get('dropdown')
-  @RequiredPermission('financials.book-payments.view')
+  @RequiredPermission('financials.book-payments.view-list')
   @ApiOperation({
     summary: 'Book Payment dropdown for PURCHASE Bank Transfer creation',
     description:
@@ -75,14 +75,14 @@ export class BookPaymentController {
   }
 
   @Get()
-  @RequiredPermission('financials.book-payments.view')
+  @RequiredPermission('financials.book-payments.view-list')
   @ApiOperation({ summary: 'List book payments with filters and pagination' })
   findAll(@Query() query: GetBookPaymentDto) {
     return this.bookPaymentService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.book-payments.view')
+  @RequiredPermission('financials.book-payments.view-list')
   @ApiOperation({ summary: 'Get a single book payment by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.bookPaymentService.findById(id);

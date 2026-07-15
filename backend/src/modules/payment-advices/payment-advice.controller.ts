@@ -12,14 +12,14 @@ export class PaymentAdviceController {
   constructor(private readonly paymentAdviceService: PaymentAdviceService) {}
 
   @Get()
-  @RequiredPermission('financials.payment-advices.view')
+  @RequiredPermission('financials.payment-advices.view-list')
   @ApiOperation({ summary: 'List payment advices with filters and pagination' })
   findAll(@Query() query: GetPaymentAdviceDto) {
     return this.paymentAdviceService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.payment-advices.view')
+  @RequiredPermission('financials.payment-advices.view-list')
   @ApiOperation({ summary: 'Get a single payment advice by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.paymentAdviceService.findById(id);
@@ -37,7 +37,7 @@ export class PaymentAdviceController {
   }
 
   @Delete(':id')
-  @RequiredPermission('financials.payment-advices.view')
+  @RequiredPermission('financials.payment-advices.view-list')
   @ApiOperation({ summary: 'Delete a payment advice' })
   remove(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.paymentAdviceService.remove(id, userId);

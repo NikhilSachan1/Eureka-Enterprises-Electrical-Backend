@@ -15,14 +15,14 @@ export class TdsController {
   constructor(private readonly tdsService: TdsService) {}
 
   @Get('register')
-  @RequiredPermission('financials.tds.view')
+  @RequiredPermission('financials.tds.view-list')
   @ApiOperation({ summary: 'List TDS register entries with filters' })
   findAllRegisterEntries(@Query() query: GetTdsRegisterDto) {
     return this.tdsService.findAllRegisterEntries(query);
   }
 
   @Get('register/:id')
-  @RequiredPermission('financials.tds.view')
+  @RequiredPermission('financials.tds.view-list')
   @ApiOperation({ summary: 'Get a single TDS register entry by ID' })
   findRegisterEntryById(@Param('id', ParseUUIDPipe) id: string) {
     return this.tdsService.findRegisterEntryById(id);
@@ -60,7 +60,7 @@ export class TdsController {
   }
 
   @Get('payments')
-  @RequiredPermission('financials.tds.view')
+  @RequiredPermission('financials.tds.view-list')
   @ApiOperation({ summary: 'List TDS payments' })
   findAllPayments(@Query('siteId') siteId?: string, @Query('partyType') partyType?: PartyType) {
     return this.tdsService.findAllPayments(siteId, partyType);

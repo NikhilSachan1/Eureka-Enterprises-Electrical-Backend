@@ -21,7 +21,7 @@ export class DocumentStatusController {
   constructor(private readonly documentStatusService: DocumentStatusService) {}
 
   @Get()
-  @RequiredPermission('financials.document-status.view')
+  @RequiredPermission('financials.document-status.view-list')
   @ApiOperation({
     summary: 'Site-level document chain summary',
     description:
@@ -35,7 +35,7 @@ export class DocumentStatusController {
   }
 
   @Get('issues')
-  @RequiredPermission('financials.document-status.view')
+  @RequiredPermission('financials.document-status.view-list')
   @ApiOperation({
     summary: 'JMC-level document chain drill-down',
     description:

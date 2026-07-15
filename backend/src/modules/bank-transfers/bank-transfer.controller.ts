@@ -32,14 +32,14 @@ export class BankTransferController {
   }
 
   @Get()
-  @RequiredPermission('financials.bank-transfers.view')
+  @RequiredPermission('financials.bank-transfers.view-list')
   @ApiOperation({ summary: 'List bank transfers with filters and pagination' })
   findAll(@Query() query: GetBankTransferDto) {
     return this.bankTransferService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.bank-transfers.view')
+  @RequiredPermission('financials.bank-transfers.view-list')
   @ApiOperation({ summary: 'Get a single bank transfer by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.bankTransferService.findById(id);

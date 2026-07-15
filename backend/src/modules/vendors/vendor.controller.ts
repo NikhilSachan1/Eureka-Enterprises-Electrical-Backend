@@ -13,12 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { VendorService } from './vendor.service';
-import {
-  CreateVendorDto,
-  UpdateVendorDto,
-  GetVendorDto,
-  BulkDeleteVendorDto,
-} from './dto';
+import { CreateVendorDto, UpdateVendorDto, GetVendorDto, BulkDeleteVendorDto } from './dto';
 
 @ApiTags('Vendors')
 @ApiBearerAuth('JWT-auth')
@@ -40,7 +35,7 @@ export class VendorController {
   }
 
   @Get()
-  @RequiredPermission('financials.vendors.view')
+  @RequiredPermission('financials.vendors.view-list')
   @ApiOperation({
     summary: 'Get all vendors',
     description: 'Retrieves a list of vendors with optional filtering and pagination.',
@@ -50,7 +45,7 @@ export class VendorController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.vendors.view')
+  @RequiredPermission('financials.vendors.view-list')
   @ApiOperation({
     summary: 'Get a vendor by ID',
     description: 'Retrieves a specific vendor by its unique identifier.',
@@ -77,7 +72,8 @@ export class VendorController {
   @RequiredPermission('financials.vendors.delete')
   @ApiOperation({
     summary: 'Bulk delete vendors',
-    description: 'Soft-deletes multiple vendors. Skips ones with active site or financial associations.',
+    description:
+      'Soft-deletes multiple vendors. Skips ones with active site or financial associations.',
   })
   @ApiBody({ type: BulkDeleteVendorDto })
   async bulkDelete(

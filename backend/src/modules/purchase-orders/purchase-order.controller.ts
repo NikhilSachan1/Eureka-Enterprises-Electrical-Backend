@@ -39,7 +39,7 @@ export class PurchaseOrderController {
   }
 
   @Get('dropdown')
-  @RequiredPermission('financials.purchase-orders.view')
+  @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({
     summary: 'PO dropdown for JMC creation',
     description:
@@ -53,14 +53,14 @@ export class PurchaseOrderController {
   }
 
   @Get()
-  @RequiredPermission('financials.purchase-orders.view')
+  @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({ summary: 'List POs' })
   async findAll(@Query() query: GetPurchaseOrderDto) {
     return await this.poService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.purchase-orders.view')
+  @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({ summary: 'Get a PO by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.poService.findById(id);

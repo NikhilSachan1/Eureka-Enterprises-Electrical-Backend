@@ -14,14 +14,14 @@ export class GstController {
   constructor(private readonly gstService: GstService) {}
 
   @Get('register')
-  @RequiredPermission('financials.gst.view')
+  @RequiredPermission('financials.gst.view-list')
   @ApiOperation({ summary: 'List GST register entries with filters' })
   findAllRegisterEntries(@Query() query: GetGstRegisterDto) {
     return this.gstService.findAllRegisterEntries(query);
   }
 
   @Get('register/:id')
-  @RequiredPermission('financials.gst.view')
+  @RequiredPermission('financials.gst.view-list')
   @ApiOperation({ summary: 'Get a single GST register entry by ID' })
   findRegisterEntryById(@Param('id', ParseUUIDPipe) id: string) {
     return this.gstService.findRegisterEntryById(id);
@@ -59,7 +59,7 @@ export class GstController {
   }
 
   @Get('payments')
-  @RequiredPermission('financials.gst.view')
+  @RequiredPermission('financials.gst.view-list')
   @ApiOperation({ summary: 'List GST payments' })
   findAllPayments(
     @Query('siteId') siteId?: string,
@@ -71,7 +71,7 @@ export class GstController {
   }
 
   @Get('summary')
-  @RequiredPermission('financials.gst.view')
+  @RequiredPermission('financials.gst.view-list')
   @ApiOperation({ summary: 'Get GST summary per BRD §5.3' })
   getSummary(@Query() query: GetGstSummaryDto) {
     return this.gstService.getSummary(query);
