@@ -12,6 +12,7 @@ import {
   UpdateSiteAllocationDto,
   DeallocateSiteDto,
   GetSiteAllocationDto,
+  GetEmployeeOverviewDto,
   ManageSiteAllocationDto,
 } from './dto';
 import {
@@ -230,6 +231,110 @@ export class SiteAllocationService {
       where: { userId, isCurrentlyAllocated: true, deletedAt: IsNull() },
       relations: ['site'],
     });
+  }
+
+  /**
+   * Employee allocation overview: all active employees with their current project (site →
+   * company → parent company), Free/Allocated status, and "since". Stats are global
+   * (independent of table filters). Filters: allocatedStatus, search (name/code), site.
+   */
+  async getEmployeeOverview(query: GetEmployeeOverviewDto) {
+    const { allocatedStatus, search, siteId, siteName, page, pageSize, sortOrder } = query;
+
+    const conds: string[] = [`u."deletedAt" IS NULL`, `u."status" = 'ACTIVE'`];
+    const params: any[] = [];
+    if (allocatedStatus === 'ALLOCATED') conds.push(`sa.id IS NOT NULL`);
+    else if (allocatedStatus === 'FREE') conds.push(`sa.id IS NULL`);
+    if (search) {
+      params.push(`%${search}%`);
+      const p = `$${params.length}`;
+      conds.push(
+        `(u."firstName" ILIKE ${p} OR u."lastName" ILIKE ${p} OR u."employeeId" ILIKE ${p}
+          OR CONCAT(u."firstName", ' ', COALESCE(u."lastName", '')) ILIKE ${p})`,
+      );
+    }
+    if (siteId) {
+      params.push(siteId);
+      conds.push(`sa."siteId" = $${params.length}`);
+    }
+    if (siteName) {
+      params.push(`%${siteName}%`);
+      conds.push(`s."name" ILIKE $${params.length}`);
+    }
+
+    const joins = `
+      FROM "users" u
+      LEFT JOIN "site_allocations" sa ON sa."userId" = u.id AND sa."isCurrentlyAllocated" = true AND sa."deletedAt" IS NULL
+      LEFT JOIN "sites" s ON s.id = sa."siteId" AND s."deletedAt" IS NULL
+      LEFT JOIN "companies" c ON c.id = s."companyId" AND c."deletedAt" IS NULL
+      LEFT JOIN "companies" pc ON pc.id = c."parentCompanyId" AND pc."deletedAt" IS NULL
+      WHERE ${conds.join(' AND ')}`;
+
+    const order = String(sortOrder ?? '').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    // Pagination is optional: omit pageSize → return ALL records (no LIMIT/OFFSET).
+    const recordParams = [...params];
+    let limitClause = '';
+    if (pageSize !== undefined && pageSize !== null) {
+      const pg = page && page > 0 ? page : 1;
+      recordParams.push(pageSize, (pg - 1) * pageSize);
+      limitClause = ` LIMIT $${recordParams.length - 1} OFFSET $${recordParams.length}`;
+    }
+
+    const recordsSql = `
+      SELECT u.id AS "userId",
+        TRIM(CONCAT(u."firstName", ' ', COALESCE(u."lastName", ''))) AS "employeeName",
+        u."employeeId" AS "employeeCode",
+        CASE WHEN sa.id IS NOT NULL THEN 'ALLOCATED' ELSE 'FREE' END AS "status",
+        sa."siteId", s."name" AS "siteName",
+        c.id AS "companyId", c."name" AS "companyName",
+        pc.id AS "parentCompanyId", pc."name" AS "parentCompanyName",
+        sa."allocatedAt" AS "since"
+      ${joins}
+      ORDER BY "employeeName" ${order}${limitClause}`;
+
+    const countSql = `SELECT COUNT(DISTINCT u.id)::int AS total ${joins}`;
+
+    const statsSql = `
+      SELECT COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE sa.id IS NOT NULL)::int AS allocated,
+        COUNT(*) FILTER (WHERE sa.id IS NULL)::int AS free
+      FROM "users" u
+      LEFT JOIN "site_allocations" sa ON sa."userId" = u.id AND sa."isCurrentlyAllocated" = true AND sa."deletedAt" IS NULL
+      WHERE u."deletedAt" IS NULL AND u."status" = 'ACTIVE'`;
+
+    const [rows, countRows, statsRows] = await Promise.all([
+      this.siteAllocationRepository.raw(recordsSql, recordParams),
+      this.siteAllocationRepository.raw(countSql, params),
+      this.siteAllocationRepository.raw(statsSql, []),
+    ]);
+
+    const s = statsRows[0] ?? {};
+    return {
+      stats: {
+        total: Number(s.total ?? 0),
+        allocated: Number(s.allocated ?? 0),
+        free: Number(s.free ?? 0),
+      },
+      records: rows.map((r: any) => ({
+        userId: r.userId,
+        employeeName: r.employeeName,
+        employeeCode: r.employeeCode ?? null,
+        status: r.status,
+        currentProject: r.siteId
+          ? {
+              siteId: r.siteId,
+              siteName: r.siteName,
+              company: r.companyId ? { id: r.companyId, name: r.companyName } : null,
+              parentCompany: r.parentCompanyId
+                ? { id: r.parentCompanyId, name: r.parentCompanyName }
+                : null,
+              since: r.since,
+            }
+          : null,
+      })),
+      totalRecords: Number(countRows[0]?.total ?? 0),
+    };
   }
 
   async getAllocationsBySiteId(siteId: string, onlyCurrentAllocations = false) {

@@ -11,7 +11,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { SiteAllocationService } from './site-allocation.service';
-import { UpdateSiteAllocationDto, GetSiteAllocationDto, ManageSiteAllocationDto } from './dto';
+import {
+  UpdateSiteAllocationDto,
+  GetSiteAllocationDto,
+  GetEmployeeOverviewDto,
+  ManageSiteAllocationDto,
+} from './dto';
 
 @ApiTags('Site Allocations')
 @ApiBearerAuth('JWT-auth')
@@ -40,6 +45,18 @@ export class SiteAllocationController {
   })
   async findAll(@Query() query: GetSiteAllocationDto) {
     return this.siteAllocationService.findAll(query);
+  }
+
+  @Get('employees')
+  @ApiOperation({
+    summary: 'Employee allocation overview (Free/Allocated) with stats',
+    description:
+      'All active employees with their current project (site → company → parent company), ' +
+      'Free/Allocated status and since-date. Includes global stats (total/allocated/free). ' +
+      'Filters: allocatedStatus, search (name/code), siteId/siteName; paginated.',
+  })
+  async employeeOverview(@Query() query: GetEmployeeOverviewDto) {
+    return this.siteAllocationService.getEmployeeOverview(query);
   }
 
   @Get('user/:userId')
