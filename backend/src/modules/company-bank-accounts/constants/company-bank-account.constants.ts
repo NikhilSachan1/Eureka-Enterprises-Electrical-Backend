@@ -14,7 +14,7 @@ export const COMPANY_BANK_ACCOUNT_RESPONSES = {
 
 export const COMPANY_BANK_ACCOUNT_PERMISSIONS = {
   CREATE: 'financials.company-bank-accounts.create',
-  VIEW: 'financials.company-bank-accounts.view',
+  VIEW: 'financials.company-bank-accounts.view-list',
   UPDATE: 'financials.company-bank-accounts.update',
   DELETE: 'financials.company-bank-accounts.delete',
 } as const;

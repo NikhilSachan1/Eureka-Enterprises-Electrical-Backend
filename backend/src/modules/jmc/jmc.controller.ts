@@ -37,7 +37,7 @@ export class JmcController {
   }
 
   @Get('dropdown')
-  @RequiredPermission('financials.jmcs.view')
+  @RequiredPermission('financials.jmcs.view-list')
   @ApiOperation({
     summary: 'JMC dropdown for Report or Invoice creation',
     description:
@@ -55,14 +55,14 @@ export class JmcController {
   }
 
   @Get()
-  @RequiredPermission('financials.jmcs.view')
+  @RequiredPermission('financials.jmcs.view-list')
   @ApiOperation({ summary: 'List JMCs' })
   async findAll(@Query() query: GetJmcDto) {
     return await this.jmcService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.jmcs.view')
+  @RequiredPermission('financials.jmcs.view-list')
   @ApiOperation({ summary: 'Get a JMC by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.jmcService.findById(id);

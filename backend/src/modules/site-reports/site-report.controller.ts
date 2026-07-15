@@ -53,13 +53,13 @@ export class SiteReportController {
   }
 
   @Get()
-  @RequiredPermission('financials.site-reports.view')
+  @RequiredPermission('financials.site-reports.view-list')
   async findAll(@Query() query: GetSiteReportDto) {
     return await this.reportService.findAll(query);
   }
 
   @Get(':id')
-  @RequiredPermission('financials.site-reports.view')
+  @RequiredPermission('financials.site-reports.view-list')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.reportService.findById(id);
   }

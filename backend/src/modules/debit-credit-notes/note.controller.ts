@@ -32,7 +32,7 @@ export class NoteController {
   }
 
   @Get()
-  @RequiredPermission('financials.notes.view')
+  @RequiredPermission('financials.notes.view-list')
   @ApiOperation({
     summary: 'List notes by side (SALE: debit notes, PURCHASE: credit notes)',
   })
@@ -41,7 +41,7 @@ export class NoteController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.notes.view')
+  @RequiredPermission('financials.notes.view-list')
   @ApiOperation({ summary: 'Get a single note by ID and side' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @Query('noteSide') noteSide: NoteSide) {
     return this.noteService.findById(id, noteSide);
