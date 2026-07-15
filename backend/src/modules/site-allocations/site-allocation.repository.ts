@@ -71,4 +71,8 @@ export class SiteAllocationRepository {
   async count(options: FindManyOptions<SiteAllocationEntity>): Promise<number> {
     return await this.repository.count(options);
   }
+
+  async raw(query: string, params: any[] = []): Promise<any> {
+    return await this.repository.manager.query(query, params);
+  }
 }
