@@ -286,8 +286,12 @@ export class SiteAllocationService {
         TRIM(CONCAT(u."firstName", ' ', COALESCE(u."lastName", ''))) AS "employeeName",
         u."employeeId" AS "employeeCode",
         CASE WHEN sa.id IS NOT NULL THEN 'ALLOCATED' ELSE 'FREE' END AS "status",
+        sa.id AS "allocationId",
         sa."siteId", s."name" AS "siteName",
+        s."city" AS "siteCity", s."state" AS "siteState",
+        s."startDate" AS "siteStartDate", s."endDate" AS "siteEndDate",
         c.id AS "companyId", c."name" AS "companyName",
+        c."city" AS "companyCity", c."state" AS "companyState",
         pc.id AS "parentCompanyId", pc."name" AS "parentCompanyName",
         sa."allocatedAt" AS "since"
       ${joins}
@@ -323,9 +327,21 @@ export class SiteAllocationService {
         status: r.status,
         currentProject: r.siteId
           ? {
+              allocationId: r.allocationId,
               siteId: r.siteId,
               siteName: r.siteName,
-              company: r.companyId ? { id: r.companyId, name: r.companyName } : null,
+              city: r.siteCity ?? null,
+              state: r.siteState ?? null,
+              startDate: r.siteStartDate ?? null,
+              endDate: r.siteEndDate ?? null,
+              company: r.companyId
+                ? {
+                    id: r.companyId,
+                    name: r.companyName,
+                    city: r.companyCity ?? null,
+                    state: r.companyState ?? null,
+                  }
+                : null,
               parentCompany: r.parentCompanyId
                 ? { id: r.parentCompanyId, name: r.parentCompanyName }
                 : null,
@@ -437,6 +453,39 @@ export class SiteAllocationService {
       throw new BadRequestException('At least one allocation or deallocation is required');
     }
 
+    // Process deallocations FIRST, then allocations. This makes a "transfer" (release the
+    // old site + allocate to the new site) work in a single request: releasing the current
+    // allocation clears `isCurrentlyAllocated`, so the subsequent create() no longer trips
+    // the "employee already allocated to another site" guard. Order matters because the two
+    // loops are independent (no shared transaction) and create() reads the live state.
+    const deallocationResults: {
+      allocationId: string;
+      success: boolean;
+      message: string;
+    }[] = [];
+
+    for (const deallocation of deallocations) {
+      try {
+        const deallocateDto: DeallocateSiteDto = {
+          deallocatedAt: deallocation.deallocatedAt,
+          remarks: deallocation.remarks,
+        };
+
+        await this.deallocate(deallocation.allocationId, deallocateDto, userId);
+        deallocationResults.push({
+          allocationId: deallocation.allocationId,
+          success: true,
+          message: SITE_ALLOCATION_RESPONSES.DEALLOCATED,
+        });
+      } catch (error) {
+        deallocationResults.push({
+          allocationId: deallocation.allocationId,
+          success: false,
+          message: error.message || 'Failed to deallocate',
+        });
+      }
+    }
+
     // Process allocations
     const allocationResults: {
       userId: string;
@@ -470,35 +519,6 @@ export class SiteAllocationService {
           siteId: allocation.siteId,
           success: false,
           message: error.message || 'Failed to allocate',
-        });
-      }
-    }
-
-    // Process deallocations
-    const deallocationResults: {
-      allocationId: string;
-      success: boolean;
-      message: string;
-    }[] = [];
-
-    for (const deallocation of deallocations) {
-      try {
-        const deallocateDto: DeallocateSiteDto = {
-          deallocatedAt: deallocation.deallocatedAt,
-          remarks: deallocation.remarks,
-        };
-
-        await this.deallocate(deallocation.allocationId, deallocateDto, userId);
-        deallocationResults.push({
-          allocationId: deallocation.allocationId,
-          success: true,
-          message: SITE_ALLOCATION_RESPONSES.DEALLOCATED,
-        });
-      } catch (error) {
-        deallocationResults.push({
-          allocationId: deallocation.allocationId,
-          success: false,
-          message: error.message || 'Failed to deallocate',
         });
       }
     }

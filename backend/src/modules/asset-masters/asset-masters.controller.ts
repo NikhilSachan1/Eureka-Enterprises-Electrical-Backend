@@ -37,6 +37,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { AssetActionDto } from './dto/asset-action.dto';
 import { Roles } from '../roles/constants/role.constants';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Asset Management')
 @ApiBearerAuth('JWT-auth')
@@ -116,6 +117,18 @@ export class AssetMastersController {
   async findLost(@Request() req: any) {
     this.assertAdminAccess(req);
     return await this.assetMastersService.findLost();
+  }
+
+  @Public()
+  @Get('public/:assetMasterId')
+  @ApiOperation({
+    summary: 'Get asset details by master id (public)',
+    description:
+      'Public (no auth) lookup of a single asset by its master id. Returns the same detailed ' +
+      'payload as GET /assets/:id. Intended for QR / external asset lookups.',
+  })
+  async findOnePublic(@Param('assetMasterId') assetMasterId: string) {
+    return await this.assetMastersService.findOneWithDetails(assetMasterId);
   }
 
   @Get(':id')
