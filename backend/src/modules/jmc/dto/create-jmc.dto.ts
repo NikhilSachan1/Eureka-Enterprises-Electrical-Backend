@@ -6,34 +6,60 @@ import {
   IsOptional,
   IsDateString,
   MaxLength,
+  IsArray,
+  ValidateNested,
+  ArrayMaxSize,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { JmcItemDto } from './jmc-item.dto';
 
 export class CreateJmcDto {
   @ApiProperty({ description: 'Parent PO ID' })
   @IsUUID('4')
   poId: string;
 
-  @ApiProperty({ description: 'JMC Number' })
+  @ApiPropertyOptional({
+    description:
+      'JMC Number. Optional — omit to auto-generate (SALE flow). Provide to set manually.',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  jmcNumber: string;
+  @IsOptional()
+  jmcNumber?: string;
 
   @ApiProperty({ description: 'JMC Date (ISO)' })
   @IsDateString()
   jmcDate: string;
 
-  @ApiProperty({ description: 'S3 file key for the JMC PDF/scan' })
+  @ApiPropertyOptional({
+    description:
+      'S3 file key of the signed JMC. Optional at create — the signed copy can be uploaded ' +
+      'later via PATCH /jmcs/:id/upload. Required (on the record) before approval.',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
-  fileKey: string;
+  @IsOptional()
+  fileKey?: string;
 
-  @ApiProperty({ description: 'Original file name' })
+  @ApiPropertyOptional({ description: 'Original file name' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  fileName: string;
+  @IsOptional()
+  fileName?: string;
+
+  @ApiPropertyOptional({
+    type: [JmcItemDto],
+    description: 'Line items (SALE only). Presence marks the JMC as system-generated.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => JmcItemDto)
+  items?: JmcItemDto[];
 
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()

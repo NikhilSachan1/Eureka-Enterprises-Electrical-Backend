@@ -7,11 +7,15 @@ export const JMC_ERRORS = {
   JMC_NUMBER_EXISTS: 'JMC number already exists under this PO',
   CANNOT_DELETE_HAS_CHILDREN:
     'Cannot delete JMC — Reports or Invoices exist against it. Delete children first.',
+  ITEMS_ONLY_FOR_SALE: 'Line items can only be added to SALE (contractor) JMCs.',
+  UPLOAD_REQUIRED_FOR_APPROVAL: 'Signed JMC upload is required before approval.',
+  PDF_ONLY_SYSTEM_GENERATED: 'PDF is available only for system-generated (SALE) JMCs with items.',
 };
 
 export const JMC_RESPONSES = {
   CREATED: 'JMC created successfully',
   UPDATED: 'JMC updated successfully',
+  UPLOADED: 'JMC signed copy uploaded successfully',
   DELETED: 'JMC deleted successfully',
   APPROVED: 'JMC approved',
   REJECTED: 'JMC rejected',
