@@ -4,6 +4,7 @@ import { Environments } from 'env-configs';
 import {
   WHATSAPP_TEMPLATES,
   WHATSAPP_TEMPLATE_KEYS,
+  WHATSAPP_TEMPLATE_META,
   WHATSAPP_ERRORS,
   formatWhatsAppNumber,
   isValidWhatsAppNumber,
@@ -46,6 +47,24 @@ export class WhatsAppService {
     return this.isEnabled && this.client !== null;
   }
 
+  /**
+   * Maps named templateData to WhatsApp's numbered content variables ({"1": ..., "2": ...})
+   * following the template's variableOrder. WhatsApp rejects empty variables, so any missing
+   * or blank value is replaced with a dash placeholder.
+   */
+  private buildContentVariables(
+    variableOrder: string[],
+    data: Record<string, any>,
+  ): Record<string, string> {
+    const vars: Record<string, string> = {};
+    variableOrder.forEach((field, index) => {
+      const value = data[field];
+      vars[String(index + 1)] =
+        value === undefined || value === null || value === '' ? '—' : String(value);
+    });
+    return vars;
+  }
+
   async sendMessage(options: WhatsAppMessageOptions): Promise<WhatsAppSendResult> {
     const {
       to,
@@ -77,15 +96,19 @@ export class WhatsAppService {
     const toNumber = formatWhatsAppNumber(to);
     const startTime = Date.now();
 
+    const meta = WHATSAPP_TEMPLATE_META[templateKey];
+
     try {
       let messageResult;
 
-      if (this.isProduction && template.contentSid) {
+      if (this.isProduction && meta?.contentSid) {
         messageResult = await this.client.messages.create({
           from: this.fromNumber,
           to: toNumber,
-          contentSid: template.contentSid,
-          contentVariables: JSON.stringify(templateData),
+          contentSid: meta.contentSid,
+          contentVariables: JSON.stringify(
+            this.buildContentVariables(meta.variableOrder, templateData),
+          ),
         });
       } else {
         const messageBody = template.sandboxMessage(templateData as any);
@@ -963,6 +986,12 @@ export class WhatsAppService {
     },
     options?: { referenceId?: string; recipientId?: string },
   ): Promise<WhatsAppSendResult> {
+    // Production template variable expects a full phrase; sandbox message still uses recoveryAmount.
+    const recoveryText =
+      data.recoveryAmount && Number(data.recoveryAmount) > 0
+        ? `₹${data.recoveryAmount} has been added to your account as a debit. Please contact HR if you have any concerns.`
+        : 'No recovery amount applicable';
+
     return this.sendMessage({
       to: phoneNumber,
       templateKey: WHATSAPP_TEMPLATE_KEYS.ASSET_LOST,
@@ -974,6 +1003,7 @@ export class WhatsAppService {
         reason: data.reason,
         lastSeenDate: data.lastSeenDate,
         recoveryAmount: data.recoveryAmount,
+        recoveryText,
       },
       category: CommunicationCategory.ASSET_TRANSACTION,
       referenceId: options?.referenceId,
@@ -995,6 +1025,12 @@ export class WhatsAppService {
     },
     options?: { referenceId?: string; recipientId?: string },
   ): Promise<WhatsAppSendResult> {
+    // Production template variable expects a full phrase; sandbox message still uses refundedAmount.
+    const refundText =
+      data.refundedAmount && Number(data.refundedAmount) > 0
+        ? `₹${data.refundedAmount} has been credited back to your account`
+        : 'No refund applicable';
+
     return this.sendMessage({
       to: phoneNumber,
       templateKey: WHATSAPP_TEMPLATE_KEYS.ASSET_RECOVERED,
@@ -1005,6 +1041,7 @@ export class WhatsAppService {
         actorName: data.actorName,
         notes: data.notes,
         refundedAmount: data.refundedAmount,
+        refundText,
       },
       category: CommunicationCategory.ASSET_TRANSACTION,
       referenceId: options?.referenceId,

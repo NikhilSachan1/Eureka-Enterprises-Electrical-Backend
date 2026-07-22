@@ -1,4 +1,4 @@
-import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
@@ -6,6 +6,7 @@ import { ContractorEntity } from 'src/modules/contractors/entities/contractor.en
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
+import { JmcItemEntity } from './jmc-item.entity';
 
 @Entity('jmcs')
 @Index('IDX_JMC_PO', ['poId'])
@@ -53,11 +54,19 @@ export class JmcEntity extends BaseEntity {
   @Column({ type: 'date' })
   jmcDate: Date;
 
-  @Column({ type: 'varchar', length: 500 })
-  fileKey: string;
+  // Nullable: for system-generated JMCs the signed copy is uploaded later, not at create.
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  fileKey: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
-  fileName: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fileName: string | null;
+
+  // True when created via the generate flow (has line items). Upload-only JMCs stay false.
+  @Column({ type: 'boolean', default: false })
+  isSystemGenerated: boolean;
+
+  @OneToMany(() => JmcItemEntity, (item) => item.jmc)
+  items: JmcItemEntity[];
 
   @Column({ type: 'text', nullable: true })
   remarks: string;

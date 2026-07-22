@@ -60,6 +60,8 @@ import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteVendorEntity } from 'src/modules/site-vendors/entities/site-vendor.entity';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
+import { JmcItemEntity } from 'src/modules/jmc/entities/jmc-item.entity';
+import { JmcItemMasterEntity } from 'src/modules/jmc/entities/jmc-item-master.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
@@ -175,6 +177,8 @@ export class ConfigService {
         SiteVendorEntity,
         PurchaseOrderEntity,
         JmcEntity,
+        JmcItemEntity,
+        JmcItemMasterEntity,
         SiteReportEntity,
         SiteInvoiceEntity,
         BookPaymentEntity,

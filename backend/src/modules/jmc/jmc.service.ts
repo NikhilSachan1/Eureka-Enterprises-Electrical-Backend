@@ -14,9 +14,19 @@ import {
   LessThanOrEqual,
   Equal,
 } from 'typeorm';
+import { EntityManager } from 'typeorm';
 import { JmcRepository } from './jmc.repository';
 import { JmcEntity } from './entities/jmc.entity';
-import { CreateJmcDto, UpdateJmcDto, GetJmcDto } from './dto';
+import { JmcItemEntity } from './entities/jmc-item.entity';
+import { JmcPdfService } from './jmc-pdf.service';
+import {
+  CreateJmcDto,
+  UpdateJmcDto,
+  GetJmcDto,
+  UploadJmcDto,
+  JmcItemDto,
+  JmcItemSuggestionDto,
+} from './dto';
 import {
   ApproveDto,
   RejectDto,
@@ -29,6 +39,8 @@ import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purcha
 import {
   FinancialApprovalStatus,
   FINANCIAL_ERRORS,
+  PartyType,
+  getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
@@ -37,6 +49,7 @@ export class JmcService {
   constructor(
     private readonly jmcRepository: JmcRepository,
     private readonly dataSource: DataSource,
+    private readonly jmcPdfService: JmcPdfService,
   ) {}
 
   async create(dto: CreateJmcDto, createdBy: string) {
@@ -45,29 +58,53 @@ export class JmcService {
       .findOne({ where: { id: dto.poId, deletedAt: IsNull() } });
     if (!po) throw new NotFoundException(JMC_ERRORS.PO_NOT_FOUND);
 
-    // Uniqueness within PO + jmcNumber (partial on deletedAt)
-    const dup = await this.jmcRepository.findOne({
-      where: { poId: dto.poId, jmcNumber: dto.jmcNumber, deletedAt: IsNull() },
-    });
-    if (dup) throw new ConflictException(JMC_ERRORS.JMC_NUMBER_EXISTS);
+    const items = dto.items ?? [];
+    const isSale = po.partyType === PartyType.SALE;
+    // Line items (system-generated flow) are SALE-only.
+    if (items.length && !isSale) {
+      throw new BadRequestException(JMC_ERRORS.ITEMS_ONLY_FOR_SALE);
+    }
 
-    const created = await this.jmcRepository.create({
-      poId: po.id,
-      siteId: po.siteId,
-      partyType: po.partyType,
-      contractorId: po.contractorId,
-      vendorId: po.vendorId,
-      jmcNumber: dto.jmcNumber,
-      jmcDate: new Date(dto.jmcDate),
-      fileKey: dto.fileKey,
-      fileName: dto.fileName,
-      remarks: dto.remarks,
-      approvalStatus: FinancialApprovalStatus.PENDING,
-      isLocked: false,
-      createdBy,
-    });
+    return await this.dataSource.transaction(async (em) => {
+      // jmcNumber: auto-generate when omitted (SALE flow); use provided value otherwise.
+      const jmcNumber = dto.jmcNumber?.trim() || (await this.generateJmcNumber(em));
 
-    return { message: JMC_RESPONSES.CREATED, id: created.id };
+      // Uniqueness within PO + jmcNumber (active rows).
+      const dup = await this.jmcRepository.findOne(
+        { where: { poId: po.id, jmcNumber, deletedAt: IsNull() } },
+        em,
+      );
+      if (dup) throw new ConflictException(JMC_ERRORS.JMC_NUMBER_EXISTS);
+
+      const isSystemGenerated = isSale && items.length > 0;
+
+      const created = await this.jmcRepository.create(
+        {
+          poId: po.id,
+          siteId: po.siteId,
+          partyType: po.partyType,
+          contractorId: po.contractorId,
+          vendorId: po.vendorId,
+          jmcNumber,
+          jmcDate: new Date(dto.jmcDate),
+          fileKey: dto.fileKey ?? null,
+          fileName: dto.fileName ?? null,
+          isSystemGenerated,
+          remarks: dto.remarks,
+          approvalStatus: FinancialApprovalStatus.PENDING,
+          isLocked: false,
+          createdBy,
+        },
+        em,
+      );
+
+      if (items.length) {
+        await this.saveItems(em, created.id, items, createdBy);
+        await this.upsertItemMasters(em, items, createdBy);
+      }
+
+      return { message: JMC_RESPONSES.CREATED, id: created.id, jmcNumber };
+    });
   }
 
   async findAll(query: GetJmcDto) {
@@ -129,6 +166,7 @@ export class JmcService {
     return {
       records: records.map((jmc) => ({
         ...jmc,
+        hasUpload: !!jmc.fileKey,
         createdByUser: formatUser(jmc.createdByUser),
         updatedByUser: formatUser(jmc.updatedByUser),
         approvalByUser: formatUser(jmc.approvalByUser),
@@ -147,6 +185,7 @@ export class JmcService {
         'site.company',
         'contractor',
         'vendor',
+        'items',
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
@@ -154,8 +193,11 @@ export class JmcService {
       ],
     });
     if (!jmc) throw new NotFoundException(JMC_ERRORS.NOT_FOUND);
+    const items = (jmc.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     return {
       ...jmc,
+      items,
+      hasUpload: !!jmc.fileKey,
       createdByUser: formatUser(jmc.createdByUser),
       updatedByUser: formatUser(jmc.updatedByUser),
       approvalByUser: formatUser(jmc.approvalByUser),
@@ -174,12 +216,81 @@ export class JmcService {
       if (dup && dup.id !== id) throw new ConflictException(JMC_ERRORS.JMC_NUMBER_EXISTS);
     }
 
-    await this.jmcRepository.update({ id }, {
-      ...dto,
-      jmcDate: dto.jmcDate ? new Date(dto.jmcDate) : undefined,
-      updatedBy,
-    } as Partial<JmcEntity>);
+    // `items` is a relation, not a column — split it out from the scalar update.
+    const { items, ...rest } = dto;
+
+    if (items !== undefined && items.length && jmc.partyType !== PartyType.SALE) {
+      throw new BadRequestException(JMC_ERRORS.ITEMS_ONLY_FOR_SALE);
+    }
+
+    await this.dataSource.transaction(async (em) => {
+      await this.jmcRepository.update(
+        { id },
+        {
+          ...rest,
+          jmcDate: rest.jmcDate ? new Date(rest.jmcDate) : undefined,
+          updatedBy,
+        } as Partial<JmcEntity>,
+        em,
+      );
+
+      // Replace-strategy for line items when the array is supplied.
+      if (items !== undefined) {
+        await em.getRepository(JmcItemEntity).delete({ jmcId: id });
+        if (items.length) {
+          await this.saveItems(em, id, items, updatedBy);
+          await this.upsertItemMasters(em, items, updatedBy);
+        }
+        await this.jmcRepository.update(
+          { id },
+          { isSystemGenerated: jmc.partyType === PartyType.SALE && items.length > 0 },
+          em,
+        );
+      }
+    });
     return { message: JMC_RESPONSES.UPDATED };
+  }
+
+  /** Attach the signed JMC copy to an existing record — no PO/contractor/date/number re-entry. */
+  async uploadSignedCopy(id: string, dto: UploadJmcDto, updatedBy: string) {
+    const jmc = await this.findActiveById(id);
+    this.assertEditable(jmc);
+    await this.jmcRepository.update(
+      { id },
+      { fileKey: dto.fileKey, fileName: dto.fileName, updatedBy },
+    );
+    return { message: JMC_RESPONSES.UPLOADED };
+  }
+
+  /** Global item-name typeahead (name only). */
+  async getItemSuggestions(query: JmcItemSuggestionDto) {
+    const limit = query.limit ?? 20;
+    const params: any[] = [];
+    let where = `"deletedAt" IS NULL`;
+    if (query.search) {
+      params.push(`%${query.search}%`);
+      where += ` AND name ILIKE $${params.length}`;
+    }
+    params.push(limit);
+    const rows = await this.dataSource.query(
+      `SELECT name FROM jmc_item_masters WHERE ${where} ORDER BY name ASC LIMIT $${params.length}`,
+      params,
+    );
+    return { records: rows.map((r: any) => r.name) };
+  }
+
+  /** Generate (always fresh, never cached) the system-generated JMC PDF; return a download URL. */
+  async generatePdf(id: string) {
+    const jmc = await this.jmcRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+      relations: ['po', 'site', 'site.company', 'contractor', 'items'],
+    });
+    if (!jmc) throw new NotFoundException(JMC_ERRORS.NOT_FOUND);
+    if (jmc.partyType !== PartyType.SALE || !jmc.isSystemGenerated) {
+      throw new BadRequestException(JMC_ERRORS.PDF_ONLY_SYSTEM_GENERATED);
+    }
+    const key = await this.jmcPdfService.generate(jmc as JmcEntity & { items: JmcItemEntity[] });
+    return await this.jmcPdfService.getDownloadUrl(key);
   }
 
   async remove(id: string, deletedBy: string) {
@@ -210,6 +321,11 @@ export class JmcService {
       .findOne({ where: { id: jmc.poId, deletedAt: IsNull() } });
     if (!po || po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
       throw new BadRequestException(JMC_ERRORS.PO_NOT_APPROVED_FOR_APPROVAL);
+    }
+
+    // The signed (uploaded) JMC is mandatory before approval.
+    if (!jmc.fileKey) {
+      throw new BadRequestException(JMC_ERRORS.UPLOAD_REQUIRED_FOR_APPROVAL);
     }
 
     await this.jmcRepository.update(
@@ -321,6 +437,59 @@ export class JmcService {
     }
     if (jmc.isLocked) {
       throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_EDIT_LOCKED);
+    }
+  }
+
+  /**
+   * Auto JMC number `JMC/{FY}/{seq}`, sequence resets per financial year. MAX(seq)+1 is computed
+   * over ALL rows incl. soft-deleted (matched by the FY prefix) to avoid colliding with a
+   * soft-deleted number — same guard as payment-sheet numbering.
+   */
+  private async generateJmcNumber(em: EntityManager): Promise<string> {
+    const fy = getFinancialYear(new Date());
+    const prefix = `JMC/${fy}/`;
+    const rows = await em.query(
+      `SELECT COALESCE(MAX(CAST(substring("jmcNumber" from '(\\d+)$') AS INTEGER)), 0) AS maxseq
+       FROM jmcs WHERE "jmcNumber" LIKE $1`,
+      [`${prefix}%`],
+    );
+    const seq = String(Number(rows?.[0]?.maxseq ?? 0) + 1).padStart(4, '0');
+    return `${prefix}${seq}`;
+  }
+
+  private async saveItems(
+    em: EntityManager,
+    jmcId: string,
+    items: JmcItemDto[],
+    userId: string,
+  ): Promise<void> {
+    const repo = em.getRepository(JmcItemEntity);
+    const rows = items.map((it, idx) =>
+      repo.create({
+        jmcId,
+        itemName: it.itemName.trim(),
+        unit: it.unit.trim(),
+        quantity: it.quantity.trim(),
+        sortOrder: idx,
+        createdBy: userId,
+      }),
+    );
+    await repo.save(rows);
+  }
+
+  /** Upsert item names into the global suggestion master (case-insensitive dedupe). */
+  private async upsertItemMasters(
+    em: EntityManager,
+    items: JmcItemDto[],
+    userId: string,
+  ): Promise<void> {
+    const names = [...new Set(items.map((i) => i.itemName.trim()).filter(Boolean))];
+    for (const name of names) {
+      await em.query(
+        `INSERT INTO jmc_item_masters (name, "createdBy") VALUES ($1, $2)
+         ON CONFLICT (LOWER(name)) DO NOTHING`,
+        [name, userId ?? null],
+      );
     }
   }
 

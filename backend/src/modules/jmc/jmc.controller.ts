@@ -13,7 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { JmcService } from './jmc.service';
-import { CreateJmcDto, UpdateJmcDto, GetJmcDto } from './dto';
+import { CreateJmcDto, UpdateJmcDto, GetJmcDto, UploadJmcDto, JmcItemSuggestionDto } from './dto';
 import {
   ApproveDto,
   RejectDto,
@@ -54,6 +54,16 @@ export class JmcController {
     return await this.jmcService.getDropdown(siteId, partyType, forDocument);
   }
 
+  @Get('items/suggestions')
+  @RequiredPermission('financials.jmcs.view')
+  @ApiOperation({
+    summary: 'Global JMC item-name suggestions (typeahead)',
+    description: 'Returns distinct item names from the global master, matching the search text.',
+  })
+  async itemSuggestions(@Query() query: JmcItemSuggestionDto) {
+    return await this.jmcService.getItemSuggestions(query);
+  }
+
   @Get()
   @RequiredPermission('financials.jmcs.view-list')
   @ApiOperation({ summary: 'List JMCs' })
@@ -68,6 +78,17 @@ export class JmcController {
     return await this.jmcService.findById(id);
   }
 
+  @Get(':id/pdf')
+  @RequiredPermission('financials.jmcs.view')
+  @ApiOperation({
+    summary: 'Download URL for the system-generated JMC PDF',
+    description:
+      'Always regenerated fresh (never cached). SALE + system-generated (has items) only.',
+  })
+  async pdf(@Param('id', ParseUUIDPipe) id: string) {
+    return await this.jmcService.generatePdf(id);
+  }
+
   @Patch(':id')
   @RequiredPermission('financials.jmcs.update')
   async update(
@@ -76,6 +97,20 @@ export class JmcController {
     @Body() dto: UpdateJmcDto,
   ) {
     return await this.jmcService.update(id, dto, updatedBy);
+  }
+
+  @Patch(':id/upload')
+  @RequiredPermission('financials.jmcs.update')
+  @ApiOperation({
+    summary: 'Attach the signed JMC copy to an existing record',
+    description: 'Uploads the signed file against the existing JMC — no PO/date/number re-entry.',
+  })
+  async uploadSignedCopy(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Body() dto: UploadJmcDto,
+  ) {
+    return await this.jmcService.uploadSignedCopy(id, dto, updatedBy);
   }
 
   @Delete(':id')
