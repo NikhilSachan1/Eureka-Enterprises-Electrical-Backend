@@ -575,7 +575,8 @@ export class DocumentStatusService {
 
     // 2) JMCs of these POs
     const jmcRows: any[] = await this.dataSource.query(
-      `SELECT id, "jmcNumber", "poId", "approvalStatus" AS status
+      `SELECT id, "jmcNumber", "poId", "approvalStatus" AS status,
+              "isSystemGenerated", ("fileKey" IS NOT NULL) AS "hasUpload"
        FROM jmcs WHERE "poId" = ANY($1) AND "deletedAt" IS NULL ORDER BY "createdAt" ASC`,
       [poIds],
     );
@@ -653,20 +654,39 @@ export class DocumentStatusService {
       status: t.status,
     });
 
-    const records = poRows.map((po) => ({
-      id: po.id,
-      poNumber: po.poNumber,
-      partyType: po.partyType,
-      status: po.status,
-      partyName: po.partyName ?? null,
-      site: { id: po.siteId, name: po.siteName, companyName: po.companyName ?? null },
-      jmcs: (jmcByPo.get(po.id) ?? []).map((j) => {
+    // Empty status-count bucket helper.
+    const bucket = () => ({ total: 0, approved: 0, pending: 0, rejected: 0 });
+    const tally = (b: any, status: string) => {
+      b.total++;
+      if (status === 'APPROVED') b.approved++;
+      else if (status === 'REJECTED') b.rejected++;
+      else b.pending++; // treat any non-approved/rejected as pending
+    };
+
+    // Page-level rollup across the returned POs.
+    const summary = {
+      poCount: poRows.length,
+      po: bucket(),
+      jmc: bucket(),
+      report: { applicable: 0, present: 0, missing: 0 }, // PURCHASE only
+      invoice: { ...bucket(), missing: 0 },
+      bookPayment: { total: 0, withTransfer: 0, withoutTransfer: 0 },
+      amounts: { invoiceTotal: 0, paid: 0, remaining: 0 },
+    };
+
+    const records = poRows.map((po) => {
+      const isPurchase = po.partyType === 'PURCHASE';
+      const jmcs = (jmcByPo.get(po.id) ?? []).map((j) => {
         const report = reportByJmc.get(j.id);
         const inv = invoiceByJmc.get(j.id);
         return {
           id: j.id,
           jmcNumber: j.jmcNumber,
           status: j.status,
+          // System-generated (created in-app with items) vs upload-only, and whether a signed
+          // file is attached. A JMC can be system-generated AND have an upload.
+          isSystemGenerated: j.isSystemGenerated,
+          hasUpload: j.hasUpload,
           // Reports apply to PURCHASE only; null => not created (MISSING).
           report: report
             ? { id: report.id, reportNumber: report.reportNumber, status: report.status }
@@ -692,10 +712,75 @@ export class DocumentStatusService {
               }
             : null,
         };
-      }),
-    }));
+      });
 
-    return { records, totalRecords };
+      // ── per-PO rollup counts ──
+      const counts = {
+        jmc: bucket(),
+        report: { applicable: 0, present: 0, missing: 0 },
+        invoice: { ...bucket(), missing: 0 },
+        bookPayment: { total: 0, withTransfer: 0, withoutTransfer: 0 },
+        amounts: { invoiceTotal: 0, paid: 0, remaining: 0 },
+      };
+      for (const j of jmcs) {
+        tally(counts.jmc, j.status);
+        if (isPurchase) {
+          counts.report.applicable++;
+          if (j.report) counts.report.present++;
+          else counts.report.missing++;
+        }
+        counts.invoice.total++;
+        if (j.invoice) {
+          if (j.invoice.status === 'APPROVED') counts.invoice.approved++;
+          else if (j.invoice.status === 'REJECTED') counts.invoice.rejected++;
+          else counts.invoice.pending++;
+          counts.amounts.invoiceTotal += j.invoice.totalAmount;
+          counts.amounts.paid += j.invoice.paidTotal;
+          counts.amounts.remaining += j.invoice.remaining;
+          for (const bp of j.invoice.bookPayments) {
+            counts.bookPayment.total++;
+            if (bp.hasTransfer) counts.bookPayment.withTransfer++;
+            else counts.bookPayment.withoutTransfer++;
+          }
+        } else {
+          counts.invoice.missing++;
+        }
+      }
+
+      // fold into page summary
+      tally(summary.po, po.status);
+      summary.jmc.total += counts.jmc.total;
+      summary.jmc.approved += counts.jmc.approved;
+      summary.jmc.pending += counts.jmc.pending;
+      summary.jmc.rejected += counts.jmc.rejected;
+      summary.report.applicable += counts.report.applicable;
+      summary.report.present += counts.report.present;
+      summary.report.missing += counts.report.missing;
+      summary.invoice.total += counts.invoice.total;
+      summary.invoice.approved += counts.invoice.approved;
+      summary.invoice.pending += counts.invoice.pending;
+      summary.invoice.rejected += counts.invoice.rejected;
+      summary.invoice.missing += counts.invoice.missing;
+      summary.bookPayment.total += counts.bookPayment.total;
+      summary.bookPayment.withTransfer += counts.bookPayment.withTransfer;
+      summary.bookPayment.withoutTransfer += counts.bookPayment.withoutTransfer;
+      summary.amounts.invoiceTotal += counts.amounts.invoiceTotal;
+      summary.amounts.paid += counts.amounts.paid;
+      summary.amounts.remaining += counts.amounts.remaining;
+
+      return {
+        id: po.id,
+        poNumber: po.poNumber,
+        partyType: po.partyType,
+        status: po.status,
+        partyName: po.partyName ?? null,
+        site: { id: po.siteId, name: po.siteName, companyName: po.companyName ?? null },
+        counts,
+        jmcs,
+      };
+    });
+
+    return { summary, records, totalRecords };
   }
 
   // ─────────────────────────────────────────────────────────────────────────

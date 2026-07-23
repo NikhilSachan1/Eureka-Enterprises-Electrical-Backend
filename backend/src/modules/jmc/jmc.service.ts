@@ -154,6 +154,7 @@ export class JmcService {
           'site.company',
           'contractor',
           'vendor',
+          'items',
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
@@ -166,6 +167,7 @@ export class JmcService {
     return {
       records: records.map((jmc) => ({
         ...jmc,
+        items: (jmc.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
         hasUpload: !!jmc.fileKey,
         createdByUser: formatUser(jmc.createdByUser),
         updatedByUser: formatUser(jmc.updatedByUser),
