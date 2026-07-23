@@ -55,7 +55,6 @@ export class JmcController {
   }
 
   @Get('items/suggestions')
-  @RequiredPermission('financials.jmcs.view')
   @ApiOperation({
     summary: 'Global JMC item-name suggestions (typeahead)',
     description: 'Returns distinct item names from the global master, matching the search text.',
