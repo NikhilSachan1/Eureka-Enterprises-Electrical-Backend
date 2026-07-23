@@ -6,6 +6,7 @@ import { RequiredPermission } from 'src/modules/auth/decorators/required-permiss
 import { DocumentStatusService } from './document-status.service';
 import { GetDocumentStatusDto } from './dto/get-document-status.dto';
 import { GetDocumentIssuesDto } from './dto/get-document-issues.dto';
+import { GetPoBreakdownDto } from './dto/get-po-breakdown.dto';
 
 @ApiTags('Document Status')
 @ApiBearerAuth('JWT-auth')
@@ -46,5 +47,19 @@ export class DocumentStatusController {
   })
   async getIssues(@Query() query: GetDocumentIssuesDto) {
     return await this.documentStatusService.getIssues(query);
+  }
+
+  @Get('po-breakdown')
+  @RequiredPermission('financials.document-status.view-list')
+  @ApiOperation({
+    summary: 'PO-wise document drill-down tree',
+    description:
+      'Per PO, a nested tree: PO → JMCs → (Report | Invoice → Book Payments → Bank Transfers). ' +
+      'Every node carries id + number + status so the UI can navigate to it. Invoices include ' +
+      'totalAmount / paidTotal / remaining. report & invoice = null means not created yet (MISSING). ' +
+      'Paginated at the PO level. Filter by siteId (required), companyId, partyType, poId.',
+  })
+  async getPoBreakdown(@Query() query: GetPoBreakdownDto) {
+    return await this.documentStatusService.getPoBreakdown(query);
   }
 }
