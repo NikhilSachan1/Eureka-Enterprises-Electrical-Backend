@@ -55,7 +55,6 @@ export class JmcController {
   }
 
   @Get('items/suggestions')
-  @RequiredPermission('financials.jmcs.view')
   @ApiOperation({
     summary: 'Global JMC item-name suggestions (typeahead)',
     description: 'Returns distinct item names from the global master, matching the search text.',
@@ -79,11 +78,11 @@ export class JmcController {
   }
 
   @Get(':id/pdf')
-  @RequiredPermission('financials.jmcs.view')
   @ApiOperation({
     summary: 'Download URL for the system-generated JMC PDF',
     description:
-      'Always regenerated fresh (never cached). SALE + system-generated (has items) only.',
+      'Always regenerated fresh (never cached). SALE + system-generated (has items) only. ' +
+      'No specific JMC permission required — any authenticated user can call this.',
   })
   async pdf(@Param('id', ParseUUIDPipe) id: string) {
     return await this.jmcService.generatePdf(id);
@@ -100,10 +99,11 @@ export class JmcController {
   }
 
   @Patch(':id/upload')
-  @RequiredPermission('financials.jmcs.update')
   @ApiOperation({
     summary: 'Attach the signed JMC copy to an existing record',
-    description: 'Uploads the signed file against the existing JMC — no PO/date/number re-entry.',
+    description:
+      'Uploads the signed file against the existing JMC — no PO/date/number re-entry. ' +
+      'No specific JMC permission required — any authenticated user can call this.',
   })
   async uploadSignedCopy(
     @Param('id', ParseUUIDPipe) id: string,
