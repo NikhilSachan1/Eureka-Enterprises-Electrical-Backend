@@ -36,6 +36,7 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { AssetActionDto } from './dto/asset-action.dto';
+import { GenerateAssetReportDto } from './dto/generate-asset-report.dto';
 import { Roles } from '../roles/constants/role.constants';
 import { Public } from '../auth/decorators/public.decorator';
 
@@ -95,6 +96,18 @@ export class AssetMastersController {
       assetFiles,
       createdBy,
     );
+  }
+
+  @Post('report/pdf')
+  @ApiOperation({
+    summary: 'Generate an Asset Report PDF for selected assets',
+    description:
+      'Accepts a list of asset master IDs and returns a download URL for a branded, ' +
+      'client-ready Asset Report PDF (asset details with calibration & warranty status). ' +
+      'Always regenerated fresh.',
+  })
+  async generateReport(@Body() dto: GenerateAssetReportDto) {
+    return await this.assetMastersService.generateAssetReport(dto);
   }
 
   @Get()
