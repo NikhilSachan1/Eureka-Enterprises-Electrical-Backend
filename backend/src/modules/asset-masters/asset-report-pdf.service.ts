@@ -6,6 +6,7 @@ import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { PAYMENT_ADVICE_COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 
 export interface AssetReportRow {
+  assetMasterId?: string;
   assetId: string;
   name: string;
   model?: string | null;
@@ -21,6 +22,7 @@ export interface AssetReportRow {
   warrantyEndDate?: Date | string | null;
   status?: string | null;
   remarks?: string | null;
+  hasCalibrationCertificate?: boolean;
 }
 
 type StatusKind = 'ok' | 'warn' | 'bad' | 'na';
@@ -41,11 +43,11 @@ export class AssetReportPdfService {
     return await this.filesService.getDownloadFileUrl(key);
   }
 
-  async generate(assets: AssetReportRow[]): Promise<string> {
+  async generate(assets: AssetReportRow[], certBaseUrl?: string): Promise<string> {
     const logoBase64 = await this.fetchUrlAsBase64(PAYMENT_ADVICE_COMPANY_DETAILS.LOGO_URL).catch(
       () => null,
     );
-    const html = this.buildHtml(assets, logoBase64);
+    const html = this.buildHtml(assets, logoBase64, certBaseUrl);
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
     try {
       browser = await puppeteer.launch({
@@ -142,7 +144,11 @@ export class AssetReportPdfService {
     });
   }
 
-  private buildHtml(assets: AssetReportRow[], logoBase64: string | null): string {
+  private buildHtml(
+    assets: AssetReportRow[],
+    logoBase64: string | null,
+    certBaseUrl?: string,
+  ): string {
     const rows = assets
       .map((a, idx) => {
         const cal = this.validity(a.calibrationEndDate);
@@ -151,6 +157,13 @@ export class AssetReportPdfService {
           a.calibrationStartDate || a.calibrationEndDate
             ? `${this.fmtDate(a.calibrationStartDate)} → ${this.fmtDate(a.calibrationEndDate)}`
             : '—';
+        // Stable public link (never expires) — resolves to a fresh presigned URL on click.
+        const certLink =
+          a.hasCalibrationCertificate && a.assetMasterId && certBaseUrl
+            ? `<div><a class="cert-link" href="${certBaseUrl}/assets/public/${this.esc(
+                a.assetMasterId,
+              )}/calibration-certificate">View Certificate ↗</a></div>`
+            : '';
         return `
           <tr>
             <td class="c">${idx + 1}</td>
@@ -169,6 +182,7 @@ export class AssetReportPdfService {
                   ? `<div class="muted">By: ${this.esc(a.calibrationFrom)}</div>`
                   : ''
               }
+              ${certLink}
             </td>
             <td>
               <div>${this.fmtDate(a.warrantyEndDate)}</div>
@@ -214,6 +228,7 @@ export class AssetReportPdfService {
   .badge-warn { background: #ffedd5; color: #c2410c; }
   .badge-bad { background: #fee2e2; color: #b91c1c; }
   .badge-na { background: #eef1f5; color: #4b5563; }
+  .cert-link { display: inline-block; margin-top: 3px; color: #1d4ed8; font-weight: 600; font-size: 8.5px; text-decoration: underline; }
   .empty { text-align: center; color: #9ca3af; padding: 24px; font-style: italic; }
 </style>
 </head>

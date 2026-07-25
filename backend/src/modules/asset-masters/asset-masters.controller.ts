@@ -9,8 +9,10 @@ import {
   Delete,
   Query,
   Get,
+  Res,
   ForbiddenException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AssetMastersService } from './asset-masters.service';
 import {
   CreateAssetDto,
@@ -142,6 +144,23 @@ export class AssetMastersController {
   })
   async findOnePublic(@Param('assetMasterId') assetMasterId: string) {
     return await this.assetMastersService.findOneWithDetails(assetMasterId);
+  }
+
+  @Public()
+  @Get('public/:assetMasterId/calibration-certificate')
+  @ApiOperation({
+    summary: 'View an asset calibration certificate (public redirect)',
+    description:
+      "Public (no auth) — resolves the asset's current calibration certificate and redirects " +
+      'to a fresh download URL. Backs the "View Certificate" link in the Asset Report PDF so ' +
+      'the link never expires.',
+  })
+  async calibrationCertificate(
+    @Param('assetMasterId') assetMasterId: string,
+    @Res() res: Response,
+  ) {
+    const { url } = await this.assetMastersService.getCalibrationCertificateUrl(assetMasterId);
+    return res.redirect(url);
   }
 
   @Get(':id')

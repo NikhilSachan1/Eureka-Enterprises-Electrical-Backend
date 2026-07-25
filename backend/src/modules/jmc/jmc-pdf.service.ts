@@ -1,6 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as https from 'https';
-import * as http from 'http';
 import puppeteer from 'puppeteer';
 import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { JmcEntity } from './entities/jmc.entity';
@@ -26,10 +24,7 @@ export class JmcPdfService {
   }
 
   async generate(jmc: JmcDetail): Promise<string> {
-    const logoBase64 = await this.fetchUrlAsBase64(PAYMENT_ADVICE_COMPANY_DETAILS.LOGO_URL).catch(
-      () => null,
-    );
-    const html = this.buildHtml(jmc, logoBase64);
+    const html = this.buildHtml(jmc);
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
     try {
       browser = await puppeteer.launch({
@@ -85,29 +80,12 @@ export class JmcPdfService {
     });
   }
 
-  private fetchUrlAsBase64(url: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      const client = url.startsWith('https') ? https : http;
-      client
-        .get(url, (res) => {
-          const chunks: Uint8Array[] = [];
-          res.on('data', (c: Uint8Array) => chunks.push(c));
-          res.on('end', () => {
-            const buf = Buffer.concat(chunks);
-            const contentType = res.headers['content-type'] ?? 'image/jpeg';
-            resolve(`data:${contentType};base64,${buf.toString('base64')}`);
-          });
-        })
-        .on('error', () => resolve(null));
-    });
-  }
-
-  private buildHtml(jmc: JmcDetail, logoBase64: string | null): string {
+  private buildHtml(jmc: JmcDetail): string {
     const projectName = (jmc as any).site?.name ?? '—';
-    const clientName = PAYMENT_ADVICE_COMPANY_DETAILS.NAME;
-    const contractorName = (jmc as any).contractor?.name ?? '—';
+    // Per lead: Client/Owner = the contractor party; Contractor = Eureka (us).
+    const clientName = (jmc as any).contractor?.name ?? '—';
+    const contractorName = PAYMENT_ADVICE_COMPANY_DETAILS.NAME;
     const poNumber = (jmc as any).po?.poNumber ?? '—';
-    const siteName = projectName;
 
     const items = (jmc.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     const rows = items
@@ -132,14 +110,9 @@ export class JmcPdfService {
   .page { padding: 4px 2px; }
 
   /* ── Header ── */
-  .header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #1f3a5f; padding-bottom: 12px; margin-bottom: 4px; }
-  .header-logo img { height: 56px; width: auto; object-fit: contain; }
-  .header-details { flex: 1; }
-  .header .company { font-size: 18px; font-weight: bold; color: #1f3a5f; text-transform: uppercase; letter-spacing: 0.5px; }
-  .header .company-sub { font-size: 10px; color: #555; margin-top: 3px; }
-  .header .doc-badge { text-align: right; }
-  .header .doc-title { font-size: 14px; font-weight: bold; color: #1f3a5f; letter-spacing: 1px; }
-  .header .doc-sub { font-size: 11px; color: #666; margin-top: 2px; }
+  .header { text-align: center; border-bottom: 3px solid #1f3a5f; padding-bottom: 12px; margin-bottom: 4px; }
+  .header .doc-title { font-size: 17px; font-weight: bold; color: #1f3a5f; letter-spacing: 1.5px; }
+  .header .doc-sub { font-size: 12px; color: #666; margin-top: 3px; }
 
   /* ── Info band ── */
   .band { display: flex; gap: 16px; margin: 14px 0 6px; }
@@ -171,21 +144,10 @@ export class JmcPdfService {
 <body>
 <div class="page">
 
-  <!-- Header -->
+  <!-- Header: JMC title only (no logo / company name, per requirement) -->
   <div class="header">
-    ${logoBase64 ? `<div class="header-logo"><img src="${logoBase64}" alt="logo"/></div>` : ''}
-    <div class="header-details">
-      <div class="company">${this.esc(clientName)}</div>
-      <div class="company-sub">GSTIN: ${this.esc(
-        PAYMENT_ADVICE_COMPANY_DETAILS.GSTIN,
-      )} · ${this.esc(PAYMENT_ADVICE_COMPANY_DETAILS.FULL_ADDRESS)}, ${this.esc(
-      PAYMENT_ADVICE_COMPANY_DETAILS.ADDRESS.CITY,
-    )}</div>
-    </div>
-    <div class="doc-badge">
-      <div class="doc-title">JOINT MEASUREMENT CERTIFICATE</div>
-      <div class="doc-sub">${this.esc(jmc.jmcNumber)}</div>
-    </div>
+    <div class="doc-title">JOINT MEASUREMENT CERTIFICATE</div>
+    <div class="doc-sub">${this.esc(jmc.jmcNumber)}</div>
   </div>
 
   <!-- Info band -->
@@ -222,7 +184,7 @@ export class JmcPdfService {
     <tbody>${rows || `<tr><td colspan="4" class="empty">No measurement items</td></tr>`}</tbody>
   </table>
 
-  <!-- Signatures: Eureka Enterprises + Site -->
+  <!-- Signatures: Contractor party (left) then Eureka (right) -->
   <div class="sign-wrap">
     <div class="section-label">Signatures</div>
     <table class="sign">
@@ -235,7 +197,7 @@ export class JmcPdfService {
         <td>
           <div class="sig-cap">For</div>
           <div class="sig-space"></div>
-          <div class="sig-label">${this.esc(siteName)}</div>
+          <div class="sig-label">${this.esc(contractorName)}</div>
         </td>
       </tr>
     </table>

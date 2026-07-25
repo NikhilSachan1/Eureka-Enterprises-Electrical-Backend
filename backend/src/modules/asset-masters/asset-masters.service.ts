@@ -19,6 +19,8 @@ import { AssetMastersRepository } from './asset-masters.repository';
 import { AssetMasterEntity } from './entities/asset-master.entity';
 import { AssetReportPdfService } from './asset-report-pdf.service';
 import { GenerateAssetReportDto } from './dto/generate-asset-report.dto';
+import { FilesService } from '../common/file-upload/files.service';
+import { Environments } from 'env-configs';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import {
   ASSET_MASTERS_ERRORS,
@@ -74,6 +76,7 @@ export class AssetMastersService {
     private readonly emailService: EmailService,
     private readonly userService: UserService,
     private readonly assetReportPdfService: AssetReportPdfService,
+    private readonly filesService: FilesService,
   ) {}
 
   /**
@@ -83,11 +86,17 @@ export class AssetMastersService {
    */
   async generateAssetReport(dto: GenerateAssetReportDto) {
     const rows = await this.dataSource.query(
-      `SELECT am."assetId",
+      `SELECT am.id AS "assetMasterId", am."assetId",
               av.name, av.model, av."serialNumber", av.category, av."assetType",
               av."calibrationFrom", av."calibrationStartDate", av."calibrationEndDate",
               av."purchaseDate", av."vendorName", av."warrantyStartDate", av."warrantyEndDate",
-              av.status, av.remarks
+              av.status, av.remarks,
+              EXISTS (
+                SELECT 1 FROM asset_files af
+                WHERE af."assetVersionId" = av.id
+                  AND af."fileType" = 'CALIBRATION_CERTIFICATE'
+                  AND af."deletedAt" IS NULL
+              ) AS "hasCalibrationCertificate"
        FROM asset_masters am
        JOIN asset_versions av
          ON av."assetMasterId" = am.id AND av."isActive" = true AND av."deletedAt" IS NULL
@@ -100,8 +109,34 @@ export class AssetMastersService {
       throw new NotFoundException('No assets found for the given IDs');
     }
 
-    const key = await this.assetReportPdfService.generate(rows);
+    // Absolute base for the public "view calibration certificate" links embedded in the PDF.
+    const certBaseUrl = Environments.API_BASE_URL;
+    const key = await this.assetReportPdfService.generate(rows, certBaseUrl);
     return await this.assetReportPdfService.getDownloadUrl(key);
+  }
+
+  /**
+   * Public: resolve the current calibration certificate for an asset and return a fresh
+   * presigned download URL. Backs GET /assets/public/:assetMasterId/calibration-certificate,
+   * so the link embedded in the Asset Report PDF never goes stale.
+   */
+  async getCalibrationCertificateUrl(assetMasterId: string) {
+    const [file] = await this.dataSource.query(
+      `SELECT af."fileKey"
+       FROM asset_files af
+       JOIN asset_versions av
+         ON av.id = af."assetVersionId" AND av."isActive" = true AND av."deletedAt" IS NULL
+       WHERE af."assetMasterId" = $1
+         AND af."fileType" = 'CALIBRATION_CERTIFICATE'
+         AND af."deletedAt" IS NULL
+       ORDER BY af."createdAt" DESC
+       LIMIT 1`,
+      [assetMasterId],
+    );
+    if (!file) {
+      throw new NotFoundException('Calibration certificate not found for this asset');
+    }
+    return await this.filesService.getDownloadFileUrl(file.fileKey);
   }
 
   // ==================== Computed Status Methods ====================
