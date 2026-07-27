@@ -78,6 +78,14 @@ export class PurchaseOrderEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 10, default: 'CGST_SGST' })
   gstType: string;
 
+  // Client/reference number shown on the PO document (e.g. work-award ref).
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  referenceNumber: string | null;
+
+  // Terms & Conditions printed on the PO (pre-filled from the default template, editable).
+  @Column({ type: 'text', nullable: true })
+  termsAndConditions: string | null;
+
   @OneToMany(() => PoItemEntity, (item) => item.po)
   items: PoItemEntity[];
 

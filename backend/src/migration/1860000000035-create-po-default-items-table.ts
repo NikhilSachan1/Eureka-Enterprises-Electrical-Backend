@@ -1,10 +1,9 @@
 import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 
 /**
- * PO system-generated enhancement (4/4).
  * `po_default_items` — default line items that pre-fill a new PO on the FE. Not editable via API
- * for now; seeded with a single placeholder row here — the team will replace it with the real
- * default items later (directly / via a follow-up migration).
+ * for now; seeded with a single placeholder row — the team will replace it with the real default
+ * items later (directly / via a follow-up migration).
  */
 export class CreatePoDefaultItemsTable1860000000035 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -10,6 +10,11 @@ export class PoItemDto {
   @MaxLength(255)
   itemName: string;
 
+  @ApiPropertyOptional({ description: 'Rich multi-line description / scope' })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
   @ApiPropertyOptional({ description: 'HSN code' })
   @IsString()
   @IsOptional()

@@ -95,6 +95,8 @@ export class PurchaseOrderService {
             gstPercentage: dto.gstPercentage ?? null,
             gstType: dto.gstType ?? 'CGST_SGST',
             totalAmount,
+            referenceNumber: dto.referenceNumber ?? null,
+            termsAndConditions: dto.termsAndConditions ?? null,
             fileKey: null,
             fileName: null,
             isSystemGenerated: true,
@@ -294,7 +296,22 @@ export class PurchaseOrderService {
     return { records: rows.map((r: any) => r.name) };
   }
 
-  /** Default line items to pre-fill a new PO (FE). */
+  /**
+   * Read the latest active config_settings value for a config key. node-pg already parses jsonb
+   * to a JS value (string/array/object), so return it as-is — do NOT JSON.parse again.
+   */
+  private async readConfigValue(key: string): Promise<any> {
+    const rows = await this.dataSource.query(
+      `SELECT cs.value FROM config_settings cs
+       JOIN configurations c ON c.id = cs."configId"
+       WHERE c.key = $1 AND cs."deletedAt" IS NULL AND cs."isActive" = true
+       ORDER BY cs."createdAt" DESC LIMIT 1`,
+      [key],
+    );
+    return rows?.[0]?.value;
+  }
+
+  /** Default line items to pre-fill a new PO (FE). Managed via the `po_default_items` table. */
   async getDefaultItems() {
     const rows = await this.dataSource.getRepository(PoDefaultItemEntity).find({
       where: { isActive: true, deletedAt: IsNull() },
@@ -307,6 +324,12 @@ export class PurchaseOrderService {
         make: r.make ?? null,
       })),
     };
+  }
+
+  /** Default Terms & Conditions template to pre-fill a new PO (FE). Config `po_default_terms`. */
+  async getDefaultTerms() {
+    const value = await this.readConfigValue('po_default_terms');
+    return { content: typeof value === 'string' ? value : '' };
   }
 
   /**
@@ -369,6 +392,7 @@ export class PurchaseOrderService {
       repo.create({
         poId,
         itemName: it.itemName.trim(),
+        description: it.description?.trim() || null,
         hsnCode: it.hsnCode?.trim() || null,
         make: it.make?.trim() || null,
         quantity: it.quantity,

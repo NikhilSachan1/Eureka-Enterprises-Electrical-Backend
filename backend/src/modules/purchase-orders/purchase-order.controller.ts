@@ -67,6 +67,13 @@ export class PurchaseOrderController {
     return await this.poService.getDefaultItems();
   }
 
+  @Get('default-terms')
+  @RequiredPermission('financials.purchase-orders.view-list')
+  @ApiOperation({ summary: 'Default Terms & Conditions template to pre-fill a new PO' })
+  async defaultTerms() {
+    return await this.poService.getDefaultTerms();
+  }
+
   @Get('can-create')
   @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({

@@ -19,6 +19,10 @@ export class PoItemEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   itemName: string;
 
+  // Rich multi-line description (scope of supply / work) shown under the item on the PDF.
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
   @Column({ type: 'varchar', length: 20, nullable: true })
   hsnCode: string | null;
 
