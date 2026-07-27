@@ -59,6 +59,10 @@ import { OrgFileNodeEntity } from 'src/modules/org-files/entities/org-file-node.
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteVendorEntity } from 'src/modules/site-vendors/entities/site-vendor.entity';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
+import { PoItemEntity } from 'src/modules/purchase-orders/entities/po-item.entity';
+import { PoItemMasterEntity } from 'src/modules/purchase-orders/entities/po-item-master.entity';
+import { PoDefaultItemEntity } from 'src/modules/purchase-orders/entities/po-default-item.entity';
+import { PaymentRequestEntity } from 'src/modules/payment-requests/entities/payment-request.entity';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { JmcItemEntity } from 'src/modules/jmc/entities/jmc-item.entity';
 import { JmcItemMasterEntity } from 'src/modules/jmc/entities/jmc-item-master.entity';
@@ -176,6 +180,10 @@ export class ConfigService {
         VendorEntity,
         SiteVendorEntity,
         PurchaseOrderEntity,
+        PoItemEntity,
+        PoItemMasterEntity,
+        PoDefaultItemEntity,
+        PaymentRequestEntity,
         JmcEntity,
         JmcItemEntity,
         JmcItemMasterEntity,

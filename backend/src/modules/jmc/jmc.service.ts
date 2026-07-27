@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   DataSource,
@@ -35,6 +36,7 @@ import {
 import { JMC_ERRORS, JMC_RESPONSES } from './constants/jmc.constants';
 import { checkJmcHasChildrenQuery } from './queries/jmc.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import {
   FinancialApprovalStatus,
@@ -57,6 +59,10 @@ export class JmcService {
       .getRepository(PurchaseOrderEntity)
       .findOne({ where: { id: dto.poId, deletedAt: IsNull() } });
     if (!po) throw new NotFoundException(JMC_ERRORS.PO_NOT_FOUND);
+
+    // Site-scoped: only a user allocated to the JMC's site (team or PM) may create.
+    const access = await checkSiteCreateAccess(this.dataSource, createdBy, po.siteId);
+    if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     const items = dto.items ?? [];
     const isSale = po.partyType === PartyType.SALE;

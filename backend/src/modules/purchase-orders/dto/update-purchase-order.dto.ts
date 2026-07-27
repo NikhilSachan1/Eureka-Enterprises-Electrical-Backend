@@ -1,5 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, Min, IsDateString, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  Min,
+  IsDateString,
+  MaxLength,
+  IsArray,
+  ValidateNested,
+  ArrayMaxSize,
+  IsIn,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { PoItemDto } from './po-item.dto';
 
 /**
  * partyType / siteId / contractorId / vendorId cannot change after creation.
@@ -57,6 +70,22 @@ export class UpdatePurchaseOrderDto {
   @IsOptional()
   @MaxLength(255)
   fileName?: string;
+
+  @ApiPropertyOptional({ description: 'Tax split for PDF', enum: ['CGST_SGST', 'IGST'] })
+  @IsIn(['CGST_SGST', 'IGST'])
+  @IsOptional()
+  gstType?: 'CGST_SGST' | 'IGST';
+
+  @ApiPropertyOptional({
+    type: [PoItemDto],
+    description: 'Line items — replaces the full list (system-generated PO, while PENDING).',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => PoItemDto)
+  items?: PoItemDto[];
 
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()

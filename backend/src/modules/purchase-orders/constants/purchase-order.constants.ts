@@ -11,7 +11,15 @@ export const PO_ERRORS = {
   REJECT_REASON_REQUIRED: 'Rejection reason is required.',
   UNLOCK_REASON_REQUIRED: 'Unlock reason is required.',
   ONLY_APPROVED_LOCKED_CAN_UNLOCK: 'Only APPROVED locked POs can request unlock.',
+  ITEMS_ONLY_FOR_PURCHASE: 'Line items (system-generated PO) are for PURCHASE (vendor) only.',
+  UPLOAD_FLOW_FIELDS_REQUIRED:
+    'poNumber, taxableAmount, totalAmount and file are required for an upload-based PO.',
+  PDF_ONLY_SYSTEM_GENERATED: 'PDF is available only for system-generated POs with items.',
+  NOT_ALLOCATED_TO_SITE: 'You are not allocated to this site.',
+  CIVIL_PO_ONLY_PM: 'Civil site: only the site Project Manager can create a PO.',
 };
+
+export const PROJECT_MANAGER_SITE_ROLE = 'Project Manager';
 
 export const PO_RESPONSES = {
   CREATED: 'Purchase order created successfully',

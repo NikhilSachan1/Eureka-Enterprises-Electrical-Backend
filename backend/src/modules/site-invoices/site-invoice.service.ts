@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   DataSource,
@@ -30,6 +31,7 @@ import {
   deleteTdsRegisterEntryForInvoiceQuery,
 } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
@@ -55,6 +57,10 @@ export class SiteInvoiceService {
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(INVOICE_ERRORS.JMC_NOT_FOUND);
+
+    // Site-scoped: only a user allocated to the invoice's site (team or PM) may create.
+    const access = await checkSiteCreateAccess(this.dataSource, createdBy, jmc.siteId);
+    if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     // 1 JMC = 1 Invoice
     const dup = await this.invoiceRepository.findOne({

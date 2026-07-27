@@ -1,4 +1,4 @@
-import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
@@ -8,6 +8,7 @@ import {
   FinancialApprovalStatus,
   PartyType,
 } from 'src/modules/common/financials/financial.constants';
+import { PoItemEntity } from './po-item.entity';
 
 @Entity('purchase_orders')
 @Index('IDX_PO_SITE', ['siteId'])
@@ -62,11 +63,23 @@ export class PurchaseOrderEntity extends BaseEntity {
   totalAmount: number;
 
   // Attachment (BRD §4.1 — required)
-  @Column({ type: 'varchar', length: 500 })
-  fileKey: string;
+  // Nullable: system-generated POs have no uploaded scan (generated + approved + downloaded).
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  fileKey: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
-  fileName: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fileName: string | null;
+
+  // True when created via the generate flow (has line items). Upload-based POs stay false.
+  @Column({ type: 'boolean', default: false })
+  isSystemGenerated: boolean;
+
+  // Tax split shown on the generated PDF: 'CGST_SGST' (intra-state) or 'IGST' (inter-state).
+  @Column({ type: 'varchar', length: 10, default: 'CGST_SGST' })
+  gstType: string;
+
+  @OneToMany(() => PoItemEntity, (item) => item.po)
+  items: PoItemEntity[];
 
   @Column({ type: 'text', nullable: true })
   remarks: string;

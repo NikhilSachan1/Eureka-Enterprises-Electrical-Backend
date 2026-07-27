@@ -3,9 +3,11 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   DataSource,
+  EntityManager,
   IsNull,
   ILike,
   In,
@@ -16,6 +18,9 @@ import {
 } from 'typeorm';
 import { PurchaseOrderRepository } from './purchase-order.repository';
 import { PurchaseOrderEntity } from './entities/purchase-order.entity';
+import { PoItemEntity } from './entities/po-item.entity';
+import { PoDefaultItemEntity } from './entities/po-default-item.entity';
+import { PoPdfService } from './po-pdf.service';
 import {
   CreatePurchaseOrderDto,
   UpdatePurchaseOrderDto,
@@ -23,14 +28,18 @@ import {
   RejectDto,
   ApproveDto,
   UnlockRequestDto,
+  PoItemDto,
+  PoItemSuggestionDto,
 } from './dto';
 import { PO_ERRORS, PO_RESPONSES } from './constants/purchase-order.constants';
 import { checkPoHasJmcsQuery } from './queries/purchase-order.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
   FINANCIAL_ERRORS,
+  getFinancialYear,
 } from 'src/modules/common/financials/financial.constants';
 import { ContractorEntity } from 'src/modules/contractors/entities/contractor.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
@@ -44,16 +53,77 @@ export class PurchaseOrderService {
   constructor(
     private readonly poRepository: PurchaseOrderRepository,
     private readonly dataSource: DataSource,
+    private readonly poPdfService: PoPdfService,
   ) {}
 
   async create(dto: CreatePurchaseOrderDto, createdBy: string) {
     this.validatePartyShape(dto.partyType, dto.contractorId, dto.vendorId);
-    this.validateAmounts(dto.taxableAmount, dto.gstAmount ?? 0, dto.totalAmount);
-
     await this.assertSiteExists(dto.siteId);
     await this.assertPartyLinkedToSite(dto);
 
-    // Uniqueness within (siteId, partyType, poNumber) — partial on deletedAt IS NULL
+    const items = dto.items ?? [];
+
+    // ── System-generated flow (line items present) ──
+    if (items.length) {
+      if (dto.partyType !== PartyType.PURCHASE) {
+        throw new BadRequestException(PO_ERRORS.ITEMS_ONLY_FOR_PURCHASE);
+      }
+      // Only the site's PM (Civil) / any allocated user (Electrical) may create.
+      await this.assertCanCreatePo(createdBy, dto.siteId);
+
+      return await this.dataSource.transaction(async (em) => {
+        const poNumber = dto.poNumber?.trim() || (await this.generatePoNumber(em));
+        await this.assertUniquePoNumber(em, dto.siteId, dto.partyType, poNumber);
+
+        // Amounts computed server-side from line items (+ GST %).
+        const taxableAmount = this.round2(items.reduce((s, it) => s + Number(it.amount), 0));
+        const gstAmount = dto.gstPercentage
+          ? this.round2((taxableAmount * dto.gstPercentage) / 100)
+          : this.round2(dto.gstAmount ?? 0);
+        const totalAmount = this.round2(taxableAmount + gstAmount);
+
+        const created = await this.poRepository.create(
+          {
+            siteId: dto.siteId,
+            partyType: PartyType.PURCHASE,
+            contractorId: null,
+            vendorId: dto.vendorId!,
+            poNumber,
+            poDate: new Date(dto.poDate),
+            taxableAmount,
+            gstAmount,
+            gstPercentage: dto.gstPercentage ?? null,
+            gstType: dto.gstType ?? 'CGST_SGST',
+            totalAmount,
+            fileKey: null,
+            fileName: null,
+            isSystemGenerated: true,
+            remarks: dto.remarks,
+            approvalStatus: FinancialApprovalStatus.PENDING,
+            isLocked: false,
+            createdBy,
+          },
+          em,
+        );
+
+        await this.saveItems(em, created.id, items, createdBy);
+        await this.upsertItemMasters(em, items, createdBy);
+        return { message: PO_RESPONSES.CREATED, id: created.id, poNumber };
+      });
+    }
+
+    // ── Legacy upload flow (no items) — poNumber + amounts + file required ──
+    if (
+      !dto.poNumber ||
+      dto.taxableAmount == null ||
+      dto.totalAmount == null ||
+      !dto.fileKey ||
+      !dto.fileName
+    ) {
+      throw new BadRequestException(PO_ERRORS.UPLOAD_FLOW_FIELDS_REQUIRED);
+    }
+    this.validateAmounts(dto.taxableAmount, dto.gstAmount ?? 0, dto.totalAmount);
+
     const dup = await this.poRepository.findOne({
       where: {
         siteId: dto.siteId,
@@ -170,6 +240,7 @@ export class PurchaseOrderService {
         'vendor',
         'site',
         'site.company',
+        'items',
         'createdByUser',
         'updatedByUser',
         'approvalByUser',
@@ -177,13 +248,152 @@ export class PurchaseOrderService {
       ],
     });
     if (!po) throw new NotFoundException(PO_ERRORS.NOT_FOUND);
+    const items = (po.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     return {
       ...po,
+      items,
       createdByUser: formatUser(po.createdByUser),
       updatedByUser: formatUser(po.updatedByUser),
       approvalByUser: formatUser(po.approvalByUser),
       unlockRequestedByUser: formatUser(po.unlockRequestedByUser),
     };
+  }
+
+  // ── System-generated PO: PDF, suggestions, defaults, site-scoped auth ──
+
+  /** Generate (always fresh) the system-generated PO PDF; return a download URL. */
+  async generatePdf(id: string) {
+    const po = await this.poRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+      relations: ['vendor', 'site', 'items'],
+    });
+    if (!po) throw new NotFoundException(PO_ERRORS.NOT_FOUND);
+    if (!po.isSystemGenerated) {
+      throw new BadRequestException(PO_ERRORS.PDF_ONLY_SYSTEM_GENERATED);
+    }
+    const key = await this.poPdfService.generate(
+      po as PurchaseOrderEntity & { items: PoItemEntity[] },
+    );
+    return await this.poPdfService.getDownloadUrl(key);
+  }
+
+  /** Global PO item-name typeahead. */
+  async getItemSuggestions(query: PoItemSuggestionDto) {
+    const limit = query.limit ?? 20;
+    const params: any[] = [];
+    let where = `"deletedAt" IS NULL`;
+    if (query.search) {
+      params.push(`%${query.search}%`);
+      where += ` AND name ILIKE $${params.length}`;
+    }
+    params.push(limit);
+    const rows = await this.dataSource.query(
+      `SELECT name FROM po_item_masters WHERE ${where} ORDER BY name ASC LIMIT $${params.length}`,
+      params,
+    );
+    return { records: rows.map((r: any) => r.name) };
+  }
+
+  /** Default line items to pre-fill a new PO (FE). */
+  async getDefaultItems() {
+    const rows = await this.dataSource.getRepository(PoDefaultItemEntity).find({
+      where: { isActive: true, deletedAt: IsNull() },
+      order: { sortOrder: 'ASC' },
+    });
+    return {
+      records: rows.map((r) => ({
+        itemName: r.itemName,
+        hsnCode: r.hsnCode ?? null,
+        make: r.make ?? null,
+      })),
+    };
+  }
+
+  /**
+   * Can this user create a PO for this site? Civil site → only role=Project Manager; Electrical-only
+   * → any current allocation. Uses site_allocations (assigned-to-site) + site.siteTypes.
+   */
+  async canCreatePo(
+    userId: string,
+    siteId: string,
+  ): Promise<{ allowed: boolean; reason: string | null }> {
+    // PO: Civil site → only role=Project Manager; Electrical-only → any allocated user.
+    return await checkSiteCreateAccess(this.dataSource, userId, siteId, {
+      requirePmForCivil: true,
+    });
+  }
+
+  private async assertCanCreatePo(userId: string, siteId: string): Promise<void> {
+    const { allowed, reason } = await this.canCreatePo(userId, siteId);
+    if (!allowed)
+      throw new ForbiddenException(reason ?? 'Not allowed to create a PO for this site');
+  }
+
+  private round2(n: number): number {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+  }
+
+  private async generatePoNumber(em: EntityManager): Promise<string> {
+    const fy = getFinancialYear(new Date());
+    const prefix = `PO/${fy}/`;
+    const rows = await em.query(
+      `SELECT COALESCE(MAX(CAST(substring("poNumber" from '(\\d+)$') AS INTEGER)), 0) AS maxseq
+       FROM purchase_orders WHERE "poNumber" LIKE $1`,
+      [`${prefix}%`],
+    );
+    const seq = String(Number(rows?.[0]?.maxseq ?? 0) + 1).padStart(4, '0');
+    return `${prefix}${seq}`;
+  }
+
+  private async assertUniquePoNumber(
+    em: EntityManager,
+    siteId: string,
+    partyType: string,
+    poNumber: string,
+  ): Promise<void> {
+    const dup = await this.poRepository.findOne(
+      { where: { siteId, partyType, poNumber, deletedAt: IsNull() } },
+      em,
+    );
+    if (dup) throw new ConflictException(PO_ERRORS.PO_NUMBER_EXISTS);
+  }
+
+  private async saveItems(
+    em: EntityManager,
+    poId: string,
+    items: PoItemDto[],
+    userId: string,
+  ): Promise<void> {
+    const repo = em.getRepository(PoItemEntity);
+    const rows = items.map((it, idx) =>
+      repo.create({
+        poId,
+        itemName: it.itemName.trim(),
+        hsnCode: it.hsnCode?.trim() || null,
+        make: it.make?.trim() || null,
+        quantity: it.quantity,
+        rate: it.rate,
+        amount: it.amount,
+        sortOrder: idx,
+        createdBy: userId,
+      }),
+    );
+    await repo.save(rows);
+  }
+
+  private async upsertItemMasters(
+    em: EntityManager,
+    items: PoItemDto[],
+    userId: string,
+  ): Promise<void> {
+    const names = [...new Set(items.map((i) => i.itemName.trim()).filter(Boolean))];
+    for (const name of names) {
+      await em.query(
+        `INSERT INTO po_item_masters (name, "createdBy") VALUES ($1, $2)
+         ON CONFLICT (LOWER(name)) DO NOTHING`,
+        [name, userId ?? null],
+      );
+    }
   }
 
   async update(id: string, dto: UpdatePurchaseOrderDto, updatedBy: string) {
@@ -202,17 +412,56 @@ export class PurchaseOrderService {
       if (dup && dup.id !== id) throw new ConflictException(PO_ERRORS.PO_NUMBER_EXISTS);
     }
 
+    const { items, ...rest } = dto;
+
+    // ── System-generated PO: items replace + recompute amounts (in a transaction) ──
+    if (items !== undefined) {
+      if (po.partyType !== PartyType.PURCHASE) {
+        throw new BadRequestException(PO_ERRORS.ITEMS_ONLY_FOR_PURCHASE);
+      }
+      return await this.dataSource.transaction(async (em) => {
+        await em.getRepository(PoItemEntity).delete({ poId: id });
+        if (items.length) {
+          await this.saveItems(em, id, items, updatedBy);
+          await this.upsertItemMasters(em, items, updatedBy);
+        }
+        const taxableAmount = this.round2(items.reduce((s, it) => s + Number(it.amount), 0));
+        const gstPct = rest.gstPercentage ?? Number(po.gstPercentage ?? 0);
+        const gstAmount = gstPct
+          ? this.round2((taxableAmount * gstPct) / 100)
+          : this.round2(rest.gstAmount ?? Number(po.gstAmount));
+        const totalAmount = this.round2(taxableAmount + gstAmount);
+
+        await this.poRepository.update(
+          { id },
+          {
+            ...rest,
+            poDate: rest.poDate ? new Date(rest.poDate) : undefined,
+            taxableAmount,
+            gstAmount,
+            gstPercentage: gstPct || null,
+            totalAmount,
+            isSystemGenerated: items.length > 0 ? true : po.isSystemGenerated,
+            updatedBy,
+          } as Partial<PurchaseOrderEntity>,
+          em,
+        );
+        return { message: PO_RESPONSES.UPDATED };
+      });
+    }
+
+    // ── Scalar update (upload/legacy) ──
     // UpdatePurchaseOrderDto deliberately omits @Type(() => Number) so absent
     // numeric fields stay undefined (not 0) under the global ValidationPipe's
     // enableImplicitConversion. The ?? fallback below is therefore safe.
-    const newTaxable = dto.taxableAmount ?? Number(po.taxableAmount);
-    const newGst = dto.gstAmount ?? Number(po.gstAmount);
-    const newTotal = dto.totalAmount ?? Number(po.totalAmount);
+    const newTaxable = rest.taxableAmount ?? Number(po.taxableAmount);
+    const newGst = rest.gstAmount ?? Number(po.gstAmount);
+    const newTotal = rest.totalAmount ?? Number(po.totalAmount);
     this.validateAmounts(newTaxable, newGst, newTotal);
 
     await this.poRepository.update({ id }, {
-      ...dto,
-      poDate: dto.poDate ? new Date(dto.poDate) : undefined,
+      ...rest,
+      poDate: rest.poDate ? new Date(rest.poDate) : undefined,
       updatedBy,
     } as Partial<PurchaseOrderEntity>);
 
