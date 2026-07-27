@@ -301,6 +301,10 @@ export class SiteInvoiceService {
       if (inv.approvalStatus === FinancialApprovalStatus.APPROVED) {
         throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
       }
+      // Rejection is terminal — a rejected doc is locked and cannot be resurrected.
+      if (inv.approvalStatus === FinancialApprovalStatus.REJECTED) {
+        throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_APPROVE_REJECTED);
+      }
 
       // "No Invoice" case (FE checkbox): explicit 0/0 on both amounts means the JMC's work
       // will be billed later via a future combined invoice — this entry never gets a real
@@ -452,7 +456,7 @@ export class SiteInvoiceService {
         approvalBy: rejectedBy,
         approvalAt: new Date(),
         approvalReason: dto.reason,
-        isLocked: false,
+        isLocked: true, // terminal — rejected docs stay locked
         updatedBy: rejectedBy,
       },
     );

@@ -316,6 +316,10 @@ export class JmcService {
     if (jmc.approvalStatus === FinancialApprovalStatus.APPROVED) {
       throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
     }
+    // Rejection is terminal — a rejected doc is locked and cannot be resurrected.
+    if (jmc.approvalStatus === FinancialApprovalStatus.REJECTED) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_APPROVE_REJECTED);
+    }
 
     // Bottom-up chain: PO must be APPROVED before JMC can be approved
     const po = await this.dataSource
@@ -362,7 +366,7 @@ export class JmcService {
         approvalBy: rejectedBy,
         approvalAt: new Date(),
         approvalReason: dto.reason,
-        isLocked: false,
+        isLocked: true, // terminal — rejected docs stay locked
         updatedBy: rejectedBy,
       },
     );
