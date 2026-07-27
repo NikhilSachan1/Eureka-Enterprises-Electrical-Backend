@@ -186,7 +186,7 @@ export class PoPdfService {
   .page { padding: 4px 2px; }
 
   .header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #1f3a5f; padding-bottom: 12px; margin-bottom: 4px; }
-  .header-logo img { height: 56px; width: auto; object-fit: contain; border-radius: 8px; }
+  .header-logo img { height: 56px; width: auto; object-fit: contain;}
   .header-details { flex: 1; }
   .header .company { font-size: 18px; font-weight: bold; color: #1f3a5f; text-transform: uppercase; letter-spacing: 0.5px; }
   .header .company-sub { font-size: 10px; color: #555; margin-top: 3px; }
