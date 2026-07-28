@@ -80,12 +80,6 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   gstType?: 'CGST_SGST' | 'IGST';
 
-  @ApiPropertyOptional({ description: 'Reference number (e.g. work-award ref)' })
-  @IsString()
-  @IsOptional()
-  @MaxLength(100)
-  referenceNumber?: string;
-
   @ApiPropertyOptional({ description: 'Terms & Conditions (pre-filled from default template)' })
   @IsString()
   @IsOptional()

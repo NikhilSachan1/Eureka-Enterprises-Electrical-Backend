@@ -44,6 +44,16 @@ export class VendorController {
     return await this.vendorService.findAll(query);
   }
 
+  @Get('next-code')
+  @RequiredPermission('financials.vendors.create')
+  @ApiOperation({
+    summary: 'Preview the next vendor code',
+    description: 'Returns the vendor code that would be assigned to the next created vendor.',
+  })
+  async nextCode() {
+    return await this.vendorService.previewNextVendorCode();
+  }
+
   @Get(':id')
   @RequiredPermission('financials.vendors.view-list')
   @ApiOperation({

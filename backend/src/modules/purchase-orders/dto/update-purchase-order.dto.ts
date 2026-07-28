@@ -76,12 +76,6 @@ export class UpdatePurchaseOrderDto {
   @IsOptional()
   gstType?: 'CGST_SGST' | 'IGST';
 
-  @ApiPropertyOptional({ description: 'Reference number' })
-  @IsString()
-  @IsOptional()
-  @MaxLength(100)
-  referenceNumber?: string;
-
   @ApiPropertyOptional({ description: 'Terms & Conditions' })
   @IsString()
   @IsOptional()

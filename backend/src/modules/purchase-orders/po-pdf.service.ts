@@ -262,8 +262,8 @@ export class PoPdfService {
     </div>
     <div class="info-block">
       <table>
-        <tr><td class="lbl">Ref#</td><td class="val">${this.esc(
-          (po as any).referenceNumber ?? '—',
+        <tr><td class="lbl">Vendor Code</td><td class="val">${this.esc(
+          v.vendorCode ?? '—',
         )}</td></tr>
         <tr><td class="lbl">Place of Supply</td><td class="val">${this.esc(placeOfSupply)}</td></tr>
       </table>

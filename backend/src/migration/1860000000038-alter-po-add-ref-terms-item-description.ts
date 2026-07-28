@@ -7,9 +7,6 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class AlterPoAddRefTermsItemDescription1860000000038 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "referenceNumber" varchar(100)`,
-    );
-    await queryRunner.query(
       `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "termsAndConditions" text`,
     );
     await queryRunner.query(`ALTER TABLE "po_items" ADD COLUMN IF NOT EXISTS "description" text`);
@@ -19,9 +16,6 @@ export class AlterPoAddRefTermsItemDescription1860000000038 implements Migration
     await queryRunner.query(`ALTER TABLE "po_items" DROP COLUMN IF EXISTS "description"`);
     await queryRunner.query(
       `ALTER TABLE "purchase_orders" DROP COLUMN IF EXISTS "termsAndConditions"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "purchase_orders" DROP COLUMN IF EXISTS "referenceNumber"`,
     );
   }
 }

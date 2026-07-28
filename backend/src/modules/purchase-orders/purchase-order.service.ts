@@ -95,7 +95,6 @@ export class PurchaseOrderService {
             gstPercentage: dto.gstPercentage ?? null,
             gstType: dto.gstType ?? 'CGST_SGST',
             totalAmount,
-            referenceNumber: dto.referenceNumber ?? null,
             termsAndConditions: dto.termsAndConditions ?? null,
             fileKey: null,
             fileName: null,
