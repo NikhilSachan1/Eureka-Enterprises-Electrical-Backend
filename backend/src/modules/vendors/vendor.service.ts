@@ -50,17 +50,59 @@ export class VendorService {
     }
 
     const fullAddress = this.buildFullAddress(createDto);
+    const vendorCode = await this.generateVendorCode();
 
-    await this.vendorRepository.create({
+    const created = await this.vendorRepository.create({
       ...createDto,
+      vendorCode,
       fullAddress,
       createdBy,
     });
 
-    return this.utilityService.getSuccessMessage(
-      VendorEntityFields.VENDOR,
-      DataSuccessOperationType.CREATE,
+    return {
+      ...this.utilityService.getSuccessMessage(
+        VendorEntityFields.VENDOR,
+        DataSuccessOperationType.CREATE,
+      ),
+      id: created.id,
+      vendorCode: created.vendorCode,
+    };
+  }
+
+  /** FE preview of the code the next created vendor will receive. */
+  async previewNextVendorCode(): Promise<{ vendorCode: string }> {
+    return { vendorCode: await this.generateVendorCode() };
+  }
+
+  /**
+   * Config-driven vendor code generator (e.g. VEN-0001).
+   * Reads `vendor_code_config` ({ prefix, padLength }) and returns MAX(seq)+1
+   * across ALL rows (incl. soft-deleted) sharing the prefix so codes never collide.
+   */
+  private async generateVendorCode(): Promise<string> {
+    const cfgRows = await this.dataSource.query(
+      `SELECT cs.value
+         FROM config_settings cs
+         JOIN configurations c ON c.id = cs."configId"
+        WHERE c.key = 'vendor_code_config'
+          AND cs."isActive" = true
+          AND cs."deletedAt" IS NULL
+        ORDER BY cs."createdAt" DESC
+        LIMIT 1`,
     );
+    // node-pg already parses jsonb → JS object; no JSON.parse needed.
+    const cfg = (cfgRows?.[0]?.value ?? {}) as { prefix?: string; padLength?: number };
+    const prefix = cfg.prefix ?? 'VEN-';
+    const padLength = Number(cfg.padLength ?? 4);
+
+    const rows = await this.dataSource.query(
+      `SELECT COALESCE(MAX(CAST(substring("vendorCode" from '(\\d+)$') AS INTEGER)), 0) AS maxseq
+         FROM vendors
+        WHERE "vendorCode" LIKE $1`,
+      [`${prefix}%`],
+    );
+    const next = Number(rows?.[0]?.maxseq ?? 0) + 1;
+    return `${prefix}${String(next).padStart(padLength, '0')}`;
   }
 
   async findAll(options: GetVendorDto) {

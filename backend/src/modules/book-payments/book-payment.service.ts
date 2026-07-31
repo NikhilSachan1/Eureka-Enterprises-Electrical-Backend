@@ -333,6 +333,10 @@ export class BookPaymentService {
     if (bp.approvalStatus === FinancialApprovalStatus.APPROVED) {
       throw new BadRequestException(BOOK_PAYMENT_ERRORS.ALREADY_APPROVED);
     }
+    // Rejection is terminal — a rejected doc is locked and cannot be resurrected.
+    if (bp.approvalStatus === FinancialApprovalStatus.REJECTED) {
+      throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_APPROVE_REJECTED);
+    }
     await this.bookPaymentRepository.update({ id }, {
       approvalStatus: FinancialApprovalStatus.APPROVED,
       approvalBy: approvedBy,
@@ -364,6 +368,7 @@ export class BookPaymentService {
           approvalStatus: FinancialApprovalStatus.REJECTED,
           approvalBy: rejectedBy,
           approvalAt: new Date(),
+          isLocked: true, // terminal — rejected docs stay locked
           updatedBy: rejectedBy,
         } as Partial<BookPaymentEntity>,
         em,

@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { AssetMastersService } from './asset-masters.service';
 import { AssetMastersController } from './asset-masters.controller';
 import { AssetMastersRepository } from './asset-masters.repository';
+import { AssetReportPdfService } from './asset-report-pdf.service';
+import { FilesModule } from '../common/file-upload/files.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssetMasterEntity } from './entities/asset-master.entity';
 import { AssetFilesModule } from '../asset-files/asset-files.module';
@@ -24,9 +26,10 @@ import { UsersModule } from '../users/user.module';
     WhatsAppModule,
     EmailModule,
     UsersModule,
+    FilesModule,
   ],
   controllers: [AssetMastersController],
-  providers: [AssetMastersService, AssetMastersRepository],
+  providers: [AssetMastersService, AssetMastersRepository, AssetReportPdfService],
   exports: [AssetMastersService],
 })
 export class AssetMastersModule {}

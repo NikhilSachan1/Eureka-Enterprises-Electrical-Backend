@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   DataSource,
@@ -30,6 +31,7 @@ import {
   deleteTdsRegisterEntryForInvoiceQuery,
 } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
@@ -55,6 +57,10 @@ export class SiteInvoiceService {
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(INVOICE_ERRORS.JMC_NOT_FOUND);
+
+    // Site-scoped: only a user allocated to the invoice's site (team or PM) may create.
+    const access = await checkSiteCreateAccess(this.dataSource, createdBy, jmc.siteId);
+    if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     // 1 JMC = 1 Invoice
     const dup = await this.invoiceRepository.findOne({
@@ -301,6 +307,10 @@ export class SiteInvoiceService {
       if (inv.approvalStatus === FinancialApprovalStatus.APPROVED) {
         throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
       }
+      // Rejection is terminal — a rejected doc is locked and cannot be resurrected.
+      if (inv.approvalStatus === FinancialApprovalStatus.REJECTED) {
+        throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_APPROVE_REJECTED);
+      }
 
       // "No Invoice" case (FE checkbox): explicit 0/0 on both amounts means the JMC's work
       // will be billed later via a future combined invoice — this entry never gets a real
@@ -452,7 +462,7 @@ export class SiteInvoiceService {
         approvalBy: rejectedBy,
         approvalAt: new Date(),
         approvalReason: dto.reason,
-        isLocked: false,
+        isLocked: true, // terminal — rejected docs stay locked
         updatedBy: rejectedBy,
       },
     );

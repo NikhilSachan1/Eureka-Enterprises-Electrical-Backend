@@ -553,7 +553,7 @@ export class DocumentStatusService {
 
     // 1) POs (paginated)
     const poRows: any[] = await this.dataSource.query(
-      `SELECT po.id, po."poNumber", po."partyType", po."approvalStatus" AS status,
+      `SELECT po.id, po."poNumber", po."poDate", po."partyType", po."approvalStatus" AS status,
               s.id AS "siteId", s.name AS "siteName", co.name AS "companyName",
               COALESCE(ct.name, v.name) AS "partyName",
               COUNT(*) OVER() AS "totalRecords"
@@ -575,7 +575,7 @@ export class DocumentStatusService {
 
     // 2) JMCs of these POs
     const jmcRows: any[] = await this.dataSource.query(
-      `SELECT id, "jmcNumber", "poId", "approvalStatus" AS status,
+      `SELECT id, "jmcNumber", "jmcDate", "poId", "approvalStatus" AS status,
               "isSystemGenerated", ("fileKey" IS NOT NULL) AS "hasUpload"
        FROM jmcs WHERE "poId" = ANY($1) AND "deletedAt" IS NULL ORDER BY "createdAt" ASC`,
       [poIds],
@@ -586,12 +586,12 @@ export class DocumentStatusService {
     const [reportRows, invoiceRows]: [any[], any[]] = jmcIds.length
       ? await Promise.all([
           this.dataSource.query(
-            `SELECT id, "reportNumber", "jmcId", "approvalStatus" AS status
+            `SELECT id, "reportNumber", "reportDate", "jmcId", "approvalStatus" AS status
              FROM site_reports WHERE "jmcId" = ANY($1) AND "deletedAt" IS NULL`,
             [jmcIds],
           ),
           this.dataSource.query(
-            `SELECT id, "invoiceNumber", "jmcId", "approvalStatus" AS status,
+            `SELECT id, "invoiceNumber", "invoiceDate", "jmcId", "approvalStatus" AS status,
                     "totalAmount", COALESCE("paidTotal", 0) AS "paidTotal"
              FROM site_invoices WHERE "jmcId" = ANY($1) AND "deletedAt" IS NULL`,
             [jmcIds],
@@ -603,7 +603,7 @@ export class DocumentStatusService {
     // 5) Book payments (PURCHASE) of these invoices
     const bpRows: any[] = invoiceIds.length
       ? await this.dataSource.query(
-          `SELECT id, "invoiceId", "paymentTotalAmount", "hasTransfer",
+          `SELECT id, "invoiceId", "bookingDate", "paymentTotalAmount", "hasTransfer",
                   "approvalStatus" AS status
            FROM book_payments WHERE "invoiceId" = ANY($1) AND "deletedAt" IS NULL
            ORDER BY "createdAt" ASC`,
@@ -615,7 +615,7 @@ export class DocumentStatusService {
     // 6) Bank transfers — SALE: by invoiceId; PURCHASE: by bookPaymentId
     const btRows: any[] = invoiceIds.length
       ? await this.dataSource.query(
-          `SELECT id, "invoiceId", "bookPaymentId", "utrNumber", "transferAmount",
+          `SELECT id, "invoiceId", "bookPaymentId", "transferDate", "utrNumber", "transferAmount",
                   "approvalStatus" AS status
            FROM bank_transfers
            WHERE ("invoiceId" = ANY($1) OR "bookPaymentId" = ANY($2)) AND "deletedAt" IS NULL
@@ -649,6 +649,7 @@ export class DocumentStatusService {
     const num = (n: any) => (n == null ? 0 : Number(n));
     const mapBt = (t: any) => ({
       id: t.id,
+      transferDate: t.transferDate,
       utrNumber: t.utrNumber,
       transferAmount: num(t.transferAmount),
       status: t.status,
@@ -682,20 +683,32 @@ export class DocumentStatusService {
         return {
           id: j.id,
           jmcNumber: j.jmcNumber,
+          jmcDate: j.jmcDate,
           status: j.status,
           // System-generated (created in-app with items) vs upload-only, and whether a signed
           // file is attached. A JMC can be system-generated AND have an upload.
           isSystemGenerated: j.isSystemGenerated,
           hasUpload: j.hasUpload,
+          // Reliable existence flags — based on whether the row exists, NOT on report/invoice
+          // number (which can be null even when the doc exists). Use these to spot "no report /
+          // no invoice" JMCs directly.
+          hasReport: !!report,
+          hasInvoice: !!inv,
           // Reports apply to PURCHASE only; null => not created (MISSING).
           report: report
-            ? { id: report.id, reportNumber: report.reportNumber, status: report.status }
+            ? {
+                id: report.id,
+                reportNumber: report.reportNumber,
+                reportDate: report.reportDate,
+                status: report.status,
+              }
             : null,
           // null => invoice not created (MISSING).
           invoice: inv
             ? {
                 id: inv.id,
                 invoiceNumber: inv.invoiceNumber,
+                invoiceDate: inv.invoiceDate,
                 status: inv.status,
                 totalAmount: num(inv.totalAmount),
                 paidTotal: num(inv.paidTotal),
@@ -703,6 +716,7 @@ export class DocumentStatusService {
                 // PURCHASE: payments hang off book payments; SALE: bank transfers direct on invoice.
                 bookPayments: (bpByInvoice.get(inv.id) ?? []).map((bp) => ({
                   id: bp.id,
+                  bookingDate: bp.bookingDate,
                   paymentTotalAmount: num(bp.paymentTotalAmount),
                   status: bp.status,
                   hasTransfer: bp.hasTransfer,
@@ -771,6 +785,7 @@ export class DocumentStatusService {
       return {
         id: po.id,
         poNumber: po.poNumber,
+        poDate: po.poDate,
         partyType: po.partyType,
         status: po.status,
         partyName: po.partyName ?? null,

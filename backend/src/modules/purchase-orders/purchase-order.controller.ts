@@ -20,6 +20,7 @@ import {
   ApproveDto,
   RejectDto,
   UnlockRequestDto,
+  PoItemSuggestionDto,
 } from './dto';
 
 @ApiTags('Purchase Orders')
@@ -52,6 +53,41 @@ export class PurchaseOrderController {
     return await this.poService.getDropdown(siteId, partyType);
   }
 
+  @Get('items/suggestions')
+  @RequiredPermission('financials.purchase-orders.view-list')
+  @ApiOperation({ summary: 'Global PO item-name suggestions (typeahead)' })
+  async itemSuggestions(@Query() query: PoItemSuggestionDto) {
+    return await this.poService.getItemSuggestions(query);
+  }
+
+  @Get('default-items')
+  @RequiredPermission('financials.purchase-orders.view-list')
+  @ApiOperation({ summary: 'Default line items to pre-fill a new PO' })
+  async defaultItems() {
+    return await this.poService.getDefaultItems();
+  }
+
+  @Get('default-terms')
+  @RequiredPermission('financials.purchase-orders.view-list')
+  @ApiOperation({ summary: 'Default Terms & Conditions template to pre-fill a new PO' })
+  async defaultTerms() {
+    return await this.poService.getDefaultTerms();
+  }
+
+  @Get('can-create')
+  @RequiredPermission('financials.purchase-orders.view-list')
+  @ApiOperation({
+    summary: 'Whether the current user can create a PO for a site (FE button gating)',
+    description:
+      'Civil site → only the site Project Manager; Electrical-only → any allocated team member.',
+  })
+  async canCreate(
+    @Request() { user: { id: userId } }: { user: { id: string } },
+    @Query('siteId', ParseUUIDPipe) siteId: string,
+  ) {
+    return await this.poService.canCreatePo(userId, siteId);
+  }
+
   @Get()
   @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({ summary: 'List POs' })
@@ -64,6 +100,16 @@ export class PurchaseOrderController {
   @ApiOperation({ summary: 'Get a PO by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.poService.findById(id);
+  }
+
+  @Get(':id/pdf')
+  @RequiredPermission('financials.purchase-orders.view-list')
+  @ApiOperation({
+    summary: 'Download URL for the system-generated PO PDF',
+    description: 'Always regenerated fresh (never cached). System-generated (has items) only.',
+  })
+  async pdf(@Param('id', ParseUUIDPipe) id: string) {
+    return await this.poService.generatePdf(id);
   }
 
   @Patch(':id')

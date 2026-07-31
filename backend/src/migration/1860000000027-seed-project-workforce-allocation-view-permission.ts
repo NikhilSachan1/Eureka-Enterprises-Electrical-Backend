@@ -25,8 +25,8 @@ export class SeedProjectWorkforceAllocationViewPermission1860000000027
         'project',
         'Table View Project Workforce Allocation',
         'Able to see workforce allocation table',
-        false,
-        false,
+        true,
+        true,
         'web'
       WHERE NOT EXISTS (
         SELECT 1 FROM permissions WHERE name = 'project.workforce-allocation.view-list'

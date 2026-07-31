@@ -17,6 +17,10 @@ import {
 } from './dto';
 import { AssetMastersRepository } from './asset-masters.repository';
 import { AssetMasterEntity } from './entities/asset-master.entity';
+import { AssetReportPdfService } from './asset-report-pdf.service';
+import { GenerateAssetReportDto } from './dto/generate-asset-report.dto';
+import { FilesService } from '../common/file-upload/files.service';
+import { Environments } from 'env-configs';
 import { DataSource, EntityManager, FindOneOptions, FindOptionsWhere } from 'typeorm';
 import {
   ASSET_MASTERS_ERRORS,
@@ -71,7 +75,69 @@ export class AssetMastersService {
     private readonly whatsAppService: WhatsAppService,
     private readonly emailService: EmailService,
     private readonly userService: UserService,
+    private readonly assetReportPdfService: AssetReportPdfService,
+    private readonly filesService: FilesService,
   ) {}
+
+  /**
+   * Generate a client-ready Asset Report PDF for the selected assets. Fetches each asset's
+   * active version, renders a branded landscape table (calibration/warranty emphasised), and
+   * returns a presigned download URL. Always regenerated fresh (never cached).
+   */
+  async generateAssetReport(dto: GenerateAssetReportDto) {
+    const rows = await this.dataSource.query(
+      `SELECT am.id AS "assetMasterId", am."assetId",
+              av.name, av.model, av."serialNumber", av.category, av."assetType",
+              av."calibrationFrom", av."calibrationStartDate", av."calibrationEndDate",
+              av."purchaseDate", av."vendorName", av."warrantyStartDate", av."warrantyEndDate",
+              av.status, av.remarks,
+              EXISTS (
+                SELECT 1 FROM asset_files af
+                WHERE af."assetVersionId" = av.id
+                  AND af."fileType" = 'CALIBRATION_CERTIFICATE'
+                  AND af."deletedAt" IS NULL
+              ) AS "hasCalibrationCertificate"
+       FROM asset_masters am
+       JOIN asset_versions av
+         ON av."assetMasterId" = am.id AND av."isActive" = true AND av."deletedAt" IS NULL
+       WHERE am.id = ANY($1) AND am."deletedAt" IS NULL
+       ORDER BY am."assetId" ASC`,
+      [dto.assetMasterIds],
+    );
+
+    if (!rows.length) {
+      throw new NotFoundException('No assets found for the given IDs');
+    }
+
+    // Absolute base for the public "view calibration certificate" links embedded in the PDF.
+    const certBaseUrl = Environments.API_BASE_URL;
+    const key = await this.assetReportPdfService.generate(rows, certBaseUrl);
+    return await this.assetReportPdfService.getDownloadUrl(key);
+  }
+
+  /**
+   * Public: resolve the current calibration certificate for an asset and return a fresh
+   * presigned download URL. Backs GET /assets/public/:assetMasterId/calibration-certificate,
+   * so the link embedded in the Asset Report PDF never goes stale.
+   */
+  async getCalibrationCertificateUrl(assetMasterId: string) {
+    const [file] = await this.dataSource.query(
+      `SELECT af."fileKey"
+       FROM asset_files af
+       JOIN asset_versions av
+         ON av.id = af."assetVersionId" AND av."isActive" = true AND av."deletedAt" IS NULL
+       WHERE af."assetMasterId" = $1
+         AND af."fileType" = 'CALIBRATION_CERTIFICATE'
+         AND af."deletedAt" IS NULL
+       ORDER BY af."createdAt" DESC
+       LIMIT 1`,
+      [assetMasterId],
+    );
+    if (!file) {
+      throw new NotFoundException('Calibration certificate not found for this asset');
+    }
+    return await this.filesService.getDownloadFileUrl(file.fileKey);
+  }
 
   // ==================== Computed Status Methods ====================
   getCalibrationStatus(assetType: string, calibrationEndDate?: Date): CalibrationStatus {
@@ -807,9 +873,7 @@ export class AssetMastersService {
       lastSeenDate: dto.lastSeenDate,
       lastSeenLocation: dto.lastSeenLocation,
       recoveryAmount: String(recoveryAmount),
-    }).catch((err) =>
-      this.logger.warn(`Failed to send lost notifications: ${err.message}`),
-    );
+    }).catch((err) => this.logger.warn(`Failed to send lost notifications: ${err.message}`));
 
     return {
       message: ASSET_MASTERS_SUCCESS_MESSAGES.LOST_SUCCESS,
@@ -957,9 +1021,7 @@ export class AssetMastersService {
       actorUserId,
       notes: dto.notes,
       refundedAmount: refundedAmount > 0 ? String(refundedAmount) : undefined,
-    }).catch((err) =>
-      this.logger.warn(`Failed to send recovered notifications: ${err.message}`),
-    );
+    }).catch((err) => this.logger.warn(`Failed to send recovered notifications: ${err.message}`));
 
     return {
       message: ASSET_MASTERS_SUCCESS_MESSAGES.RECOVERED_SUCCESS,
@@ -1079,8 +1141,7 @@ export class AssetMastersService {
             actorName,
             reason: input.reason,
             lastSeenDate: input.lastSeenDate,
-            recoveryAmount:
-              Number(input.recoveryAmount) > 0 ? input.recoveryAmount : undefined,
+            recoveryAmount: Number(input.recoveryAmount) > 0 ? input.recoveryAmount : undefined,
           },
           { referenceId: input.asset.id, recipientId: recipient.id },
         );
@@ -1158,4 +1219,3 @@ export class AssetMastersService {
     }
   }
 }
-

@@ -71,6 +71,7 @@ import { JmcModule } from 'src/modules/jmc/jmc.module';
 import { SiteReportModule } from 'src/modules/site-reports/site-report.module';
 import { SiteInvoiceModule } from 'src/modules/site-invoices/site-invoice.module';
 import { BookPaymentModule } from 'src/modules/book-payments/book-payment.module';
+import { PaymentRequestModule } from 'src/modules/payment-requests/payment-request.module';
 import { BankTransferModule } from 'src/modules/bank-transfers/bank-transfer.module';
 import { PaymentSheetModule } from 'src/modules/payment-sheets/payment-sheet.module';
 import { CompanyBankAccountModule } from 'src/modules/company-bank-accounts/company-bank-account.module';
@@ -151,6 +152,7 @@ import { DocumentStatusModule } from 'src/modules/document-status/document-statu
     SiteReportModule,
     SiteInvoiceModule,
     BookPaymentModule,
+    PaymentRequestModule,
     BankTransferModule,
     PaymentSheetModule,
     CompanyBankAccountModule,

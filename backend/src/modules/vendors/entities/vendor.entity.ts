@@ -8,6 +8,10 @@ import { VendorType } from '../constants/vendor.constants';
 @Index('IDX_VENDOR_CITY', ['city'])
 @Index('IDX_VENDOR_TYPE', ['vendorType'])
 export class VendorEntity extends BaseEntity {
+  // Auto-generated at creation (config-driven format, e.g. VEN-0001). Unique.
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  vendorCode: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   name: string;
 

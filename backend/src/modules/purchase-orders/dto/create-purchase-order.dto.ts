@@ -9,9 +9,14 @@ import {
   Min,
   IsDateString,
   MaxLength,
+  IsArray,
+  ValidateNested,
+  ArrayMaxSize,
+  IsIn,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
+import { PoItemDto } from './po-item.dto';
 
 export class CreatePurchaseOrderDto {
   @ApiProperty({ description: 'Site ID' })
@@ -32,21 +37,29 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   vendorId?: string;
 
-  @ApiProperty({ description: 'PO Number', example: 'PO/2526/0001' })
+  @ApiPropertyOptional({
+    description: 'PO Number. Optional — omit to auto-generate (system-generated flow).',
+    example: 'PO/2627/0001',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  poNumber: string;
+  @IsOptional()
+  poNumber?: string;
 
   @ApiProperty({ description: 'PO Date (ISO)', example: '2026-04-01' })
   @IsDateString()
   poDate: string;
 
-  @ApiProperty({ description: 'Taxable amount', example: 100000 })
+  @ApiPropertyOptional({
+    description: 'Taxable amount. Optional for system-generated PO (computed from items).',
+    example: 100000,
+  })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  taxableAmount: number;
+  @IsOptional()
+  taxableAmount?: number;
 
   @ApiPropertyOptional({ description: 'GST amount', example: 18000, default: 0 })
   @Type(() => Number)
@@ -55,30 +68,60 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   gstAmount?: number = 0;
 
-  @ApiPropertyOptional({ description: 'GST percentage (informational only)', example: 18 })
+  @ApiPropertyOptional({ description: 'GST percentage', example: 18 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
   gstPercentage?: number;
 
-  @ApiProperty({ description: 'Total amount (= taxable + GST)', example: 118000 })
+  @ApiPropertyOptional({ description: 'Tax split for PDF', enum: ['CGST_SGST', 'IGST'] })
+  @IsIn(['CGST_SGST', 'IGST'])
+  @IsOptional()
+  gstType?: 'CGST_SGST' | 'IGST';
+
+  @ApiPropertyOptional({ description: 'Terms & Conditions (pre-filled from default template)' })
+  @IsString()
+  @IsOptional()
+  termsAndConditions?: string;
+
+  @ApiPropertyOptional({
+    description: 'Total amount (= taxable + GST). Optional for system-generated PO (computed).',
+    example: 118000,
+  })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  totalAmount: number;
+  @IsOptional()
+  totalAmount?: number;
 
-  @ApiProperty({ description: 'S3 file key for the PO PDF/scan' })
+  @ApiPropertyOptional({
+    type: [PoItemDto],
+    description:
+      'Line items (system-generated PURCHASE PO). Presence marks the PO system-generated.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => PoItemDto)
+  items?: PoItemDto[];
+
+  @ApiPropertyOptional({
+    description: 'S3 file key of an uploaded PO scan. Optional (not used for system-generated PO).',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
-  fileKey: string;
+  @IsOptional()
+  fileKey?: string;
 
-  @ApiProperty({ description: 'Original file name' })
+  @ApiPropertyOptional({ description: 'Original file name' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  fileName: string;
+  @IsOptional()
+  fileName?: string;
 
   @ApiPropertyOptional({ description: 'Remarks' })
   @IsString()

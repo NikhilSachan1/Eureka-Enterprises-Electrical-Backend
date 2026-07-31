@@ -50,6 +50,8 @@ export const FINANCIAL_ERRORS = {
     'Cannot unlock — TDS payment has already been released against this invoice.',
   CANNOT_REJECT_APPROVED:
     'Document is already approved and cannot be rejected. If changes are needed, the document must be unlocked, updated, and re-submitted for approval.',
+  CANNOT_APPROVE_REJECTED:
+    'This document was rejected and is locked (terminal). It cannot be approved or edited — create a new document instead.',
   UNLOCK_REJECT_NO_REQUEST: 'No pending unlock request found on this document.',
   AMOUNT_VALIDATION_FAILED: 'Total amount must equal taxable amount + GST amount.',
 };
