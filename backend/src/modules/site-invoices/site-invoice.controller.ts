@@ -30,10 +30,11 @@ export class SiteInvoiceController {
   @RequiredPermission('financials.invoices.create')
   @ApiOperation({ summary: 'Create an Invoice (PENDING)' })
   async create(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreateSiteInvoiceDto,
   ) {
-    return await this.invoiceService.create(dto, createdBy);
+    return await this.invoiceService.create(dto, createdBy, activeRole);
   }
 
   @Get('dropdown')

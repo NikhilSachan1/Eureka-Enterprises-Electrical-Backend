@@ -54,14 +54,16 @@ export class JmcService {
     private readonly jmcPdfService: JmcPdfService,
   ) {}
 
-  async create(dto: CreateJmcDto, createdBy: string) {
+  async create(dto: CreateJmcDto, createdBy: string, activeRole?: string) {
     const po = await this.dataSource
       .getRepository(PurchaseOrderEntity)
       .findOne({ where: { id: dto.poId, deletedAt: IsNull() } });
     if (!po) throw new NotFoundException(JMC_ERRORS.PO_NOT_FOUND);
 
-    // Site-scoped: only a user allocated to the JMC's site (team or PM) may create.
-    const access = await checkSiteCreateAccess(this.dataSource, createdBy, po.siteId);
+    // Site-scoped: allocated team/PM, or office roles (SUPER_ADMIN/ADMIN/…).
+    const access = await checkSiteCreateAccess(this.dataSource, createdBy, po.siteId, {
+      activeRole,
+    });
     if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     const items = dto.items ?? [];
