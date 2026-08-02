@@ -30,10 +30,11 @@ export class JmcController {
   @RequiredPermission('financials.jmcs.create')
   @ApiOperation({ summary: 'Create a JMC against an APPROVED PO' })
   async create(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreateJmcDto,
   ) {
-    return await this.jmcService.create(dto, createdBy);
+    return await this.jmcService.create(dto, createdBy, activeRole);
   }
 
   @Get('dropdown')

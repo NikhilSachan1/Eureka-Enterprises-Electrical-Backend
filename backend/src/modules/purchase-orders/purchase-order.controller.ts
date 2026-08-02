@@ -33,10 +33,11 @@ export class PurchaseOrderController {
   @RequiredPermission('financials.purchase-orders.create')
   @ApiOperation({ summary: 'Create a Purchase Order' })
   async create(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreatePurchaseOrderDto,
   ) {
-    return await this.poService.create(dto, createdBy);
+    return await this.poService.create(dto, createdBy, activeRole);
   }
 
   @Get('dropdown')
@@ -82,10 +83,11 @@ export class PurchaseOrderController {
       'Civil site → only the site Project Manager; Electrical-only → any allocated team member.',
   })
   async canCreate(
-    @Request() { user: { id: userId } }: { user: { id: string } },
+    @Request()
+    { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
     @Query('siteId', ParseUUIDPipe) siteId: string,
   ) {
-    return await this.poService.canCreatePo(userId, siteId);
+    return await this.poService.canCreatePo(userId, siteId, activeRole);
   }
 
   @Get()

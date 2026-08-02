@@ -56,7 +56,7 @@ export class PurchaseOrderService {
     private readonly poPdfService: PoPdfService,
   ) {}
 
-  async create(dto: CreatePurchaseOrderDto, createdBy: string) {
+  async create(dto: CreatePurchaseOrderDto, createdBy: string, activeRole?: string) {
     this.validatePartyShape(dto.partyType, dto.contractorId, dto.vendorId);
     await this.assertSiteExists(dto.siteId);
     await this.assertPartyLinkedToSite(dto);
@@ -68,8 +68,8 @@ export class PurchaseOrderService {
       if (dto.partyType !== PartyType.PURCHASE) {
         throw new BadRequestException(PO_ERRORS.ITEMS_ONLY_FOR_PURCHASE);
       }
-      // Only the site's PM (Civil) / any allocated user (Electrical) may create.
-      await this.assertCanCreatePo(createdBy, dto.siteId);
+      // Site's PM (Civil) / any allocated user (Electrical) / office roles.
+      await this.assertCanCreatePo(createdBy, dto.siteId, activeRole);
 
       return await this.dataSource.transaction(async (em) => {
         const poNumber = dto.poNumber?.trim() || (await this.generatePoNumber(em));
@@ -338,15 +338,22 @@ export class PurchaseOrderService {
   async canCreatePo(
     userId: string,
     siteId: string,
+    activeRole?: string,
   ): Promise<{ allowed: boolean; reason: string | null }> {
     // PO: Civil site → only role=Project Manager; Electrical-only → any allocated user.
+    // Office roles (SUPER_ADMIN/ADMIN/…) bypass allocation.
     return await checkSiteCreateAccess(this.dataSource, userId, siteId, {
       requirePmForCivil: true,
+      activeRole,
     });
   }
 
-  private async assertCanCreatePo(userId: string, siteId: string): Promise<void> {
-    const { allowed, reason } = await this.canCreatePo(userId, siteId);
+  private async assertCanCreatePo(
+    userId: string,
+    siteId: string,
+    activeRole?: string,
+  ): Promise<void> {
+    const { allowed, reason } = await this.canCreatePo(userId, siteId, activeRole);
     if (!allowed)
       throw new ForbiddenException(reason ?? 'Not allowed to create a PO for this site');
   }

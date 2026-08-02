@@ -52,14 +52,16 @@ export class SiteInvoiceService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(dto: CreateSiteInvoiceDto, createdBy: string) {
+  async create(dto: CreateSiteInvoiceDto, createdBy: string, activeRole?: string) {
     const jmc = await this.dataSource
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(INVOICE_ERRORS.JMC_NOT_FOUND);
 
-    // Site-scoped: only a user allocated to the invoice's site (team or PM) may create.
-    const access = await checkSiteCreateAccess(this.dataSource, createdBy, jmc.siteId);
+    // Site-scoped: allocated team/PM, or office roles (SUPER_ADMIN/ADMIN/…).
+    const access = await checkSiteCreateAccess(this.dataSource, createdBy, jmc.siteId, {
+      activeRole,
+    });
     if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     // 1 JMC = 1 Invoice
