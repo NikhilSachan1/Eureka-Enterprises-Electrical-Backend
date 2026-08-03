@@ -554,6 +554,7 @@ export class DocumentStatusService {
     // 1) POs (paginated)
     const poRows: any[] = await this.dataSource.query(
       `SELECT po.id, po."poNumber", po."poDate", po."partyType", po."approvalStatus" AS status,
+              po."totalAmount",
               s.id AS "siteId", s.name AS "siteName", co.name AS "companyName",
               COALESCE(ct.name, v.name) AS "partyName",
               COUNT(*) OVER() AS "totalRecords"
@@ -792,6 +793,7 @@ export class DocumentStatusService {
         poDate: po.poDate,
         partyType: po.partyType,
         status: po.status,
+        totalAmount: num(po.totalAmount),
         partyName: po.partyName ?? null,
         site: { id: po.siteId, name: po.siteName, companyName: po.companyName ?? null },
         counts,
