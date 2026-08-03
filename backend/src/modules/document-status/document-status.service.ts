@@ -689,11 +689,15 @@ export class DocumentStatusService {
           // file is attached. A JMC can be system-generated AND have an upload.
           isSystemGenerated: j.isSystemGenerated,
           hasUpload: j.hasUpload,
-          // Reliable existence flags — based on whether the row exists, NOT on report/invoice
-          // number (which can be null even when the doc exists). Use these to spot "no report /
-          // no invoice" JMCs directly.
+          // hasReport is row-existence based. hasInvoice, however, must reflect a REAL invoice.
+          // invoiceNumber is the discriminator: the deliberate "No Invoice / bill later" marker
+          // never gets a number (see site-invoice approve()), and an unfilled draft has none yet
+          // — so a null number means "not a real invoice". We intentionally do NOT gate on amount:
+          // a numbered invoice may legitimately have a 0/null total (number entered before amounts,
+          // or a genuine zero-total invoice), and gating on amount would wrongly hide it. Mirrors
+          // the invoice-dropdown rule (invoiceNumber IS NOT NULL).
           hasReport: !!report,
-          hasInvoice: !!inv,
+          hasInvoice: !!inv && inv.invoiceNumber != null,
           // Reports apply to PURCHASE only; null => not created (MISSING).
           report: report
             ? {
