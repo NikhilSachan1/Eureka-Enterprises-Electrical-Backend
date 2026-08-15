@@ -81,6 +81,7 @@ import { GstModule } from 'src/modules/gst/gst.module';
 import { TdsModule } from 'src/modules/tds/tds.module';
 import { BillingModule } from 'src/modules/billing/billing.module';
 import { DocumentStatusModule } from 'src/modules/document-status/document-status.module';
+import { PublicInfoModule } from 'src/modules/public-info/public-info.module';
 
 @Module({
   imports: [
@@ -162,6 +163,7 @@ import { DocumentStatusModule } from 'src/modules/document-status/document-statu
     TdsModule,
     BillingModule,
     DocumentStatusModule,
+    PublicInfoModule,
   ],
   controllers: [AppController],
   providers: [
