@@ -9,7 +9,12 @@ import { ConfigService } from './config.service';
       envFilePath: ['.env'],
       isGlobal: true,
     }),
-    TypeOrmModule.forRoot(ConfigService.getOrmConfig()),
+    // forRootAsync (not forRoot) so the SSH tunnel is established during app
+    // initialisation — a sync forRoot would build the config at import time,
+    // before there is any chance to open the tunnel.
+    TypeOrmModule.forRootAsync({
+      useFactory: () => ConfigService.resolveOrmConfig('default', false),
+    }),
   ],
   providers: [ConfigService],
 })

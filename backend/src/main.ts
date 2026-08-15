@@ -10,18 +10,46 @@ import { json, urlencoded } from 'express';
 import { useContainer } from 'class-validator';
 import { setGlobalModuleRef } from './utils/validators/validator.utils';
 import { ModuleRef } from '@nestjs/core';
+import { ConfigService } from './utils/config/config.service';
+
+// Optional env vars — only relevant to the LOCAL SSH tunnel, so they must not be
+// treated as "missing" on deployed environments that connect to the DB directly.
+const OPTIONAL_ENV_KEYS = new Set([
+  'DATABASE_SSH_HOST',
+  'DATABASE_SSH_PRIVATE_KEY',
+  'DATABASE_SSH_PRIVATE_KEY_PATH',
+  'DATABASE_SSH_PASSPHRASE',
+]);
 
 async function bootstrap() {
   const envConfigVariables = Object.keys(Environments);
   const missingEnvVariables = envConfigVariables.filter(
     (key) =>
-      Environments[key] === undefined || Environments[key] === null || Environments[key] === '',
+      !OPTIONAL_ENV_KEYS.has(key) &&
+      (Environments[key] === undefined || Environments[key] === null || Environments[key] === ''),
   );
 
   if (missingEnvVariables.length > 0) {
     throw new Error(
       `❌ Missing required environment variables: [${missingEnvVariables.join(', ')}]`,
     );
+  }
+
+  // LOCAL only: the DB is reachable through a bastion, so a half-configured
+  // tunnel should fail loudly at boot rather than time out on the first query.
+  if (ConfigService.isLocal() && Environments.DATABASE_SSH_TUNNEL) {
+    const missingSshVariables: string[] = [];
+    if (!Environments.DATABASE_SSH_HOST) missingSshVariables.push('DATABASE_SSH_HOST');
+    if (!Environments.DATABASE_SSH_USER) missingSshVariables.push('DATABASE_SSH_USER');
+    if (!Environments.DATABASE_SSH_PRIVATE_KEY && !Environments.DATABASE_SSH_PRIVATE_KEY_PATH) {
+      missingSshVariables.push('DATABASE_SSH_PRIVATE_KEY or DATABASE_SSH_PRIVATE_KEY_PATH');
+    }
+
+    if (missingSshVariables.length > 0) {
+      throw new Error(
+        `DATABASE_SSH_TUNNEL is enabled but missing: [${missingSshVariables.join(', ')}]`,
+      );
+    }
   }
 
   const app = await NestFactory.create(AppModule);

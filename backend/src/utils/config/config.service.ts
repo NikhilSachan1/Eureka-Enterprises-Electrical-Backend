@@ -2,6 +2,7 @@ import * as path from 'path';
 import { DataSourceOptions } from 'typeorm';
 import { Environments } from '../../../env-configs';
 import { ENVIRONMENT_CONFIG } from './constants/constants';
+import { ensureDatabaseTunnel } from '../ssh-tunnel/ssh-tunnel';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { RoleEntity } from 'src/modules/roles/entities/role.entity';
 import { UserRoleEntity } from 'src/modules/user-roles/entities/user-role.entity';
@@ -101,13 +102,41 @@ export class ConfigService {
     return this.getValue(Environments.APP_ENVIRONMENT) === ENVIRONMENT_CONFIG.PRODUCTION;
   }
 
-  static getOrmConfig(connectionName = 'default', migrationsRun = false): DataSourceOptions {
+  /** True only for local development (APP_ENVIRONMENT=LOCAL). */
+  static isLocal() {
+    return Environments.APP_ENVIRONMENT === ENVIRONMENT_CONFIG.LOCAL;
+  }
+
+  /**
+   * Resolves the ORM config, opening the SSH tunnel first when running LOCAL
+   * (and DATABASE_SSH_TUNNEL is enabled) so TypeORM connects to the local
+   * forwarded port. Deployed environments are inside the VPC and connect
+   * directly, so the tunnel is never opened for them.
+   */
+  static async resolveOrmConfig(
+    connectionName = 'default',
+    migrationsRun = false,
+  ): Promise<DataSourceOptions> {
+    const tunnel = this.isLocal() ? await ensureDatabaseTunnel() : null;
+
+    return this.getOrmConfig(
+      connectionName,
+      migrationsRun,
+      tunnel ? { host: tunnel.host, port: tunnel.port } : undefined,
+    );
+  }
+
+  static getOrmConfig(
+    connectionName = 'default',
+    migrationsRun = false,
+    overrides?: { host?: string; port?: number },
+  ): DataSourceOptions {
     const migrationDir = path.join(__dirname, '../../migration/*.{js,ts}');
     const config: DataSourceOptions = {
       name: connectionName,
       type: 'postgres',
-      host: Environments.DATABASE_HOST,
-      port: Environments.DATABASE_PORT,
+      host: overrides?.host ?? Environments.DATABASE_HOST,
+      port: overrides?.port ?? Environments.DATABASE_PORT,
       username: Environments.DATABASE_USERNAME,
       password: Environments.DATABASE_PASSWORD,
       database: Environments.DATABASE_NAME,

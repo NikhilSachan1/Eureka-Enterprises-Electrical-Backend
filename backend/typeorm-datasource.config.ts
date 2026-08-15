@@ -4,7 +4,10 @@ import { DataSource } from 'typeorm';
 
 config();
 
-const options = ConfigService.getOrmConfig('migration_connection', true);
-const connection = new DataSource(options);
+// The TypeORM CLI awaits a promised DataSource, which lets the SSH tunnel come
+// up (LOCAL only) before the connection is created.
+const connection = ConfigService.resolveOrmConfig('migration_connection', true).then(
+  (options) => new DataSource(options),
+);
 
 export default connection;

@@ -11,6 +11,22 @@ export const Environments = {
   DATABASE_PORT: parseInt(process.env.DATABASE_PORT),
   DATABASE_SSL: process.env.DATABASE_SSL === 'true' ? true : false,
 
+  // SSH tunnel — the RDS instance is private, so LOCAL development forwards the
+  // DB connection through a bastion host. Only honoured when APP_ENVIRONMENT=LOCAL
+  // (see ConfigService.resolveOrmConfig); deployed envs connect directly.
+  DATABASE_SSH_TUNNEL: process.env.DATABASE_SSH_TUNNEL === 'true',
+  DATABASE_SSH_HOST: process.env.DATABASE_SSH_HOST,
+  DATABASE_SSH_PORT: parseInt(process.env.DATABASE_SSH_PORT || '22'),
+  DATABASE_SSH_USER: process.env.DATABASE_SSH_USER || 'ubuntu',
+  // Either the key itself (raw PEM, escaped newlines, or base64) …
+  DATABASE_SSH_PRIVATE_KEY: process.env.DATABASE_SSH_PRIVATE_KEY,
+  // … or a path to it on disk, which is easier for local development.
+  DATABASE_SSH_PRIVATE_KEY_PATH: process.env.DATABASE_SSH_PRIVATE_KEY_PATH,
+  DATABASE_SSH_PASSPHRASE: process.env.DATABASE_SSH_PASSPHRASE,
+  DATABASE_SSH_LOCAL_HOST: process.env.DATABASE_SSH_LOCAL_HOST || '127.0.0.1',
+  // 0 lets the OS pick a free port, which avoids clashing with a local postgres.
+  DATABASE_SSH_LOCAL_PORT: parseInt(process.env.DATABASE_SSH_LOCAL_PORT || '0'),
+
   // App configuration
   APP_ENVIRONMENT: process.env.APP_ENVIRONMENT,
   APP_PORT: process.env.APP_PORT,
