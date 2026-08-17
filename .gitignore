@@ -1,1 +1,4 @@
 .claude/
+
+# SSH private key(s) for the LOCAL DB tunnel — never commit
+keys/
