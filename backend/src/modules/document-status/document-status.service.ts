@@ -73,13 +73,13 @@ export class DocumentStatusService {
         GROUP BY "siteId", "partyType"
       ),
 
-      -- ── Reports (PURCHASE only; base = ALL purchase JMCs) ─────────────────
+      -- ── Reports (PURCHASE only; uploaded = JMC has report WITH file attachment) ─
       report_agg AS (
         SELECT
           j."siteId",
           COUNT(j.id)  AS total,
-          COUNT(sr.id) AS uploaded,
-          COUNT(j.id) - COUNT(sr.id) AS missing
+          COUNT(sr.id) FILTER (WHERE sr."fileKey" IS NOT NULL) AS uploaded,
+          COUNT(j.id) - COUNT(sr.id) FILTER (WHERE sr."fileKey" IS NOT NULL) AS missing
         FROM jmcs j
         LEFT JOIN site_reports sr
                ON sr."jmcId" = j.id AND sr."deletedAt" IS NULL
@@ -587,7 +587,8 @@ export class DocumentStatusService {
     const [reportRows, invoiceRows]: [any[], any[]] = jmcIds.length
       ? await Promise.all([
           this.dataSource.query(
-            `SELECT id, "reportNumber", "reportDate", "jmcId", "approvalStatus" AS status
+            `SELECT id, "reportNumber", "reportDate", "jmcId", "approvalStatus" AS status,
+                    ("fileKey" IS NOT NULL) AS "hasUpload"
              FROM site_reports WHERE "jmcId" = ANY($1) AND "deletedAt" IS NULL`,
             [jmcIds],
           ),
@@ -690,14 +691,10 @@ export class DocumentStatusService {
           // file is attached. A JMC can be system-generated AND have an upload.
           isSystemGenerated: j.isSystemGenerated,
           hasUpload: j.hasUpload,
-          // hasReport is row-existence based. hasInvoice, however, must reflect a REAL invoice.
-          // invoiceNumber is the discriminator: the deliberate "No Invoice / bill later" marker
-          // never gets a number (see site-invoice approve()), and an unfilled draft has none yet
-          // — so a null number means "not a real invoice". We intentionally do NOT gate on amount:
-          // a numbered invoice may legitimately have a 0/null total (number entered before amounts,
-          // or a genuine zero-total invoice), and gating on amount would wrongly hide it. Mirrors
-          // the invoice-dropdown rule (invoiceNumber IS NOT NULL).
-          hasReport: !!report,
+          // hasReport / hasInvoice must reflect a REAL document. Reports: file attached
+          // (fileKey); "No report" markers have a row but no upload. Invoices: invoiceNumber
+          // (the "No Invoice / bill later" marker never gets a number).
+          hasReport: !!report && report.hasUpload,
           hasInvoice: !!inv && inv.invoiceNumber != null,
           // Reports apply to PURCHASE only; null => not created (MISSING).
           report: report
@@ -745,7 +742,7 @@ export class DocumentStatusService {
         tally(counts.jmc, j.status);
         if (isPurchase) {
           counts.report.applicable++;
-          if (j.report) counts.report.present++;
+          if (j.hasReport) counts.report.present++;
           else counts.report.missing++;
         }
         counts.invoice.total++;
