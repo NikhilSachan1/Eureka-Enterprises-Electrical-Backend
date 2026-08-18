@@ -27,6 +27,7 @@ import { AttendanceHistoryUserInterceptor } from './interceptors/attendance-hist
 // import { AttendanceCurrentStatusInterceptor } from './interceptors/attendance-current-status.interceptor';
 import { CurrentStatusQueryDto } from './dto/current-status-query.dto';
 import { RequestWithTimezone } from './attendance.types';
+import { Roles } from 'src/modules/roles/constants/role.constants';
 @ApiTags('Attendance')
 @ApiBearerAuth('JWT-auth')
 @Controller('attendance')
@@ -122,7 +123,15 @@ export class AttendanceController {
     @Query() query: CurrentStatusQueryDto,
     @Request() req: RequestWithTimezone,
   ) {
-    return this.attendanceService.getEmployeeCurrentAttendanceStatus(query.userId, req.timezone);
+    // Only privileged roles may view another user's status. For everyone else the
+    // explicit userId is ignored and the request is scoped to the caller — without
+    // this fallback a missing userId ran an unfiltered query that leaked an
+    // arbitrary user's record.
+    const PRIVILEGED_ROLES: string[] = [Roles.SUPER_ADMIN, Roles.ADMIN, Roles.HR];
+    const canViewOthers = PRIVILEGED_ROLES.includes(req.user.role);
+    const targetUserId = query.userId && canViewOthers ? query.userId : req.user.id;
+
+    return this.attendanceService.getEmployeeCurrentAttendanceStatus(targetUserId, req.timezone);
   }
 
   @Post('approval')
