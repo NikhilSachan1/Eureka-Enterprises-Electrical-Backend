@@ -1755,6 +1755,11 @@ export class AttendanceService {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async getEmployeeCurrentAttendanceStatus(userId: string, timezone?: string) {
+    // Defense in depth: a falsy userId would make TypeORM drop the where filter
+    // and return an arbitrary company-wide record. Never allow an unfiltered query.
+    if (!userId) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.USER_ID_REQUIRED);
+    }
     try {
       // Get today's date in the user's timezone (YYYY-MM-DD format)
       const today = new Date();
