@@ -92,7 +92,7 @@ export class AssetMastersService {
               av."purchaseDate", av."vendorName", av."warrantyStartDate", av."warrantyEndDate",
               av.status, av.remarks,
               EXISTS (
-                SELECT 1 FROM asset_files af
+                SELECT 1 FROM assets_files af
                 WHERE af."assetVersionId" = av.id
                   AND af."fileType" = 'CALIBRATION_CERTIFICATE'
                   AND af."deletedAt" IS NULL
@@ -123,7 +123,7 @@ export class AssetMastersService {
   async getCalibrationCertificateUrl(assetMasterId: string) {
     const [file] = await this.dataSource.query(
       `SELECT af."fileKey"
-       FROM asset_files af
+       FROM assets_files af
        JOIN asset_versions av
          ON av.id = af."assetVersionId" AND av."isActive" = true AND av."deletedAt" IS NULL
        WHERE af."assetMasterId" = $1
