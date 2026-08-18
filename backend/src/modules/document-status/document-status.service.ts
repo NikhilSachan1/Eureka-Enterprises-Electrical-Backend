@@ -73,13 +73,13 @@ export class DocumentStatusService {
         GROUP BY "siteId", "partyType"
       ),
 
-      -- ── Reports (PURCHASE only; base = ALL purchase JMCs) ─────────────────
+      -- ── Reports (PURCHASE only; uploaded = JMC has report WITH file attachment) ─
       report_agg AS (
         SELECT
           j."siteId",
           COUNT(j.id)  AS total,
-          COUNT(sr.id) AS uploaded,
-          COUNT(j.id) - COUNT(sr.id) AS missing
+          COUNT(sr.id) FILTER (WHERE sr."fileKey" IS NOT NULL) AS uploaded,
+          COUNT(j.id) - COUNT(sr.id) FILTER (WHERE sr."fileKey" IS NOT NULL) AS missing
         FROM jmcs j
         LEFT JOIN site_reports sr
                ON sr."jmcId" = j.id AND sr."deletedAt" IS NULL
@@ -587,7 +587,8 @@ export class DocumentStatusService {
     const [reportRows, invoiceRows]: [any[], any[]] = jmcIds.length
       ? await Promise.all([
           this.dataSource.query(
-            `SELECT id, "reportNumber", "reportDate", "jmcId", "approvalStatus" AS status
+            `SELECT id, "reportNumber", "reportDate", "jmcId", "approvalStatus" AS status,
+                    ("fileKey" IS NOT NULL) AS "hasUpload"
              FROM site_reports WHERE "jmcId" = ANY($1) AND "deletedAt" IS NULL`,
             [jmcIds],
           ),
@@ -690,14 +691,10 @@ export class DocumentStatusService {
           // file is attached. A JMC can be system-generated AND have an upload.
           isSystemGenerated: j.isSystemGenerated,
           hasUpload: j.hasUpload,
-          // hasReport / hasInvoice must reflect a REAL document, not a "No Report" / "No Invoice"
-          // marker. Those markers are created with a null document number (the "No report" UI
-          // selection makes a site_reports row with only a date/remarks; the "No Invoice / bill
-          // later" checkbox makes a zero-value site_invoices row) — so the number is the
-          // discriminator. We intentionally do NOT gate on amount/file: a numbered invoice may
-          // legitimately have a 0/null total (number entered before amounts). Mirrors the
-          // dropdown rule (reportNumber / invoiceNumber IS NOT NULL).
-          hasReport: !!report && report.reportNumber != null,
+          // hasReport / hasInvoice must reflect a REAL document. Reports: file attached
+          // (fileKey); "No report" markers have a row but no upload. Invoices: invoiceNumber
+          // (the "No Invoice / bill later" marker never gets a number).
+          hasReport: !!report && report.hasUpload,
           hasInvoice: !!inv && inv.invoiceNumber != null,
           // Reports apply to PURCHASE only; null => not created (MISSING).
           report: report
@@ -745,7 +742,7 @@ export class DocumentStatusService {
         tally(counts.jmc, j.status);
         if (isPurchase) {
           counts.report.applicable++;
-          if (j.report) counts.report.present++;
+          if (j.hasReport) counts.report.present++;
           else counts.report.missing++;
         }
         counts.invoice.total++;
