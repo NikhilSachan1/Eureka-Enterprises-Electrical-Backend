@@ -199,6 +199,7 @@ export class PurchaseOrderService {
           'vendor',
           'site',
           'site.company',
+          'items',
           'createdByUser',
           'updatedByUser',
           'approvalByUser',
@@ -216,6 +217,7 @@ export class PurchaseOrderService {
 
         return {
           ...po,
+          items: (po.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
           createdByUser: formatUser(po.createdByUser),
           updatedByUser: formatUser(po.updatedByUser),
           approvalByUser: formatUser(po.approvalByUser),
