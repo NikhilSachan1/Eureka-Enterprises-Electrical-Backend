@@ -104,6 +104,25 @@ export class PaymentRequestService {
     return { message: PAYMENT_REQUEST_RESPONSES.REJECTED };
   }
 
+  private readonly listRelations = [
+    'site',
+    'site.company',
+    'po',
+    'invoice',
+    'invoice.contractor',
+    'invoice.vendor',
+    'createdByUser',
+    'approvalByUser',
+  ] as const;
+
+  private mapRecord(r: PaymentRequestEntity) {
+    return {
+      ...r,
+      createdByUser: formatUser(r.createdByUser),
+      approvalByUser: formatUser(r.approvalByUser),
+    };
+  }
+
   async findAll(query: GetPaymentRequestDto) {
     const { siteId, invoiceId, status, page = 1, pageSize = 10 } = query;
     const where: any = { deletedAt: IsNull() };
@@ -117,12 +136,12 @@ export class PaymentRequestService {
         order: { createdAt: 'DESC' },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'approvalByUser'],
+        relations: [...this.listRelations],
       }),
       this.repo.count({ where }),
     ]);
     return {
-      records: records.map((r) => ({ ...r, approvalByUser: formatUser(r.approvalByUser) })),
+      records: records.map((r) => this.mapRecord(r)),
       totalRecords,
     };
   }
@@ -130,10 +149,10 @@ export class PaymentRequestService {
   async findById(id: string) {
     const pr = await this.repo.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['invoice', 'approvalByUser'],
+      relations: [...this.listRelations],
     });
     if (!pr) throw new NotFoundException(PAYMENT_REQUEST_ERRORS.NOT_FOUND);
-    return { ...pr, approvalByUser: formatUser(pr.approvalByUser) };
+    return this.mapRecord(pr);
   }
 
   private async findActive(id: string): Promise<PaymentRequestEntity> {
