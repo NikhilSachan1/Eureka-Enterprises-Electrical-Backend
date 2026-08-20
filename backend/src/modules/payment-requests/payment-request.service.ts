@@ -115,11 +115,63 @@ export class PaymentRequestService {
     'approvalByUser',
   ] as const;
 
-  private mapRecord(r: PaymentRequestEntity) {
+  private readonly detailRelations = [...this.listRelations, 'updatedByUser'] as const;
+
+  private formatDateOnly(value?: Date | string | null): string | null {
+    if (!value) return null;
+    return new Date(value).toISOString().split('T')[0];
+  }
+
+  /** Slim list/detail shape aligned with other financial doc APIs + FE schemas. */
+  private mapRecord(r: PaymentRequestEntity, opts?: { includeUpdatedBy?: boolean }) {
     return {
-      ...r,
+      id: r.id,
+      invoiceId: r.invoiceId,
+      siteId: r.siteId,
+      poId: r.poId,
+      requestedAmount: r.requestedAmount,
+      approvedAmount: r.approvedAmount,
+      status: r.status,
+      reason: r.reason,
+      rejectionReason: r.rejectionReason,
+      bookPaymentId: r.bookPaymentId,
+      approvalAt: r.approvalAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      createdBy: r.createdBy,
       createdByUser: formatUser(r.createdByUser),
       approvalByUser: formatUser(r.approvalByUser),
+      ...(opts?.includeUpdatedBy
+        ? { updatedByUser: formatUser(r.updatedByUser) }
+        : {}),
+      site: r.site
+        ? {
+            name: r.site.name,
+            company: r.site.company ? { name: r.site.company.name } : null,
+          }
+        : null,
+      vendor: r.invoice?.vendor ? { name: r.invoice.vendor.name } : null,
+      contractor: r.invoice?.contractor ? { name: r.invoice.contractor.name } : null,
+      po: r.po
+        ? {
+            poNumber: r.po.poNumber,
+            poDate: this.formatDateOnly(r.po.poDate),
+            taxableAmount: r.po.taxableAmount,
+            gstAmount: r.po.gstAmount,
+            totalAmount: r.po.totalAmount,
+          }
+        : null,
+      invoice: r.invoice
+        ? {
+            id: r.invoice.id,
+            invoiceNumber: r.invoice.invoiceNumber,
+            invoiceDate: this.formatDateOnly(r.invoice.invoiceDate),
+            taxableAmount: r.invoice.taxableAmount,
+            gstAmount: r.invoice.gstAmount,
+            tdsAmount: r.invoice.tdsAmount,
+            totalAmount: r.invoice.totalAmount,
+          }
+        : null,
     };
   }
 
@@ -149,10 +201,10 @@ export class PaymentRequestService {
   async findById(id: string) {
     const pr = await this.repo.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: [...this.listRelations],
+      relations: [...this.detailRelations],
     });
     if (!pr) throw new NotFoundException(PAYMENT_REQUEST_ERRORS.NOT_FOUND);
-    return this.mapRecord(pr);
+    return this.mapRecord(pr, { includeUpdatedBy: true });
   }
 
   private async findActive(id: string): Promise<PaymentRequestEntity> {
