@@ -147,6 +147,8 @@ export class PaymentRequestService {
       site: r.site
         ? {
             name: r.site.name,
+            city: r.site.city,
+            state: r.site.state,
             company: r.site.company ? { name: r.site.company.name } : null,
           }
         : null,
