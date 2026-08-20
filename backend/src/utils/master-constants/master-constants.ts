@@ -134,7 +134,7 @@ export enum LeaveCycleType {
 
 export enum EntrySourceType {
   WEB = 'web',
-  APP = 'app',
+  APP = 'mobile',
   BIOMETRIC = 'biometric',
   SYSTEM = 'system',
 }
