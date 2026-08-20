@@ -30,8 +30,8 @@ export const CRON_SCHEDULES = {
   // 11:59 PM IST = 6:29 PM UTC
   DAILY_END_OF_DAY_IST: '29 18 * * *',
 
-  // 9:00 PM IST = 3:30 PM UTC (typical shift end + buffer)
-  DAILY_SHIFT_END_IST: '30 15 * * *',
+  // 6:00 PM IST = 12:30 PM UTC (typical shift end + buffer)
+  DAILY_SHIFT_END_IST: '30 12 * * *',
 
   // ============================================
   // MORNING ALERTS (9:00 AM IST) - Staggered
