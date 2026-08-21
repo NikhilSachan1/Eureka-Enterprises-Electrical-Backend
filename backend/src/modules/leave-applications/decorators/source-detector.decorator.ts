@@ -8,7 +8,7 @@ export const DetectSource = createParamDecorator(
 
     const customSource = headers['x-source-type'] || headers['x-client-type'];
     if (customSource) {
-      return customSource.toLowerCase() === 'app' ? EntrySourceType.APP : EntrySourceType.WEB;
+      return customSource.toLowerCase() === 'mobile' ? EntrySourceType.APP : EntrySourceType.WEB;
     }
 
     return EntrySourceType.WEB;

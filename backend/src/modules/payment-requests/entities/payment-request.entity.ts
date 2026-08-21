@@ -1,6 +1,8 @@
 import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
+import { SiteEntity } from 'src/modules/sites/entities/site.entity';
+import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 
 /**
@@ -22,8 +24,16 @@ export class PaymentRequestEntity extends BaseEntity {
   @Column({ type: 'uuid' })
   siteId: string;
 
+  @ManyToOne(() => SiteEntity)
+  @JoinColumn({ name: 'siteId' })
+  site: SiteEntity;
+
   @Column({ type: 'uuid' })
   poId: string;
+
+  @ManyToOne(() => PurchaseOrderEntity)
+  @JoinColumn({ name: 'poId' })
+  po: PurchaseOrderEntity;
 
   @Column({ type: 'numeric', precision: 15, scale: 2 })
   requestedAmount: number;
