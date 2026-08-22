@@ -97,6 +97,12 @@ export class PaymentRequestService {
     }
     const approvedAmount = dto.approvedAmount ?? Number(pr.requestedAmount);
 
+    // The approver's note wins, but fall back to the reason the request was raised with so the
+    // book payment still carries some context. `remarks` is optional on approval and the UI does
+    // not currently send it, so without this fallback every book payment created from a request
+    // was stored with remarks = null and the requester's reason was lost at the handover.
+    const remarks = dto.remarks?.trim() || pr.reason?.trim() || undefined;
+
     // Book payment (its own validation: invoice approved, PO ceiling, etc.) — the amount that
     // reaches the vendor. bookingDate = today.
     const bookingDate = new Date().toISOString().slice(0, 10);
@@ -105,7 +111,7 @@ export class PaymentRequestService {
         invoiceId: pr.invoiceId,
         bookingDate,
         transferAmount: approvedAmount,
-        remarks: dto.remarks,
+        remarks,
       } as any,
       approvedBy,
     );
@@ -214,14 +220,14 @@ export class PaymentRequestService {
   }
 
   async findAll(query: GetPaymentRequestDto) {
-    const { siteId, invoiceId, status, search, page = 1, pageSize = 10 } = query;
+    const { siteId, invoiceId, status, invoiceNumber, page = 1, pageSize = 10 } = query;
     const where: any = { deletedAt: IsNull() };
     if (siteId?.length) where.siteId = In(siteId);
     if (invoiceId) where.invoiceId = invoiceId;
     if (status) where.status = status;
     // Partial match on the related invoice's number. `invoice` is already in listRelations,
     // so the join TypeORM adds for this condition is the one it was making anyway.
-    if (search) where.invoice = { invoiceNumber: ILike(`%${search}%`) };
+    if (invoiceNumber) where.invoice = { invoiceNumber: ILike(`%${invoiceNumber}%`) };
 
     const [records, totalRecords] = await Promise.all([
       this.repo.find({

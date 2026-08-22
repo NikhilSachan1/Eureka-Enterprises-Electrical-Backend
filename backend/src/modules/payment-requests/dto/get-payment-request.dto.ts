@@ -15,14 +15,17 @@ export class GetPaymentRequestDto {
   @IsUUID('4')
   invoiceId?: string;
 
+  // Named `invoiceNumber` rather than `search` to match book-payments and bank-transfers,
+  // where the invoice is likewise a parent document. (In site-invoices the invoice *is* the
+  // entity, so there `search` is the one that hits the invoice number.)
   @ApiPropertyOptional({
-    description: 'Partial, case-insensitive search on the invoice number',
+    description: 'Search by parent invoice number (partial, case-insensitive)',
     example: 'INV-2026',
   })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
-  search?: string;
+  invoiceNumber?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by status',
