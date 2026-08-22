@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DataSource, IsNull, In } from 'typeorm';
+import { DataSource, IsNull, In, ILike } from 'typeorm';
 import { PaymentRequestEntity } from './entities/payment-request.entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import {
   CreatePaymentRequestDto,
+  UpdatePaymentRequestDto,
   ApprovePaymentRequestDto,
   RejectPaymentRequestDto,
   GetPaymentRequestDto,
@@ -46,6 +47,43 @@ export class PaymentRequestService {
       }),
     );
     return { message: PAYMENT_REQUEST_RESPONSES.CREATED, id: created.id };
+  }
+
+  /**
+   * Edit a request while it is still PENDING. Once approved a book_payment exists against it and
+   * once rejected it is a closed record, so neither may be amended in place.
+   */
+  async update(id: string, dto: UpdatePaymentRequestDto, updatedBy: string) {
+    const pr = await this.findActive(id);
+    this.assertPending(pr, PAYMENT_REQUEST_ERRORS.NOT_PENDING_EDIT);
+
+    const patch: Partial<PaymentRequestEntity> = {};
+    if (dto.requestedAmount !== undefined) patch.requestedAmount = dto.requestedAmount;
+    if (dto.reason !== undefined) patch.reason = dto.reason ?? null;
+
+    if (Object.keys(patch).length === 0) {
+      throw new BadRequestException(PAYMENT_REQUEST_ERRORS.NOTHING_TO_UPDATE);
+    }
+
+    await this.repo.update({ id }, { ...patch, updatedBy });
+    return { message: PAYMENT_REQUEST_RESPONSES.UPDATED };
+  }
+
+  /** Soft-delete a request while it is still PENDING. */
+  async remove(id: string, deletedBy: string) {
+    const pr = await this.findActive(id);
+    this.assertPending(pr, PAYMENT_REQUEST_ERRORS.NOT_PENDING_DELETE);
+
+    // Stamp the actor before soft-deleting — softDelete() only sets deletedAt.
+    await this.repo.update({ id }, { deletedBy, updatedBy: deletedBy });
+    await this.repo.softDelete({ id });
+    return { message: PAYMENT_REQUEST_RESPONSES.DELETED };
+  }
+
+  private assertPending(pr: PaymentRequestEntity, template: string): void {
+    if (pr.status !== PAYMENT_REQUEST_STATUS.PENDING) {
+      throw new BadRequestException(template.replace('{status}', pr.status));
+    }
   }
 
   /**
@@ -176,11 +214,14 @@ export class PaymentRequestService {
   }
 
   async findAll(query: GetPaymentRequestDto) {
-    const { siteId, invoiceId, status, page = 1, pageSize = 10 } = query;
+    const { siteId, invoiceId, status, search, page = 1, pageSize = 10 } = query;
     const where: any = { deletedAt: IsNull() };
     if (siteId?.length) where.siteId = In(siteId);
     if (invoiceId) where.invoiceId = invoiceId;
     if (status) where.status = status;
+    // Partial match on the related invoice's number. `invoice` is already in listRelations,
+    // so the join TypeORM adds for this condition is the one it was making anyway.
+    if (search) where.invoice = { invoiceNumber: ILike(`%${search}%`) };
 
     const [records, totalRecords] = await Promise.all([
       this.repo.find({

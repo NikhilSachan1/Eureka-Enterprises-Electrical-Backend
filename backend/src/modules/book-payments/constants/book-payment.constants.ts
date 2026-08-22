@@ -6,6 +6,12 @@ export const BOOK_PAYMENT_ERRORS = {
   INVOICE_NOT_PURCHASE: 'Book payments can only be created for PURCHASE side invoices.',
   INVOICE_CEILING_EXCEEDED:
     'Invoice ceiling exceeded — sum of booked payments cannot exceed invoice net payable amount.',
+  // Same rule as INVOICE_CEILING_EXCEEDED, but stating the figures so the user knows what
+  // to enter instead of having to work the remainder out themselves.
+  INVOICE_CEILING_EXCEEDED_DETAIL:
+    'Invoice net payable is {netPayable}. {booked} is already booked, so you can book at most {remaining}. You entered {requested}.',
+  INVOICE_FULLY_BOOKED:
+    'Invoice net payable of {netPayable} is already fully booked ({booked}). No further payment can be booked against it.',
   CANNOT_DELETE_HAS_TRANSFER:
     'Cannot delete book payment — a bank transfer exists. Delete the bank transfer first.',
   CANNOT_UPDATE_TDS_PAID:

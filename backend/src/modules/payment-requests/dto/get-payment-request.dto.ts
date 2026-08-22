@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsOptional, IsUUID, IsArray, IsIn, IsInt, Min } from 'class-validator';
+import { IsOptional, IsUUID, IsArray, IsIn, IsInt, Min, IsString } from 'class-validator';
 
 export class GetPaymentRequestDto {
   @ApiPropertyOptional({ type: [String], description: 'Filter by site IDs' })
@@ -14,6 +14,15 @@ export class GetPaymentRequestDto {
   @IsOptional()
   @IsUUID('4')
   invoiceId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Partial, case-insensitive search on the invoice number',
+    example: 'INV-2026',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by status',
