@@ -410,6 +410,7 @@ export class AttendanceCronService {
       checkInTime: Date;
       shiftConfigId: string;
       approvalStatus: string;
+      status: string;
       notes: string | null;
     }> = await this.dataSource.query(query, params);
 
@@ -421,10 +422,16 @@ export class AttendanceCronService {
 
         const updateData: Partial<any> = {
           checkOutTime: shiftEndTime,
-          status: AttendanceStatus.CHECKED_OUT,
           notes: this.appendNote(record.notes, SYSTEM_NOTES.AUTO_CHECKOUT),
           updatedBy: SYSTEM_DEFAULTS.SYSTEM_USER_ID,
         };
+
+        // Only move the row to CHECKED_OUT if it is still checked in. A row that
+        // was approved earlier in the day already sits at PRESENT and must keep
+        // that status — it only needs the checkOutTime it never received.
+        if (record.status === AttendanceStatus.CHECKED_IN) {
+          updateData.status = AttendanceStatus.CHECKED_OUT;
+        }
 
         // Only set approvalStatus to PENDING if not already APPROVED
         if (record.approvalStatus !== ApprovalStatus.APPROVED) {

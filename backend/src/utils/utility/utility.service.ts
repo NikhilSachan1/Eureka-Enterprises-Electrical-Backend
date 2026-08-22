@@ -77,6 +77,34 @@ export class UtilityService {
     return localMoment.utc().toDate();
   }
 
+  /**
+   * Same as convertLocalTimeToUTC, but anchored to a given day instead of today.
+   * Required when stamping a time onto a record from another date — approving
+   * yesterday's attendance with a today-anchored time writes the wrong day.
+   */
+  convertLocalTimeToUTCOnDate(
+    anchorDate: Date | string,
+    timeString: string,
+    timezone = 'Asia/Kolkata',
+  ): Date {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const anchor = moment.tz(anchorDate, timezone);
+
+    return moment
+      .tz(
+        {
+          year: anchor.year(),
+          month: anchor.month(),
+          date: anchor.date(),
+          hour: hours,
+          minute: minutes,
+        },
+        timezone,
+      )
+      .utc()
+      .toDate();
+  }
+
   getCurrentFinancialYear() {
     const today = new Date();
     const year = today.getFullYear();

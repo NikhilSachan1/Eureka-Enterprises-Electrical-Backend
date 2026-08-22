@@ -391,6 +391,16 @@ export class AttendanceService {
     return { configSettingId, shiftConfigs };
   }
 
+  /** Configured shift end for a given attendance date, as UTC. */
+  private async getShiftEndTimeForDate(attendanceDate: Date): Promise<Date> {
+    const { shiftConfigs } = await this.getShiftConfigs();
+    return this.utilityService.convertLocalTimeToUTCOnDate(
+      attendanceDate,
+      shiftConfigs.endTime,
+      shiftConfigs.timezone,
+    );
+  }
+
   /** Same calendar config as leave applications (`leaveConfigId` on leave_applications). */
   private async getLeaveCalendarLeaveConfigId(): Promise<string> {
     const leaveCalendarSetting = await this.configurationService.findOneOrFail({
@@ -2098,6 +2108,16 @@ export class AttendanceService {
 
       if (approvalStatus === ApprovalStatus.APPROVED) {
         updateAttendanceRecord.status = AttendanceStatus.PRESENT;
+
+        // Approving moves the row off CHECKED_IN, which is the state the end-of-day
+        // auto-checkout used to key on. Stamp the shift-end checkout here so a row
+        // approved before that cron runs still gets one — manual checkout is
+        // disabled by shift config, so nothing else would ever fill it in.
+        if (!attendance.checkOutTime) {
+          updateAttendanceRecord.checkOutTime = await this.getShiftEndTimeForDate(
+            attendance.attendanceDate,
+          );
+        }
       }
 
       if (approvalStatus === ApprovalStatus.REJECTED) {
