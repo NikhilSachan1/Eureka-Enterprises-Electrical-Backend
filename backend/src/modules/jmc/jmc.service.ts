@@ -533,7 +533,7 @@ export class JmcService {
         j."poId",
         COALESCE(c.name, v.name) AS "partyName",
         -- sub-checks
-        (SELECT COUNT(*)::int FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL AND sr."fileKey" IS NOT NULL) AS "reportCount",
+        (SELECT COUNT(*)::int FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) AS "reportCount",
         (SELECT COUNT(*)::int FROM site_invoices   si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) AS "invoiceCount",
         -- eligibility computed per forDocument
         -- PENDING JMCs are now eligible (creation allowed); only REJECTED is blocked
@@ -542,7 +542,7 @@ export class JmcService {
           WHEN $3 = 'report'  AND (SELECT COUNT(*) FROM site_reports  sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) > 0 THEN false
           WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0 THEN false
           WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
-               AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL AND sr."fileKey" IS NOT NULL) = 0
+               AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0
             THEN false
           ELSE true
         END AS eligible,
@@ -553,7 +553,7 @@ export class JmcService {
           WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0
             THEN 'Invoice already exists for this JMC'
           WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
-               AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL AND sr."fileKey" IS NOT NULL) = 0
+               AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0
             THEN 'Report must be created first (PURCHASE side)'
           WHEN j."approvalStatus" = 'PENDING' THEN 'JMC not yet approved — document can be created but invoice cannot be approved until JMC is approved'
           ELSE NULL

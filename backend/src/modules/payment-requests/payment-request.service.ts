@@ -220,14 +220,36 @@ export class PaymentRequestService {
   }
 
   async findAll(query: GetPaymentRequestDto) {
-    const { siteId, invoiceId, status, invoiceNumber, page = 1, pageSize = 10 } = query;
+    const {
+      siteId,
+      invoiceId,
+      status,
+      invoiceNumber,
+      companyId,
+      companyName,
+      vendorId,
+      vendorName,
+      page = 1,
+      pageSize = 10,
+    } = query;
     const where: any = { deletedAt: IsNull() };
     if (siteId?.length) where.siteId = In(siteId);
     if (invoiceId) where.invoiceId = invoiceId;
     if (status) where.status = status;
-    // Partial match on the related invoice's number. `invoice` is already in listRelations,
-    // so the join TypeORM adds for this condition is the one it was making anyway.
-    if (invoiceNumber) where.invoice = { invoiceNumber: ILike(`%${invoiceNumber}%`) };
+
+    // Every condition on a given relation has to be merged into one object — assigning
+    // `where.invoice` twice would silently drop the first filter. `site` and `invoice` are
+    // already in listRelations, so these reuse joins that were being made anyway.
+    const siteWhere: Record<string, unknown> = {};
+    if (companyId?.length) siteWhere.companyId = In(companyId);
+    if (companyName) siteWhere.company = { name: ILike(`%${companyName}%`) };
+    if (Object.keys(siteWhere).length) where.site = siteWhere;
+
+    const invoiceWhere: Record<string, unknown> = {};
+    if (invoiceNumber) invoiceWhere.invoiceNumber = ILike(`%${invoiceNumber}%`);
+    if (vendorId?.length) invoiceWhere.vendorId = In(vendorId);
+    if (vendorName) invoiceWhere.vendor = { name: ILike(`%${vendorName}%`) };
+    if (Object.keys(invoiceWhere).length) where.invoice = invoiceWhere;
 
     const [records, totalRecords] = await Promise.all([
       this.repo.find({

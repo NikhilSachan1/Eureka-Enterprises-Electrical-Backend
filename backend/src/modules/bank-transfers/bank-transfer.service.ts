@@ -13,6 +13,8 @@ import {
   MoreThanOrEqual,
   LessThanOrEqual,
   Not,
+  And,
+  FindOperator,
 } from 'typeorm';
 import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
@@ -34,6 +36,25 @@ import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { CompanyBankAccountService } from 'src/modules/company-bank-accounts/company-bank-account.service';
+
+type WhereObject = Record<string, any>;
+
+/** A plain nested-relation object, as opposed to a leaf value or a TypeORM operator. */
+const isPlainWhereObject = (value: unknown): value is WhereObject =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  !(value instanceof FindOperator) &&
+  !(value instanceof Date);
+
+/**
+ * The same condition on the invoice, expressed for both routes a transfer can take to reach it:
+ * SALE holds `invoiceId` directly, PURCHASE reaches it through `bookPayment`.
+ */
+const onInvoice = (condition: WhereObject): WhereObject[] => [
+  { invoice: condition },
+  { bookPayment: { invoice: condition } },
+];
 
 @Injectable()
 export class BankTransferService {
@@ -344,22 +365,43 @@ export class BankTransferService {
     if (dateFrom && dateTo) where.transferDate = Between(dateFrom, dateTo);
     else if (dateFrom) where.transferDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.transferDate = LessThanOrEqual(dateTo);
-    if (search) where.utrNumber = ILike(`%${search}%`);
     if (paidFromAccountId) where.paidFromAccountId = paidFromAccountId;
     if (paidFromAccountName)
       where.paidFromAccount = { accountName: ILike(`%${paidFromAccountName}%`) };
     if (hasPaidFromAccount === true) where.paidFromAccountId = Not(IsNull());
     else if (hasPaidFromAccount === false) where.paidFromAccountId = IsNull();
-    if (invoiceNumber || poNumber) {
-      const invCond: any = {};
-      if (invoiceNumber) invCond.invoiceNumber = ILike(`%${invoiceNumber}%`);
-      if (poNumber) invCond.jmc = { po: { poNumber: ILike(`%${poNumber}%`) } };
-      where.invoice = invCond;
+    // Anything reached through the invoice has two routes, and a transfer only ever has one of
+    // them: SALE carries `invoiceId` directly, PURCHASE leaves it null and hangs the invoice off
+    // `bookPayment`. Filtering only on `invoice` therefore matched nothing on the PURCHASE side.
+    let branches: WhereObject[] = [where];
+    if (invoiceNumber) {
+      branches = this.expand(branches, onInvoice({ invoiceNumber: ILike(`%${invoiceNumber}%`) }));
     }
+    if (poNumber) {
+      branches = this.expand(
+        branches,
+        onInvoice({ jmc: { po: { poNumber: ILike(`%${poNumber}%`) } } }),
+      );
+    }
+
+    // `search` is the single free-text box: UTR number, payment-advice reference, or invoice
+    // number (either route). TypeORM ANDs the keys within one where-object, so an OR has to be an
+    // array of objects — and every other filter is copied into each branch, otherwise it silently
+    // stops applying to part of the union.
+    if (search) {
+      const term = ILike(`%${search}%`);
+      branches = this.expand(branches, [
+        { utrNumber: term },
+        { paymentAdvice: { referenceNumber: term } },
+        ...onInvoice({ invoiceNumber: term }),
+      ]);
+    }
+
+    const finalWhere = branches.length === 1 ? branches[0] : branches;
 
     const [records, totalRecords] = await Promise.all([
       this.bankTransferRepository.findAll({
-        where,
+        where: finalWhere,
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -382,7 +424,7 @@ export class BankTransferService {
           'approvalByUser',
         ],
       }),
-      this.bankTransferRepository.count({ where }),
+      this.bankTransferRepository.count({ where: finalWhere }),
     ]);
 
     return {
@@ -394,6 +436,34 @@ export class BankTransferService {
       })),
       totalRecords,
     };
+  }
+
+  /**
+   * Combines every existing branch with every new alternative, so N filters that each have
+   * several possible routes produce the full set of OR branches rather than losing one.
+   */
+  private expand(bases: WhereObject[], alternatives: WhereObject[]): WhereObject[] {
+    return bases.flatMap((base) => alternatives.map((alt) => this.mergeWhere(base, alt)));
+  }
+
+  /**
+   * Deep-merges two where-fragments. Relation sub-objects are merged rather than overwritten
+   * (two fragments both touching `invoice` must combine), and two operators landing on the same
+   * leaf are And()-ed so an explicit filter is never silently replaced by a search term.
+   */
+  private mergeWhere(a: WhereObject, b: WhereObject): WhereObject {
+    const merged: WhereObject = { ...a };
+    for (const [key, value] of Object.entries(b)) {
+      const existing = merged[key];
+      if (existing === undefined) {
+        merged[key] = value;
+      } else if (isPlainWhereObject(existing) && isPlainWhereObject(value)) {
+        merged[key] = this.mergeWhere(existing, value);
+      } else {
+        merged[key] = And(existing as FindOperator<unknown>, value as FindOperator<unknown>);
+      }
+    }
+    return merged;
   }
 
   async findById(id: string) {

@@ -15,6 +15,35 @@ export class GetPaymentRequestDto {
   @IsUUID('4')
   invoiceId?: string;
 
+  // Company is reached through the site; vendor through the invoice. Both are offered as
+  // an ID list (matching book-payments/bank-transfers, i.e. what a dropdown sends) and as a
+  // partial name (for a free-text box). Use whichever the screen has — they combine as AND.
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more company IDs' })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value != null ? [value] : undefined))
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  companyId?: string[];
+
+  @ApiPropertyOptional({ description: 'Search by company name (partial, case-insensitive)' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more vendor IDs' })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value != null ? [value] : undefined))
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  vendorId?: string[];
+
+  @ApiPropertyOptional({ description: 'Search by vendor name (partial, case-insensitive)' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  vendorName?: string;
+
   // Named `invoiceNumber` rather than `search` to match book-payments and bank-transfers,
   // where the invoice is likewise a parent document. (In site-invoices the invoice *is* the
   // entity, so there `search` is the one that hits the invoice number.)
