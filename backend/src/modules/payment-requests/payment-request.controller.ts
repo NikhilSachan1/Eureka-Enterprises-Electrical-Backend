@@ -1,9 +1,21 @@
-import { Controller, Get, Post, Body, Param, Query, Request, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Request,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { PaymentRequestService } from './payment-request.service';
 import {
   CreatePaymentRequestDto,
+  UpdatePaymentRequestDto,
   ApprovePaymentRequestDto,
   RejectPaymentRequestDto,
   GetPaymentRequestDto,
@@ -37,6 +49,27 @@ export class PaymentRequestController {
   @ApiOperation({ summary: 'Get a payment request by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.service.findById(id);
+  }
+
+  @Patch(':id')
+  @RequiredPermission('financials.payment-requests.update')
+  @ApiOperation({ summary: 'Edit a payment request (allowed only while PENDING)' })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Body() dto: UpdatePaymentRequestDto,
+  ) {
+    return await this.service.update(id, dto, updatedBy);
+  }
+
+  @Delete(':id')
+  @RequiredPermission('financials.payment-requests.delete')
+  @ApiOperation({ summary: 'Delete a payment request (allowed only while PENDING)' })
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+  ) {
+    return await this.service.remove(id, deletedBy);
   }
 
   @Post(':id/approve')

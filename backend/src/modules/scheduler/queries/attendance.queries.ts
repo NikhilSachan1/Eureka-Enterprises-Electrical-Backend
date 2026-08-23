@@ -68,17 +68,28 @@ export const getExistingAttendanceUserIdsQuery = (date: Date) => {
  * 2. Mark absent users who never checked in (NOT_CHECKED_IN_YET → ABSENT)
  * 3. Create ABSENT records for users added after morning cron
  */
+/**
+ * Selects on the data condition (checked in, never checked out) rather than on
+ * status = CHECKED_IN. Approval rewrites the status to PRESENT, so a row approved
+ * before this cron runs used to fall out of the result set and keep a null
+ * checkOutTime forever — manual checkout is disabled by shift config, which makes
+ * this cron the only writer of checkOutTime.
+ *
+ * `status` is selected so the caller can leave an already-approved row's status
+ * alone and fill in only the missing checkout.
+ */
 export const getCheckedInAttendancesQuery = (date: Date) => {
   return {
     query: `
-      SELECT id, "userId", "checkInTime", "shiftConfigId", "approvalStatus", "notes"
+      SELECT id, "userId", "checkInTime", "shiftConfigId", "approvalStatus", "status", "notes"
       FROM attendances
       WHERE "attendanceDate" = $1
-        AND "status" = $2
+        AND "checkInTime" IS NOT NULL
+        AND "checkOutTime" IS NULL
         AND "isActive" = true
         AND "deletedAt" IS NULL
     `,
-    params: [date, AttendanceStatus.CHECKED_IN],
+    params: [date],
   };
 };
 

@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { AttendanceType, AttendanceAction } from '../constants/attendance.constants';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
@@ -44,17 +44,23 @@ class AssignmentSnapshotVehicleDto {
   registrationNo: string;
 }
 
+// Validated more strictly than the rest of the snapshot: clients were sending an
+// uninitialised `{id:"", firstName:"", ...}`, which bare @IsString() accepts, and it
+// was then stored and served as a real engineer.
 class AssignmentSnapshotEngineerDto {
-  @IsString()
+  @IsUUID()
   id: string;
 
   @IsString()
+  @IsNotEmpty()
   firstName: string;
 
   @IsString()
+  @IsNotEmpty()
   lastName: string;
 
   @IsString()
+  @IsNotEmpty()
   employeeId: string;
 }
 

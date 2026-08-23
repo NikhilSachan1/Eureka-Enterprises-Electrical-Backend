@@ -77,6 +77,10 @@ import { TransactionType } from '../expense-tracker/constants/expense-tracker.co
 import { AuditLogService } from '../audit-logs/audit-log.service';
 import { EntityAuditAction } from '../audit-logs/entities/entity-audit-log.entity';
 
+type AssignmentEngineer = NonNullable<
+  NonNullable<AttendanceEntity['assignmentSnapshot']>['assignedEngineer']
+>;
+
 @Injectable()
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
@@ -150,8 +154,11 @@ export class AttendanceService {
   }
 
   async handleAttendanceAction(userId: string, attendanceActionDto: AttendanceActionDto) {
-    const { action, entrySourceType, attendanceType, notes, timezone, assignmentSnapshot } =
-      attendanceActionDto;
+    const { action, entrySourceType, attendanceType, notes, timezone } = attendanceActionDto;
+    const assignmentSnapshot = await this.sanitizeAssignmentSnapshot(
+      userId,
+      attendanceActionDto.assignmentSnapshot,
+    );
     const todayDate = this.dateTimeService.getStartOfToday(timezone);
     const currentTimeUTC = new Date();
     const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
@@ -389,6 +396,16 @@ export class AttendanceService {
       select: { configSettings: { id: true, value: true } },
     });
     return { configSettingId, shiftConfigs };
+  }
+
+  /** Configured shift end for a given attendance date, as UTC. */
+  private async getShiftEndTimeForDate(attendanceDate: Date): Promise<Date> {
+    const { shiftConfigs } = await this.getShiftConfigs();
+    return this.utilityService.convertLocalTimeToUTCOnDate(
+      attendanceDate,
+      shiftConfigs.endTime,
+      shiftConfigs.timezone,
+    );
   }
 
   /** Same calendar config as leave applications (`leaveConfigId` on leave_applications). */
@@ -1082,9 +1099,16 @@ export class AttendanceService {
         entrySourceType,
         attendanceType,
         status,
-        assignmentSnapshot,
         leaveCategory,
       } = forceAttendanceDto;
+
+      // Sanitised per user, not per request: a bulk force-attendance sends one
+      // snapshot for every userId in the batch, so the engineer must be judged
+      // against this user's role rather than the batch as a whole.
+      const assignmentSnapshot = await this.sanitizeAssignmentSnapshot(
+        userId,
+        forceAttendanceDto.assignmentSnapshot,
+      );
 
       // Use timezone-aware date comparison
       const attendanceDateStr =
@@ -1807,7 +1831,7 @@ export class AttendanceService {
           company: siteData?.company || null,
           contractors: siteData?.contractors || [],
           vehicle: vehicleData,
-          assignedEngineer: siteData?.assignedEngineer || null,
+          assignedEngineer: await this.resolveVisibleEngineer(userId, siteData?.assignedEngineer),
           message: 'No attendance record found for today',
         };
       }
@@ -1832,6 +1856,8 @@ export class AttendanceService {
         vehicle = vehicleData;
         assignedEngineer = siteData?.assignedEngineer || null;
       }
+
+      assignedEngineer = await this.resolveVisibleEngineer(userId, assignedEngineer);
 
       return {
         id: attendance.id,
@@ -2098,6 +2124,16 @@ export class AttendanceService {
 
       if (approvalStatus === ApprovalStatus.APPROVED) {
         updateAttendanceRecord.status = AttendanceStatus.PRESENT;
+
+        // Approving moves the row off CHECKED_IN, which is the state the end-of-day
+        // auto-checkout used to key on. Stamp the shift-end checkout here so a row
+        // approved before that cron runs still gets one — manual checkout is
+        // disabled by shift config, so nothing else would ever fill it in.
+        if (!attendance.checkOutTime) {
+          updateAttendanceRecord.checkOutTime = await this.getShiftEndTimeForDate(
+            attendance.attendanceDate,
+          );
+        }
       }
 
       if (approvalStatus === ApprovalStatus.REJECTED) {
@@ -2593,6 +2629,50 @@ export class AttendanceService {
 
     this.logger.log(`Driver ${userId} food credit redirected to assigned engineer ${engineerId}`);
     return engineerId;
+  }
+
+  /**
+   * Read-side counterpart to sanitizeAssignmentSnapshot. Rows written before that
+   * guard existed still carry an engineer for non-drivers (and blank `{id:""}`
+   * objects, which are truthy and so slip past a plain `|| null`), so the same rule
+   * is applied on the way out.
+   */
+  private async resolveVisibleEngineer(
+    userId: string,
+    engineer?: AssignmentEngineer | null,
+  ): Promise<AssignmentEngineer | null> {
+    if (!engineer?.id) {
+      return null;
+    }
+    return (await this.checkUserHasDriverRole(userId)) ? engineer : null;
+  }
+
+  /**
+   * `assignedEngineer` is only meaningful for drivers — it redirects their food
+   * credit (see resolveFoodCreditRecipient). Clients have been sending it for every
+   * role, and an uninitialised form object (`{id:"", firstName:"", ...}`) passes DTO
+   * validation, so both are dropped here rather than trusted from the payload.
+   *
+   * Applied to every snapshot that arrives from a client. Snapshots copied between
+   * rows internally (regularization) are already sanitised at their origin.
+   */
+  private async sanitizeAssignmentSnapshot(
+    userId: string,
+    snapshot: AttendanceEntity['assignmentSnapshot'] | undefined,
+  ): Promise<AttendanceEntity['assignmentSnapshot'] | undefined> {
+    if (!snapshot?.assignedEngineer) {
+      return snapshot;
+    }
+
+    // An engineer without an id cannot be resolved by anything downstream.
+    const isUsable = Boolean(snapshot.assignedEngineer.id);
+    if (isUsable && (await this.checkUserHasDriverRole(userId))) {
+      return snapshot;
+    }
+
+    const withoutEngineer = { ...snapshot };
+    delete withoutEngineer.assignedEngineer;
+    return withoutEngineer;
   }
 
   /**

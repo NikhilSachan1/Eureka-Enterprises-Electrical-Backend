@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DataSource, IsNull, In } from 'typeorm';
+import { DataSource, IsNull, In, ILike } from 'typeorm';
 import { PaymentRequestEntity } from './entities/payment-request.entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import {
   CreatePaymentRequestDto,
+  UpdatePaymentRequestDto,
   ApprovePaymentRequestDto,
   RejectPaymentRequestDto,
   GetPaymentRequestDto,
@@ -49,6 +50,43 @@ export class PaymentRequestService {
   }
 
   /**
+   * Edit a request while it is still PENDING. Once approved a book_payment exists against it and
+   * once rejected it is a closed record, so neither may be amended in place.
+   */
+  async update(id: string, dto: UpdatePaymentRequestDto, updatedBy: string) {
+    const pr = await this.findActive(id);
+    this.assertPending(pr, PAYMENT_REQUEST_ERRORS.NOT_PENDING_EDIT);
+
+    const patch: Partial<PaymentRequestEntity> = {};
+    if (dto.requestedAmount !== undefined) patch.requestedAmount = dto.requestedAmount;
+    if (dto.reason !== undefined) patch.reason = dto.reason ?? null;
+
+    if (Object.keys(patch).length === 0) {
+      throw new BadRequestException(PAYMENT_REQUEST_ERRORS.NOTHING_TO_UPDATE);
+    }
+
+    await this.repo.update({ id }, { ...patch, updatedBy });
+    return { message: PAYMENT_REQUEST_RESPONSES.UPDATED };
+  }
+
+  /** Soft-delete a request while it is still PENDING. */
+  async remove(id: string, deletedBy: string) {
+    const pr = await this.findActive(id);
+    this.assertPending(pr, PAYMENT_REQUEST_ERRORS.NOT_PENDING_DELETE);
+
+    // Stamp the actor before soft-deleting — softDelete() only sets deletedAt.
+    await this.repo.update({ id }, { deletedBy, updatedBy: deletedBy });
+    await this.repo.softDelete({ id });
+    return { message: PAYMENT_REQUEST_RESPONSES.DELETED };
+  }
+
+  private assertPending(pr: PaymentRequestEntity, template: string): void {
+    if (pr.status !== PAYMENT_REQUEST_STATUS.PENDING) {
+      throw new BadRequestException(template.replace('{status}', pr.status));
+    }
+  }
+
+  /**
    * Approve a request (optionally adjusting the amount). Creates a book_payment for the approved
    * amount against the invoice — this is what surfaces in the payment sheet.
    */
@@ -59,6 +97,12 @@ export class PaymentRequestService {
     }
     const approvedAmount = dto.approvedAmount ?? Number(pr.requestedAmount);
 
+    // The approver's note wins, but fall back to the reason the request was raised with so the
+    // book payment still carries some context. `remarks` is optional on approval and the UI does
+    // not currently send it, so without this fallback every book payment created from a request
+    // was stored with remarks = null and the requester's reason was lost at the handover.
+    const remarks = dto.remarks?.trim() || pr.reason?.trim() || undefined;
+
     // Book payment (its own validation: invoice approved, PO ceiling, etc.) — the amount that
     // reaches the vendor. bookingDate = today.
     const bookingDate = new Date().toISOString().slice(0, 10);
@@ -67,7 +111,7 @@ export class PaymentRequestService {
         invoiceId: pr.invoiceId,
         bookingDate,
         transferAmount: approvedAmount,
-        remarks: dto.remarks,
+        remarks,
       } as any,
       approvedBy,
     );
@@ -176,11 +220,36 @@ export class PaymentRequestService {
   }
 
   async findAll(query: GetPaymentRequestDto) {
-    const { siteId, invoiceId, status, page = 1, pageSize = 10 } = query;
+    const {
+      siteId,
+      invoiceId,
+      status,
+      invoiceNumber,
+      companyId,
+      companyName,
+      vendorId,
+      vendorName,
+      page = 1,
+      pageSize = 10,
+    } = query;
     const where: any = { deletedAt: IsNull() };
     if (siteId?.length) where.siteId = In(siteId);
     if (invoiceId) where.invoiceId = invoiceId;
     if (status) where.status = status;
+
+    // Every condition on a given relation has to be merged into one object — assigning
+    // `where.invoice` twice would silently drop the first filter. `site` and `invoice` are
+    // already in listRelations, so these reuse joins that were being made anyway.
+    const siteWhere: Record<string, unknown> = {};
+    if (companyId?.length) siteWhere.companyId = In(companyId);
+    if (companyName) siteWhere.company = { name: ILike(`%${companyName}%`) };
+    if (Object.keys(siteWhere).length) where.site = siteWhere;
+
+    const invoiceWhere: Record<string, unknown> = {};
+    if (invoiceNumber) invoiceWhere.invoiceNumber = ILike(`%${invoiceNumber}%`);
+    if (vendorId?.length) invoiceWhere.vendorId = In(vendorId);
+    if (vendorName) invoiceWhere.vendor = { name: ILike(`%${vendorName}%`) };
+    if (Object.keys(invoiceWhere).length) where.invoice = invoiceWhere;
 
     const [records, totalRecords] = await Promise.all([
       this.repo.find({

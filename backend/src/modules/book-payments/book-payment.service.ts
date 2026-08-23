@@ -21,6 +21,7 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
+import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 
 @Injectable()
 export class BookPaymentService {
@@ -67,12 +68,25 @@ export class BookPaymentService {
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
       const remaining = invoiceNetPayable - existingBooked;
       if (remaining <= 0) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
+        throw new BadRequestException(
+          BOOK_PAYMENT_ERRORS.INVOICE_FULLY_BOOKED.replace(
+            '{netPayable}',
+            formatInr(invoiceNetPayable),
+          ).replace('{booked}', formatInr(existingBooked)),
+        );
       }
 
       const transferAmount = Number(dto.transferAmount);
       if (transferAmount > remaining) {
-        throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
+        throw new BadRequestException(
+          BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED_DETAIL.replace(
+            '{netPayable}',
+            formatInr(invoiceNetPayable),
+          )
+            .replace('{booked}', formatInr(existingBooked))
+            .replace('{remaining}', formatInr(remaining))
+            .replace('{requested}', formatInr(transferAmount)),
+        );
       }
 
       // Each book payment books exactly what is transferred — no per-payment hold

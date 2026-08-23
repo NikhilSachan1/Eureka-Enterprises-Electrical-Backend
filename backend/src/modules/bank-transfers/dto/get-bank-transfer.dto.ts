@@ -81,7 +81,10 @@ export class GetBankTransferDto {
   @IsDateString()
   dateTo?: string;
 
-  @ApiPropertyOptional({ description: 'Search by UTR number' })
+  @ApiPropertyOptional({
+    description:
+      'Free-text search — matches UTR number, payment-advice reference number, or invoice number',
+  })
   @IsString()
   @IsOptional()
   search?: string;
