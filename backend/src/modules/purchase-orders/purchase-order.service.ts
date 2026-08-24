@@ -34,7 +34,10 @@ import {
 import { PO_ERRORS, PO_RESPONSES } from './constants/purchase-order.constants';
 import { checkPoHasJmcsQuery } from './queries/purchase-order.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
-import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
+import {
+  checkSiteCreateAccess,
+  getReadableSiteIds,
+} from 'src/modules/common/financials/site-access.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -157,7 +160,7 @@ export class PurchaseOrderService {
     return { message: PO_RESPONSES.CREATED, id: created.id };
   }
 
-  async findAll(query: GetPurchaseOrderDto) {
+  async findAll(query: GetPurchaseOrderDto, userId: string, activeRole?: string) {
     const {
       companyId,
       siteId,
@@ -177,7 +180,19 @@ export class PurchaseOrderService {
 
     const where: any = { deletedAt: IsNull() };
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+
+    // Read-scope: employees see only their allocated sites; office roles see all.
+    const readableSiteIds = await getReadableSiteIds(this.dataSource, userId, activeRole);
+    if (readableSiteIds !== null) {
+      const effective = siteId?.length
+        ? siteId.filter((s) => readableSiteIds.includes(s))
+        : readableSiteIds;
+      if (effective.length === 0) return { records: [], totalRecords: 0 };
+      where.siteId = In(effective);
+    } else if (siteId?.length) {
+      where.siteId = In(siteId);
+    }
+
     if (partyType) where.partyType = partyType;
     if (contractorId?.length) where.contractorId = In(contractorId);
     if (vendorId?.length) where.vendorId = In(vendorId);

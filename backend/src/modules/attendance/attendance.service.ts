@@ -13,6 +13,7 @@ import {
   FindOptionsWhere,
   FindOneOptions,
   In,
+  IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
 } from 'typeorm';
@@ -3666,6 +3667,285 @@ export class AttendanceService {
     );
 
     return { message: ATTENDANCE_RESPONSES.FORCE_ATTENDANCE_SUCCESS };
+  }
+
+  /**
+   * Delete an attendance record and unwind everything it caused: the food allowance already
+   * credited, and any leave debited or cancelled on its behalf.
+   *
+   * Blocked for today (the end-of-day cron would recreate the row as ABSENT), for future dates,
+   * and once payroll exists for that month (the payslip is already derived from these days).
+   */
+  async deleteAttendance(attendanceId: string, deletedBy: string, timezone?: string) {
+    const attendance = await this.attendanceRepository.findOne({
+      where: { id: attendanceId, deletedAt: IsNull() },
+    });
+    if (!attendance) {
+      throw new NotFoundException(ATTENDANCE_ERRORS.NOT_FOUND);
+    }
+
+    const calendarDate = this.normalizeAttendanceCalendarDate(attendance.attendanceDate);
+    const dateStr = this.formatLocalYyyyMmDd(calendarDate);
+
+    if (this.dateTimeService.isToday(dateStr, timezone)) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.DELETE_SAME_DAY_NOT_ALLOWED);
+    }
+    if (this.dateTimeService.isFutureDate(dateStr, timezone)) {
+      throw new BadRequestException(ATTENDANCE_ERRORS.DELETE_FUTURE_DATE_NOT_ALLOWED);
+    }
+
+    await this.assertNoPayrollForMonth(attendance.userId, calendarDate);
+
+    const summary = await this.dataSource.transaction(async (entityManager) => {
+      const reversedExpenses = await this.reverseFoodExpenseByLedger(
+        attendance.userId,
+        calendarDate,
+        deletedBy,
+      );
+      const leaveEffect = await this.unwindLeaveForDeletedAttendance(
+        attendance,
+        calendarDate,
+        deletedBy,
+        entityManager,
+      );
+
+      // The whole day is removed, including any superseded (isActive = false) versions left
+      // behind by earlier regularizations — otherwise those rows linger with nothing pointing
+      // at them.
+      const rows = await entityManager
+        .getRepository(AttendanceEntity)
+        .find({ where: { userId: attendance.userId, attendanceDate: attendance.attendanceDate } });
+      const ids = rows.filter((r) => !r.deletedAt).map((r) => r.id);
+
+      await entityManager
+        .getRepository(AttendanceEntity)
+        .update({ id: In(ids) }, { deletedBy, updatedBy: deletedBy });
+      await entityManager.getRepository(AttendanceEntity).softDelete({ id: In(ids) });
+
+      return { reversedExpenses, leaveEffect, deletedRows: ids.length };
+    });
+
+    // softDelete()/update() bypass the entity audit subscriber, so the deletion is recorded here
+    // explicitly — otherwise a money-moving action would leave no trail.
+    await this.recordAttendanceDeletionAudit(attendance, deletedBy, summary);
+
+    this.logger.log(
+      `Deleted attendance ${attendanceId} (user ${attendance.userId}, ${dateStr}) — ` +
+        `${summary.deletedRows} row(s), ${summary.reversedExpenses} expense reversal(s), leave: ${summary.leaveEffect}`,
+    );
+
+    return { message: ATTENDANCE_RESPONSES.ATTENDANCE_DELETED, ...summary };
+  }
+
+  /** Payroll for the month freezes the attendance it was calculated from. */
+  private async assertNoPayrollForMonth(userId: string, calendarDate: Date): Promise<void> {
+    const month = calendarDate.getMonth() + 1;
+    const year = calendarDate.getFullYear();
+
+    const [payroll] = await this.dataSource.query(
+      `SELECT status FROM payroll
+       WHERE "userId" = $1 AND month = $2 AND year = $3
+         AND status <> 'CANCELLED' AND "deletedAt" IS NULL
+       LIMIT 1`,
+      [userId, month, year],
+    );
+
+    if (payroll) {
+      throw new BadRequestException(
+        ATTENDANCE_ERRORS.DELETE_PAYROLL_EXISTS.replace('{month}', String(month))
+          .replace('{year}', String(year))
+          .replace('{status}', String(payroll.status).toLowerCase()),
+      );
+    }
+  }
+
+  /**
+   * Reverses the food allowance by reading the ledger rows that were actually written, rather
+   * than recomputing who should have received it.
+   *
+   * Recomputing is unsafe here: resolveFoodCreditRecipient() consults the user's *current* driver
+   * role, the *current* assignmentSnapshot and whether the engineer still exists. Any of those
+   * changing between the credit and the delete would reverse the money out of the wrong person —
+   * and the credit itself has two different shapes (one self row, or driver-earn + driver-redirect
+   * + engineer rows). Mirroring the stored rows is immune to all of that.
+   */
+  private async reverseFoodExpenseByLedger(
+    ownerUserId: string,
+    calendarDate: Date,
+    actionBy: string,
+  ): Promise<number> {
+    const dateStr = this.formatLocalYyyyMmDd(calendarDate);
+    const ref = (template: string) =>
+      template.replace('{userId}', ownerUserId).replace('{date}', dateStr);
+
+    // credit reference → its reversal counterpart
+    const reversalOf: Record<string, string> = {
+      [ref(FOOD_EXPENSE_CONSTANTS.REFERENCE_ID)]: ref(FOOD_EXPENSE_CONSTANTS.REVERSAL_REFERENCE_ID),
+      [ref(FOOD_EXPENSE_CONSTANTS.DRIVER_EARN_REFERENCE_ID)]: ref(
+        FOOD_EXPENSE_CONSTANTS.REVERSAL_DRIVER_EARN_REFERENCE_ID,
+      ),
+      [ref(FOOD_EXPENSE_CONSTANTS.DRIVER_REDIRECT_REFERENCE_ID)]: ref(
+        FOOD_EXPENSE_CONSTANTS.REVERSAL_DRIVER_REDIRECT_REFERENCE_ID,
+      ),
+    };
+
+    const creditRefs = Object.keys(reversalOf);
+    const reversalRefs = Object.values(reversalOf);
+
+    // A credit row and its reversal share a transactionId only up to the userId in the template —
+    // the engineer's row reuses the driver's REFERENCE_ID — so both are matched on (txn, user).
+    const credits: Array<{ id: string; userId: string; amount: string; transactionType: string }> =
+      await this.dataSource.query(
+        `SELECT id, "userId", amount, "transactionType", "transactionId"
+         FROM expenses
+         WHERE "transactionId" = ANY($1) AND "deletedAt" IS NULL`,
+        [creditRefs],
+      );
+
+    if (credits.length === 0) {
+      return 0;
+    }
+
+    const existingReversals: Array<{ transactionId: string; userId: string; amount: string }> =
+      await this.dataSource.query(
+        `SELECT "transactionId", "userId", amount FROM expenses
+         WHERE "transactionId" = ANY($1) AND "deletedAt" IS NULL`,
+        [reversalRefs],
+      );
+
+    // Idempotency is measured by outstanding amount, not by "a reversal row exists". The same
+    // user/date can be credited again after a delete (re-forced attendance), and a stale reversal
+    // from the earlier cycle must not cause the new credit to be skipped.
+    const outstanding = new Map<
+      string,
+      { userId: string; ref: string; amount: number; type: string }
+    >();
+    for (const credit of credits) {
+      const creditRef = (credit as any).transactionId as string;
+      const reversalRef = reversalOf[creditRef];
+      const key = `${reversalRef}::${credit.userId}`;
+      const entry = outstanding.get(key) ?? {
+        userId: credit.userId,
+        ref: reversalRef,
+        amount: 0,
+        type: credit.transactionType,
+      };
+      entry.amount += Math.abs(Number(credit.amount));
+      outstanding.set(key, entry);
+    }
+    for (const reversal of existingReversals) {
+      const key = `${reversal.transactionId}::${reversal.userId}`;
+      const entry = outstanding.get(key);
+      if (entry) entry.amount -= Math.abs(Number(reversal.amount));
+    }
+
+    let reversed = 0;
+    for (const entry of outstanding.values()) {
+      if (entry.amount <= 0.005) {
+        continue; // already fully unwound — deleting twice must not move money twice
+      }
+
+      await this.expenseTrackerService.createSystemExpense({
+        userId: entry.userId,
+        category: FOOD_EXPENSE_CONSTANTS.CATEGORY,
+        amount: -entry.amount,
+        description: `Reversal: food allowance for ${dateStr} (attendance deleted)`,
+        createdBy: actionBy,
+        referenceId: entry.ref,
+        referenceType: FOOD_EXPENSE_CONSTANTS.REFERENCE_TYPE,
+        expenseDate: calendarDate,
+        approvalAt: new Date(),
+        transactionType: entry.type,
+      });
+      reversed++;
+    }
+
+    return reversed;
+  }
+
+  /**
+   * Undoes the leave side of the record:
+   *  - LEAVE            → credit the day back and cancel the forced application
+   *  - LEAVE_WITHOUT_PAY→ cancel the forced application (no balance was debited)
+   *  - anything else    → nothing; a plain present/absent day never touched leave
+   */
+  private async unwindLeaveForDeletedAttendance(
+    attendance: AttendanceEntity,
+    calendarDate: Date,
+    actionBy: string,
+    entityManager: EntityManager,
+  ): Promise<string> {
+    const isPaidLeave = attendance.status === AttendanceStatus.LEAVE;
+    const isLwp = attendance.status === AttendanceStatus.LEAVE_WITHOUT_PAY;
+    if (!isPaidLeave && !isLwp) {
+      return 'none';
+    }
+
+    const dateStr = this.formatLocalYyyyMmDd(calendarDate);
+    const application = await this.findLeaveApplicationForDate(attendance.userId, calendarDate);
+    if (!application) {
+      return 'no-application-found';
+    }
+
+    if (isPaidLeave) {
+      await this.leaveBalancesService.update(
+        {
+          userId: attendance.userId,
+          leaveCategory: application.leaveCategory,
+          financialYear: this.utilityService.getFinancialYear(calendarDate),
+        },
+        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+        entityManager,
+      );
+    }
+
+    // Only a single-day application belongs to this one attendance row; a multi-day leave covers
+    // other days too and must stay approved for them.
+    const fromDate = new Date(application.fromDate);
+    const toDate = new Date(application.toDate);
+    if (fromDate.toDateString() !== toDate.toDateString()) {
+      return isPaidLeave ? 'balance-credited-multi-day-application-kept' : 'multi-day-kept';
+    }
+
+    await this.leaveApplicationsService.update(
+      { id: application.id },
+      {
+        approvalStatus: LeaveApprovalStatus.CANCELLED,
+        approvalReason: `Attendance for ${dateStr} was deleted`,
+        approvalBy: actionBy,
+        approvalAt: new Date(),
+        updatedBy: actionBy,
+      },
+      entityManager,
+    );
+
+    return isPaidLeave ? 'balance-credited-application-cancelled' : 'application-cancelled';
+  }
+
+  private async recordAttendanceDeletionAudit(
+    attendance: AttendanceEntity,
+    deletedBy: string,
+    summary: { reversedExpenses: number; leaveEffect: string; deletedRows: number },
+  ): Promise<void> {
+    try {
+      await this.auditLogService.createEntityLog({
+        entityName: 'AttendanceEntity',
+        entityId: attendance.id,
+        action: EntityAuditAction.SOFT_DELETE,
+        oldValues: {
+          userId: attendance.userId,
+          attendanceDate: attendance.attendanceDate,
+          status: attendance.status,
+          approvalStatus: attendance.approvalStatus,
+          checkInTime: attendance.checkInTime,
+          checkOutTime: attendance.checkOutTime,
+        },
+        newValues: summary,
+        changedBy: deletedBy,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to write attendance deletion audit: ${(error as Error).message}`);
+    }
   }
 
   private async findLeaveApplicationForDate(userId: string, date: Date): Promise<any | null> {

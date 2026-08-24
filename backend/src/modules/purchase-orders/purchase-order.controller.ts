@@ -93,8 +93,11 @@ export class PurchaseOrderController {
   @Get()
   @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({ summary: 'List POs' })
-  async findAll(@Query() query: GetPurchaseOrderDto) {
-    return await this.poService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetPurchaseOrderDto,
+  ) {
+    return await this.poService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

@@ -83,3 +83,29 @@ export async function checkSiteCreateAccess(
   }
   return { allowed: true, reason: null };
 }
+
+/**
+ * Site IDs a user may READ financial documents (PO / JMC / Invoice) for.
+ *
+ * Returns `null` when unrestricted — office roles (SUPER_ADMIN / ADMIN / MANAGER /
+ * OPERATION_MANAGER / HR) see every site. Otherwise returns the DISTINCT set of sites the
+ * user was EVER allocated to, mirroring the site-listing scope so a workspace surfaces the
+ * same projects' documents. An empty array means the user can see nothing.
+ *
+ * Callers AND this into their list filter: `null` → no restriction; `[]` → empty result;
+ * otherwise intersect with any requested siteId.
+ */
+export async function getReadableSiteIds(
+  db: DataSource | EntityManager,
+  userId: string,
+  activeRole?: string,
+): Promise<string[] | null> {
+  if (activeRole && SITE_ACCESS_BYPASS_ROLES.includes(activeRole.toUpperCase())) {
+    return null;
+  }
+  const rows: { siteId: string }[] = await db.query(
+    `SELECT DISTINCT "siteId" FROM site_allocations WHERE "userId" = $1 AND "deletedAt" IS NULL`,
+    [userId],
+  );
+  return rows.map((r) => r.siteId);
+}
