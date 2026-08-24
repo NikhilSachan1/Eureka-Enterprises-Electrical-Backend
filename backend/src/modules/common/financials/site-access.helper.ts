@@ -25,6 +25,7 @@ export const SITE_ACCESS_REASONS = {
   SITE_NOT_FOUND: 'Site not found',
   NOT_ALLOCATED: 'You are not allocated to this site.',
   CIVIL_PM_ONLY: 'Civil site: only the site Project Manager can create this document.',
+  CIVIL_SITE_ONLY: 'A Purchase Order can only be created for a Civil site.',
 };
 
 /**
@@ -36,21 +37,32 @@ export const SITE_ACCESS_REASONS = {
  * Office roles (SUPER_ADMIN / ADMIN / MANAGER / OPERATION_MANAGER / HR) bypass allocation
  * via `opts.activeRole` — they can create for any site (same as site listing access).
  *
+ * `civilOnly` (PO only): a PO can only be created for a site whose `siteTypes` includes
+ * 'Civil'. This is a document-level constraint on the site (not the user), so it is enforced
+ * before the office-role bypass — Electrical-only sites reject a PO for everyone.
+ *
  * `requirePmForCivil` (PO only): if the site's `siteTypes` includes 'Civil', the user's
- * allocation role must be Project Manager. Electrical-only sites → any allocated user.
- * JMC / Invoice pass this false → any allocated user (team + PM).
+ * allocation role must be Project Manager. JMC / Invoice pass this false → any allocated user.
  */
 export async function checkSiteCreateAccess(
   db: DataSource | EntityManager,
   userId: string,
   siteId: string,
-  opts: { requirePmForCivil?: boolean; activeRole?: string } = {},
+  opts: { requirePmForCivil?: boolean; civilOnly?: boolean; activeRole?: string } = {},
 ): Promise<SiteAccessResult> {
   const [site] = await db.query(
     `SELECT "siteTypes" FROM sites WHERE id = $1 AND "deletedAt" IS NULL`,
     [siteId],
   );
   if (!site) return { allowed: false, reason: SITE_ACCESS_REASONS.SITE_NOT_FOUND };
+
+  const types = (site.siteTypes ?? []).map((t: string) => String(t).toUpperCase());
+
+  // Document-level site gate (PO): a PO belongs to Civil sites only. Applies to everyone,
+  // including office roles — an Electrical-only site has no PO concept.
+  if (opts.civilOnly && !types.includes('CIVIL')) {
+    return { allowed: false, reason: SITE_ACCESS_REASONS.CIVIL_SITE_ONLY };
+  }
 
   if (opts.activeRole && SITE_ACCESS_BYPASS_ROLES.includes(opts.activeRole.toUpperCase())) {
     return { allowed: true, reason: null };
@@ -65,7 +77,6 @@ export async function checkSiteCreateAccess(
   if (!alloc) return { allowed: false, reason: SITE_ACCESS_REASONS.NOT_ALLOCATED };
 
   if (opts.requirePmForCivil) {
-    const types = (site.siteTypes ?? []).map((t: string) => String(t).toUpperCase());
     if (types.includes('CIVIL') && String(alloc.role) !== PROJECT_MANAGER_SITE_ROLE) {
       return { allowed: false, reason: SITE_ACCESS_REASONS.CIVIL_PM_ONLY };
     }

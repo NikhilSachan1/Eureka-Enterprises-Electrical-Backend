@@ -286,7 +286,7 @@ export class SiteAllocationService {
         TRIM(CONCAT(u."firstName", ' ', COALESCE(u."lastName", ''))) AS "employeeName",
         u."employeeId" AS "employeeCode",
         CASE WHEN sa.id IS NOT NULL THEN 'ALLOCATED' ELSE 'FREE' END AS "status",
-        sa.id AS "allocationId",
+        sa.id AS "allocationId", sa."role" AS "projectRole",
         sa."siteId", s."name" AS "siteName",
         s."city" AS "siteCity", s."state" AS "siteState",
         s."startDate" AS "siteStartDate", s."endDate" AS "siteEndDate",
@@ -328,6 +328,7 @@ export class SiteAllocationService {
         currentProject: r.siteId
           ? {
               allocationId: r.allocationId,
+              projectRole: r.projectRole ?? null,
               siteId: r.siteId,
               siteName: r.siteName,
               city: r.siteCity ?? null,

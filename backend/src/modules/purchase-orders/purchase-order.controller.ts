@@ -80,7 +80,7 @@ export class PurchaseOrderController {
   @ApiOperation({
     summary: 'Whether the current user can create a PO for a site (FE button gating)',
     description:
-      'Civil site → only the site Project Manager; Electrical-only → any allocated team member.',
+      'PO is Civil-only: Electrical-only sites are rejected. On a Civil site → only the site Project Manager.',
   })
   async canCreate(
     @Request()
