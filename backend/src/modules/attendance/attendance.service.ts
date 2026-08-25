@@ -487,9 +487,13 @@ export class AttendanceService {
     // The engineer inside the snapshot decides who receives the day's food allowance, so a
     // client-supplied snapshot goes through the same driver-only guard as check-in and force.
     const previousSnapshot = existingAttendance.assignmentSnapshot;
-    const snapshotToApply = isSnapshotCorrection
+    const resolvedSnapshot = isSnapshotCorrection
       ? await this.sanitizeAssignmentSnapshot(userId, regularizeAttendanceDto.assignmentSnapshot)
       : previousSnapshot;
+
+    // Every row written below carries the target status, so the working/non-working decision can
+    // be made once here rather than at each of the branches.
+    const snapshotToApply = this.snapshotForStatus(status as AttendanceStatus, resolvedSnapshot);
     const { shiftConfigs } = await this.getShiftConfigs();
     await this.isRegularizationAllowed({
       attendanceDate: existingAttendance.attendanceDate,
@@ -2161,6 +2165,13 @@ export class AttendanceService {
 
       if (approvalStatus === ApprovalStatus.REJECTED) {
         updateAttendanceRecord.status = AttendanceStatus.ABSENT;
+        // Rejecting also turns the day into a non-working one, so it must lose the assignment for
+        // the same reason regularizing to absent does. Safe to clear here: the food reversal below
+        // reads the snapshot off the pre-update entity, not off the row.
+        updateAttendanceRecord.assignmentSnapshot = this.snapshotForStatus(
+          AttendanceStatus.ABSENT,
+          attendance.assignmentSnapshot,
+        );
       }
 
       await this.attendanceRepository.update(
@@ -2746,6 +2757,30 @@ export class AttendanceService {
       return null;
     }
     return (await this.checkUserHasDriverRole(userId)) ? engineer : null;
+  }
+
+  /**
+   * A snapshot records where the employee actually worked that day, so a non-working day must not
+   * carry one — otherwise an absent or holiday row keeps showing the site, vehicle and engineer
+   * from before it was regularized.
+   *
+   * Deliberately keyed on the non-working statuses rather than "anything except present": rows
+   * sitting at CHECKED_OUT, HALF_DAY or APPROVAL_PENDING are still working days, and the
+   * month-end auto-approve cron reads their snapshot to route the driver's food allowance to the
+   * assigned engineer. Nulling those would silently pay the driver instead.
+   */
+  private static readonly NON_WORKING_STATUSES: AttendanceStatus[] = [
+    AttendanceStatus.ABSENT,
+    AttendanceStatus.LEAVE,
+    AttendanceStatus.LEAVE_WITHOUT_PAY,
+    AttendanceStatus.HOLIDAY,
+  ];
+
+  private snapshotForStatus(
+    status: AttendanceStatus,
+    snapshot: AttendanceEntity['assignmentSnapshot'] | undefined,
+  ): AttendanceEntity['assignmentSnapshot'] | undefined {
+    return AttendanceService.NON_WORKING_STATUSES.includes(status) ? null : snapshot;
   }
 
   /**
