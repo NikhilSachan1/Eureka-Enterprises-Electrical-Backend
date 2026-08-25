@@ -74,6 +74,7 @@ export const buildAttendanceSummaryForPayrollQuery = (
       AND a."attendanceDate" >= $2::date
       AND a."attendanceDate" <= $3::date
       AND a."isActive" = true
+      AND a."deletedAt" IS NULL
       AND a."approvalStatus" = 'approved'
   `;
 
@@ -114,6 +115,7 @@ export const buildPresentDatesForPayrollQuery = (
       AND a."attendanceDate" >= $2::date
       AND a."attendanceDate" <= $3::date
       AND a."isActive" = true
+      AND a."deletedAt" IS NULL
       AND a."approvalStatus" = 'approved'
       AND a."status" IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.CHECKED_IN}', '${AttendanceStatus.CHECKED_OUT}', '${AttendanceStatus.APPROVAL_PENDING}')
   `;

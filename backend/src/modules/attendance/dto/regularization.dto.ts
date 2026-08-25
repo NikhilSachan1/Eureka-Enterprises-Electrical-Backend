@@ -1,7 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { AttendanceStatus, AttendanceType } from '../constants/attendance.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
+import { AssignmentSnapshotDto } from './attendance-action.dto';
 
 export class RegularizeAttendanceDto {
   @ApiProperty({
@@ -63,6 +72,18 @@ export class RegularizeAttendanceDto {
   @IsNotEmpty({ message: 'Leave category is required when status is leave' })
   @IsString()
   leaveCategory?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Corrected assignment snapshot (site, company, contractors, vehicle, assigned engineer). ' +
+      'Omit to keep the existing one. `assignedEngineer` is only retained for drivers, and ' +
+      'changing it re-routes the food allowance for that day.',
+    type: AssignmentSnapshotDto,
+  })
+  @ValidateNested()
+  @Type(() => AssignmentSnapshotDto)
+  @IsOptional()
+  assignmentSnapshot?: AssignmentSnapshotDto;
 
   @IsEnum(EntrySourceType)
   @IsOptional()

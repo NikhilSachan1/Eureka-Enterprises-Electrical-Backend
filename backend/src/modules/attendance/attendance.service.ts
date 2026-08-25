@@ -116,7 +116,7 @@ export class AttendanceService {
     entityId: string;
     userId: string;
     attendanceDate: Date | string;
-    source: 'APPROVAL' | 'FORCE_STATUS_CHANGE';
+    source: 'APPROVAL' | 'FORCE_STATUS_CHANGE' | 'REGULARIZATION';
     changedBy?: string;
     error: unknown;
   }): Promise<void> {
@@ -474,11 +474,22 @@ export class AttendanceService {
         isActive: true,
       },
     });
-    if (existingAttendance.status === status) {
+    // Re-submitting the same status is normally a no-op and rejected — unless the caller is
+    // correcting the assignment snapshot (wrong site/vehicle/engineer), which is a real edit
+    // that does not change the status.
+    const isSnapshotCorrection = regularizeAttendanceDto.assignmentSnapshot !== undefined;
+    if (existingAttendance.status === status && !isSnapshotCorrection) {
       throw new BadRequestException(
         ATTENDANCE_ERRORS.ALREADY_REGULARIZED.replace('{status}', status),
       );
     }
+
+    // The engineer inside the snapshot decides who receives the day's food allowance, so a
+    // client-supplied snapshot goes through the same driver-only guard as check-in and force.
+    const previousSnapshot = existingAttendance.assignmentSnapshot;
+    const snapshotToApply = isSnapshotCorrection
+      ? await this.sanitizeAssignmentSnapshot(userId, regularizeAttendanceDto.assignmentSnapshot)
+      : previousSnapshot;
     const { shiftConfigs } = await this.getShiftConfigs();
     await this.isRegularizationAllowed({
       attendanceDate: existingAttendance.attendanceDate,
@@ -534,7 +545,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -566,7 +577,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -612,7 +623,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -641,7 +652,7 @@ export class AttendanceService {
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               regularizedBy: userId,
               isActive: true,
               createdBy: userId,
@@ -673,7 +684,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -702,7 +713,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -750,7 +761,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -819,7 +830,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -848,7 +859,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -889,7 +900,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -917,7 +928,7 @@ export class AttendanceService {
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               regularizedBy: userId,
               shiftConfigId: existingAttendance.shiftConfigId,
-              assignmentSnapshot: existingAttendance.assignmentSnapshot,
+              assignmentSnapshot: snapshotToApply,
               isActive: true,
               createdBy: userId,
               updatedBy: userId,
@@ -929,15 +940,26 @@ export class AttendanceService {
           throw new BadRequestException(ATTENDANCE_ERRORS.INVALID_STATUS);
       }
 
-      // Handle food expense crediting/reversal based on status change
-      await this.handleFoodExpenseForStatusChange(
+      // Each branch above keys off a *change* of status, so a snapshot-only correction (status
+      // unchanged) matches none of them and would write nothing. Apply it to the live row here.
+      if (isSnapshotCorrection && existingAttendance.status === status) {
+        await this.attendanceRepository.update(
+          { id: existingAttendance.id },
+          { assignmentSnapshot: snapshotToApply, notes, updatedBy: userId },
+          entityManager,
+        );
+      }
+
+      // Handle food expense crediting/reversal for the status change and/or a re-pointed engineer
+      await this.handleFoodExpenseForRegularization({
         userId,
-        existingAttendance.attendanceDate,
-        existingAttendance.status as AttendanceStatus,
-        status as AttendanceStatus,
-        userId,
-        existingAttendance.assignmentSnapshot,
-      );
+        attendanceDate: existingAttendance.attendanceDate,
+        previousStatus: existingAttendance.status as AttendanceStatus,
+        newStatus: status as AttendanceStatus,
+        actionBy: userId,
+        previousSnapshot,
+        newSnapshot: snapshotToApply,
+      });
 
       // Send regularization notification to the employee
       await this.sendRegularizationNotification(
@@ -2590,6 +2612,84 @@ export class AttendanceService {
         userId,
         attendanceDate,
         source: 'FORCE_STATUS_CHANGE',
+        changedBy: actionBy,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Food-allowance handling for a regularization, which — unlike a plain approval — can change
+   * both the status *and* who the day was assigned to.
+   *
+   * Two rules matter here:
+   *  - a reversal must undo what was actually credited, so it reads the ledger rather than
+   *    re-deriving a recipient from the (possibly just-edited) snapshot;
+   *  - a credit must follow the *new* snapshot, otherwise correcting a wrong engineer would pay
+   *    the wrong person all over again.
+   *
+   * Re-pointing the engineer on a day that is already present therefore reverses the old
+   * recipient and credits the new one, rather than silently leaving the money where it was.
+   */
+  private async handleFoodExpenseForRegularization(params: {
+    userId: string;
+    attendanceDate: Date | string;
+    previousStatus: AttendanceStatus;
+    newStatus: AttendanceStatus;
+    actionBy: string;
+    previousSnapshot?: AttendanceEntity['assignmentSnapshot'];
+    newSnapshot?: AttendanceEntity['assignmentSnapshot'];
+  }): Promise<void> {
+    const {
+      userId,
+      attendanceDate,
+      previousStatus,
+      newStatus,
+      actionBy,
+      previousSnapshot,
+      newSnapshot,
+    } = params;
+
+    const wasPresent = previousStatus === AttendanceStatus.PRESENT;
+    const isPresent = newStatus === AttendanceStatus.PRESENT;
+    const engineerChanged =
+      (previousSnapshot?.assignedEngineer?.id ?? null) !==
+      (newSnapshot?.assignedEngineer?.id ?? null);
+
+    try {
+      if (!wasPresent && isPresent) {
+        await this.creditFoodExpenseForAttendance(userId, attendanceDate, actionBy, newSnapshot);
+        return;
+      }
+
+      if (wasPresent && !isPresent) {
+        await this.reverseFoodExpenseByLedger(
+          userId,
+          this.normalizeAttendanceCalendarDate(attendanceDate),
+          actionBy,
+        );
+        return;
+      }
+
+      if (wasPresent && isPresent && engineerChanged) {
+        await this.reverseFoodExpenseByLedger(
+          userId,
+          this.normalizeAttendanceCalendarDate(attendanceDate),
+          actionBy,
+        );
+        await this.creditFoodExpenseForAttendance(userId, attendanceDate, actionBy, newSnapshot);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle food expense for regularization (${previousStatus} -> ${newStatus}): ${
+          (error as Error).message
+        }`,
+      );
+      await this.recordFoodCreditFailure({
+        entityId: userId,
+        userId,
+        attendanceDate,
+        source: 'REGULARIZATION',
         changedBy: actionBy,
         error,
       });
