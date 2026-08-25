@@ -17,7 +17,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
     search,
   } = query;
 
-  const whereConditions = [];
+  const whereConditions = ['a."deletedAt" IS NULL'];
   const params: any[] = [];
   let paramIndex = 1;
 
@@ -139,7 +139,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
 export function buildAttendanceStatsQuery(query: AttendanceQueryDto) {
   const { userIds, startDate, endDate, date, statuses, approvalStatuses, search } = query;
 
-  const whereConditions = [];
+  const whereConditions = ['a."deletedAt" IS NULL'];
   const params: any[] = [];
   let paramIndex = 1;
 

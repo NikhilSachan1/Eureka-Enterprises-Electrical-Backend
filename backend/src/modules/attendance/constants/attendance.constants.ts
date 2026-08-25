@@ -38,6 +38,13 @@ export enum ShiftStatus {
 
 export const ATTENDANCE_ERRORS = {
   NOT_FOUND: 'Attendance record not found',
+  // Deleting today's record is pointless: the end-of-day cron looks for users with no attendance
+  // row for today and would immediately recreate one as ABSENT.
+  DELETE_SAME_DAY_NOT_ALLOWED:
+    "Today's attendance cannot be deleted — it would be recreated as absent by the end-of-day job. Regularize it instead.",
+  DELETE_FUTURE_DATE_NOT_ALLOWED: 'Attendance for a future date cannot be deleted.',
+  DELETE_PAYROLL_EXISTS:
+    'Attendance for {month}/{year} cannot be deleted — payroll for that month has already been {status}. Cancel the payroll first.',
   ALREADY_CHECKED_IN: 'Already checked in for today',
   NOT_CHECKED_IN: 'Not checked in yet',
   ALREADY_CHECKED_OUT: 'Already checked out',
@@ -95,6 +102,7 @@ export const ATTENDANCE_ERRORS = {
 };
 
 export const ATTENDANCE_RESPONSES = {
+  ATTENDANCE_DELETED: 'Attendance record deleted successfully',
   CHECK_IN_SUCCESS: 'Successfully checked in',
   CHECK_OUT_SUCCESS: 'Successfully checked out',
   ATTENDANCE_UPDATED: 'Attendance record updated successfully',

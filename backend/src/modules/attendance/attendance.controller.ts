@@ -1,13 +1,16 @@
 import {
   Controller,
   Post,
+  Delete,
   Body,
   Request,
   Param,
+  ParseUUIDPipe,
   Get,
   Query,
   UseInterceptors,
 } from '@nestjs/common';
+import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { AttendanceService } from './attendance.service';
 import {
   AttendanceActionDto,
@@ -132,6 +135,23 @@ export class AttendanceController {
     const targetUserId = query.userId && canViewOthers ? query.userId : req.user.id;
 
     return this.attendanceService.getEmployeeCurrentAttendanceStatus(targetUserId, req.timezone);
+  }
+
+  @Delete(':attendanceId')
+  @RequiredPermission('attendance.delete')
+  @ApiOperation({
+    summary: 'Delete an attendance record',
+    description:
+      'Soft-deletes the whole day for that employee (including superseded versions) and unwinds ' +
+      'what it caused: any food allowance already credited is reversed against the ledger rows ' +
+      'that were actually written, and leave debited or cancelled for the day is restored. ' +
+      "Blocked for today's date, future dates, and once payroll exists for that month.",
+  })
+  async deleteAttendance(
+    @Param('attendanceId', ParseUUIDPipe) attendanceId: string,
+    @Request() req: RequestWithTimezone & { user: { id: string } },
+  ) {
+    return await this.attendanceService.deleteAttendance(attendanceId, req.user.id, req.timezone);
   }
 
   @Post('approval')

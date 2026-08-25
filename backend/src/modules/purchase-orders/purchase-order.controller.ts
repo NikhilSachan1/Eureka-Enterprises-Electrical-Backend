@@ -80,7 +80,7 @@ export class PurchaseOrderController {
   @ApiOperation({
     summary: 'Whether the current user can create a PO for a site (FE button gating)',
     description:
-      'Civil site → only the site Project Manager; Electrical-only → any allocated team member.',
+      'PO is Civil-only: Electrical-only sites are rejected. On a Civil site → only the site Project Manager.',
   })
   async canCreate(
     @Request()
@@ -93,8 +93,11 @@ export class PurchaseOrderController {
   @Get()
   @RequiredPermission('financials.purchase-orders.view-list')
   @ApiOperation({ summary: 'List POs' })
-  async findAll(@Query() query: GetPurchaseOrderDto) {
-    return await this.poService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetPurchaseOrderDto,
+  ) {
+    return await this.poService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

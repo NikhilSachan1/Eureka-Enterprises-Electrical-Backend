@@ -34,7 +34,10 @@ import {
 import { PO_ERRORS, PO_RESPONSES } from './constants/purchase-order.constants';
 import { checkPoHasJmcsQuery } from './queries/purchase-order.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
-import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
+import {
+  checkSiteCreateAccess,
+  getReadableSiteIds,
+} from 'src/modules/common/financials/site-access.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -157,7 +160,7 @@ export class PurchaseOrderService {
     return { message: PO_RESPONSES.CREATED, id: created.id };
   }
 
-  async findAll(query: GetPurchaseOrderDto) {
+  async findAll(query: GetPurchaseOrderDto, userId: string, activeRole?: string) {
     const {
       companyId,
       siteId,
@@ -177,7 +180,19 @@ export class PurchaseOrderService {
 
     const where: any = { deletedAt: IsNull() };
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+
+    // Read-scope: employees see only their allocated sites; office roles see all.
+    const readableSiteIds = await getReadableSiteIds(this.dataSource, userId, activeRole);
+    if (readableSiteIds !== null) {
+      const effective = siteId?.length
+        ? siteId.filter((s) => readableSiteIds.includes(s))
+        : readableSiteIds;
+      if (effective.length === 0) return { records: [], totalRecords: 0 };
+      where.siteId = In(effective);
+    } else if (siteId?.length) {
+      where.siteId = In(siteId);
+    }
+
     if (partyType) where.partyType = partyType;
     if (contractorId?.length) where.contractorId = In(contractorId);
     if (vendorId?.length) where.vendorId = In(vendorId);
@@ -334,17 +349,19 @@ export class PurchaseOrderService {
   }
 
   /**
-   * Can this user create a PO for this site? Civil site → only role=Project Manager; Electrical-only
-   * → any current allocation. Uses site_allocations (assigned-to-site) + site.siteTypes.
+   * Can this user create a PO for this site? PO is Civil-only: sites without 'Civil' in siteTypes
+   * are rejected for everyone. On a Civil site → only the site Project Manager (office roles bypass
+   * allocation). Uses site_allocations (assigned-to-site) + site.siteTypes.
    */
   async canCreatePo(
     userId: string,
     siteId: string,
     activeRole?: string,
   ): Promise<{ allowed: boolean; reason: string | null }> {
-    // PO: Civil site → only role=Project Manager; Electrical-only → any allocated user.
-    // Office roles (SUPER_ADMIN/ADMIN/…) bypass allocation.
+    // PO is a Civil-site document: Electrical-only sites are rejected for everyone (civilOnly).
+    // On a Civil site → only role=Project Manager. Office roles bypass allocation (not civilOnly).
     return await checkSiteCreateAccess(this.dataSource, userId, siteId, {
+      civilOnly: true,
       requirePmForCivil: true,
       activeRole,
     });
