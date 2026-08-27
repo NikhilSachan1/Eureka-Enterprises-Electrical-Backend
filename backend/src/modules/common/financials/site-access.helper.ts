@@ -37,11 +37,9 @@ export const SITE_ACCESS_REASONS = {
  * Office roles (SUPER_ADMIN / ADMIN / MANAGER / OPERATION_MANAGER / HR) bypass allocation
  * via `opts.activeRole` — they can create for any site (same as site listing access).
  *
- * `civilOnly` (PO only): a PO can only be created for a site whose `siteTypes` includes
- * 'Civil'. This is a document-level constraint on the site (not the user), so it is enforced
- * before the office-role bypass — Electrical-only sites reject a PO for everyone.
+ * `civilOnly` (optional): when true, only sites with 'Civil' in siteTypes are allowed.
  *
- * `requirePmForCivil` (PO only): if the site's `siteTypes` includes 'Civil', the user's
+ * `requirePmForCivil` (PO): if the site's `siteTypes` includes 'Civil', the user's
  * allocation role must be Project Manager. JMC / Invoice pass this false → any allocated user.
  */
 export async function checkSiteCreateAccess(
@@ -58,8 +56,7 @@ export async function checkSiteCreateAccess(
 
   const types = (site.siteTypes ?? []).map((t: string) => String(t).toUpperCase());
 
-  // Document-level site gate (PO): a PO belongs to Civil sites only. Applies to everyone,
-  // including office roles — an Electrical-only site has no PO concept.
+  // Optional site-type gate: when civilOnly, sites without Civil in siteTypes are rejected.
   if (opts.civilOnly && !types.includes('CIVIL')) {
     return { allowed: false, reason: SITE_ACCESS_REASONS.CIVIL_SITE_ONLY };
   }
