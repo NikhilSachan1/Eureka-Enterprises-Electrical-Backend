@@ -349,19 +349,15 @@ export class PurchaseOrderService {
   }
 
   /**
-   * Can this user create a PO for this site? PO is Civil-only: sites without 'Civil' in siteTypes
-   * are rejected for everyone. On a Civil site → only the site Project Manager (office roles bypass
-   * allocation). Uses site_allocations (assigned-to-site) + site.siteTypes.
+   * Can this user create a PO for this site? Civil site → only the site Project Manager;
+   * Electrical-only site → any currently allocated user. Office roles bypass allocation.
    */
   async canCreatePo(
     userId: string,
     siteId: string,
     activeRole?: string,
   ): Promise<{ allowed: boolean; reason: string | null }> {
-    // PO is a Civil-site document: Electrical-only sites are rejected for everyone (civilOnly).
-    // On a Civil site → only role=Project Manager. Office roles bypass allocation (not civilOnly).
     return await checkSiteCreateAccess(this.dataSource, userId, siteId, {
-      civilOnly: true,
       requirePmForCivil: true,
       activeRole,
     });
