@@ -85,6 +85,57 @@ export class DriverAssignmentService {
     };
   }
 
+  /**
+   * The drivers paired with each engineer/day in one query, keyed `engineerId|YYYY-MM-DD`.
+   *
+   * Batched on purpose: a list endpoint returning a month of rows would otherwise issue a query per
+   * row for a field that is empty on most of them.
+   */
+  async loadDriversFor(
+    pairs: Array<{ engineerId: string; workDate: Date | string }>,
+    em?: EntityManager,
+  ): Promise<Map<string, AssignedEngineerSnapshot[]>> {
+    const result = new Map<string, AssignedEngineerSnapshot[]>();
+    if (pairs.length === 0) {
+      return result;
+    }
+
+    const engineerIds = [...new Set(pairs.map((p) => p.engineerId))];
+    const dates = [...new Set(pairs.map((p) => this.toDateString(p.workDate)))];
+
+    const rows = await (em ?? this.dataSource).query(
+      `SELECT dda."engineerId",
+              to_char(dda."workDate", 'YYYY-MM-DD') AS "workDate",
+              du."id", du."firstName", du."lastName", du."employeeId"
+       FROM "driver_day_assignments" dda
+       INNER JOIN "users" du ON du."id" = dda."driverId" AND du."deletedAt" IS NULL
+       WHERE dda."engineerId" = ANY($1)
+         AND dda."workDate" = ANY($2::date[])
+         AND dda."deletedAt" IS NULL
+       ORDER BY du."firstName"`,
+      [engineerIds, dates],
+    );
+
+    for (const row of rows) {
+      const key = `${row.engineerId}|${row.workDate}`;
+      const list = result.get(key) ?? [];
+      list.push({
+        id: row.id,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        employeeId: row.employeeId,
+      });
+      result.set(key, list);
+    }
+
+    return result;
+  }
+
+  /** The key `loadDriversFor` returns its map under. */
+  driverMapKey(engineerId: string, workDate: Date | string): string {
+    return `${engineerId}|${this.toDateString(workDate)}`;
+  }
+
   /** Who currently holds this driver on this day, if anyone. Used for the duplicate-claim error. */
   async findHolder(
     driverId: string,

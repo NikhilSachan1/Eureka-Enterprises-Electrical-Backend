@@ -1701,6 +1701,8 @@ export class AttendanceService {
       workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
       notes: record.notes,
       assignmentSnapshot: record.assignmentSnapshot ?? undefined,
+      // Empty for anyone who is not an engineer holding drivers that day, which is most rows.
+      assignedDrivers: record.assignedDrivers ?? [],
     };
   }
 
@@ -1803,9 +1805,20 @@ export class AttendanceService {
         },
       });
 
+      const driverMap = await this.driverAssignmentService.loadDriversFor(
+        attendance.records.map((record) => ({
+          engineerId: record.userId,
+          workDate: record.attendanceDate,
+        })),
+      );
+
       return attendance.records.map((record) => {
         return {
           ...record,
+          assignedDrivers:
+            driverMap.get(
+              this.driverAssignmentService.driverMapKey(record.userId, record.attendanceDate),
+            ) ?? [],
           // User with standard fields (id, firstName, lastName, email, employeeId)
           user: record.user
             ? {
@@ -1915,6 +1928,7 @@ export class AttendanceService {
           contractors: siteData?.contractors || [],
           vehicle: vehicleData,
           assignedEngineer: await this.resolveVisibleEngineer(userId, siteData?.assignedEngineer),
+          assignedDrivers: await this.loadDriversForDay(userId, todayDate),
           message: 'No attendance record found for today',
         };
       }
@@ -1962,6 +1976,7 @@ export class AttendanceService {
         contractors,
         vehicle,
         assignedEngineer,
+        assignedDrivers: await this.loadDriversForDay(userId, attendance.attendanceDate),
       };
     } catch (error) {
       throw error;
@@ -2890,27 +2905,24 @@ export class AttendanceService {
       calendarDate,
     );
 
-    // Keep the stored record in step with the pairing even when no money is involved, otherwise
-    // the attendance row would still name an engineer the pairing no longer agrees with.
     const snapshot = { ...(attendance.assignmentSnapshot ?? {}) } as Record<string, unknown>;
     if (engineer) {
       snapshot.assignedEngineer = engineer;
     } else {
       delete snapshot.assignedEngineer;
     }
-    await this.attendanceRepository.update(
-      { id: attendance.id },
-      { assignmentSnapshot: snapshot as AttendanceEntity['assignmentSnapshot'], updatedBy: actor },
-    );
 
-    if (!(await this.hasCreditedFoodAllowance(driverId, calendarDate))) {
-      return 'not-credited';
-    }
+    const isCredited = await this.hasCreditedFoodAllowance(driverId, calendarDate);
 
     // Payroll for the month is derived from these figures. Moving money after it is generated
     // would leave the payslip and the ledger disagreeing with nothing to show why, so the change
     // is recorded and surfaced instead of applied.
-    const payrollStatus = await this.findPayrollStatusForMonth(driverId, calendarDate);
+    //
+    // Checked before the snapshot is written, not after: naming the new engineer on the row while
+    // the money stayed with the old one is the exact divergence this guard exists to prevent.
+    const payrollStatus = isCredited
+      ? await this.findPayrollStatusForMonth(driverId, calendarDate)
+      : null;
     if (payrollStatus) {
       this.logger.warn(
         `[driver-pairing] Allowance for driver ${driverId} on ${this.formatLocalYyyyMmDd(
@@ -2926,6 +2938,16 @@ export class AttendanceService {
         error: new Error(`Payroll already ${payrollStatus}; allowance not re-routed`),
       });
       return 'payroll-locked';
+    }
+
+    // Safe to write now: either no money has moved, or it is about to move in the same call.
+    await this.attendanceRepository.update(
+      { id: attendance.id },
+      { assignmentSnapshot: snapshot as AttendanceEntity['assignmentSnapshot'], updatedBy: actor },
+    );
+
+    if (!isCredited) {
+      return 'not-credited';
     }
 
     await this.reverseFoodExpenseByLedger(driverId, calendarDate, actor);
@@ -3015,6 +3037,18 @@ export class AttendanceService {
         );
       }
     }
+  }
+
+  /**
+   * The drivers paired with this person for the day, in the shape the API returns them. Empty for
+   * anyone who is not an engineer holding drivers, which is most people.
+   */
+  private async loadDriversForDay(
+    engineerId: string,
+    workDate: Date | string,
+  ): Promise<Array<{ id: string; firstName: string; lastName: string; employeeId: string }>> {
+    const map = await this.driverAssignmentService.loadDriversFor([{ engineerId, workDate }]);
+    return map.get(this.driverAssignmentService.driverMapKey(engineerId, workDate)) ?? [];
   }
 
   /** Every driver this engineer holds for the day — the set affected when his own day changes. */
