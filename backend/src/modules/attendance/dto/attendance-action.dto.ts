@@ -1,8 +1,16 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 import { AttendanceType, AttendanceAction } from '../constants/attendance.constants';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 class AssignmentSnapshotSiteDto {
   @IsString()
@@ -65,6 +73,24 @@ class AssignmentSnapshotEngineerDto {
 }
 
 export class AssignmentSnapshotDto {
+  /**
+   * Drivers the engineer has with him today. This is an *instruction*, not stored data — it drives
+   * rows in driver_day_assignments and is then stripped from the snapshot, so the pairing table
+   * stays the single record and cannot drift from a copy held on the attendance row.
+   *
+   * It rides on the snapshot rather than the top level so that regularize, which already carries
+   * the snapshot, becomes the correction path for free.
+   */
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'User IDs of the drivers working with this engineer today (DRIVER role only)',
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value != null ? [value] : undefined))
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  assignedDrivers?: string[];
+
   @ApiPropertyOptional({ type: AssignmentSnapshotSiteDto })
   @ValidateNested()
   @Type(() => AssignmentSnapshotSiteDto)

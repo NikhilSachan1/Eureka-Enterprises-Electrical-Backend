@@ -13,6 +13,7 @@ import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module'
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
 import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 import { ConfigSettingsModule } from '../config-settings/config-setting.module';
+import { DriverAssignmentModule } from '../driver-assignments/driver-assignment.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
     forwardRef(() => ExpenseTrackerModule),
     forwardRef(() => LeaveApplicationsModule),
     forwardRef(() => LeaveBalancesModule),
+    DriverAssignmentModule,
   ],
   providers: [AttendanceService, AttendanceRepository],
   exports: [AttendanceService],
