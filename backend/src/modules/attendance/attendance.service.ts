@@ -2133,7 +2133,24 @@ export class AttendanceService {
         );
       }
 
-      if (approvalStatus === ApprovalStatus.APPROVED && !attendance.checkInTime) {
+      // Approval means two different things depending on what the row already says. For a working
+      // day it confirms the employee's claimed presence and converts the row to PRESENT. For a
+      // non-working day — typically an absence the end-of-day cron recorded at PENDING — nobody
+      // claimed anything, so approving only affirms the day as it stands: "yes, he was absent".
+      // Without this split there is no way to reach (ABSENT, APPROVED), and the row stays PENDING,
+      // where buildAttendanceSummaryForPayrollQuery ignores it and the LOP deduction is never applied.
+      const isNonWorkingDay = AttendanceService.NON_WORKING_STATUSES.includes(
+        attendance.status as AttendanceStatus,
+      );
+
+      // Only guards the present-day conversion below: approving a row with no check-in would
+      // otherwise produce a PRESENT day with a null checkInTime and pay for a day never worked.
+      // A non-working row keeps its own status, so it has nothing to convert and nothing to guard.
+      if (
+        approvalStatus === ApprovalStatus.APPROVED &&
+        !isNonWorkingDay &&
+        !attendance.checkInTime
+      ) {
         throw new BadRequestException(ATTENDANCE_ERRORS.CANNOT_APPROVE_WITHOUT_CHECKIN);
       }
 
@@ -2149,7 +2166,7 @@ export class AttendanceService {
         updatedBy: approvalBy,
       };
 
-      if (approvalStatus === ApprovalStatus.APPROVED) {
+      if (approvalStatus === ApprovalStatus.APPROVED && !isNonWorkingDay) {
         updateAttendanceRecord.status = AttendanceStatus.PRESENT;
 
         // Approving moves the row off CHECKED_IN, which is the state the end-of-day
@@ -2202,7 +2219,9 @@ export class AttendanceService {
           approvalStatus,
         ),
         attendanceId,
-        newStatus: updateAttendanceRecord.status,
+        // Confirming a non-working day leaves `status` untouched, so fall back to the row's own
+        // status rather than reporting `undefined` back to the caller.
+        newStatus: updateAttendanceRecord.status ?? attendance.status,
         approvalStatus,
       };
     });
@@ -2529,6 +2548,16 @@ export class AttendanceService {
       const snapshot = attendance.assignmentSnapshot;
 
       if (newApprovalStatus === ApprovalStatus.APPROVED) {
+        // Approving a non-working day affirms what the row already says; it does not turn the day
+        // into worked time, so no allowance is earned. `attendance` is the pre-update entity, so
+        // its status is the one being approved. Without this, confirming an absence would credit
+        // the employee a food allowance for the day they missed — snapshot is null on these rows,
+        // so creditFoodExpenseForAttendance would treat it as a non-redirected self credit.
+        if (
+          AttendanceService.NON_WORKING_STATUSES.includes(attendance.status as AttendanceStatus)
+        ) {
+          return;
+        }
         await this.creditFoodExpenseForAttendance(userId, attendanceDate, approvalBy, snapshot);
       } else if (
         newApprovalStatus === ApprovalStatus.REJECTED &&
