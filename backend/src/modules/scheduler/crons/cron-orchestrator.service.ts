@@ -213,7 +213,9 @@ export class CronOrchestratorService {
    * - Both must complete before Monthly Leave Accrual (12:30 AM)
    * - Leaves approved first as attendance might reference leave data
    */
-  @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_ORCHESTRATOR)
+  // @Cron decorator disabled - AutoApproveLeaves + AutoApproveAttendance are off;
+  // run via manual trigger only
+  // @Cron(CRON_SCHEDULES.MONTHLY_FIRST_MIDNIGHT_ORCHESTRATOR)
   async handleMonthlyAutoApproveOrchestrator(): Promise<OrchestratorResult | null> {
     const cronName = CRON_NAMES.MONTHLY_AUTO_APPROVE_ORCHESTRATOR;
 
