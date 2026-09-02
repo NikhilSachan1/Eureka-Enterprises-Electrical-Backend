@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -12,6 +13,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { AssetType, AssetStatus } from '../constants/asset-masters.constants';
+import { parseJsonArray } from 'src/utils/utility/dto-transform.utils';
 
 export class CreateAssetDto {
   @ApiProperty({ description: 'Asset ID (unique identifier)', example: 'AST-TL-201' })
@@ -177,4 +179,18 @@ export class CreateAssetDto {
   })
   @IsOptional()
   assetFiles?: any;
+
+  @ApiProperty({
+    description:
+      'Labels for the uploaded files, index-aligned with assetFiles (JSON array of strings). ' +
+      'Entry i labels assetFiles[i]. Omit to leave the files unlabelled.',
+    example: '["Front view","Serial plate close-up"]',
+    required: false,
+  })
+  @IsOptional()
+  @Transform(parseJsonArray)
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(255, { each: true })
+  assetFileLabels?: string[];
 }

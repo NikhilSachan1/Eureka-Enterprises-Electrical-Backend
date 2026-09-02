@@ -24,6 +24,8 @@ export const ASSET_MASTERS_ERRORS = {
   RECOVERY_AMOUNT_INVALID: 'Recovery amount must be a non-negative number',
   REASON_REQUIRED_FOR_LOST: 'Reason is required when marking an asset as lost',
   LOST_EVENT_NOT_FOUND: 'Lost event not found for this asset',
+  ASSET_FILE_LABELS_TOO_MANY:
+    'assetFileLabels has more entries ({labelCount}) than uploaded files ({fileCount})',
 };
 
 export const ASSET_MASTERS_SUCCESS_MESSAGES = {

@@ -44,7 +44,7 @@ import { Roles } from '../roles/constants/role.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DataSuccessOperationType } from 'src/utils/utility/constants/utility.constants';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { AssetFilesService } from '../asset-files/asset-files.service';
+import { AssetFilesService, AssetFileToCreate } from '../asset-files/asset-files.service';
 import { AssetEventsService } from '../asset-events/asset-events.service';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
 import { getAssetQuery, getAssetStatsQuery, getLostAssetsQuery } from './queries/get-asset.query';
@@ -217,6 +217,34 @@ export class AssetMastersService {
     }
   }
 
+  /**
+   * Pairs each uploaded file key with its label, matching by position:
+   * assetFileLabels[i] labels assetFiles[i].
+   *
+   * Labels are optional throughout - a missing entry falls back to no label,
+   * which is exactly how these files were recorded before labels existed.
+   */
+  private buildAssetFilesToCreate(
+    assetFiles: string[],
+    assetFileLabels?: string[],
+  ): AssetFileToCreate[] {
+    // More labels than files means the client labelled a file it never sent.
+    if (assetFileLabels && assetFileLabels.length > assetFiles.length) {
+      throw new BadRequestException(
+        ASSET_MASTERS_ERRORS.ASSET_FILE_LABELS_TOO_MANY.replace(
+          '{labelCount}',
+          String(assetFileLabels.length),
+        ).replace('{fileCount}', String(assetFiles.length)),
+      );
+    }
+
+    return assetFiles.map((fileKey, index) => ({
+      fileKey,
+      label: assetFileLabels?.[index] ?? null,
+      fileType: AssetFileTypes.ASSET_IMAGE,
+    }));
+  }
+
   // ==================== CRUD Methods ====================
   async create(createAssetDto: CreateAssetDto & { createdBy: string }, assetFiles: string[]) {
     try {
@@ -271,14 +299,13 @@ export class AssetMastersService {
 
         // Create asset files if provided - linked to initial version
         if (assetFiles && assetFiles.length > 0) {
-          await this.assetFilesService.create(
+          await this.assetFilesService.createMany(
             {
               assetMasterId: assetMaster.id,
               assetVersionId: initialVersion.id,
-              fileType: AssetFileTypes.ASSET_IMAGE,
-              fileKeys: assetFiles,
               assetEventsId: assetAddedEvent.id,
               createdBy,
+              files: this.buildAssetFilesToCreate(assetFiles, createAssetDto.assetFileLabels),
             },
             entityManager,
           );
@@ -612,14 +639,13 @@ export class AssetMastersService {
 
         // Create asset files if provided - linked to new version and UPDATED event
         if (assetFiles && assetFiles.length > 0) {
-          await this.assetFilesService.create(
+          await this.assetFilesService.createMany(
             {
               assetMasterId: asset.id,
               assetVersionId: newVersion.id,
-              fileType: AssetFileTypes.ASSET_IMAGE,
-              fileKeys: assetFiles,
               assetEventsId: updateEvent.id,
               createdBy: updateData.createdBy,
+              files: this.buildAssetFilesToCreate(assetFiles, updateData.assetFileLabels),
             },
             entityManager,
           );

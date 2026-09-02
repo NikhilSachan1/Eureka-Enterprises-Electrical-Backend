@@ -1,17 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+// import { Cron } from '@nestjs/schedule';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SchedulerService } from '../scheduler.service';
 import { PayrollService } from '../../payroll/payroll.service';
 import { PayrollStatus, PAYROLL_ERRORS } from '../../payroll/constants/payroll.constants';
 import { UserStatus } from '../../users/constants/user.constants';
-import {
-  CRON_SCHEDULES,
-  CRON_NAMES,
-  SYSTEM_DEFAULTS,
-  CronProcessStatus,
-} from '../constants/scheduler.constants';
+import { CRON_NAMES, SYSTEM_DEFAULTS, CronProcessStatus } from '../constants/scheduler.constants';
 import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import { MonthlyPayrollGenerationResult } from '../types/payroll.types';
@@ -44,7 +39,8 @@ export class PayrollCronService {
    *
    * Workflow: DRAFT → GENERATED → APPROVED → PAID
    */
-  @Cron(CRON_SCHEDULES.MONTHLY_SECOND_1AM_IST)
+  // @Cron decorator disabled - scheduled generation is off; run via manual trigger only
+  // @Cron(CRON_SCHEDULES.MONTHLY_SECOND_1AM_IST)
   async handleMonthlyPayrollGeneration(): Promise<MonthlyPayrollGenerationResult | null> {
     const cronName = CRON_NAMES.MONTHLY_PAYROLL_GENERATION;
 
