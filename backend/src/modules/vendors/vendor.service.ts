@@ -93,9 +93,14 @@ export class VendorService {
         LIMIT 1`,
     );
     // node-pg already parses jsonb → JS object; no JSON.parse needed.
-    const cfg = (cfgRows?.[0]?.value ?? {}) as { prefix?: string; padLength?: number };
+    const cfg = (cfgRows?.[0]?.value ?? {}) as {
+      prefix?: string;
+      padLength?: number;
+      startFrom?: number;
+    };
     const prefix = cfg.prefix ?? 'VEN-';
     const padLength = Number(cfg.padLength ?? 4);
+    const startFrom = Number(cfg.startFrom ?? 1);
 
     const rows = await this.dataSource.query(
       `SELECT COALESCE(MAX(CAST(substring("vendorCode" from '(\\d+)$') AS INTEGER)), 0) AS maxseq
@@ -103,7 +108,10 @@ export class VendorService {
         WHERE "vendorCode" LIKE $1`,
       [`${prefix}%`],
     );
-    const next = Number(rows?.[0]?.maxseq ?? 0) + 1;
+    // `startFrom` is a floor, not a starting counter: it only bites while MAX is below it. Without
+    // it an empty vendors table (fresh env, wiped QA DB) would restart at 1 and silently undo the
+    // configured sequence start.
+    const next = Math.max(Number(rows?.[0]?.maxseq ?? 0), startFrom - 1) + 1;
     return `${prefix}${String(next).padStart(padLength, '0')}`;
   }
 

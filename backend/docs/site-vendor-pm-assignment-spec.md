@@ -202,3 +202,114 @@ audited entities, not just vendors.
 
 Option 2 alone is the safest minimum: an audit-logging failure should never
 discard business data. Option 1 as well, so bad clients get told.
+
+## 14. Addendum — FE gating endpoint (`assignable sites`)
+
+**Added 2026-09-04.** The FE vendor section is a **global screen, not inside a site page**, so
+there is no `siteId` in context to check against. A per-site `can-manage` check (the PO
+`can-create` pattern) therefore does not fit: the user also has to *pick* a site to assign to.
+
+### Endpoint
+
+```
+GET /sites/vendors/assignable
+→ { "allowed": true, "sites": [ { "id": "…", "name": "…" } ] }
+```
+
+One call serves both FE needs:
+
+| FE need | From |
+|---|---|
+| Show / hide the vendor section | `allowed === false` → hide |
+| Site dropdown for assign / unassign | `sites` |
+
+### `allowed` logic
+
+| Case | allowed | sites |
+|---|---|---|
+| `activeRole` in `SITE_ACCESS_BYPASS_ROLES` (SUPER_ADMIN, ADMIN, MANAGER, OPERATION_MANAGER, HR) | `true` | all non-deleted sites |
+| ≥1 current allocation with `role = 'Project Manager'` | `true` | just those sites |
+| Neither | `false` | `[]` |
+
+Non-bypass users get **only their PM sites** — a site where they are `Engineer` is deliberately
+excluded, because assigning there would 403. That is the whole point of the endpoint: the dropdown
+can only contain sites the user can actually act on.
+
+`allowed` is kept as its own field rather than letting FE infer `sites.length > 0`, for the one
+case where they differ: an admin on a system with no sites yet gets `allowed: true, sites: []` —
+the section should show, even with an empty dropdown.
+
+The bypass-role list and the PM role string both come from
+[`site-access.helper.ts`](../src/modules/common/financials/site-access.helper.ts), the same source
+the POST/DELETE enforcement uses, so gating and enforcement cannot drift apart. FE never hardcodes
+`'Project Manager'`.
+
+### Route path
+
+`/sites/vendors/assignable`, **not** `/vendors/assignable-sites` as first sketched. Two reasons:
+
+1. `/vendors/assignable-sites` would live on `VendorController`, which would need
+   `SiteVendorService` — and `SiteVendorModule` already imports from the vendors module, so that
+   is a circular module dependency needing `forwardRef`.
+2. It returns **sites**, so `/sites/...` is the more accurate resource.
+
+No route collision: `sites/:id/vendors` requires the literal `vendors` in the 3rd segment, while
+this route has `assignable` there. It is still declared before the `:id` routes as a precaution.
+
+### Permission
+
+`financials.site-vendors.view` — the same permission the list already needs. FE must treat a
+**403 as "hide the section"**, not as an error, since that is what a role without the grant sees.
+
+### FE contract
+
+```
+if (403 || !allowed)  → hide vendor section
+else                  → show section; use `sites` for the site picker
+```
+
+## 15. Addendum — completed sites excluded
+
+**Added 2026-09-04.** Neither `getAssignableSites` nor the assign/unassign enforcement looked at
+`sites.status`, so a finished site was offered in the picker and accepted by the API.
+
+Confirmed on dev, not theoretical: the test PM's only site
+(`765/400/220 Kv Pgcil, Bikaner 3`) is **`completed`** and still came back in `sites`, and the
+admin branch returned all 8 sites including 3 `completed` + 1 `work_completed`.
+
+Why the existing invariant does not cover it: [`site.service.ts:658`](../src/modules/sites/site.service.ts#L658)
+blocks the *transition to* `hold`/`work_completed`/`completed` while any `isCurrentlyAllocated`
+allocation exists — but nothing stops allocations existing afterwards, and dev already holds 2
+violating rows (one with a PM). The guard protects the transition, not the steady state.
+
+### Rule
+
+Only **`completed`** is excluded. `hold` and `work_completed` are deliberately left alone for now
+(user's call — a held site may resume).
+
+| Path | Behaviour on a `completed` site |
+|---|---|
+| `GET /sites/vendors/assignable` | Site omitted from `sites` — both PM and bypass branches |
+| `POST /sites/:id/vendors` (assign) | **403** — applies to everyone, admins included |
+| `DELETE /sites/:id/vendors` (unassign) | **Allowed** — a vendor wrongly attached to a closed site must stay removable |
+
+The status check is applied to the picker **and** the enforcement. Picker-only would let an admin
+(who bypasses the allocation check) still assign to a closed site via a direct call, which is
+exactly the gating/enforcement drift this spec has avoided elsewhere.
+
+Unassign is deliberately asymmetric: blocking it would strand bad data on closed sites with no
+cleanup path.
+
+### Known data issue (not fixed here)
+
+2 dev sites are `completed` yet still carry `isCurrentlyAllocated = true` allocations. That is a
+data-quality problem predating this change, worth checking on prod:
+
+```sql
+SELECT s.status, s.name, count(*) AS current_allocs
+  FROM sites s
+  JOIN site_allocations sa ON sa."siteId" = s.id
+                          AND sa."isCurrentlyAllocated" = true AND sa."deletedAt" IS NULL
+ WHERE s."deletedAt" IS NULL AND s.status IN ('hold','work_completed','completed')
+ GROUP BY s.status, s.name;
+```
