@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Public } from './decorators/public.decorator';
@@ -9,8 +9,10 @@ import {
   ResetPasswordDto,
   SwitchRoleDto,
   RefreshTokenDto,
+  AdminResetPasswordDto,
 } from './dto';
 import { AuthenticatedRequest } from './auth.types';
+import { RequiredPermission } from './decorators/required-permission.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -94,6 +96,26 @@ export class AuthController {
   })
   async resetPassword(@Param('token') token: string, @Body() body: ResetPasswordDto) {
     return await this.authService.resetPassword(body, token);
+  }
+
+  @Post('users/:userId/reset-password')
+  @RequiredPermission('employee.reset-password')
+  @ApiOperation({
+    summary: "Set an employee's or driver's password directly (admin / HR / operation manager)",
+    description:
+      'For users who cannot receive a reset link — a driver with no working email, for example. ' +
+      'The caller sets the password and shares it out-of-band; the response never contains it. ' +
+      'Restricted to targets holding only EMPLOYEE / DRIVER roles: a target with any privileged ' +
+      'role returns 403, so this cannot be used to take over an admin account. Resetting your own ' +
+      'password here is also rejected. On success the target is signed out of all devices and any ' +
+      'outstanding reset link for them stops working.',
+  })
+  async adminResetUserPassword(
+    @Req() { user: { id: actorUserId } }: AuthenticatedRequest,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() body: AdminResetPasswordDto,
+  ) {
+    return await this.authService.adminResetUserPassword(userId, body, actorUserId);
   }
 
   @Public()
