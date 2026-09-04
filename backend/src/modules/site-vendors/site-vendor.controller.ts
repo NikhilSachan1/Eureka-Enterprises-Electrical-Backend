@@ -10,6 +10,26 @@ import { ManageSiteVendorsDto } from './dto';
 export class SiteVendorController {
   constructor(private readonly siteVendorService: SiteVendorService) {}
 
+  /**
+   * Declared before the `:id` routes on purpose. There is no actual collision — `:id/vendors`
+   * needs the literal `vendors` in the third segment and this has `assignable` — but keeping
+   * static paths above parameterised ones avoids a surprise if either route is renamed.
+   */
+  @Get('vendors/assignable')
+  @RequiredPermission('financials.site-vendors.view')
+  @ApiOperation({
+    summary: 'Sites the current user may assign vendors to (FE section gating + site picker)',
+    description:
+      'Returns { allowed, sites }. Non-bypass users get only the sites where they are the ' +
+      'Project Manager and currently allocated; office roles get every site. FE should treat a ' +
+      '403 the same as allowed=false and hide the vendor section.',
+  })
+  async assignableSites(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+  ) {
+    return await this.siteVendorService.getAssignableSites(userId, activeRole);
+  }
+
   @Get(':id/vendors')
   @RequiredPermission('financials.site-vendors.view')
   @ApiOperation({ summary: 'List vendors linked to a site' })
