@@ -32,6 +32,11 @@ export class PoItemEntity extends BaseEntity {
   @Column({ type: 'numeric', precision: 15, scale: 3, default: 0 })
   quantity: number;
 
+  // Unit of measure for `quantity` (Nos, Kg, Sqm …). Allowed values come from the `po_units`
+  // config. Null on rows created before the field existed.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  unit: string | null;
+
   @Column({ type: 'numeric', precision: 15, scale: 2, default: 0 })
   rate: number;
 

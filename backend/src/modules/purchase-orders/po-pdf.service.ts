@@ -161,6 +161,7 @@ export class PoPdfService {
           </td>
           <td class="c">${this.esc(it.hsnCode ?? '—')}</td>
           <td class="r">${this.qty(it.quantity)}</td>
+          <td class="c">${it.unit ? this.esc(it.unit) : ''}</td>
           <td class="r">${this.money(it.rate)}</td>
           <td class="r strong">${this.money(it.amount)}</td>
         </tr>`,
@@ -293,11 +294,12 @@ export class PoPdfService {
         <th>Item &amp; Description</th>
         <th class="c" style="width:80px">HSN/SAC</th>
         <th class="r" style="width:70px">Qty</th>
+        <th class="c" style="width:55px">Unit</th>
         <th class="r" style="width:100px">Rate</th>
         <th class="r" style="width:110px">Amount</th>
       </tr>
     </thead>
-    <tbody>${rows || `<tr><td colspan="6" class="empty">No items</td></tr>`}</tbody>
+    <tbody>${rows || `<tr><td colspan="7" class="empty">No items</td></tr>`}</tbody>
   </table>
 
   <div class="bottom">

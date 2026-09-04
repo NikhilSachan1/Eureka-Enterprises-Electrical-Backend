@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -31,7 +32,7 @@ import {
   PoItemDto,
   PoItemSuggestionDto,
 } from './dto';
-import { PO_ERRORS, PO_RESPONSES } from './constants/purchase-order.constants';
+import { PO_ERRORS, PO_RESPONSES, PO_UNITS_CONFIG_KEY } from './constants/purchase-order.constants';
 import { checkPoHasJmcsQuery } from './queries/purchase-order.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import {
@@ -53,6 +54,8 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 
 @Injectable()
 export class PurchaseOrderService {
+  private readonly logger = new Logger(PurchaseOrderService.name);
+
   constructor(
     private readonly poRepository: PurchaseOrderRepository,
     private readonly dataSource: DataSource,
@@ -73,6 +76,7 @@ export class PurchaseOrderService {
       }
       // Site's PM (Civil) / any allocated user (Electrical) / office roles.
       await this.assertCanCreatePo(createdBy, dto.siteId, activeRole);
+      await this.assertValidUnits(items);
 
       return await this.dataSource.transaction(async (em) => {
         const poNumber = dto.poNumber?.trim() || (await this.generatePoNumber(em));
@@ -306,10 +310,12 @@ export class PurchaseOrderService {
     }
     params.push(limit);
     const rows = await this.dataSource.query(
-      `SELECT name FROM po_item_masters WHERE ${where} ORDER BY name ASC LIMIT $${params.length}`,
+      `SELECT name, unit FROM po_item_masters WHERE ${where} ORDER BY name ASC LIMIT $${params.length}`,
       params,
     );
-    return { records: rows.map((r: any) => r.name) };
+    // `records` used to be a plain string[]; it is now [{ name, unit }] so the typeahead can
+    // pre-fill the unit last used for that item. Breaking change for FE — see the spec.
+    return { records: rows.map((r: any) => ({ name: r.name, unit: r.unit ?? null })) };
   }
 
   /**
@@ -338,6 +344,7 @@ export class PurchaseOrderService {
         itemName: r.itemName,
         hsnCode: r.hsnCode ?? null,
         make: r.make ?? null,
+        unit: r.unit ?? null,
       })),
     };
   }
@@ -417,6 +424,7 @@ export class PurchaseOrderService {
         hsnCode: it.hsnCode?.trim() || null,
         make: it.make?.trim() || null,
         quantity: it.quantity,
+        unit: it.unit?.trim() || null,
         rate: it.rate,
         amount: it.amount,
         sortOrder: idx,
@@ -426,17 +434,68 @@ export class PurchaseOrderService {
     await repo.save(rows);
   }
 
+  /**
+   * Rejects any line-item unit that is not in the `po_units` config.
+   *
+   * Deliberately fails **open** when the config row is missing or malformed: a deleted config
+   * would otherwise block every PO creation, which is far worse than accepting an unvalidated
+   * unit. The miss is logged so it surfaces rather than passing silently.
+   */
+  private async assertValidUnits(items: PoItemDto[]): Promise<void> {
+    const used = [...new Set(items.map((i) => i.unit?.trim()).filter((u): u is string => !!u))];
+    if (used.length === 0) {
+      return;
+    }
+
+    const configured = await this.readConfigValue(PO_UNITS_CONFIG_KEY);
+    if (!Array.isArray(configured) || configured.length === 0) {
+      this.logger.warn(
+        `Config "${PO_UNITS_CONFIG_KEY}" is missing or empty — skipping PO unit validation`,
+      );
+      return;
+    }
+
+    const allowed = new Set(
+      configured
+        .map((entry: unknown) =>
+          typeof entry === 'string' ? entry : (entry as { value?: string })?.value,
+        )
+        .filter((v): v is string => !!v),
+    );
+
+    const offender = used.find((u) => !allowed.has(u));
+    if (offender) {
+      throw new BadRequestException(
+        PO_ERRORS.INVALID_UNIT.replace('{unit}', offender).replace(
+          '{allowed}',
+          [...allowed].join(', '),
+        ),
+      );
+    }
+  }
+
   private async upsertItemMasters(
     em: EntityManager,
     items: PoItemDto[],
     userId: string,
   ): Promise<void> {
-    const names = [...new Set(items.map((i) => i.itemName.trim()).filter(Boolean))];
-    for (const name of names) {
+    // Last non-empty unit wins per name, so re-saving a PO refreshes the remembered unit.
+    const byName = new Map<string, string | null>();
+    for (const item of items) {
+      const name = item.itemName.trim();
+      if (!name) continue;
+      const unit = item.unit?.trim() || null;
+      byName.set(name, unit ?? byName.get(name) ?? null);
+    }
+
+    for (const [name, unit] of byName) {
+      // COALESCE on update so a line saved without a unit does not wipe the remembered one.
       await em.query(
-        `INSERT INTO po_item_masters (name, "createdBy") VALUES ($1, $2)
-         ON CONFLICT (LOWER(name)) DO NOTHING`,
-        [name, userId ?? null],
+        `INSERT INTO po_item_masters (name, unit, "createdBy") VALUES ($1, $2, $3)
+         ON CONFLICT (LOWER(name)) DO UPDATE
+           SET unit = COALESCE(EXCLUDED.unit, po_item_masters.unit),
+               "updatedAt" = NOW()`,
+        [name, unit, userId ?? null],
       );
     }
   }
@@ -464,6 +523,7 @@ export class PurchaseOrderService {
       if (po.partyType !== PartyType.PURCHASE) {
         throw new BadRequestException(PO_ERRORS.ITEMS_ONLY_FOR_PURCHASE);
       }
+      await this.assertValidUnits(items);
       return await this.dataSource.transaction(async (em) => {
         await em.getRepository(PoItemEntity).delete({ poId: id });
         if (items.length) {

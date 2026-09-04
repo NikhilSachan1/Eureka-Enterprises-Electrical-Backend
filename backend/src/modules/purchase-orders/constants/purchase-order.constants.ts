@@ -17,7 +17,11 @@ export const PO_ERRORS = {
   PDF_ONLY_SYSTEM_GENERATED: 'PDF is available only for system-generated POs with items.',
   NOT_ALLOCATED_TO_SITE: 'You are not allocated to this site.',
   CIVIL_PO_ONLY_PM: 'Civil site: only the site Project Manager can create a PO.',
+  INVALID_UNIT: 'Invalid unit "{unit}". Allowed units: {allowed}.',
 };
+
+/** Config key holding the selectable PO line-item units, as a [{label, value}] array. */
+export const PO_UNITS_CONFIG_KEY = 'po_units';
 
 export const PROJECT_MANAGER_SITE_ROLE = 'Project Manager';
 
