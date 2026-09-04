@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { DataSource, In, IsNull } from 'typeorm';
+import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
 import { SiteVendorRepository } from './site-vendor.repository';
 import { VendorRepository } from 'src/modules/vendors/vendor.repository';
 import { SiteRepository } from 'src/modules/sites/site.repository';
@@ -22,8 +28,9 @@ export class SiteVendorService {
     return rows.filter((r) => r.vendor && !r.vendor.deletedAt).map((r) => r.vendor);
   }
 
-  async addVendorsToSite(siteId: string, vendorIds: string[]) {
+  async addVendorsToSite(siteId: string, vendorIds: string[], userId: string, activeRole?: string) {
     await this.assertSiteExists(siteId);
+    await this.assertIsSitePm(siteId, userId, activeRole);
     await this.assertVendorsExist(vendorIds);
 
     const existing = await this.siteVendorRepository.getVendorsBySiteId(siteId);
@@ -41,8 +48,14 @@ export class SiteVendorService {
     };
   }
 
-  async removeVendorsFromSite(siteId: string, vendorIds: string[]) {
+  async removeVendorsFromSite(
+    siteId: string,
+    vendorIds: string[],
+    userId: string,
+    activeRole?: string,
+  ) {
     await this.assertSiteExists(siteId);
+    await this.assertIsSitePm(siteId, userId, activeRole);
 
     // Block removal if any of these vendors have purchase orders on this site
     const result = await this.dataSource.query(
@@ -55,6 +68,23 @@ export class SiteVendorService {
 
     await this.siteVendorRepository.removeVendors(siteId, vendorIds);
     return { message: SITE_VENDOR_RESPONSES.VENDORS_UNLINKED, removedCount: vendorIds.length };
+  }
+
+  /**
+   * Assigning and unassigning vendors is reserved for the site's Project Manager.
+   *
+   * Office roles (SITE_ACCESS_BYPASS_ROLES) pass through via `activeRole`, matching
+   * how site-scoped financial documents already behave. `requirePm` applies to every
+   * site type, not just Civil.
+   */
+  private async assertIsSitePm(siteId: string, userId: string, activeRole?: string) {
+    const { allowed } = await checkSiteCreateAccess(this.dataSource, userId, siteId, {
+      requirePm: true,
+      activeRole,
+    });
+    if (!allowed) {
+      throw new ForbiddenException(SITE_VENDOR_ERRORS.NOT_SITE_PM);
+    }
   }
 
   private async assertSiteExists(siteId: string) {

@@ -1,5 +1,6 @@
 export const SITE_VENDOR_ERRORS = {
   VENDOR_IDS_REQUIRED: 'vendorIds must not be empty',
+  NOT_SITE_PM: 'Only the site Project Manager can assign or unassign vendors for this site.',
   VENDOR_HAS_FINANCIAL_DOCS:
     'Cannot remove vendor — one or more POs / JMCs exist for this vendor on the site. Delete the financial documents first.',
 } as const;

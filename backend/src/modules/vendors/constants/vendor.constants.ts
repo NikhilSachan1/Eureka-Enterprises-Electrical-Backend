@@ -3,10 +3,8 @@ export const VENDOR_ERRORS = {
   NAME_ALREADY_EXISTS: 'Vendor with this name already exists',
   EMAIL_ALREADY_EXISTS: 'Vendor with this email already exists',
   GST_ALREADY_EXISTS: 'Vendor with this GST number already exists',
-  GST_REQUIRED_FOR_REGISTERED:
-    'GST number is required when vendorType is GST_REGISTERED',
-  GST_NOT_ALLOWED_FOR_FREELANCER:
-    'GST number is not allowed when vendorType is FREELANCER',
+  GST_REQUIRED_FOR_REGISTERED: 'GST number is required when vendorType is GST_REGISTERED',
+  GST_NOT_ALLOWED_FOR_FREELANCER: 'GST number is not allowed when vendorType is FREELANCER',
   INVALID_GST_FORMAT: 'Invalid GST number format. Expected format: 22AAAAA0000A1Z5',
   INVALID_PAN_FORMAT: 'Invalid PAN number format. Expected format: ABCDE1234F',
   INVALID_PINCODE: 'Invalid pincode format. Must be 6 digits.',
@@ -14,13 +12,13 @@ export const VENDOR_ERRORS = {
   INVALID_CONTACT_NUMBER: 'Invalid contact number format',
   INVALID_IFSC: 'Invalid IFSC code format. Expected format: ABCD0123456',
   INVALID_VENDOR_TYPE: 'Invalid vendor type. Allowed: FREELANCER, GST_REGISTERED',
-  CANNOT_DELETE_HAS_SITES:
-    'Cannot delete vendor. Remove all associated sites before deleting.',
+  CANNOT_DELETE_HAS_SITES: 'Cannot delete vendor. Remove all associated sites before deleting.',
   VENDOR_HAS_PENDING_FINANCIALS:
     'Vendor has pending financial documents (POs, JMCs, Invoices, Book Payments). Settle them before deleting.',
   VENDOR_HAS_ACTIVE_ASSOCIATIONS:
     'Cannot delete vendor. Resolve the following before deleting: {issues}',
   DELETE_FAILED: 'Failed to delete vendor',
+  NOT_OWNER: 'You can only edit or delete vendors you created.',
 };
 
 export const VENDOR_RESPONSES = {

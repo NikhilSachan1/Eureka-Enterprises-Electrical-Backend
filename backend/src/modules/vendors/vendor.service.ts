@@ -3,8 +3,10 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { IsNull, ILike, FindOneOptions, Not, DataSource, In } from 'typeorm';
+import { SITE_ACCESS_BYPASS_ROLES } from 'src/modules/common/financials/site-access.helper';
 import { VendorRepository } from './vendor.repository';
 import { VendorEntity } from './entities/vendor.entity';
 import { CreateVendorDto, UpdateVendorDto, GetVendorDto } from './dto';
@@ -201,8 +203,28 @@ export class VendorService {
     };
   }
 
-  async update(id: string, updateDto: UpdateVendorDto, updatedBy: string) {
+  /**
+   * A vendor may only be edited or deleted by the user who created it.
+   *
+   * Office roles (SITE_ACCESS_BYPASS_ROLES) keep a full override so admins can still
+   * correct or remove vendor data created by anyone. The restriction exists so a site
+   * Project Manager, who can now create vendors, cannot alter another PM's vendors.
+   *
+   * Vendors created before this rule may have a null `createdBy`; those are treated as
+   * not-owned, so only the bypass roles can modify them.
+   */
+  private assertCanModify(vendor: VendorEntity, actorId: string, activeRole?: string) {
+    if (activeRole && SITE_ACCESS_BYPASS_ROLES.includes(activeRole.toUpperCase())) {
+      return;
+    }
+    if (!vendor.createdBy || vendor.createdBy !== actorId) {
+      throw new ForbiddenException(VENDOR_ERRORS.NOT_OWNER);
+    }
+  }
+
+  async update(id: string, updateDto: UpdateVendorDto, updatedBy: string, activeRole?: string) {
     const existingVendor = await this.findOneOrFail({ where: { id } });
+    this.assertCanModify(existingVendor, updatedBy, activeRole);
 
     const effectiveType = (updateDto.vendorType ?? existingVendor.vendorType) as VendorType;
 
@@ -242,8 +264,9 @@ export class VendorService {
     );
   }
 
-  async remove(id: string, deletedBy: string) {
-    await this.findOneOrFail({ where: { id } });
+  async remove(id: string, deletedBy: string, activeRole?: string) {
+    const vendor = await this.findOneOrFail({ where: { id } });
+    this.assertCanModify(vendor, deletedBy, activeRole);
     await this.validateVendorCanBeDeleted(id);
 
     await this.vendorRepository.update({ id }, { deletedBy });
@@ -287,7 +310,7 @@ export class VendorService {
     }
   }
 
-  async bulkDelete(vendorIds: string[], deletedBy: string) {
+  async bulkDelete(vendorIds: string[], deletedBy: string, activeRole?: string) {
     const results: { id: string; success: boolean; message: string }[] = [];
 
     for (const vendorId of vendorIds) {
@@ -300,6 +323,10 @@ export class VendorService {
           results.push({ id: vendorId, success: false, message: VENDOR_ERRORS.NOT_FOUND });
           continue;
         }
+
+        // Reported per row rather than aborting the batch, matching how
+        // not-found and active-association failures are already handled.
+        this.assertCanModify(vendor, deletedBy, activeRole);
 
         await this.validateVendorCanBeDeleted(vendorId);
 
