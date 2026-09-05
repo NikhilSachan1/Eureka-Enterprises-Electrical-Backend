@@ -70,13 +70,12 @@ export class VehicleEventsService {
         }
         break;
 
+      // Optional files for these actions.
+      // HANDOVER_ACCEPTED used to require files as condition evidence from the receiver; that was
+      // dropped so an accept is never blocked when the receiver cannot photograph the vehicle.
+      // Files are still attached normally when sent. Who may accept is unaffected — a pending
+      // handover must exist and only its target user can accept it.
       case VehicleEventTypes.HANDOVER_ACCEPTED:
-        if (!hasFiles) {
-          throw new BadRequestException(VEHICLE_EVENTS_ERRORS.FILES_REQUIRED_FOR_HANDOVER_ACCEPT);
-        }
-        break;
-
-      // Optional files for these actions
       case VehicleEventTypes.HANDOVER_REJECTED:
       case VehicleEventTypes.HANDOVER_CANCELLED:
       case VehicleEventTypes.DEALLOCATED:
