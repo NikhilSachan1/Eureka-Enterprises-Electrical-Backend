@@ -509,13 +509,16 @@ export class AttendanceService {
     // The engineer inside the snapshot decides who receives the day's food allowance, so a
     // client-supplied snapshot goes through the same driver-only guard as check-in and force.
     const previousSnapshot = existingAttendance.assignmentSnapshot;
-    const resolvedSnapshot = isSnapshotCorrection
-      ? await this.sanitizeAssignmentSnapshot(
-          userId,
-          regularizeAttendanceDto.assignmentSnapshot,
-          existingAttendance.attendanceDate,
-        )
-      : previousSnapshot;
+    // Sanitised even when the client sent no snapshot. A driver has nothing of his own to submit,
+    // so the old `isSnapshotCorrection ? sanitize : keep-as-is` meant regularizing a driver never
+    // re-derived his engineer — his snapshot stayed exactly as empty as the cron left it. Passing
+    // the previous snapshot through is idempotent: sanitize strips assignedEngineer/assignedDrivers
+    // and re-derives them from the pairing, so a non-driver simply keeps what he had.
+    const resolvedSnapshot = await this.sanitizeAssignmentSnapshot(
+      userId,
+      isSnapshotCorrection ? regularizeAttendanceDto.assignmentSnapshot : previousSnapshot,
+      existingAttendance.attendanceDate,
+    );
 
     // Every row written below carries the target status, so the working/non-working decision can
     // be made once here rather than at each of the branches.
@@ -539,7 +542,7 @@ export class AttendanceService {
       }
     }
 
-    return await this.dataSource.transaction(async (entityManager) => {
+    const result = await this.dataSource.transaction(async (entityManager) => {
       // Regularize is the correction path for pairings too: an engineer who forgot a driver, named
       // the wrong one, or needs to drop one submits the corrected list here and syncClaims works
       // out which to claim and which to release.
@@ -1019,10 +1022,6 @@ export class AttendanceService {
         newSnapshot: snapshotToApply,
       });
 
-      // Runs inside the transaction here, unlike check-in: the status change that invalidates the
-      // pairing has already been written above, so the pairing resolves correctly from this point.
-      await this.reRouteDrivers(affectedDrivers, existingAttendance.attendanceDate, userId);
-
       // Send regularization notification to the employee
       await this.sendRegularizationNotification(
         userId,
@@ -1040,6 +1039,18 @@ export class AttendanceService {
         attendanceId,
       };
     });
+
+    // Deliberately AFTER the transaction, matching check-in and force attendance.
+    //
+    // It used to run inside it, on the reasoning that the status change had already been written.
+    // But reRouteDriverAllowance reads and writes through `this.attendanceRepository` /
+    // `this.dataSource` without the entityManager, so it runs on a different connection and could
+    // not see the uncommitted status. Regularizing an engineer from absent to present therefore
+    // left him looking absent to the re-route, the pairing did not resolve, and every driver he
+    // had just claimed kept an empty snapshot with his allowance stranded.
+    await this.reRouteDrivers(affectedDrivers, existingAttendance.attendanceDate, userId);
+
+    return result;
   }
 
   private async validateTimeWithinShift(shiftConfigs: any, timeToValidate: Date, timeType: string) {
