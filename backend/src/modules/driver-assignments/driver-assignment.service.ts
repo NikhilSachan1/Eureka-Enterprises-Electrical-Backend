@@ -22,6 +22,21 @@ export interface AssignedEngineerSnapshot {
   employeeId: string;
 }
 
+/**
+ * The engineer a driver was with, plus the site context that engineer recorded for that day.
+ *
+ * A driver has no site context of his own to give — he is wherever his engineer was — so these
+ * fields are inherited rather than asked for. Shapes mirror `attendances.assignmentSnapshot`
+ * exactly, so a caller can spread them straight onto a snapshot.
+ */
+export interface DriverAssignmentContext {
+  engineer: AssignedEngineerSnapshot | null;
+  site?: { id: string; name: string; fullAddress?: string };
+  company?: { id: string; name: string; fullAddress?: string };
+  contractors?: Array<{ id: string; name: string }>;
+  vehicle?: { id: string; registrationNo: string };
+}
+
 @Injectable()
 export class DriverAssignmentService {
   private readonly logger = new Logger(DriverAssignmentService.name);
@@ -82,6 +97,64 @@ export class DriverAssignmentService {
       firstName: row.firstName,
       lastName: row.lastName,
       employeeId: row.employeeId,
+    };
+  }
+
+  /**
+   * The engineer **and** his recorded site context for a driver's day.
+   *
+   * Same pairing conditions as `resolveAssignedEngineer` — including the worked-status filter — so
+   * the two can never disagree about whether a pairing resolves. The only addition is reading the
+   * engineer's own `assignmentSnapshot` off the row it already joins to.
+   *
+   * Returns null on exactly the same terms as `resolveAssignedEngineer`: not a driver, nobody
+   * claimed them that day, or the paired engineer's day no longer counts as worked.
+   */
+  async resolveAssignmentContext(
+    driverId: string,
+    workDate: Date | string,
+    em?: EntityManager,
+  ): Promise<DriverAssignmentContext | null> {
+    const dateStr = this.toDateString(workDate);
+
+    const [row] = await (em ?? this.dataSource).query(
+      `SELECT u."id", u."firstName", u."lastName", u."employeeId",
+              a."assignmentSnapshot" AS "engineerSnapshot"
+       FROM "driver_day_assignments" da
+       INNER JOIN "users" u ON u."id" = da."engineerId" AND u."deletedAt" IS NULL
+       INNER JOIN "attendances" a
+               ON a."userId" = da."engineerId"
+              AND a."attendanceDate" = da."workDate"
+              AND a."isActive" = true
+              AND a."deletedAt" IS NULL
+              AND a."status" = ANY($3)
+       WHERE da."driverId" = $1
+         AND da."workDate" = $2::date
+         AND da."deletedAt" IS NULL
+       LIMIT 1`,
+      [driverId, dateStr, WORKED_STATUSES],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    // node-pg parses jsonb already. An engineer whose row was created by the midnight cron has a
+    // null snapshot — the context is then just the engineer, and the caller keeps whatever the
+    // driver already had rather than having it wiped.
+    const engineerSnapshot = (row.engineerSnapshot ?? {}) as DriverAssignmentContext;
+
+    return {
+      engineer: {
+        id: row.id,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        employeeId: row.employeeId,
+      },
+      site: engineerSnapshot.site,
+      company: engineerSnapshot.company,
+      contractors: engineerSnapshot.contractors,
+      vehicle: engineerSnapshot.vehicle,
     };
   }
 

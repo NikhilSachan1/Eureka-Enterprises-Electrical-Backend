@@ -152,3 +152,157 @@ Ye 4 tay hone ke baad spec likhi jayegi, aur phir dev pe pura test hoga (jaise s
 | Recipient resolve | `resolveFoodCreditRecipient` — [attendance.service.ts:2827](../src/modules/attendance/attendance.service.ts#L2827) |
 | Ledger-based reversal | `reverseFoodExpenseByLedger` — [attendance.service.ts:4246](../src/modules/attendance/attendance.service.ts#L4246) |
 | Engineer → drivers (read, batched) | [attendance.service.ts:1808](../src/modules/attendance/attendance.service.ts#L1808) |
+
+---
+---
+
+# Update — 8 Sept 2026: naya approach (ordering check + re-derive)
+
+Lead ne ek simpler idea diya: **attendance approve karte waqt ordering enforce karein** — pehle
+employee/engineer ka attendance approve ho, phir driver ka. Warna error.
+
+## Pehla finding — ordering akela kaafi nahi hai
+
+| Time | Kya hota hai |
+|---|---|
+| 7:00 AM | Driver check-in. Koi pairing nahi → row mein `assignedEngineer` **null** likha gaya |
+| 9:00 AM | Engineer check-in + driver claim → pairing ban gayi |
+| — | Ordering enforce: pehle engineer approve, phir driver ✅ |
+| Driver approval | `handleFoodExpenseForApproval` **stored** snapshot padhta hai → wo abhi bhi **null** |
+| Result | Paisa **driver** ko hi gaya ❌ |
+
+Ordering se engineer ka din pehle final ho jaata hai, par driver ke row pe likha null engineer
+waise ka waisa rehta hai. **Paisa phir bhi galat jaayega.**
+
+## Asli fix — re-derive at approval
+
+`handleFoodExpenseForApproval`
+([attendance.service.ts:2622](../src/modules/attendance/attendance.service.ts#L2622)) abhi ye karta hai:
+
+```ts
+const snapshot = attendance.assignmentSnapshot;   // stored, engineer null ho sakta hai
+await this.creditFoodExpenseForAttendance(userId, attendanceDate, approvalBy, snapshot);
+```
+
+Fix: driver ke liye stored pe bharosa mat karo — approval ke waqt
+`driverAssignmentService.resolveAssignedEngineer(driverId, attendanceDate)` se **pairing table se**
+engineer nikaalo aur snapshot mein daalo.
+
+**Ye check-in ke order se independent hai.** Driver pehle ho ya engineer — approval ke waqt tak
+pairing bani hoti hai, to sahi engineer mil jaata hai.
+
+Iska matlab: **correctness ke liye ordering check zaroori nahi hai.** Wo ek *extra guarantee* deta
+hai (engineer ka din pehle final ho jaaye, baad mein reject hoke paisa invalid na ho), par asli
+paisa-fix `re-derive` hi hai. Dono independently useful hain.
+
+## Doosra finding — machinery already exist karti hai
+
+`reRouteDriverAllowance`
+([attendance.service.ts:2918](../src/modules/attendance/attendance.service.ts#L2918)) already:
+
+1. `resolveAssignedEngineer` se engineer **re-derive** karta hai
+2. Driver ke `assignmentSnapshot.assignedEngineer` ko **update** karta hai
+3. Paisa **reverse + re-credit** karta hai
+4. **Payroll guard** — us mahine ka payroll already generate ho gaya to paisa hilata nahi,
+   `recordFoodCreditFailure` mein review ke liye likh deta hai
+
+Abhi ye sirf tab chalta hai jab engineer ka din **reject** hota hai
+(`releaseHeldPairings` → `reRouteDrivers`). Approval path pe iska logic reuse ho sakta hai — naya
+reverse/recredit banane ki zaroorat nahi.
+
+## Teesra finding — bulk approval already partial-success karta hai
+
+`POST /attendance/approval` pehle se **bulk** hai, aur `handleBulkAttendanceApproval`
+([attendance.service.ts:2143](../src/modules/attendance/attendance.service.ts#L2143)) mein har record
+apne `try/catch` mein chalta hai:
+
+```json
+{
+  "message": "... {length} processed, {success} succeeded, {error} failed",
+  "result": [ "jo approve ho gaye" ],
+  "errors": [ { "attendanceId": "…", "error": "…" } ]
+}
+```
+
+Poora batch fail nahi hota. **Toh ordering check isi pattern mein fit ho jayega** — driver ka record
+`errors[]` mein chala jayega ("engineer ka attendance pehle approve karein"), baaki sab approve ho
+jayenge. FE ko ye shape already handle karna aata hai, koi contract change nahi.
+
+## Ab kya karna hai
+
+| Piece | Zaroori? |
+|-------|----------|
+| **Re-derive at approval** (driver ke liye pairing table se engineer) | **Haan** — yahi paisa fix karta hai |
+| **Ordering check** (engineer pehle, driver baad mein) | Optional guarantee — lead ne maanga hai |
+
+## Pending decisions — confirm hone baaki hain
+
+### Ordering check ke edge cases (8 Sept ko park kiye)
+
+1. **Engineer ka din approve hi nahi hota** (company chhod di / bhool gaye) → driver ka attendance
+   permanently blocked rahega? Koi override chahiye? — *user: "keep on side, will confirm"*
+2. **Engineer ka din reject ho gaya** → driver approve ho sakta hai (paisa driver ko) ya wo bhi
+   blocked? — *user: "keep on side, will confirm"*
+3. **Raat cross karne wali shift** → driver ki `attendanceDate` engineer se alag ho sakti hai;
+   pairing kaunsi date se match karein? — *user: "keep on side, will confirm"*
+
+### Original open decisions (4 Sept se, abhi bhi pending)
+
+4. **Scenario X** — driver ka din approve ho gaya, phir engineer ne claim kiya →
+   (a) auto-correct, (b) block, ya (c) flag + manual regularize? *(recommendation: (c))*
+5. **Purana data (Scenario 10)** — pairing na mile to purana stored `assignedEngineer` fallback
+   padhein? *(recommendation: haan)*
+6. **Freeze ke baad engineer absent (Scenario 6)** — frozen copy waise rakhein?
+   *(recommendation: haan)* — note: ordering + re-derive approach mein "freeze" ka concept hi nahi
+   hai, to ye decision sirf tab relevant hai agar Option 2 (freeze-on-approval) pe wapas jaayen
+
+**Note:** decisions 4-6 Option 2 (freeze-on-approval) ke context mein the. Naya approach
+(ordering + re-derive) simpler hai aur usme freeze nahi hai — to 5 abhi bhi relevant hai (display ke
+liye), 4 aur 6 ka scope badal jaata hai. Spec likhne se pehle ye tay karna padega ki hum
+**Option 2** pe jaa rahe hain ya **naye ordering+re-derive** approach pe.
+
+---
+---
+
+# CORRECTION — 8 Sept 2026: paisa wala bug exist nahi karta
+
+Is doc mein upar jo bhi likha hai ki **"driver pehle check-in kare to paisa driver ko chala jaata
+hai"** — **wo galat hai.** Code padhne pe ulta nikla.
+
+`reRouteDriverAllowance` snapshot ko **unconditionally** likhta hai, `isCredited` check se *pehle*:
+
+```ts
+// Safe to write now: either no money has moved, or it is about to move in the same call.
+await this.attendanceRepository.update({ id: attendance.id }, { assignmentSnapshot: snapshot, ... });
+if (!isCredited) return 'not-credited';
+```
+
+Aur ye already **teeno** pairing-change paths pe chalta hai — engineer check-in
+([:225](../src/modules/attendance/attendance.service.ts#L225)), regularize
+([:1021](../src/modules/attendance/attendance.service.ts#L1021)), aur reject
+(`releaseHeldPairings` → `reRouteDrivers`).
+
+| Scenario | Aaj ka asli behaviour |
+|---|---|
+| Driver pehle, engineer baad mein claim kare | Claim ke waqt engineer re-derive hoke **driver ke row pe likh diya jaata hai** → approval usi ko padhta hai → **paisa engineer ko** ✅ |
+| Driver ka din approve, phir engineer claim kare (Scenario X) | `isCredited = true` → ledger **reverse + engineer ko re-credit**, aur **payroll guard** bhi ✅ |
+| Engineer ka din reject | Pairings release, drivers ka allowance wapas unke paas ✅ |
+
+**Iska matlab:**
+- Option 2 (freeze-on-approval) ki poori complexity **zaroori nahi** — wo ek aise bug ke liye
+  design ki gayi thi jo hai hi nahi
+- Ordering check **correctness ke liye zaroori nahi** (sirf operational value hai)
+- Scenario X ka decision moot hai — already handle hota hai, aur mere (c) "manual flag"
+  recommendation se **behtar** tareeke se
+
+## Asli bacha hua gap
+
+`reRouteDriverAllowance` sirf `assignedEngineer` copy karta hai. **`site`, `company`, `contractors`,
+`vehicle` copy nahi hote** engineer ke snapshot se — aur aapki original requirement wahi thi.
+
+Toh bacha hua kaam **display-only** hai, paisa ka nahi. Risk bahut kam.
+
+➡ Naya spec: [`driver-snapshot-inherit-spec.md`](./driver-snapshot-inherit-spec.md)
+
+Is doc ke upar wale saare Option 2 / freeze / dashboard-MV wale sections **superseded** hain. Unhe
+sirf history ke liye rakha gaya hai.

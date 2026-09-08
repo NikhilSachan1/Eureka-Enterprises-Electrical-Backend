@@ -77,7 +77,10 @@ import { Roles } from '../roles/constants/role.constants';
 import { TransactionType } from '../expense-tracker/constants/expense-tracker.constants';
 import { AuditLogService } from '../audit-logs/audit-log.service';
 import { EntityAuditAction } from '../audit-logs/entities/entity-audit-log.entity';
-import { DriverAssignmentService } from '../driver-assignments/driver-assignment.service';
+import {
+  DriverAssignmentService,
+  DriverAssignmentContext,
+} from '../driver-assignments/driver-assignment.service';
 
 type AssignmentEngineer = NonNullable<
   NonNullable<AttendanceEntity['assignmentSnapshot']>['assignedEngineer']
@@ -2929,15 +2932,18 @@ export class AttendanceService {
       return 'no-attendance';
     }
 
-    const engineer = await this.driverAssignmentService.resolveAssignedEngineer(
+    const context = await this.driverAssignmentService.resolveAssignmentContext(
       driverId,
       calendarDate,
     );
 
-    const snapshot = { ...(attendance.assignmentSnapshot ?? {}) } as Record<string, unknown>;
-    if (engineer) {
-      snapshot.assignedEngineer = engineer;
+    let snapshot = { ...(attendance.assignmentSnapshot ?? {}) } as Record<string, unknown>;
+    if (context?.engineer) {
+      snapshot = this.applyEngineerContext(snapshot, context) as Record<string, unknown>;
     } else {
+      // Only the engineer is cleared. The inherited site/company/contractor/vehicle are left in
+      // place: the pairing going away does not mean the day's context was wrong, and clearing them
+      // would erase the only record of where the driver actually was.
       delete snapshot.assignedEngineer;
     }
 
@@ -3126,18 +3132,42 @@ export class AttendanceService {
       return snapshot === undefined && Object.keys(base).length === 0 ? snapshot : base;
     }
 
-    const engineer = await this.driverAssignmentService.resolveAssignedEngineer(
+    const context = await this.driverAssignmentService.resolveAssignmentContext(
       userId,
       attendanceDate,
     );
 
     // Null is the normal outcome for a non-driver, or a driver nobody claimed that day: the
     // allowance simply stays with them.
-    if (!engineer) {
+    if (!context?.engineer) {
       return snapshot === undefined && Object.keys(base).length === 0 ? snapshot : base;
     }
 
-    return { ...base, assignedEngineer: engineer };
+    return this.applyEngineerContext(base, context);
+  }
+
+  /**
+   * Merges the engineer's day context onto a driver's snapshot.
+   *
+   * A driver has no site context of his own to report — he is wherever his engineer was — so site,
+   * company, contractor and vehicle are inherited from the engineer's own snapshot.
+   *
+   * `??` rather than plain assignment on each field: an engineer whose row was created by the
+   * midnight cron has a null snapshot, and overwriting with undefined would wipe whatever the
+   * driver legitimately had.
+   */
+  private applyEngineerContext(
+    base: Record<string, unknown>,
+    context: DriverAssignmentContext,
+  ): AttendanceEntity['assignmentSnapshot'] {
+    return {
+      ...base,
+      assignedEngineer: context.engineer ?? undefined,
+      site: context.site ?? (base.site as never),
+      company: context.company ?? (base.company as never),
+      contractors: context.contractors ?? (base.contractors as never),
+      vehicle: context.vehicle ?? (base.vehicle as never),
+    } as AttendanceEntity['assignmentSnapshot'];
   }
 
   /**
