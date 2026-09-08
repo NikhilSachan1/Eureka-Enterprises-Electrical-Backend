@@ -249,13 +249,7 @@ export class AttendanceService {
     configSettingId: string,
     shiftConfigs: any,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     await this.validateShiftTiming(shiftConfigs, currentTime);
 
@@ -1423,13 +1417,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     const shiftStatus = await this.getShiftStatus(shiftConfigs, currentTime);
 
@@ -1513,13 +1501,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     if (!checkInTime) {
       throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_CHECK_IN_TIME_REQUIRED);
@@ -1571,13 +1553,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     // After shift - both check-in and check-out are required
     if (!checkInTime || !checkOutTime) {
@@ -1659,13 +1635,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     if (!checkInTime || !checkOutTime) {
       throw new BadRequestException(
@@ -2077,7 +2047,13 @@ export class AttendanceService {
   private async getUserCurrentSiteWithDetails(userId: string): Promise<{
     site: { id: string; name: string; fullAddress: string } | null;
     company: { id: string; name: string; fullAddress: string } | null;
-    contractors: Array<{ id: string; name: string }>;
+    contractors: Array<{
+      id: string;
+      name: string;
+      city?: string;
+      state?: string;
+      gstNumber?: string;
+    }>;
     assignedEngineer: {
       id: string;
       firstName: string;
@@ -2111,11 +2087,15 @@ export class AttendanceService {
 
     const siteRow = siteResult[0];
 
-    // Get contractors for this site
+    // Get contractors for this site. City / state / GST come along so the check-in screen can show
+    // them before any snapshot exists — the same three fields the stored snapshot carries.
     const contractorsQuery = `
-      SELECT 
+      SELECT
         con.id,
-        con.name
+        con.name,
+        con.city,
+        con.state,
+        con."gstNumber"
       FROM site_contractors sc
       INNER JOIN contractors con ON con.id = sc."contractorId" AND con."deletedAt" IS NULL
       WHERE sc."siteId" = $1
@@ -2155,10 +2135,21 @@ export class AttendanceService {
             fullAddress: siteRow.companyFullAddress,
           }
         : null,
-      contractors: contractors.map((c: { id: string; name: string }) => ({
-        id: c.id,
-        name: c.name,
-      })),
+      contractors: contractors.map(
+        (c: {
+          id: string;
+          name: string;
+          city: string | null;
+          state: string | null;
+          gstNumber: string | null;
+        }) => ({
+          id: c.id,
+          name: c.name,
+          city: c.city ?? undefined,
+          state: c.state ?? undefined,
+          gstNumber: c.gstNumber ?? undefined,
+        }),
+      ),
       assignedEngineer: engineer
         ? {
             id: engineer.id,
@@ -3323,8 +3314,15 @@ export class AttendanceService {
     // copy on the attendance row would be a second version of the truth that can drift.
     delete base.assignedDrivers;
 
+    // `snapshot` is returned untouched rather than as an empty object so that "the client said
+    // nothing" stays distinguishable from "the client sent an empty snapshot" downstream.
+    const asStored = () =>
+      snapshot === undefined && Object.keys(base).length === 0
+        ? snapshot
+        : (base as AttendanceEntity['assignmentSnapshot']);
+
     if (!attendanceDate) {
-      return snapshot === undefined && Object.keys(base).length === 0 ? snapshot : base;
+      return this.enrichSnapshotContractors(asStored());
     }
 
     const context = await this.driverAssignmentService.resolveAssignmentContext(
@@ -3335,10 +3333,69 @@ export class AttendanceService {
     // Null is the normal outcome for a non-driver, or a driver nobody claimed that day: the
     // allowance simply stays with them.
     if (!context?.engineer) {
-      return snapshot === undefined && Object.keys(base).length === 0 ? snapshot : base;
+      return this.enrichSnapshotContractors(asStored());
     }
 
-    return this.applyEngineerContext(base, context);
+    // Enriched after the merge, not before: a driver inherits `contractors` from his engineer's
+    // row, and rows written before enrichment existed carry only id and name. Doing it last means
+    // the driver still ends up with the full contractor details.
+    return this.enrichSnapshotContractors(this.applyEngineerContext(base, context));
+  }
+
+  /**
+   * Replaces the snapshot's contractor entries with authoritative rows from the contractors master,
+   * keyed on the ids the caller sent.
+   *
+   * City, state and GST number are master data with financial meaning, so they are read here rather
+   * than accepted from the client, which may have loaded its screen hours before posting.
+   *
+   * An id with no matching contractor is kept exactly as it arrived — dropping it would silently
+   * lose an entry the user can still see on their own screen.
+   */
+  private async enrichSnapshotContractors(
+    snapshot: AttendanceEntity['assignmentSnapshot'] | undefined,
+  ): Promise<AttendanceEntity['assignmentSnapshot'] | undefined> {
+    const contractors = snapshot?.contractors;
+    if (!Array.isArray(contractors) || contractors.length === 0) {
+      return snapshot;
+    }
+
+    const ids = [...new Set(contractors.map((contractor) => contractor?.id).filter(Boolean))];
+    if (ids.length === 0) {
+      return snapshot;
+    }
+
+    const rows: Array<{
+      id: string;
+      name: string;
+      city: string | null;
+      state: string | null;
+      gstNumber: string | null;
+    }> = await this.dataSource.query(
+      `SELECT id, name, city, state, "gstNumber"
+         FROM contractors
+        WHERE id = ANY($1::uuid[]) AND "deletedAt" IS NULL`,
+      [ids],
+    );
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    return {
+      ...snapshot,
+      contractors: contractors.map((contractor) => {
+        const row = byId.get(contractor?.id);
+        if (!row) {
+          return contractor;
+        }
+        return {
+          id: row.id,
+          name: row.name,
+          city: row.city ?? undefined,
+          state: row.state ?? undefined,
+          gstNumber: row.gstNumber ?? undefined,
+        };
+      }),
+    };
   }
 
   /**

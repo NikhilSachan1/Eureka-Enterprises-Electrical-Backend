@@ -42,6 +42,21 @@ class AssignmentSnapshotContractorDto {
 
   @IsString()
   name: string;
+
+  // Accepted but not trusted: the server re-reads all three from the contractors master before
+  // storing. They are declared here only so a client that sends them keeps validating, which lets
+  // the app and the API deploy independently — the same reasoning as `assignedEngineer`.
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @IsString()
+  @IsOptional()
+  gstNumber?: string;
 }
 
 class AssignmentSnapshotVehicleDto {
