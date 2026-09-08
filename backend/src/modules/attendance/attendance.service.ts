@@ -81,6 +81,7 @@ import {
   DriverAssignmentService,
   DriverAssignmentContext,
 } from '../driver-assignments/driver-assignment.service';
+import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 
 type AssignmentEngineer = NonNullable<
   NonNullable<AttendanceEntity['assignmentSnapshot']>['assignedEngineer']
@@ -559,6 +560,19 @@ export class AttendanceService {
       const isNonWorkingDay = AttendanceService.NON_WORKING_STATUSES.includes(
         status as AttendanceStatus,
       );
+      // The other direction: if THIS person is somebody's driver that day, a non-working status
+      // contradicts the engineer's record, so it is refused rather than silently unlinked.
+      if (isNonWorkingDay) {
+        await this.handleOwnPairingForNonWorkingDay(
+          userId,
+          existingAttendance.attendanceDate,
+          status,
+          userId,
+          'throw',
+          entityManager,
+        );
+      }
+
       const freed = isNonWorkingDay
         ? await this.releaseHeldPairings(
             userId,
@@ -1278,6 +1292,19 @@ export class AttendanceService {
         const isNonWorkingDay = AttendanceService.NON_WORKING_STATUSES.includes(
           status as AttendanceStatus,
         );
+        // Same refusal as regularize: forcing someone to a non-working day while an engineer has
+        // them claimed as a driver is a contradiction the admin has to resolve explicitly.
+        if (isNonWorkingDay) {
+          await this.handleOwnPairingForNonWorkingDay(
+            userId,
+            targetDateOnly,
+            status,
+            createdBy,
+            'throw',
+            entityManager,
+          );
+        }
+
         const freed = isNonWorkingDay
           ? await this.releaseHeldPairings(userId, targetDateOnly, createdBy, entityManager)
           : await this.driversHeldBy(userId, targetDateOnly);
@@ -2316,6 +2343,19 @@ export class AttendanceService {
       }
 
       if (approvalStatus === ApprovalStatus.REJECTED) {
+        // Rejecting turns the day absent, so the same contradiction applies as in regularize and
+        // force: refuse while an engineer still has this person claimed as his driver. Checked
+        // before anything is written so the rejection fails cleanly. In a bulk approval this lands
+        // in `errors[]` and the remaining records still process.
+        await this.handleOwnPairingForNonWorkingDay(
+          attendance.userId,
+          attendance.attendanceDate,
+          AttendanceStatus.ABSENT,
+          approvalBy,
+          'throw',
+          entityManager,
+        );
+
         updateAttendanceRecord.status = AttendanceStatus.ABSENT;
         // Rejecting also turns the day into a non-working one, so it must lose the assignment for
         // the same reason regularizing to absent does. Safe to clear here: the food reversal below
@@ -3151,6 +3191,100 @@ export class AttendanceService {
   private async driversHeldBy(engineerId: string, workDate: Date | string): Promise<string[]> {
     const rows = await this.driverAssignmentService.findByEngineer(engineerId, workDate);
     return rows.map((row) => row.driverId);
+  }
+
+  /**
+   * A driver whose day becomes non-working (absent / leave / holiday) cannot also have been out
+   * with an engineer, so the pairing where **he is the driver** has to be dealt with.
+   *
+   * This is the mirror of `releaseHeldPairings`, which only ever handled the other direction —
+   * an engineer going non-working gives up the drivers he holds. Without this a driver could be
+   * marked absent while still appearing in his engineer's snapshot, with his own snapshot emptied.
+   *
+   * Two modes, because the two kinds of caller need opposite things:
+   *
+   * - `'throw'` for manual paths (regularize / force / reject). The engineer stated the driver was
+   *   with him and an admin is now saying he was absent — that is a contradiction between two
+   *   people's records, and silently overriding either one hides it. The error names the engineer
+   *   so the fix is obvious.
+   * - `'release'` for the crons. There is no human in the loop to answer an error, and a cron that
+   *   threw would abort the rest of its batch, so it unlinks and lets the allowance re-route.
+   *
+   * Returns the drivers whose pairing changed, for the caller to re-route.
+   */
+  private async handleOwnPairingForNonWorkingDay(
+    userId: string,
+    workDate: Date | string,
+    status: AttendanceStatus | string,
+    actor: string,
+    mode: 'throw' | 'release',
+    entityManager?: EntityManager,
+  ): Promise<string[]> {
+    const holder = await this.driverAssignmentService.findHolder(userId, workDate, entityManager);
+    if (!holder) {
+      return [];
+    }
+
+    if (mode === 'throw') {
+      const subject = await this.userService.findOne({ id: userId });
+      throw new BadRequestException(
+        ATTENDANCE_ERRORS.DRIVER_LINKED_CANNOT_MARK_NON_WORKING.replace(
+          '{driver}',
+          subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'This user',
+        )
+          .replace('{engineer}', holder.engineerName)
+          .replace(
+            '{date}',
+            this.formatLocalYyyyMmDd(this.normalizeAttendanceCalendarDate(workDate)),
+          )
+          .replace('{status}', String(status).toLowerCase()),
+      );
+    }
+
+    await this.driverAssignmentService.release(userId, workDate, actor, entityManager);
+    this.logger.log(
+      `[driver-pairing] released ${userId} from ${holder.engineerId} on ${workDate} — day became ${status}`,
+    );
+    return [userId];
+  }
+
+  /**
+   * Cron entry point for the same problem the manual paths refuse.
+   *
+   * The end-of-day cron marks anyone who never checked in as absent, and that can include a driver
+   * an engineer had claimed. A cron cannot surface an error to anyone and throwing would abandon
+   * the rest of its batch, so here the pairing is unlinked and the allowance re-routed instead.
+   *
+   * Deliberately public: the cron writes attendance through a plain repository update and so
+   * bypasses every pairing path in this service.
+   *
+   * Only unlinks — it does NOT re-route. The end-of-day cron wraps its whole batch in one
+   * transaction, and re-routing reads on its own connection, so it would not see the absent status
+   * yet (the same isolation trap that produced the regularize bug). The cron collects the returned
+   * ids and calls `reRouteReleasedDrivers` once the transaction has committed.
+   */
+  async releaseOwnPairingForSystemNonWorkingDay(
+    userId: string,
+    workDate: Date | string,
+    status: AttendanceStatus | string,
+    entityManager?: EntityManager,
+  ): Promise<string[]> {
+    return this.handleOwnPairingForNonWorkingDay(
+      userId,
+      workDate,
+      status,
+      SYSTEM_USER_ID,
+      'release',
+      entityManager,
+    );
+  }
+
+  /** Companion to the above, to be called by the cron after its transaction has committed. */
+  async reRouteReleasedDrivers(driverIds: string[], workDate: Date | string): Promise<void> {
+    if (!driverIds.length) {
+      return;
+    }
+    await this.reRouteDrivers(driverIds, workDate, SYSTEM_USER_ID);
   }
 
   /**

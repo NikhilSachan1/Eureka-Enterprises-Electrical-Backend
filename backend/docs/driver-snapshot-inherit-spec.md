@@ -176,11 +176,124 @@ it shows up in real data.
    left alone, review entry recorded (unchanged behaviour).
 9. Driver with no engineer → snapshot and allowance exactly as today.
 
-## 9. Open items
+## 9. Decisions taken
 
-1. Should the **ordering check** (§6) be built at all, given it is not needed for correctness? If
-   yes, confirm the narrow table in §6 so it cannot deadlock.
-2. Should `vehicle` be inherited too, or only site/company/contractor? The requirement said
-   "company, contractor, etc." — vehicle is in the snapshot shape but is arguably the *engineer's*
-   vehicle, not the driver's.
-3. Historical backfill — §5 option (a) or (b).
+| Open item | Decision | Rationale |
+|---|---|---|
+| Inherit `vehicle` too? | **Yes** — inherited | Confirmed by the lead. The driver drove the engineer's vehicle that day, so it is the more useful of the two readings. Verified inherited on dev. |
+| Historical backfill (§5) | **No backfill** — option (a) | Requirement is forward-looking reporting; a backfill rewrites attendance rows in already-settled months for cosmetic benefit. |
+| Ordering check (§6) | **Not built** | §2 established the money is already correct without it, so its only value is operational. Building it would block a driver behind an engineer whose day may never be processed. The narrow table in §6 stands as the design if it is ever wanted. |
+
+## 10. Force attendance had the same pairing gap
+
+Regularize synced pairings; **force attendance did not**. An admin forcing an engineer's day with
+`assignedDrivers` wrote the snapshot but never wrote `driver_day_assignments`, so the driver's own
+row never inherited anything and the allowance never re-routed.
+
+Force now mirrors regularize: pairings are synced inside the transaction and `reRouteDrivers` runs
+after it commits.
+
+**Bulk force is deliberately excluded.** `handleBulkForceAttendance` applies one payload to many
+users, so a shared `assignedDrivers` would mean several engineers claiming the same driver on the
+same day — the partial unique index rejects the second, aborting the batch. Bulk force therefore
+strips `assignedDrivers` and logs a `[driver-pairing]` warning. Pair drivers through single force or
+regularize.
+
+## 11. Two regularize bugs found from live dev data
+
+Both surfaced from the reported case (engineer Nikhil + driver Siddhika, both marked absent by the
+cron, then regularized).
+
+**Bug A — the re-route could not see its own transaction.** `reRouteDrivers` was called *inside*
+`this.dataSource.transaction(...)`, but it reads on its own connection. The engineer's new
+`present` status was still uncommitted, so `resolveAssignmentContext` — which requires the
+engineer's day to be a worked status — found nothing, and the driver's snapshot stayed `{}`.
+Fixed by capturing the transaction result and re-routing after it commits:
+
+```ts
+const result = await this.dataSource.transaction(/* ... */);
+await this.reRouteDrivers(affectedDrivers, existingAttendance.attendanceDate, userId);
+return result;
+```
+
+**Bug B — sanitize was skipped on the driver's own regularize.** `sanitizeAssignmentSnapshot` only
+ran when the caller supplied a snapshot (`isSnapshotCorrection`). Regularizing the *driver* without
+one skipped resolution entirely, so a driver who was already paired never gained his engineer.
+Sanitize now always runs, falling back to the stored snapshot:
+
+```ts
+const resolvedSnapshot = await this.sanitizeAssignmentSnapshot(
+  userId,
+  isSnapshotCorrection ? regularizeAttendanceDto.assignmentSnapshot : previousSnapshot,
+  existingAttendance.attendanceDate,
+);
+```
+
+Verified against the real dev rows: 4/4 assertions, including that the fixed path would have
+populated engineer + site + company + vehicle for that exact pair.
+
+## 12. Non-working day while still linked
+
+A driver cannot be absent *and* out with an engineer on the same day. Previously nothing enforced
+this: marking the driver absent emptied his own snapshot while he stayed listed as an assigned
+driver in the engineer's snapshot, and stayed holding the unique-index slot.
+
+`handleOwnPairingForNonWorkingDay` is the mirror of `releaseHeldPairings` (which only handled the
+other direction — an engineer going non-working gives up the drivers he holds). It has two modes,
+because the two kinds of caller need opposite things:
+
+| Path | Mode | Behaviour |
+|---|---|---|
+| Regularize to absent / leave / LWP / holiday | `throw` | `DRIVER_LINKED_CANNOT_MARK_NON_WORKING`, naming the engineer |
+| Force attendance to a non-working status | `throw` | same |
+| Approval **reject** (status → absent) | `throw` | same; in a bulk approval it lands in `errors[]` and the rest still process |
+| End-of-day cron marking absent | `release` | unlinks, logs, re-routes the allowance |
+
+Manual paths throw because the contradiction is between *two people's records* — the engineer said
+the driver was with him, an admin now says he was absent — and silently overriding either one hides
+a data-entry mistake. The error names the engineer so the fix is obvious: remove the driver from
+that attendance first.
+
+Crons release instead: there is no human in the loop to answer an error, and a throw would abandon
+the rest of the batch.
+
+**Where the cron re-routes matters.** The end-of-day cron wraps its whole batch in one
+`dataSource.transaction`, so re-routing inside it would hit exactly the isolation trap of Bug A.
+`releaseOwnPairingForSystemNonWorkingDay` therefore only unlinks and returns the freed driver ids;
+the cron accumulates them across both absent paths (`markAbsentNotCheckedInUsers` and
+`createAbsentForMissingUsers`) and calls `reRouteReleasedDrivers` after the transaction commits.
+
+`createAbsentForMissingUsers` needs the check too: a driver can be claimed for the day without ever
+having an attendance row of his own.
+
+The **morning** cron (`buildAttendanceRecord` → holiday / leave / LWP) needs no check. It runs at
+midnight of the day it creates rows for, and a pairing for a date requires the engineer to already
+have attendance for that date — which regularize and force both refuse for future dates. No pairing
+can exist yet.
+
+### Fixing a blocked case
+
+| Situation | What to do |
+|---|---|
+| Driver was genuinely absent; engineer's day is wrong | Regularize the **engineer** and remove the driver from `assignedDrivers`. The driver is freed, then mark him absent. |
+| Engineer's day is right; the driver's absence is wrong | Don't mark him absent — regularize him to present. He keeps the inherited context and the allowance stays routed to the engineer. |
+| Driver on approved leave, engineer claimed him by mistake | Regularize the engineer to drop the claim, then apply the leave. |
+| Cron already marked the driver absent | Nothing to do — the cron released the link and re-routed. Re-claim him via the engineer's regularize if he did work. |
+
+## 13. Verification (dev only)
+
+- Snapshot inheritance: 12/13 assertions (the skipped one needed a second DRIVER account).
+- The two regularize bugs, reproduced and fixed against the real reported rows: 4/4.
+- Non-working-day rule, both modes, mirroring `findHolder` / `release` SQL exactly: 16/16 —
+  including that the refused attempt writes nothing, that release is idempotent, that a freed driver
+  is immediately re-claimable, and that `SYSTEM_USER_ID` is usable as `deletedBy`.
+
+Still outstanding: an end-to-end run against the booted app. Everything above was asserted at the
+SQL-contract level on dev, plus `tsc` and `eslint` clean.
+
+## 14. Open items
+
+1. Engineer's day is never approved → should the driver's approval be blocked, or is an override
+   needed? (Parked by the lead.)
+2. Engineer's day is rejected → should the driver still be approvable? (Parked.)
+3. Night shifts crossing midnight (§7) — documented as an accepted limitation, not handled.

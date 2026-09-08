@@ -312,6 +312,8 @@ export class AttendanceCronService {
       // Get shift end time from config
       const shiftEndTime = await this.getShiftEndTime();
 
+      const releasedDrivers: string[] = [];
+
       await this.dataSource.transaction(async (entityManager) => {
         // 1. Auto-checkout users who forgot to checkout
         const autoCheckoutResult = await this.autoCheckoutForgottenUsers(
@@ -326,12 +328,17 @@ export class AttendanceCronService {
         const markAbsentResult = await this.markAbsentNotCheckedInUsers(today, entityManager);
         result.markedAbsent = markAbsentResult.count;
         result.errors.push(...markAbsentResult.errors);
+        releasedDrivers.push(...markAbsentResult.releasedDrivers);
 
         // 3. Create ABSENT records for users added after morning cron
         const newAbsentResult = await this.createAbsentForMissingUsers(today, entityManager);
         result.newAbsentRecords = newAbsentResult.count;
         result.errors.push(...newAbsentResult.errors);
+        releasedDrivers.push(...newAbsentResult.releasedDrivers);
       });
+
+      // After commit, so the re-route reads the absent status the batch just wrote.
+      await this.attendanceService.reRouteReleasedDrivers(releasedDrivers, today);
 
       return result;
     });
@@ -348,6 +355,8 @@ export class AttendanceCronService {
     const today: Date = targetDate ? new Date(targetDate) : this.schedulerService.getTodayDateIST();
     const shiftEndTime = await this.getShiftEndTime();
 
+    const releasedDrivers: string[] = [];
+
     await this.dataSource.transaction(async (entityManager) => {
       const autoCheckoutResult = await this.autoCheckoutForgottenUsers(
         today,
@@ -360,11 +369,16 @@ export class AttendanceCronService {
       const markAbsentResult = await this.markAbsentNotCheckedInUsers(today, entityManager);
       result.markedAbsent = markAbsentResult.count;
       result.errors.push(...markAbsentResult.errors);
+      releasedDrivers.push(...markAbsentResult.releasedDrivers);
 
       const newAbsentResult = await this.createAbsentForMissingUsers(today, entityManager);
       result.newAbsentRecords = newAbsentResult.count;
       result.errors.push(...newAbsentResult.errors);
+      releasedDrivers.push(...newAbsentResult.releasedDrivers);
     });
+
+    // After commit, so the re-route reads the absent status the batch just wrote.
+    await this.attendanceService.reRouteReleasedDrivers(releasedDrivers, today);
 
     return result;
   }
@@ -452,8 +466,9 @@ export class AttendanceCronService {
   private async markAbsentNotCheckedInUsers(
     today: Date,
     entityManager: any,
-  ): Promise<{ count: number; errors: string[] }> {
+  ): Promise<{ count: number; errors: string[]; releasedDrivers: string[] }> {
     const errors: string[] = [];
+    const releasedDrivers: string[] = [];
     let count = 0;
 
     const { query, params } = getNotCheckedInAttendancesQuery(today);
@@ -465,6 +480,18 @@ export class AttendanceCronService {
 
     for (const record of notCheckedInRecords) {
       try {
+        // A driver an engineer had claimed for today cannot be absent and with him at once. The
+        // manual paths reject that; a cron has nobody to reject to, so the link is dropped and the
+        // allowance re-routed after commit.
+        releasedDrivers.push(
+          ...(await this.attendanceService.releaseOwnPairingForSystemNonWorkingDay(
+            record.userId,
+            today,
+            AttendanceStatus.ABSENT,
+            entityManager,
+          )),
+        );
+
         await this.attendanceService.update(
           { id: record.id },
           {
@@ -484,7 +511,7 @@ export class AttendanceCronService {
       }
     }
 
-    return { count, errors };
+    return { count, errors, releasedDrivers };
   }
 
   private appendNote(existingNotes: string | null, newNote: string): string {
@@ -497,8 +524,9 @@ export class AttendanceCronService {
   private async createAbsentForMissingUsers(
     today: Date,
     entityManager: any,
-  ): Promise<{ count: number; errors: string[] }> {
+  ): Promise<{ count: number; errors: string[]; releasedDrivers: string[] }> {
     const errors: string[] = [];
+    const releasedDrivers: string[] = [];
     let count = 0;
 
     const { query, params } = getUsersWithoutAttendanceQuery(UserStatus.ACTIVE, today);
@@ -509,6 +537,17 @@ export class AttendanceCronService {
 
     for (const user of usersWithoutAttendance) {
       try {
+        // Same rule as above. A driver can be claimed for the day without ever having an
+        // attendance row of his own, so this path needs the unlink too.
+        releasedDrivers.push(
+          ...(await this.attendanceService.releaseOwnPairingForSystemNonWorkingDay(
+            user.id,
+            today,
+            AttendanceStatus.ABSENT,
+            entityManager,
+          )),
+        );
+
         await this.attendanceService.create(
           {
             userId: user.id,
@@ -535,7 +574,7 @@ export class AttendanceCronService {
       }
     }
 
-    return { count, errors };
+    return { count, errors, releasedDrivers };
   }
 
   // ==================== MARK APPROVAL PENDING ====================
