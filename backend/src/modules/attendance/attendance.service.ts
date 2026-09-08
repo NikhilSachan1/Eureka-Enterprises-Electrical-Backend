@@ -1154,9 +1154,26 @@ export class AttendanceService {
     bulkForceAttendanceDto: ForceAttendanceDto & { timezone: string },
   ): Promise<{ message: string }> {
     try {
+      // A bulk force sends ONE snapshot for every userId, so a driver list in it cannot be
+      // meaningful: the same driver cannot be with several engineers on the same day, and the
+      // partial-unique index on driver_day_assignments would reject the second claim and abort the
+      // whole batch. Dropped here so the per-user path never sees it — claiming drivers is a
+      // single-user operation.
+      const { assignedDrivers: _ignoredForBulk, ...snapshotWithoutDrivers } =
+        bulkForceAttendanceDto.assignmentSnapshot ?? {};
+      const hadDriverList = _ignoredForBulk !== undefined;
+      if (hadDriverList) {
+        this.logger.warn(
+          `[driver-pairing] assignedDrivers ignored on bulk force attendance for ${bulkForceAttendanceDto.userIds.length} users — claim drivers via a single force or regularize instead`,
+        );
+      }
+
       for (const userId of bulkForceAttendanceDto.userIds) {
         await this.handleSingleForceAttendance(createdBy, {
           ...bulkForceAttendanceDto,
+          assignmentSnapshot: bulkForceAttendanceDto.assignmentSnapshot
+            ? (snapshotWithoutDrivers as ForceAttendanceDto['assignmentSnapshot'])
+            : undefined,
           userId,
         });
       }
@@ -1226,7 +1243,36 @@ export class AttendanceService {
       const isPreviousDay = this.dateTimeService.isPastDate(attendanceDateStr, timezone);
       const isSameDay = this.dateTimeService.isToday(attendanceDateStr, timezone);
 
+      let affectedDrivers: string[] = [];
+
       const forceResult = await this.dataSource.transaction(async (entityManager) => {
+        // Force attendance is a correction path like regularize, so it has to maintain pairings
+        // too. Without this an admin forcing an engineer's day with `assignedDrivers` created no
+        // pairing at all, leaving every one of those drivers with an empty snapshot and their
+        // allowance stranded with them.
+        //
+        // `assignedDrivers` is read off the DTO, not off `assignmentSnapshot` above:
+        // sanitizeAssignmentSnapshot strips the key, because it is an instruction rather than
+        // stored data.
+        const changed = await this.syncDriverClaims(
+          userId,
+          targetDateOnly,
+          forceAttendanceDto.assignmentSnapshot?.assignedDrivers,
+          entityManager,
+        );
+
+        // Forcing someone to absent / leave / holiday means nobody was with them, so their
+        // pairings are given up — otherwise the driver stays blocked from being claimed by
+        // whoever he really was with.
+        const isNonWorkingDay = AttendanceService.NON_WORKING_STATUSES.includes(
+          status as AttendanceStatus,
+        );
+        const freed = isNonWorkingDay
+          ? await this.releaseHeldPairings(userId, targetDateOnly, createdBy, entityManager)
+          : await this.driversHeldBy(userId, targetDateOnly);
+
+        affectedDrivers = [...new Set([...changed, ...freed])];
+
         const existingAttendance = await this.attendanceRepository.findOne(
           {
             where: {
@@ -1307,6 +1353,10 @@ export class AttendanceService {
           );
         }
       });
+
+      // Outside the transaction, like the check-in and regularize paths: the pairing only resolves
+      // once this person's own day is committed and counts as worked.
+      await this.reRouteDrivers(affectedDrivers, targetDateOnly, createdBy);
 
       // Fire-and-forget notification for non-LEAVE force attendance (LEAVE has its own notification)
       if (status !== AttendanceStatus.LEAVE && status !== AttendanceStatus.LEAVE_WITHOUT_PAY) {
