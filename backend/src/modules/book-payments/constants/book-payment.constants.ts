@@ -1,6 +1,8 @@
 export const BOOK_PAYMENT_ERRORS = {
   NOT_FOUND: 'Book payment not found.',
   CANNOT_UPDATE_HAS_TRANSFER: 'Cannot update book payment — a bank transfer exists.',
+  ADVANCE_BACKED_AMOUNT_NOT_EDITABLE:
+    'The amount of an advance-backed book payment cannot be edited here. Adjust the advance payment instead.',
   INVOICE_NOT_FOUND: 'Invoice not found.',
   INVOICE_NOT_APPROVED: 'Invoice must be approved before booking payment.',
   INVOICE_NOT_PURCHASE: 'Book payments can only be created for PURCHASE side invoices.',
@@ -46,3 +48,15 @@ export const BOOK_PAYMENT_RESPONSES = {
   UNLOCK_GRANTED: 'Book payment unlocked',
   UNLOCK_REJECTED: 'Unlock request rejected — book payment remains locked',
 };
+
+/**
+ * What a book payment is raised against. Exactly one of `invoiceId` / `advancePaymentId` is set
+ * to match, enforced in the database by CHK_BOOK_PAYMENT_SOURCE.
+ *
+ * INVOICE is the default so every row that predates advance payments reads correctly — all of them
+ * were invoice-backed, since nothing else was possible.
+ */
+export enum BookPaymentSourceType {
+  INVOICE = 'INVOICE',
+  ADVANCE = 'ADVANCE',
+}

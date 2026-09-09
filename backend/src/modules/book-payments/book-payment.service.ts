@@ -13,6 +13,7 @@ import { buildVendorListQuery } from './queries/book-payment.queries';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
+import { BookPaymentSourceType } from './constants/book-payment.constants';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
 import {
   PartyType,
@@ -22,6 +23,15 @@ import {
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
+
+/**
+ * A book payment rolls up onto an invoice only when it is invoice-backed. Advance-backed bookings
+ * carry a null `invoiceId`, and `strictNullChecks` is off in this project, so the compiler will not
+ * flag a null dereference — the guard has to be explicit rather than relying on types.
+ */
+function isInvoiceBacked(bp: Pick<BookPaymentEntity, 'sourceType' | 'invoiceId'>): boolean {
+  return bp.sourceType !== BookPaymentSourceType.ADVANCE && !!bp.invoiceId;
+}
 
 @Injectable()
 export class BookPaymentService {
@@ -244,6 +254,13 @@ export class BookPaymentService {
         const newTransferAmount = Number(dto.transferAmount);
         const oldTransferAmount = Number(bp.paymentTotalAmount);
 
+        // The ceiling re-check below reads the source invoice, so it only applies to invoice-backed
+        // bookings. An advance-backed one is capped by its advance, not an invoice, and reaching
+        // here with a null invoiceId would fetch nothing and then dereference null.
+        if (!isInvoiceBacked(bp)) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.ADVANCE_BACKED_AMOUNT_NOT_EDITABLE);
+        }
+
         // Re-check ceiling: remove old amount, add new amount
         const invoice = await em
           .getRepository(SiteInvoiceEntity)
@@ -327,9 +344,16 @@ export class BookPaymentService {
 
       // Reverse the booked amount that was added at create time
       const effectiveAmount = Number(bp.paymentTotalAmount);
-      await em
-        .getRepository(SiteInvoiceEntity)
-        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      // Only invoice-backed bookings roll up onto an invoice — an advance-backed one has no
+      // invoiceId, and updating by a null id would silently match nothing.
+      if (isInvoiceBacked(bp)) {
+        await em
+          .getRepository(SiteInvoiceEntity)
+          .update(
+            { id: bp.invoiceId },
+            { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` },
+          );
+      }
       await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
 
       await this.bookPaymentRepository.update({ id }, { deletedBy }, em);
@@ -369,11 +393,17 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_REJECT_APPROVED);
       }
 
-      // Reverse bookedTotal that was incremented on create
+      // Reverse bookedTotal that was incremented on create. Advance-backed bookings have no
+      // invoice to reverse against — only the PO rollup applies to them.
       const effectiveAmount = Number(bp.paymentTotalAmount);
-      await em
-        .getRepository(SiteInvoiceEntity)
-        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      if (isInvoiceBacked(bp)) {
+        await em
+          .getRepository(SiteInvoiceEntity)
+          .update(
+            { id: bp.invoiceId },
+            { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` },
+          );
+      }
       await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
 
       await this.bookPaymentRepository.update(
