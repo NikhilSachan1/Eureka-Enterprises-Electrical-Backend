@@ -10,4 +10,9 @@ import { BaseEntity } from 'src/utils/base-entity/base-entity';
 export class PoItemMasterEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 255 })
   name: string;
+
+  // The unit last saved for this item name, so the typeahead can pre-fill it. Advisory only — the
+  // user can still change it per line.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  unit: string | null;
 }

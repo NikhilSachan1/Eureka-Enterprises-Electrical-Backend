@@ -54,7 +54,16 @@ export class AttendanceEntity extends BaseEntity {
   assignmentSnapshot: {
     site?: { id: string; name: string; fullAddress?: string };
     company?: { id: string; name: string; fullAddress?: string };
-    contractors?: Array<{ id: string; name: string }>;
+    // city / state / gstNumber are read from the contractors master when the snapshot is written,
+    // never taken from the client. Optional because rows written before that existed have only
+    // id and name.
+    contractors?: Array<{
+      id: string;
+      name: string;
+      city?: string;
+      state?: string;
+      gstNumber?: string;
+    }>;
     vehicle?: { id: string; registrationNo: string };
     assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
   };

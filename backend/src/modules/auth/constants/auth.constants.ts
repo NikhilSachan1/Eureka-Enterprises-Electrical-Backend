@@ -31,7 +31,22 @@ export const AUTH_ERRORS = {
   REFRESH_TOKEN_REVOKED: 'Refresh token has been revoked. Please sign in again.',
   REFRESH_TOKEN_EXPIRED: 'Refresh token has expired. Please sign in again.',
   REFRESH_TOKEN_NOT_FOUND: 'Refresh token not found. Please sign in again.',
+  // Admin-set password reset
+  RESET_TARGET_NOT_ALLOWED:
+    'Only employee and driver accounts can have their password reset this way. This user holds a privileged role.',
+  RESET_TARGET_SELF:
+    'You cannot reset your own password here. Use change password or forgot password.',
+  RESET_TARGET_HAS_NO_ROLES: 'This user has no roles assigned, so their password cannot be reset.',
 };
+
+/**
+ * Roles a target may hold and still be password-resettable by an admin.
+ *
+ * This is a privilege-escalation guard, not a convenience filter: HR legitimately holds the
+ * reset permission, so without it an HR user could reset the SUPER_ADMIN's password and sign in
+ * as them. Privileged accounts use the emailed forgot-password flow instead.
+ */
+export const ADMIN_RESETTABLE_TARGET_ROLES: readonly string[] = ['EMPLOYEE', 'DRIVER'];
 
 export const AUTH_RESPONSES = {
   PASSWORD_RESET: 'Your password has been reset successfully.',

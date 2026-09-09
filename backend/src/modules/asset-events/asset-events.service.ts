@@ -76,19 +76,18 @@ export class AssetEventsService {
         }
         break;
 
-      case AssetEventTypes.HANDOVER_ACCEPTED:
-        if (!hasFiles) {
-          throw new BadRequestException(ASSET_EVENTS_ERRORS.FILES_REQUIRED_FOR_HANDOVER_ACCEPT);
-        }
-        break;
-
       case AssetEventTypes.CALIBRATED:
         if (!hasFiles) {
           throw new BadRequestException(ASSET_EVENTS_ERRORS.FILES_REQUIRED_FOR_CALIBRATION);
         }
         break;
 
-      // Optional files for these actions
+      // Optional files for these actions.
+      // HANDOVER_ACCEPTED used to require files as condition evidence from the receiver; that was
+      // dropped so an accept is never blocked when the receiver cannot photograph the asset. Files
+      // are still attached normally when sent. Who may accept is unaffected — a pending handover
+      // must exist and only its target user can accept it.
+      case AssetEventTypes.HANDOVER_ACCEPTED:
       case AssetEventTypes.HANDOVER_REJECTED:
       case AssetEventTypes.HANDOVER_CANCELLED:
       case AssetEventTypes.DEALLOCATED:

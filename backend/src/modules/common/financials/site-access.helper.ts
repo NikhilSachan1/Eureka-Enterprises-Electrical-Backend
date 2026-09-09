@@ -26,6 +26,7 @@ export const SITE_ACCESS_REASONS = {
   NOT_ALLOCATED: 'You are not allocated to this site.',
   CIVIL_PM_ONLY: 'Civil site: only the site Project Manager can create this document.',
   CIVIL_SITE_ONLY: 'A Purchase Order can only be created for a Civil site.',
+  PM_ONLY: 'Only the site Project Manager can do this.',
 };
 
 /**
@@ -41,12 +42,20 @@ export const SITE_ACCESS_REASONS = {
  *
  * `requirePmForCivil` (PO): if the site's `siteTypes` includes 'Civil', the user's
  * allocation role must be Project Manager. JMC / Invoice pass this false → any allocated user.
+ *
+ * `requirePm` (site-vendor assignment): the user's allocation role must be Project
+ * Manager for **every** site type — unlike `requirePmForCivil`, which only bites on Civil.
  */
 export async function checkSiteCreateAccess(
   db: DataSource | EntityManager,
   userId: string,
   siteId: string,
-  opts: { requirePmForCivil?: boolean; civilOnly?: boolean; activeRole?: string } = {},
+  opts: {
+    requirePmForCivil?: boolean;
+    requirePm?: boolean;
+    civilOnly?: boolean;
+    activeRole?: string;
+  } = {},
 ): Promise<SiteAccessResult> {
   const [site] = await db.query(
     `SELECT "siteTypes" FROM sites WHERE id = $1 AND "deletedAt" IS NULL`,
@@ -72,6 +81,11 @@ export async function checkSiteCreateAccess(
     [userId, siteId],
   );
   if (!alloc) return { allowed: false, reason: SITE_ACCESS_REASONS.NOT_ALLOCATED };
+
+  // Applies to every site type, so it is checked before the Civil-only variant.
+  if (opts.requirePm && String(alloc.role) !== PROJECT_MANAGER_SITE_ROLE) {
+    return { allowed: false, reason: SITE_ACCESS_REASONS.PM_ONLY };
+  }
 
   if (opts.requirePmForCivil) {
     if (types.includes('CIVIL') && String(alloc.role) !== PROJECT_MANAGER_SITE_ROLE) {

@@ -2,6 +2,28 @@ import { AttendanceQueryDto } from '../dto/attendance-query.dto';
 import { ATTENDANCE_SORTABLE_FIELDS } from '../constants/attendance.constants';
 import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
+/**
+ * Drivers paired with this row's owner on this row's date.
+ *
+ * Read from driver_day_assignments rather than the attendance row: the pairing lives there, and a
+ * copy on the row would be a second version of the truth that can drift. Empty for anyone who is
+ * not an engineer with drivers that day, which is most rows.
+ */
+const DRIVERS_FOR_ROW = `
+      COALESCE((
+        SELECT json_agg(json_build_object(
+          'id', du."id",
+          'firstName', du."firstName",
+          'lastName', du."lastName",
+          'employeeId', du."employeeId"
+        ) ORDER BY du."firstName")
+        FROM "driver_day_assignments" dda
+        INNER JOIN "users" du ON du."id" = dda."driverId" AND du."deletedAt" IS NULL
+        WHERE dda."engineerId" = a."userId"
+          AND dda."workDate" = a."attendanceDate"
+          AND dda."deletedAt" IS NULL
+      ), '[]'::json) as "assignedDrivers"`;
+
 export function buildAttendanceListQuery(query: AttendanceQueryDto) {
   const {
     page,
@@ -102,6 +124,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       a."approvalComment",
       a."notes",
       a."assignmentSnapshot" as "assignmentSnapshot",
+      ${DRIVERS_FOR_ROW},
       a."createdAt",
       a."updatedAt",
       a."createdBy",

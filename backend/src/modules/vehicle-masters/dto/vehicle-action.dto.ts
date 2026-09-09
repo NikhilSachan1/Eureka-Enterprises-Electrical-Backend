@@ -9,7 +9,7 @@ import { VehicleEventTypes } from '../constants/vehicle-masters.constants';
  * | Action              | toUserId           | Files      |
  * |---------------------|-------------------|------------|
  * | HANDOVER_INITIATED  | Required          | Required   |
- * | HANDOVER_ACCEPTED   | Derived (JWT)     | Required   |
+ * | HANDOVER_ACCEPTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_REJECTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_CANCELLED  | Derived (JWT)     | Optional   |
  * | DEALLOCATED         | Auto (assignedTo) | Optional   |
@@ -76,7 +76,7 @@ export class VehicleActionDto {
   metadata?: Record<string, any>;
 
   @ApiProperty({
-    description: 'Files to be uploaded (required for HANDOVER_INITIATED, HANDOVER_ACCEPTED)',
+    description: 'Files to be uploaded (required for HANDOVER_INITIATED)',
     type: 'string',
     format: 'binary',
     isArray: true,

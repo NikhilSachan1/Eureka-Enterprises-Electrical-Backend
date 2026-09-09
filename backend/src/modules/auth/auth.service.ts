@@ -11,8 +11,19 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../users/user.service';
 import { Environments } from '../../../env-configs';
-import { SignInDto, ResetPasswordDto, SwitchRoleDto, RefreshTokenDto } from './dto';
-import { AUTH_ERRORS, AUTH_RESPONSES, AUTH_REDIRECT_ROUTES } from './constants/auth.constants';
+import {
+  SignInDto,
+  ResetPasswordDto,
+  SwitchRoleDto,
+  RefreshTokenDto,
+  AdminResetPasswordDto,
+} from './dto';
+import {
+  AUTH_ERRORS,
+  AUTH_RESPONSES,
+  AUTH_REDIRECT_ROUTES,
+  ADMIN_RESETTABLE_TARGET_ROLES,
+} from './constants/auth.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { EmailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
@@ -27,6 +38,8 @@ import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(forwardRef(() => UserService))
     private userService: UserService,
@@ -373,6 +386,80 @@ export class AuthService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * An admin sets another user's password directly, then shares it out-of-band.
+   *
+   * Exists for the case the emailed link cannot serve: a driver with no working email address has
+   * no way to receive a reset link at all.
+   *
+   * Restricted to targets holding only EMPLOYEE / DRIVER. That is a privilege-escalation guard, not
+   * a convenience filter — HR legitimately holds the reset permission, so without it an HR user
+   * could reset the SUPER_ADMIN's password and immediately sign in as them. The permission check
+   * cannot catch that, because the permission is exactly what they are supposed to have.
+   *
+   * On success it mirrors the self-service reset above: bcrypt hash, bump `passwordUpdatedAt` (which
+   * also expires any reset link already sitting in the target's inbox, since resetPassword compares
+   * it against the link's `iat`), and revoke every active refresh token so no existing session
+   * outlives the reset.
+   */
+  async adminResetUserPassword(
+    targetUserId: string,
+    dto: AdminResetPasswordDto,
+    actorUserId: string,
+  ) {
+    const { newPassword, confirmPassword } = dto;
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestException(AUTH_ERRORS.PASSWORDS_DO_NOT_MATCH);
+    }
+
+    if (targetUserId === actorUserId) {
+      throw new ForbiddenException(AUTH_ERRORS.RESET_TARGET_SELF);
+    }
+
+    const target = await this.userService.findOne({ id: targetUserId, deletedAt: null });
+    if (!target) {
+      throw new NotFoundException(AUTH_ERRORS.EMAIL_NOT_EXISTS);
+    }
+
+    const targetRoles = await this.userRoleService.findAll({
+      where: { userId: targetUserId },
+      relations: ['role'],
+    });
+    if (!targetRoles || targetRoles.length === 0) {
+      throw new ForbiddenException(AUTH_ERRORS.RESET_TARGET_HAS_NO_ROLES);
+    }
+
+    // Every role the target holds must be resettable — holding one privileged role is enough to
+    // block, otherwise an admin who also has EMPLOYEE would slip through.
+    const roleNames = targetRoles.map((ur) => ur.role.name);
+    const hasOnlyResettableRoles = roleNames.every((name) =>
+      ADMIN_RESETTABLE_TARGET_ROLES.includes(String(name).toUpperCase()),
+    );
+    if (!hasOnlyResettableRoles) {
+      throw new ForbiddenException(AUTH_ERRORS.RESET_TARGET_NOT_ALLOWED);
+    }
+
+    await this.userService.update(
+      { id: targetUserId },
+      {
+        password: this.utilityService.createHash(confirmPassword),
+        passwordUpdatedAt: new Date(),
+        updatedBy: actorUserId,
+      },
+    );
+
+    await this.refreshTokenRepository.update(
+      { userId: targetUserId, isRevoked: false },
+      { isRevoked: true },
+    );
+
+    this.logger.log(`Password for user ${targetUserId} was reset by ${actorUserId}`);
+
+    // Deliberately does not echo the password back — the caller typed it and already has it, and
+    // returning it would put a live credential into response logs and browser history.
+    return { message: AUTH_RESPONSES.PASSWORD_RESET };
   }
 
   async resetPasswordTokenValidation(tokenHash: string) {

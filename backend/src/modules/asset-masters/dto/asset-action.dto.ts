@@ -9,7 +9,7 @@ import { ASSET_MASTERS_ERRORS, AssetEventTypes } from '../constants/asset-master
  * | Action              | toUserId           | Files      |
  * |---------------------|-------------------|------------|
  * | HANDOVER_INITIATED  | Required          | Required   |
- * | HANDOVER_ACCEPTED   | Derived (JWT)     | Required   |
+ * | HANDOVER_ACCEPTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_REJECTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_CANCELLED  | Derived (JWT)     | Optional   |
  * | DEALLOCATED         | Auto (assignedTo) | Optional   |
@@ -66,8 +66,7 @@ export class AssetActionDto {
   metadata?: Record<string, any>;
 
   @ApiProperty({
-    description:
-      'Files to be uploaded (required for HANDOVER_INITIATED, HANDOVER_ACCEPTED, CALIBRATED)',
+    description: 'Files to be uploaded (required for HANDOVER_INITIATED, CALIBRATED)',
     type: 'array',
     items: { type: 'string', format: 'binary' },
     required: false,

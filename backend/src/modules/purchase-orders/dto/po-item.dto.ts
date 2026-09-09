@@ -33,6 +33,17 @@ export class PoItemDto {
   @Min(0)
   quantity: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Unit of measure for quantity. Must be one of the values in the `po_units` config ' +
+      '(GET /configurations/details?key=po_units). Optional — omit to leave it unset.',
+    example: 'Nos',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(20)
+  unit?: string;
+
   @ApiProperty({ description: 'Rate per unit', example: 350 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

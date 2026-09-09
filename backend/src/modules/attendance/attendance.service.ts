@@ -77,6 +77,11 @@ import { Roles } from '../roles/constants/role.constants';
 import { TransactionType } from '../expense-tracker/constants/expense-tracker.constants';
 import { AuditLogService } from '../audit-logs/audit-log.service';
 import { EntityAuditAction } from '../audit-logs/entities/entity-audit-log.entity';
+import {
+  DriverAssignmentService,
+  DriverAssignmentContext,
+} from '../driver-assignments/driver-assignment.service';
+import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 
 type AssignmentEngineer = NonNullable<
   NonNullable<AttendanceEntity['assignmentSnapshot']>['assignedEngineer']
@@ -105,6 +110,7 @@ export class AttendanceService {
     @Inject(forwardRef(() => LeaveBalancesService))
     private readonly leaveBalancesService: LeaveBalancesService,
     private readonly auditLogService: AuditLogService,
+    private readonly driverAssignmentService: DriverAssignmentService,
   ) {}
 
   /**
@@ -116,7 +122,7 @@ export class AttendanceService {
     entityId: string;
     userId: string;
     attendanceDate: Date | string;
-    source: 'APPROVAL' | 'FORCE_STATUS_CHANGE' | 'REGULARIZATION';
+    source: 'APPROVAL' | 'FORCE_STATUS_CHANGE' | 'REGULARIZATION' | 'PAIRING_CHANGE';
     changedBy?: string;
     error: unknown;
   }): Promise<void> {
@@ -156,13 +162,15 @@ export class AttendanceService {
 
   async handleAttendanceAction(userId: string, attendanceActionDto: AttendanceActionDto) {
     const { action, entrySourceType, attendanceType, notes, timezone } = attendanceActionDto;
+    const todayDate = this.dateTimeService.getStartOfToday(timezone);
     const assignmentSnapshot = await this.sanitizeAssignmentSnapshot(
       userId,
       attendanceActionDto.assignmentSnapshot,
+      todayDate,
     );
-    const todayDate = this.dateTimeService.getStartOfToday(timezone);
     const currentTimeUTC = new Date();
     const { configSettingId, shiftConfigs } = await this.getShiftConfigs();
+    let affectedDrivers: string[] = [];
 
     const result = await this.dataSource.transaction(async (entityManager) => {
       const existingAttendance = await this.attendanceRepository.findOne(
@@ -175,6 +183,17 @@ export class AttendanceService {
         },
         entityManager,
       );
+
+      // The engineer states which drivers are with him as part of his own check-in, which is what
+      // guarantees he was present when he claimed them — the claim IS the check-in.
+      if (action === AttendanceAction.CHECK_IN) {
+        affectedDrivers = await this.syncDriverClaims(
+          userId,
+          todayDate,
+          attendanceActionDto.assignmentSnapshot?.assignedDrivers,
+          entityManager,
+        );
+      }
 
       switch (action) {
         case AttendanceAction.CHECK_IN:
@@ -205,6 +224,10 @@ export class AttendanceService {
       }
     });
 
+    // After the transaction, so the engineer's own row already counts as worked — the pairing does
+    // not resolve until it does.
+    await this.reRouteDrivers(affectedDrivers, todayDate, userId);
+
     // Fire-and-forget WhatsApp notifications (do not block the response)
     if (action === AttendanceAction.CHECK_IN && 'checkInTime' in result) {
       this.sendCheckInNotification(userId, todayDate, result.checkInTime);
@@ -226,13 +249,7 @@ export class AttendanceService {
     configSettingId: string,
     shiftConfigs: any,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     await this.validateShiftTiming(shiftConfigs, currentTime);
 
@@ -487,13 +504,21 @@ export class AttendanceService {
     // The engineer inside the snapshot decides who receives the day's food allowance, so a
     // client-supplied snapshot goes through the same driver-only guard as check-in and force.
     const previousSnapshot = existingAttendance.assignmentSnapshot;
-    const resolvedSnapshot = isSnapshotCorrection
-      ? await this.sanitizeAssignmentSnapshot(userId, regularizeAttendanceDto.assignmentSnapshot)
-      : previousSnapshot;
+    // Sanitised even when the client sent no snapshot. A driver has nothing of his own to submit,
+    // so the old `isSnapshotCorrection ? sanitize : keep-as-is` meant regularizing a driver never
+    // re-derived his engineer — his snapshot stayed exactly as empty as the cron left it. Passing
+    // the previous snapshot through is idempotent: sanitize strips assignedEngineer/assignedDrivers
+    // and re-derives them from the pairing, so a non-driver simply keeps what he had.
+    const resolvedSnapshot = await this.sanitizeAssignmentSnapshot(
+      userId,
+      isSnapshotCorrection ? regularizeAttendanceDto.assignmentSnapshot : previousSnapshot,
+      existingAttendance.attendanceDate,
+    );
 
     // Every row written below carries the target status, so the working/non-working decision can
     // be made once here rather than at each of the branches.
     const snapshotToApply = this.snapshotForStatus(status as AttendanceStatus, resolvedSnapshot);
+    let affectedDrivers: string[] = [];
     const { shiftConfigs } = await this.getShiftConfigs();
     await this.isRegularizationAllowed({
       attendanceDate: existingAttendance.attendanceDate,
@@ -512,7 +537,47 @@ export class AttendanceService {
       }
     }
 
-    return await this.dataSource.transaction(async (entityManager) => {
+    const result = await this.dataSource.transaction(async (entityManager) => {
+      // Regularize is the correction path for pairings too: an engineer who forgot a driver, named
+      // the wrong one, or needs to drop one submits the corrected list here and syncClaims works
+      // out which to claim and which to release.
+      const changed = await this.syncDriverClaims(
+        userId,
+        existingAttendance.attendanceDate,
+        regularizeAttendanceDto.assignmentSnapshot?.assignedDrivers,
+        entityManager,
+      );
+
+      // Regularizing his own day to absent, leave or holiday means he had nobody with him, so the
+      // pairings are given up outright — leaving them would block whoever the driver really was
+      // with from claiming him.
+      const isNonWorkingDay = AttendanceService.NON_WORKING_STATUSES.includes(
+        status as AttendanceStatus,
+      );
+      // The other direction: if THIS person is somebody's driver that day, a non-working status
+      // contradicts the engineer's record, so it is refused rather than silently unlinked.
+      if (isNonWorkingDay) {
+        await this.handleOwnPairingForNonWorkingDay(
+          userId,
+          existingAttendance.attendanceDate,
+          status,
+          userId,
+          'throw',
+          entityManager,
+        );
+      }
+
+      const freed = isNonWorkingDay
+        ? await this.releaseHeldPairings(
+            userId,
+            existingAttendance.attendanceDate,
+            userId,
+            entityManager,
+          )
+        : await this.driversHeldBy(userId, existingAttendance.attendanceDate);
+
+      affectedDrivers = [...new Set([...changed, ...freed])];
+
       const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(
         checkInTime,
         timezone || shiftConfigs.timezone,
@@ -982,6 +1047,18 @@ export class AttendanceService {
         attendanceId,
       };
     });
+
+    // Deliberately AFTER the transaction, matching check-in and force attendance.
+    //
+    // It used to run inside it, on the reasoning that the status change had already been written.
+    // But reRouteDriverAllowance reads and writes through `this.attendanceRepository` /
+    // `this.dataSource` without the entityManager, so it runs on a different connection and could
+    // not see the uncommitted status. Regularizing an engineer from absent to present therefore
+    // left him looking absent to the re-route, the pairing did not resolve, and every driver he
+    // had just claimed kept an empty snapshot with his allowance stranded.
+    await this.reRouteDrivers(affectedDrivers, existingAttendance.attendanceDate, userId);
+
+    return result;
   }
 
   private async validateTimeWithinShift(shiftConfigs: any, timeToValidate: Date, timeType: string) {
@@ -1096,9 +1173,30 @@ export class AttendanceService {
     bulkForceAttendanceDto: ForceAttendanceDto & { timezone: string },
   ): Promise<{ message: string }> {
     try {
+      // This is the only force-attendance entry point — the route always sends `userIds`, even for
+      // one person — so a driver list is dropped only when the batch really is a batch.
+      //
+      // With several userIds one snapshot is applied to all of them, and a driver list in it cannot
+      // be meaningful: the same driver cannot be with several engineers on the same day, and the
+      // partial-unique index on driver_day_assignments would reject the second claim and abort the
+      // whole batch. With a single userId it is exactly as meaningful as it is on regularize, so it
+      // is passed straight through.
+      const isBatch = bulkForceAttendanceDto.userIds.length > 1;
+      const { assignedDrivers: _ignoredForBulk, ...snapshotWithoutDrivers } =
+        bulkForceAttendanceDto.assignmentSnapshot ?? {};
+      if (isBatch && _ignoredForBulk !== undefined) {
+        this.logger.warn(
+          `[driver-pairing] assignedDrivers ignored on bulk force attendance for ${bulkForceAttendanceDto.userIds.length} users — claim drivers by forcing one user at a time, or via regularize`,
+        );
+      }
+
       for (const userId of bulkForceAttendanceDto.userIds) {
         await this.handleSingleForceAttendance(createdBy, {
           ...bulkForceAttendanceDto,
+          assignmentSnapshot:
+            isBatch && bulkForceAttendanceDto.assignmentSnapshot
+              ? (snapshotWithoutDrivers as ForceAttendanceDto['assignmentSnapshot'])
+              : bulkForceAttendanceDto.assignmentSnapshot,
           userId,
         });
       }
@@ -1135,6 +1233,7 @@ export class AttendanceService {
       const assignmentSnapshot = await this.sanitizeAssignmentSnapshot(
         userId,
         forceAttendanceDto.assignmentSnapshot,
+        attendanceDate,
       );
 
       // Use timezone-aware date comparison
@@ -1167,7 +1266,49 @@ export class AttendanceService {
       const isPreviousDay = this.dateTimeService.isPastDate(attendanceDateStr, timezone);
       const isSameDay = this.dateTimeService.isToday(attendanceDateStr, timezone);
 
+      let affectedDrivers: string[] = [];
+
       const forceResult = await this.dataSource.transaction(async (entityManager) => {
+        // Force attendance is a correction path like regularize, so it has to maintain pairings
+        // too. Without this an admin forcing an engineer's day with `assignedDrivers` created no
+        // pairing at all, leaving every one of those drivers with an empty snapshot and their
+        // allowance stranded with them.
+        //
+        // `assignedDrivers` is read off the DTO, not off `assignmentSnapshot` above:
+        // sanitizeAssignmentSnapshot strips the key, because it is an instruction rather than
+        // stored data.
+        const changed = await this.syncDriverClaims(
+          userId,
+          targetDateOnly,
+          forceAttendanceDto.assignmentSnapshot?.assignedDrivers,
+          entityManager,
+        );
+
+        // Forcing someone to absent / leave / holiday means nobody was with them, so their
+        // pairings are given up — otherwise the driver stays blocked from being claimed by
+        // whoever he really was with.
+        const isNonWorkingDay = AttendanceService.NON_WORKING_STATUSES.includes(
+          status as AttendanceStatus,
+        );
+        // Same refusal as regularize: forcing someone to a non-working day while an engineer has
+        // them claimed as a driver is a contradiction the admin has to resolve explicitly.
+        if (isNonWorkingDay) {
+          await this.handleOwnPairingForNonWorkingDay(
+            userId,
+            targetDateOnly,
+            status,
+            createdBy,
+            'throw',
+            entityManager,
+          );
+        }
+
+        const freed = isNonWorkingDay
+          ? await this.releaseHeldPairings(userId, targetDateOnly, createdBy, entityManager)
+          : await this.driversHeldBy(userId, targetDateOnly);
+
+        affectedDrivers = [...new Set([...changed, ...freed])];
+
         const existingAttendance = await this.attendanceRepository.findOne(
           {
             where: {
@@ -1249,6 +1390,10 @@ export class AttendanceService {
         }
       });
 
+      // Outside the transaction, like the check-in and regularize paths: the pairing only resolves
+      // once this person's own day is committed and counts as worked.
+      await this.reRouteDrivers(affectedDrivers, targetDateOnly, createdBy);
+
       // Fire-and-forget notification for non-LEAVE force attendance (LEAVE has its own notification)
       if (status !== AttendanceStatus.LEAVE && status !== AttendanceStatus.LEAVE_WITHOUT_PAY) {
         this.sendForceAttendanceNotification(userId, createdBy, targetDateOnly, status);
@@ -1276,13 +1421,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     const shiftStatus = await this.getShiftStatus(shiftConfigs, currentTime);
 
@@ -1366,13 +1505,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     if (!checkInTime) {
       throw new BadRequestException(ATTENDANCE_ERRORS.FORCE_ATTENDANCE_CHECK_IN_TIME_REQUIRED);
@@ -1424,13 +1557,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     // After shift - both check-in and check-out are required
     if (!checkInTime || !checkOutTime) {
@@ -1512,13 +1639,7 @@ export class AttendanceService {
     attendanceType: AttendanceType,
     timezone: string,
     entityManager: any,
-    assignmentSnapshot?: {
-      site?: { id: string; name: string; fullAddress?: string };
-      company?: { id: string; name: string; fullAddress?: string };
-      contractors?: Array<{ id: string; name: string }>;
-      vehicle?: { id: string; registrationNo: string };
-      assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
-    },
+    assignmentSnapshot?: AttendanceEntity['assignmentSnapshot'],
   ) {
     if (!checkInTime || !checkOutTime) {
       throw new BadRequestException(
@@ -1645,6 +1766,8 @@ export class AttendanceService {
       workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
       notes: record.notes,
       assignmentSnapshot: record.assignmentSnapshot ?? undefined,
+      // Empty for anyone who is not an engineer holding drivers that day, which is most rows.
+      assignedDrivers: record.assignedDrivers ?? [],
     };
   }
 
@@ -1747,9 +1870,20 @@ export class AttendanceService {
         },
       });
 
+      const driverMap = await this.driverAssignmentService.loadDriversFor(
+        attendance.records.map((record) => ({
+          engineerId: record.userId,
+          workDate: record.attendanceDate,
+        })),
+      );
+
       return attendance.records.map((record) => {
         return {
           ...record,
+          assignedDrivers:
+            driverMap.get(
+              this.driverAssignmentService.driverMapKey(record.userId, record.attendanceDate),
+            ) ?? [],
           // User with standard fields (id, firstName, lastName, email, employeeId)
           user: record.user
             ? {
@@ -1859,6 +1993,7 @@ export class AttendanceService {
           contractors: siteData?.contractors || [],
           vehicle: vehicleData,
           assignedEngineer: await this.resolveVisibleEngineer(userId, siteData?.assignedEngineer),
+          assignedDrivers: await this.loadDriversForDay(userId, todayDate),
           message: 'No attendance record found for today',
         };
       }
@@ -1906,6 +2041,7 @@ export class AttendanceService {
         contractors,
         vehicle,
         assignedEngineer,
+        assignedDrivers: await this.loadDriversForDay(userId, attendance.attendanceDate),
       };
     } catch (error) {
       throw error;
@@ -1915,7 +2051,13 @@ export class AttendanceService {
   private async getUserCurrentSiteWithDetails(userId: string): Promise<{
     site: { id: string; name: string; fullAddress: string } | null;
     company: { id: string; name: string; fullAddress: string } | null;
-    contractors: Array<{ id: string; name: string }>;
+    contractors: Array<{
+      id: string;
+      name: string;
+      city?: string;
+      state?: string;
+      gstNumber?: string;
+    }>;
     assignedEngineer: {
       id: string;
       firstName: string;
@@ -1949,11 +2091,15 @@ export class AttendanceService {
 
     const siteRow = siteResult[0];
 
-    // Get contractors for this site
+    // Get contractors for this site. City / state / GST come along so the check-in screen can show
+    // them before any snapshot exists — the same three fields the stored snapshot carries.
     const contractorsQuery = `
-      SELECT 
+      SELECT
         con.id,
-        con.name
+        con.name,
+        con.city,
+        con.state,
+        con."gstNumber"
       FROM site_contractors sc
       INNER JOIN contractors con ON con.id = sc."contractorId" AND con."deletedAt" IS NULL
       WHERE sc."siteId" = $1
@@ -1993,10 +2139,21 @@ export class AttendanceService {
             fullAddress: siteRow.companyFullAddress,
           }
         : null,
-      contractors: contractors.map((c: { id: string; name: string }) => ({
-        id: c.id,
-        name: c.name,
-      })),
+      contractors: contractors.map(
+        (c: {
+          id: string;
+          name: string;
+          city: string | null;
+          state: string | null;
+          gstNumber: string | null;
+        }) => ({
+          id: c.id,
+          name: c.name,
+          city: c.city ?? undefined,
+          state: c.state ?? undefined,
+          gstNumber: c.gstNumber ?? undefined,
+        }),
+      ),
       assignedEngineer: engineer
         ? {
             id: engineer.id,
@@ -2181,6 +2338,19 @@ export class AttendanceService {
       }
 
       if (approvalStatus === ApprovalStatus.REJECTED) {
+        // Rejecting turns the day absent, so the same contradiction applies as in regularize and
+        // force: refuse while an engineer still has this person claimed as his driver. Checked
+        // before anything is written so the rejection fails cleanly. In a bulk approval this lands
+        // in `errors[]` and the remaining records still process.
+        await this.handleOwnPairingForNonWorkingDay(
+          attendance.userId,
+          attendance.attendanceDate,
+          AttendanceStatus.ABSENT,
+          approvalBy,
+          'throw',
+          entityManager,
+        );
+
         updateAttendanceRecord.status = AttendanceStatus.ABSENT;
         // Rejecting also turns the day into a non-working one, so it must lose the assignment for
         // the same reason regularizing to absent does. Safe to clear here: the food reversal below
@@ -2196,6 +2366,18 @@ export class AttendanceService {
         updateAttendanceRecord,
         entityManager,
       );
+
+      // Rejecting turns the day into absent, so any drivers this person was holding lose their
+      // pairing and their allowance goes back to them.
+      if (approvalStatus === ApprovalStatus.REJECTED) {
+        const freed = await this.releaseHeldPairings(
+          attendance.userId,
+          attendance.attendanceDate,
+          approvalBy,
+          entityManager,
+        );
+        await this.reRouteDrivers(freed, attendance.attendanceDate, approvalBy);
+      }
 
       // Handle food expense crediting/reversal based on approval status
       await this.handleFoodExpenseForApproval(
@@ -2821,23 +3003,432 @@ export class AttendanceService {
    * Applied to every snapshot that arrives from a client. Snapshots copied between
    * rows internally (regularization) are already sanitised at their origin.
    */
+  /**
+   * Re-points a driver's already-credited food allowance at whoever the pairing now resolves to.
+   *
+   * Called whenever the pairing for that day could have changed meaning: claimed, released,
+   * swapped, or the paired engineer's own day stopped counting as worked. It reverses whatever the
+   * ledger actually holds and re-credits from scratch, so it does not need to know which of those
+   * happened — and it is safe to call when nothing changed.
+   *
+   * Deliberately does nothing when no allowance has been credited yet: the credit will happen later
+   * at approval and will pick up the correct pairing on its own.
+   */
+  private async reRouteDriverAllowance(
+    driverId: string,
+    workDate: Date | string,
+    actor: string,
+  ): Promise<'rerouted' | 'not-credited' | 'payroll-locked' | 'no-attendance'> {
+    const calendarDate = this.normalizeAttendanceCalendarDate(workDate);
+
+    const attendance = await this.attendanceRepository.findOne({
+      where: { userId: driverId, attendanceDate: workDate as Date, isActive: true },
+    });
+    if (!attendance) {
+      return 'no-attendance';
+    }
+
+    const context = await this.driverAssignmentService.resolveAssignmentContext(
+      driverId,
+      calendarDate,
+    );
+
+    let snapshot = { ...(attendance.assignmentSnapshot ?? {}) } as Record<string, unknown>;
+    if (context?.engineer) {
+      snapshot = this.applyEngineerContext(snapshot, context) as Record<string, unknown>;
+    } else {
+      // Only the engineer is cleared. The inherited site/company/contractor/vehicle are left in
+      // place: the pairing going away does not mean the day's context was wrong, and clearing them
+      // would erase the only record of where the driver actually was.
+      delete snapshot.assignedEngineer;
+    }
+
+    const isCredited = await this.hasCreditedFoodAllowance(driverId, calendarDate);
+
+    // Payroll for the month is derived from these figures. Moving money after it is generated
+    // would leave the payslip and the ledger disagreeing with nothing to show why, so the change
+    // is recorded and surfaced instead of applied.
+    //
+    // Checked before the snapshot is written, not after: naming the new engineer on the row while
+    // the money stayed with the old one is the exact divergence this guard exists to prevent.
+    const payrollStatus = isCredited
+      ? await this.findPayrollStatusForMonth(driverId, calendarDate)
+      : null;
+    if (payrollStatus) {
+      this.logger.warn(
+        `[driver-pairing] Allowance for driver ${driverId} on ${this.formatLocalYyyyMmDd(
+          calendarDate,
+        )} needs re-routing, but payroll for that month is already ${payrollStatus}. Left unchanged for review.`,
+      );
+      await this.recordFoodCreditFailure({
+        entityId: attendance.id,
+        userId: driverId,
+        attendanceDate: calendarDate,
+        source: 'PAIRING_CHANGE',
+        changedBy: actor,
+        error: new Error(`Payroll already ${payrollStatus}; allowance not re-routed`),
+      });
+      return 'payroll-locked';
+    }
+
+    // Safe to write now: either no money has moved, or it is about to move in the same call.
+    await this.attendanceRepository.update(
+      { id: attendance.id },
+      { assignmentSnapshot: snapshot as AttendanceEntity['assignmentSnapshot'], updatedBy: actor },
+    );
+
+    if (!isCredited) {
+      return 'not-credited';
+    }
+
+    await this.reverseFoodExpenseByLedger(driverId, calendarDate, actor);
+    await this.creditFoodExpenseForAttendance(
+      driverId,
+      calendarDate,
+      actor,
+      snapshot as AttendanceEntity['assignmentSnapshot'],
+    );
+
+    return 'rerouted';
+  }
+
+  /** Whether any food allowance is currently outstanding for this driver and day. */
+  private async hasCreditedFoodAllowance(driverId: string, calendarDate: Date): Promise<boolean> {
+    const dateStr = this.formatLocalYyyyMmDd(calendarDate);
+    const [row] = await this.dataSource.query(
+      `SELECT COALESCE(SUM(amount), 0)::float AS net
+       FROM expenses
+       WHERE "transactionId" LIKE $1 AND "deletedAt" IS NULL`,
+      [`ATT\\_FOOD%${driverId}\\_${dateStr}`],
+    );
+    return Math.abs(Number(row?.net ?? 0)) > 0.005;
+  }
+
+  private async findPayrollStatusForMonth(
+    userId: string,
+    calendarDate: Date,
+  ): Promise<string | null> {
+    const [payroll] = await this.dataSource.query(
+      `SELECT status FROM payroll
+       WHERE "userId" = $1 AND month = $2 AND year = $3
+         AND status <> 'CANCELLED' AND "deletedAt" IS NULL
+       LIMIT 1`,
+      [userId, calendarDate.getMonth() + 1, calendarDate.getFullYear()],
+    );
+    return payroll?.status ?? null;
+  }
+
+  /**
+   * Applies the driver list an engineer submitted, if he submitted one.
+   *
+   * `undefined` means "the client said nothing about drivers" and leaves existing pairings alone;
+   * an empty array means "I have no drivers today" and releases them. Collapsing those two into
+   * one would make every check-in from an older app build silently drop the engineer's pairings.
+   */
+  private async syncDriverClaims(
+    engineerId: string,
+    workDate: Date | string,
+    driverIds: string[] | undefined,
+    entityManager: EntityManager,
+  ): Promise<string[]> {
+    if (driverIds === undefined) {
+      return [];
+    }
+
+    const { claimed, released } = await this.driverAssignmentService.syncClaims({
+      engineerId,
+      workDate,
+      driverIds,
+      actor: engineerId,
+      entityManager,
+    });
+
+    return [...claimed, ...released];
+  }
+
+  /**
+   * Re-routes the allowance for a set of drivers, one at a time so a failure on one does not
+   * abandon the rest. Runs after the engineer's own attendance has been written, because the
+   * pairing only resolves once his day counts as worked.
+   */
+  private async reRouteDrivers(
+    driverIds: string[],
+    workDate: Date | string,
+    actor: string,
+  ): Promise<void> {
+    for (const driverId of driverIds) {
+      try {
+        const outcome = await this.reRouteDriverAllowance(driverId, workDate, actor);
+        this.logger.log(`[driver-pairing] driver ${driverId} on ${workDate}: ${outcome}`);
+      } catch (error) {
+        this.logger.error(
+          `[driver-pairing] Failed to re-route allowance for driver ${driverId}: ${
+            (error as Error).message
+          }`,
+        );
+      }
+    }
+  }
+
+  /**
+   * The drivers paired with this person for the day, in the shape the API returns them. Empty for
+   * anyone who is not an engineer holding drivers, which is most people.
+   */
+  private async loadDriversForDay(
+    engineerId: string,
+    workDate: Date | string,
+  ): Promise<Array<{ id: string; firstName: string; lastName: string; employeeId: string }>> {
+    const map = await this.driverAssignmentService.loadDriversFor([{ engineerId, workDate }]);
+    return map.get(this.driverAssignmentService.driverMapKey(engineerId, workDate)) ?? [];
+  }
+
+  /** Every driver this engineer holds for the day — the set affected when his own day changes. */
+  private async driversHeldBy(engineerId: string, workDate: Date | string): Promise<string[]> {
+    const rows = await this.driverAssignmentService.findByEngineer(engineerId, workDate);
+    return rows.map((row) => row.driverId);
+  }
+
+  /**
+   * A driver whose day becomes non-working (absent / leave / holiday) cannot also have been out
+   * with an engineer, so the pairing where **he is the driver** has to be dealt with.
+   *
+   * This is the mirror of `releaseHeldPairings`, which only ever handled the other direction —
+   * an engineer going non-working gives up the drivers he holds. Without this a driver could be
+   * marked absent while still appearing in his engineer's snapshot, with his own snapshot emptied.
+   *
+   * Two modes, because the two kinds of caller need opposite things:
+   *
+   * - `'throw'` for manual paths (regularize / force / reject). The engineer stated the driver was
+   *   with him and an admin is now saying he was absent — that is a contradiction between two
+   *   people's records, and silently overriding either one hides it. The error names the engineer
+   *   so the fix is obvious.
+   * - `'release'` for the crons. There is no human in the loop to answer an error, and a cron that
+   *   threw would abort the rest of its batch, so it unlinks and lets the allowance re-route.
+   *
+   * Returns the drivers whose pairing changed, for the caller to re-route.
+   *
+   * `errorTemplate` lets the delete path word the same refusal in its own terms; every other
+   * caller is restatusing the day and takes the default.
+   */
+  private async handleOwnPairingForNonWorkingDay(
+    userId: string,
+    workDate: Date | string,
+    status: AttendanceStatus | string,
+    actor: string,
+    mode: 'throw' | 'release',
+    entityManager?: EntityManager,
+    errorTemplate: string = ATTENDANCE_ERRORS.DRIVER_LINKED_CANNOT_MARK_NON_WORKING,
+  ): Promise<string[]> {
+    const holder = await this.driverAssignmentService.findHolder(userId, workDate, entityManager);
+    if (!holder) {
+      return [];
+    }
+
+    if (mode === 'throw') {
+      const subject = await this.userService.findOne({ id: userId });
+      throw new BadRequestException(
+        errorTemplate
+          .replace(
+            '{driver}',
+            subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'This user',
+          )
+          .replace('{engineer}', holder.engineerName)
+          .replace(
+            '{date}',
+            this.formatLocalYyyyMmDd(this.normalizeAttendanceCalendarDate(workDate)),
+          )
+          .replace('{status}', String(status).toLowerCase()),
+      );
+    }
+
+    await this.driverAssignmentService.release(userId, workDate, actor, entityManager);
+    this.logger.log(
+      `[driver-pairing] released ${userId} from ${holder.engineerId} on ${workDate} — day became ${status}`,
+    );
+    return [userId];
+  }
+
+  /**
+   * Cron entry point for the same problem the manual paths refuse.
+   *
+   * The end-of-day cron marks anyone who never checked in as absent, and that can include a driver
+   * an engineer had claimed. A cron cannot surface an error to anyone and throwing would abandon
+   * the rest of its batch, so here the pairing is unlinked and the allowance re-routed instead.
+   *
+   * Deliberately public: the cron writes attendance through a plain repository update and so
+   * bypasses every pairing path in this service.
+   *
+   * Only unlinks — it does NOT re-route. The end-of-day cron wraps its whole batch in one
+   * transaction, and re-routing reads on its own connection, so it would not see the absent status
+   * yet (the same isolation trap that produced the regularize bug). The cron collects the returned
+   * ids and calls `reRouteReleasedDrivers` once the transaction has committed.
+   */
+  async releaseOwnPairingForSystemNonWorkingDay(
+    userId: string,
+    workDate: Date | string,
+    status: AttendanceStatus | string,
+    entityManager?: EntityManager,
+  ): Promise<string[]> {
+    return this.handleOwnPairingForNonWorkingDay(
+      userId,
+      workDate,
+      status,
+      SYSTEM_USER_ID,
+      'release',
+      entityManager,
+    );
+  }
+
+  /** Companion to the above, to be called by the cron after its transaction has committed. */
+  async reRouteReleasedDrivers(driverIds: string[], workDate: Date | string): Promise<void> {
+    if (!driverIds.length) {
+      return;
+    }
+    await this.reRouteDrivers(driverIds, workDate, SYSTEM_USER_ID);
+  }
+
+  /**
+   * Gives up every pairing this person holds for the day, because their own day no longer counts
+   * as worked — they cannot have had a driver with them.
+   *
+   * Releasing rather than merely letting the pairing stop resolving matters: a stale claim would
+   * still occupy the unique index and block the engineer the driver *was* actually with from
+   * claiming him. Returns the drivers freed, so their allowance can be re-routed.
+   */
+  private async releaseHeldPairings(
+    engineerId: string,
+    workDate: Date | string,
+    actor: string,
+    entityManager?: EntityManager,
+  ): Promise<string[]> {
+    const held = await this.driversHeldBy(engineerId, workDate);
+    for (const driverId of held) {
+      await this.driverAssignmentService.release(driverId, workDate, actor, entityManager);
+    }
+    return held;
+  }
+
   private async sanitizeAssignmentSnapshot(
     userId: string,
     snapshot: AttendanceEntity['assignmentSnapshot'] | undefined,
+    attendanceDate?: Date | string,
   ): Promise<AttendanceEntity['assignmentSnapshot'] | undefined> {
-    if (!snapshot?.assignedEngineer) {
+    // Whatever the client sent for assignedEngineer is discarded unconditionally — the pairing is
+    // now owned by driver_day_assignments, stated by the engineer at his own check-in. Dropping it
+    // for everyone (rather than only for non-drivers) is what lets an older mobile build keep
+    // sending the field without corrupting anything, so the app and the API can deploy separately.
+    const base = { ...(snapshot ?? {}) } as Record<string, unknown>;
+    delete base.assignedEngineer;
+    // An instruction, not stored data: it has already been turned into pairing rows, and keeping a
+    // copy on the attendance row would be a second version of the truth that can drift.
+    delete base.assignedDrivers;
+
+    // `snapshot` is returned untouched rather than as an empty object so that "the client said
+    // nothing" stays distinguishable from "the client sent an empty snapshot" downstream.
+    const asStored = () =>
+      snapshot === undefined && Object.keys(base).length === 0
+        ? snapshot
+        : (base as AttendanceEntity['assignmentSnapshot']);
+
+    if (!attendanceDate) {
+      return this.enrichSnapshotContractors(asStored());
+    }
+
+    const context = await this.driverAssignmentService.resolveAssignmentContext(
+      userId,
+      attendanceDate,
+    );
+
+    // Null is the normal outcome for a non-driver, or a driver nobody claimed that day: the
+    // allowance simply stays with them.
+    if (!context?.engineer) {
+      return this.enrichSnapshotContractors(asStored());
+    }
+
+    // Enriched after the merge, not before: a driver inherits `contractors` from his engineer's
+    // row, and rows written before enrichment existed carry only id and name. Doing it last means
+    // the driver still ends up with the full contractor details.
+    return this.enrichSnapshotContractors(this.applyEngineerContext(base, context));
+  }
+
+  /**
+   * Replaces the snapshot's contractor entries with authoritative rows from the contractors master,
+   * keyed on the ids the caller sent.
+   *
+   * City, state and GST number are master data with financial meaning, so they are read here rather
+   * than accepted from the client, which may have loaded its screen hours before posting.
+   *
+   * An id with no matching contractor is kept exactly as it arrived — dropping it would silently
+   * lose an entry the user can still see on their own screen.
+   */
+  private async enrichSnapshotContractors(
+    snapshot: AttendanceEntity['assignmentSnapshot'] | undefined,
+  ): Promise<AttendanceEntity['assignmentSnapshot'] | undefined> {
+    const contractors = snapshot?.contractors;
+    if (!Array.isArray(contractors) || contractors.length === 0) {
       return snapshot;
     }
 
-    // An engineer without an id cannot be resolved by anything downstream.
-    const isUsable = Boolean(snapshot.assignedEngineer.id);
-    if (isUsable && (await this.checkUserHasDriverRole(userId))) {
+    const ids = [...new Set(contractors.map((contractor) => contractor?.id).filter(Boolean))];
+    if (ids.length === 0) {
       return snapshot;
     }
 
-    const withoutEngineer = { ...snapshot };
-    delete withoutEngineer.assignedEngineer;
-    return withoutEngineer;
+    const rows: Array<{
+      id: string;
+      name: string;
+      city: string | null;
+      state: string | null;
+      gstNumber: string | null;
+    }> = await this.dataSource.query(
+      `SELECT id, name, city, state, "gstNumber"
+         FROM contractors
+        WHERE id = ANY($1::uuid[]) AND "deletedAt" IS NULL`,
+      [ids],
+    );
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    return {
+      ...snapshot,
+      contractors: contractors.map((contractor) => {
+        const row = byId.get(contractor?.id);
+        if (!row) {
+          return contractor;
+        }
+        return {
+          id: row.id,
+          name: row.name,
+          city: row.city ?? undefined,
+          state: row.state ?? undefined,
+          gstNumber: row.gstNumber ?? undefined,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Merges the engineer's day context onto a driver's snapshot.
+   *
+   * A driver has no site context of his own to report — he is wherever his engineer was — so site,
+   * company, contractor and vehicle are inherited from the engineer's own snapshot.
+   *
+   * `??` rather than plain assignment on each field: an engineer whose row was created by the
+   * midnight cron has a null snapshot, and overwriting with undefined would wipe whatever the
+   * driver legitimately had.
+   */
+  private applyEngineerContext(
+    base: Record<string, unknown>,
+    context: DriverAssignmentContext,
+  ): AttendanceEntity['assignmentSnapshot'] {
+    return {
+      ...base,
+      assignedEngineer: context.engineer ?? undefined,
+      site: context.site ?? (base.site as never),
+      company: context.company ?? (base.company as never),
+      contractors: context.contractors ?? (base.contractors as never),
+      vehicle: context.vehicle ?? (base.vehicle as never),
+    } as AttendanceEntity['assignmentSnapshot'];
   }
 
   /**
@@ -3860,6 +4451,22 @@ export class AttendanceService {
 
     await this.assertNoPayrollForMonth(attendance.userId, calendarDate);
 
+    // The other half of the pairing rule. `releaseHeldPairings` below covers this person as an
+    // engineer giving up his drivers; this covers them as a driver somebody else has claimed.
+    // Deleting the day while that claim stands would leave the engineer's record naming a driver
+    // with no attendance at all, and the claim would keep occupying the unique-index slot.
+    //
+    // Checked before anything is written, so a refused delete changes nothing.
+    await this.handleOwnPairingForNonWorkingDay(
+      attendance.userId,
+      attendance.attendanceDate,
+      attendance.status,
+      deletedBy,
+      'throw',
+      undefined,
+      ATTENDANCE_ERRORS.DRIVER_LINKED_CANNOT_DELETE,
+    );
+
     const summary = await this.dataSource.transaction(async (entityManager) => {
       const reversedExpenses = await this.reverseFoodExpenseByLedger(
         attendance.userId,
@@ -3888,6 +4495,15 @@ export class AttendanceService {
 
       return { reversedExpenses, leaveEffect, deletedRows: ids.length };
     });
+
+    // Deleting the day removes it from the worked statuses, so anyone this person was holding
+    // loses the pairing and gets their allowance back.
+    const freedDrivers = await this.releaseHeldPairings(
+      attendance.userId,
+      attendance.attendanceDate,
+      deletedBy,
+    );
+    await this.reRouteDrivers(freedDrivers, attendance.attendanceDate, deletedBy);
 
     // softDelete()/update() bypass the entity audit subscriber, so the deletion is recorded here
     // explicitly — otherwise a money-moving action would leave no trail.

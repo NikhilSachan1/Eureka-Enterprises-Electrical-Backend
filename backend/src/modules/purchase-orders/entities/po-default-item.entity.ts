@@ -16,6 +16,10 @@ export class PoDefaultItemEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   make: string | null;
 
+  // Pre-fills the unit on the line item so the user does not retype it for a standard item.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  unit: string | null;
+
   @Column({ type: 'integer', default: 0 })
   sortOrder: number;
 

@@ -161,6 +161,7 @@ export class PoPdfService {
           </td>
           <td class="c">${this.esc(it.hsnCode ?? '—')}</td>
           <td class="r">${this.qty(it.quantity)}</td>
+          <td class="c">${it.unit ? this.esc(it.unit) : ''}</td>
           <td class="r">${this.money(it.rate)}</td>
           <td class="r strong">${this.money(it.amount)}</td>
         </tr>`,
@@ -233,8 +234,11 @@ export class PoPdfService {
   table.totals .lbl { color: #6b7280; }
   table.totals .val { text-align: right; font-weight: 600; }
   table.totals tr.grand td { background: #eef3fb; color: #1f3a5f; font-weight: bold; border-top: 2px solid #1f3a5f; }
-  .sign-box { border: 1px solid #e2e6ec; border-radius: 6px; margin-top: 12px; padding: 10px 12px; height: 84px; display: flex; flex-direction: column; justify-content: flex-end; }
+  /* Two boxes stack in the totals column, so each is shorter than the single box used to be —
+     otherwise the pair pushes the page-break-avoid block onto a second page. */
+  .sign-box { border: 1px solid #e2e6ec; border-radius: 6px; margin-top: 12px; padding: 10px 12px; height: 68px; display: flex; flex-direction: column; justify-content: flex-end; }
   .sign-box .sign-label { text-align: center; color: #1f3a5f; font-weight: 600; font-size: 10px; border-top: 1px solid #9fb0c9; padding-top: 6px; }
+  .sign-box .sign-sub { text-align: center; color: #555; font-size: 9px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -293,11 +297,12 @@ export class PoPdfService {
         <th>Item &amp; Description</th>
         <th class="c" style="width:80px">HSN/SAC</th>
         <th class="r" style="width:70px">Qty</th>
+        <th class="c" style="width:55px">Unit</th>
         <th class="r" style="width:100px">Rate</th>
         <th class="r" style="width:110px">Amount</th>
       </tr>
     </thead>
-    <tbody>${rows || `<tr><td colspan="6" class="empty">No items</td></tr>`}</tbody>
+    <tbody>${rows || `<tr><td colspan="7" class="empty">No items</td></tr>`}</tbody>
   </table>
 
   <div class="bottom">
@@ -315,6 +320,11 @@ export class PoPdfService {
       </div>
       <div class="sign-box">
         <div class="sign-label">Authorized Signature</div>
+        <div class="sign-sub">${this.esc(C.NAME)}</div>
+      </div>
+      <div class="sign-box">
+        <div class="sign-label">Authorized Signature</div>
+        <div class="sign-sub">Project Manager</div>
       </div>
     </div>
   </div>

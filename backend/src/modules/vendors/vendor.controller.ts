@@ -68,14 +68,17 @@ export class VendorController {
   @RequiredPermission('financials.vendors.update')
   @ApiOperation({
     summary: 'Update a vendor',
-    description: 'Updates an existing vendor record.',
+    description:
+      'Updates an existing vendor record. Only the vendor creator may edit it; ' +
+      'office roles retain a full override.',
   })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Request() { user: { id: updatedBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: updatedBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() updateVendorDto: UpdateVendorDto,
   ) {
-    return await this.vendorService.update(id, updateVendorDto, updatedBy);
+    return await this.vendorService.update(id, updateVendorDto, updatedBy, activeRole);
   }
 
   @Delete()
@@ -87,23 +90,27 @@ export class VendorController {
   })
   @ApiBody({ type: BulkDeleteVendorDto })
   async bulkDelete(
-    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: deletedBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() bulkDeleteDto: BulkDeleteVendorDto,
   ) {
-    return await this.vendorService.bulkDelete(bulkDeleteDto.vendorIds, deletedBy);
+    return await this.vendorService.bulkDelete(bulkDeleteDto.vendorIds, deletedBy, activeRole);
   }
 
   @Delete(':id')
   @RequiredPermission('financials.vendors.delete')
   @ApiOperation({
     summary: 'Delete a vendor',
-    description: 'Soft deletes a vendor by its unique identifier.',
+    description:
+      'Soft deletes a vendor by its unique identifier. Only the vendor creator may ' +
+      'delete it; office roles retain a full override.',
   })
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
-    @Request() { user: { id: deletedBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: deletedBy, activeRole } }: { user: { id: string; activeRole?: string } },
   ) {
-    return await this.vendorService.remove(id, deletedBy);
+    return await this.vendorService.remove(id, deletedBy, activeRole);
   }
 
   @Post(':id/restore')

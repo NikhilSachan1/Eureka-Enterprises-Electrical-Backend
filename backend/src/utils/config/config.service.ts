@@ -44,6 +44,7 @@ import { RefreshTokenEntity } from 'src/modules/auth/entities/refresh-token.enti
 import { CommunicationLogEntity } from 'src/modules/common/communication-logs/entities/communication-log.entity';
 import { CompanyEntity } from 'src/modules/companies/entities/company.entity';
 import { SiteAllocationEntity } from 'src/modules/site-allocations/entities/site-allocation.entity';
+import { DriverAssignmentEntity } from 'src/modules/driver-assignments/entities/driver-assignment.entity';
 import { SiteDocumentEntity } from 'src/modules/site-documents/entities/site-document.entity';
 import { VehicleLogEntity } from 'src/modules/vehicle-logs/entities/vehicle-log.entity';
 import { VehicleLogFileEntity } from 'src/modules/vehicle-logs/entities/vehicle-log-file.entity';
@@ -193,6 +194,7 @@ export class ConfigService {
         CommunicationLogEntity,
         CompanyEntity,
         SiteAllocationEntity,
+        DriverAssignmentEntity,
         SiteDocumentEntity,
         VehicleLogEntity,
         VehicleLogFileEntity,

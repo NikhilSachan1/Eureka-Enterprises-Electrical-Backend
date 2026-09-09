@@ -69,6 +69,14 @@ export const ATTENDANCE_ERRORS = {
   REGULARIZATION_NOT_ALLOWED_DURING_SHIFT: 'Regularization is not allowed during shift hours',
   FUTURE_DATE_REGULARIZATION_NOT_ALLOWED: 'Regularization is not allowed for future dates',
   ALREADY_REGULARIZED: 'Attendance is already regularized and status is {status}',
+  // A driver marked non-working cannot also have been out with an engineer that day. Manual paths
+  // surface the contradiction instead of silently overriding whichever record was entered first.
+  DRIVER_LINKED_CANNOT_MARK_NON_WORKING:
+    '{driver} is assigned as a driver to {engineer} on {date}. Remove the driver from that attendance first, then mark this day as {status}.',
+  // Same contradiction as above, but deleting the day is more final than restatusing it: the
+  // engineer's record would keep naming a driver whose day no longer exists at all.
+  DRIVER_LINKED_CANNOT_DELETE:
+    '{driver} is assigned as a driver to {engineer} on {date}. Remove the driver from that attendance first, then delete this day.',
   FORCE_ATTENDANCE_SAME_DAY_SHIFT_NOT_OVER:
     'Force attendance for same day is only allowed before shift end time',
   FORCE_ATTENDANCE_INVALID_TIME_FORMAT: 'Invalid time format. Use HH:MM format',

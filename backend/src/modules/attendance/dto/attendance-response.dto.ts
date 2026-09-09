@@ -74,6 +74,19 @@ export class AttendanceRecordDto {
     description: 'Site, company, contractors, vehicle, and assigned engineer at time of attendance',
   })
   assignmentSnapshot?: AssignmentSnapshotDto;
+
+  @ApiPropertyOptional({
+    type: [Object],
+    description:
+      'Drivers paired with this person on this date. Read from driver_day_assignments, not from ' +
+      'the attendance row. Empty for anyone who is not an engineer holding drivers that day.',
+  })
+  assignedDrivers?: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeId: string;
+  }>;
 }
 
 export class AttendanceListResponseDto {
