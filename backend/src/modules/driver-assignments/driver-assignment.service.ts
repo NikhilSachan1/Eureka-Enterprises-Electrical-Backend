@@ -273,9 +273,17 @@ export class DriverAssignmentService {
   }
 
   /**
-   * Claims one driver for the day. The unique index is what actually decides conflicts — checking
-   * first and then inserting would leave a race between two engineers checking in at once, so the
-   * violation is caught and translated instead.
+   * Claims one driver for the day.
+   *
+   * Conflicts are decided in two layers. The check below catches the ordinary case — somebody else
+   * already holds this driver — and reports it before anything is written. The unique index remains
+   * the real arbiter for the race where two engineers claim the same driver at the same instant,
+   * and that violation is translated in the catch.
+   *
+   * The catch cannot read through `em`: a constraint violation aborts the enclosing transaction, so
+   * every subsequent statement on that connection fails with 25P02 and the friendly message is
+   * never built — the caller got a 500 instead. The lookups therefore go over a fresh connection,
+   * which is safe because a row that won the index race is by definition committed.
    */
   private async claim(
     driverId: string,
@@ -284,6 +292,13 @@ export class DriverAssignmentService {
     actor: string,
     em?: EntityManager,
   ): Promise<void> {
+    const existingHolder = await this.findHolder(driverId, dateStr, em);
+    if (existingHolder) {
+      throw new BadRequestException(
+        await this.alreadyClaimedMessage(driverId, dateStr, existingHolder.engineerName, em),
+      );
+    }
+
     try {
       await this.repo(em).insert({
         driverId,
@@ -297,18 +312,39 @@ export class DriverAssignmentService {
         throw error;
       }
 
-      const holder = await this.findHolder(driverId, dateStr, em);
+      // Deliberately NOT passing `em` — see the note above.
+      const holder = await this.findHolder(driverId, dateStr).catch(() => null);
+      throw new BadRequestException(
+        await this.alreadyClaimedMessage(driverId, dateStr, holder?.engineerName),
+      );
+    }
+  }
+
+  /**
+   * Builds the ALREADY_CLAIMED text. `em` is passed only when the transaction is still healthy;
+   * on the post-violation path it is omitted so the read goes over a fresh connection, and any
+   * further failure degrades to generic wording rather than replacing a 400 with a 500.
+   */
+  private async alreadyClaimedMessage(
+    driverId: string,
+    dateStr: string,
+    engineerName?: string,
+    em?: EntityManager,
+  ): Promise<string> {
+    let driverName: string | undefined;
+    try {
       const [driver] = await (em ?? this.dataSource).query(
         `SELECT TRIM(CONCAT("firstName", ' ', "lastName")) AS name FROM users WHERE id = $1`,
         [driverId],
       );
-
-      throw new BadRequestException(
-        DRIVER_ASSIGNMENT_ERRORS.ALREADY_CLAIMED.replace('{driver}', driver?.name ?? 'That driver')
-          .replace('{engineer}', holder?.engineerName ?? 'another engineer')
-          .replace('{date}', dateStr),
-      );
+      driverName = driver?.name;
+    } catch {
+      driverName = undefined;
     }
+
+    return DRIVER_ASSIGNMENT_ERRORS.ALREADY_CLAIMED.replace('{driver}', driverName || 'That driver')
+      .replace('{engineer}', engineerName || 'another engineer')
+      .replace('{date}', dateStr);
   }
 
   /** Soft-deletes the pairing so the driver becomes claimable again that same day. */
