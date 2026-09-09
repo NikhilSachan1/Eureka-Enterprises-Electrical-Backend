@@ -3206,6 +3206,9 @@ export class AttendanceService {
    *   threw would abort the rest of its batch, so it unlinks and lets the allowance re-route.
    *
    * Returns the drivers whose pairing changed, for the caller to re-route.
+   *
+   * `errorTemplate` lets the delete path word the same refusal in its own terms; every other
+   * caller is restatusing the day and takes the default.
    */
   private async handleOwnPairingForNonWorkingDay(
     userId: string,
@@ -3214,6 +3217,7 @@ export class AttendanceService {
     actor: string,
     mode: 'throw' | 'release',
     entityManager?: EntityManager,
+    errorTemplate: string = ATTENDANCE_ERRORS.DRIVER_LINKED_CANNOT_MARK_NON_WORKING,
   ): Promise<string[]> {
     const holder = await this.driverAssignmentService.findHolder(userId, workDate, entityManager);
     if (!holder) {
@@ -3223,10 +3227,11 @@ export class AttendanceService {
     if (mode === 'throw') {
       const subject = await this.userService.findOne({ id: userId });
       throw new BadRequestException(
-        ATTENDANCE_ERRORS.DRIVER_LINKED_CANNOT_MARK_NON_WORKING.replace(
-          '{driver}',
-          subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'This user',
-        )
+        errorTemplate
+          .replace(
+            '{driver}',
+            subject ? `${subject.firstName} ${subject.lastName}`.trim() : 'This user',
+          )
           .replace('{engineer}', holder.engineerName)
           .replace(
             '{date}',
@@ -4445,6 +4450,22 @@ export class AttendanceService {
     }
 
     await this.assertNoPayrollForMonth(attendance.userId, calendarDate);
+
+    // The other half of the pairing rule. `releaseHeldPairings` below covers this person as an
+    // engineer giving up his drivers; this covers them as a driver somebody else has claimed.
+    // Deleting the day while that claim stands would leave the engineer's record naming a driver
+    // with no attendance at all, and the claim would keep occupying the unique-index slot.
+    //
+    // Checked before anything is written, so a refused delete changes nothing.
+    await this.handleOwnPairingForNonWorkingDay(
+      attendance.userId,
+      attendance.attendanceDate,
+      attendance.status,
+      deletedBy,
+      'throw',
+      undefined,
+      ATTENDANCE_ERRORS.DRIVER_LINKED_CANNOT_DELETE,
+    );
 
     const summary = await this.dataSource.transaction(async (entityManager) => {
       const reversedExpenses = await this.reverseFoodExpenseByLedger(
