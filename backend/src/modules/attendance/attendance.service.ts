@@ -1173,26 +1173,30 @@ export class AttendanceService {
     bulkForceAttendanceDto: ForceAttendanceDto & { timezone: string },
   ): Promise<{ message: string }> {
     try {
-      // A bulk force sends ONE snapshot for every userId, so a driver list in it cannot be
-      // meaningful: the same driver cannot be with several engineers on the same day, and the
+      // This is the only force-attendance entry point — the route always sends `userIds`, even for
+      // one person — so a driver list is dropped only when the batch really is a batch.
+      //
+      // With several userIds one snapshot is applied to all of them, and a driver list in it cannot
+      // be meaningful: the same driver cannot be with several engineers on the same day, and the
       // partial-unique index on driver_day_assignments would reject the second claim and abort the
-      // whole batch. Dropped here so the per-user path never sees it — claiming drivers is a
-      // single-user operation.
+      // whole batch. With a single userId it is exactly as meaningful as it is on regularize, so it
+      // is passed straight through.
+      const isBatch = bulkForceAttendanceDto.userIds.length > 1;
       const { assignedDrivers: _ignoredForBulk, ...snapshotWithoutDrivers } =
         bulkForceAttendanceDto.assignmentSnapshot ?? {};
-      const hadDriverList = _ignoredForBulk !== undefined;
-      if (hadDriverList) {
+      if (isBatch && _ignoredForBulk !== undefined) {
         this.logger.warn(
-          `[driver-pairing] assignedDrivers ignored on bulk force attendance for ${bulkForceAttendanceDto.userIds.length} users — claim drivers via a single force or regularize instead`,
+          `[driver-pairing] assignedDrivers ignored on bulk force attendance for ${bulkForceAttendanceDto.userIds.length} users — claim drivers by forcing one user at a time, or via regularize`,
         );
       }
 
       for (const userId of bulkForceAttendanceDto.userIds) {
         await this.handleSingleForceAttendance(createdBy, {
           ...bulkForceAttendanceDto,
-          assignmentSnapshot: bulkForceAttendanceDto.assignmentSnapshot
-            ? (snapshotWithoutDrivers as ForceAttendanceDto['assignmentSnapshot'])
-            : undefined,
+          assignmentSnapshot:
+            isBatch && bulkForceAttendanceDto.assignmentSnapshot
+              ? (snapshotWithoutDrivers as ForceAttendanceDto['assignmentSnapshot'])
+              : bulkForceAttendanceDto.assignmentSnapshot,
           userId,
         });
       }
