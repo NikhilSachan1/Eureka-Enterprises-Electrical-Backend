@@ -118,14 +118,14 @@ export class BookPaymentController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.book-payments.unlock-grant')
+  @RequiredPermission('financials.book-payments.unlock')
   @ApiOperation({ summary: 'Grant unlock request — admin (book payment becomes editable)' })
   grantUnlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bookPaymentService.grantUnlock(id, userId);
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.book-payments.unlock-request-reject')
+  @RequiredPermission('financials.book-payments.unlock')
   @ApiOperation({ summary: 'Reject unlock request — admin (book payment stays locked)' })
   rejectUnlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bookPaymentService.rejectUnlock(id, userId);
