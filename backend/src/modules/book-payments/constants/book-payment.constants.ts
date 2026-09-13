@@ -4,6 +4,12 @@ export const BOOK_PAYMENT_ERRORS = {
   ADVANCE_BACKED_AMOUNT_NOT_EDITABLE:
     'The amount of an advance-backed book payment cannot be edited here. Adjust the advance payment instead.',
   INVOICE_NOT_FOUND: 'Invoice not found.',
+  ADVANCE_NOT_FOUND: 'Advance payment not found.',
+  ADVANCE_NOT_APPROVED: 'Advance payment must be approved before a payment can be booked for it.',
+  ADVANCE_FULLY_BOOKED:
+    'Advance {advanceNumber} of {amount} is already fully booked ({booked}). No further payment can be booked against it.',
+  ADVANCE_CEILING_EXCEEDED:
+    'Advance {advanceNumber} is {amount}. {booked} is already booked, so you can book at most {remaining}. You entered {requested}.',
   INVOICE_NOT_APPROVED: 'Invoice must be approved before booking payment.',
   INVOICE_NOT_PURCHASE: 'Book payments can only be created for PURCHASE side invoices.',
   INVOICE_CEILING_EXCEEDED:

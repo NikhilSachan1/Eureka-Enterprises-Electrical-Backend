@@ -7,6 +7,7 @@ import {
   OverallStatus,
   NEXT_ACTION,
   OVERALL_STATUS_CASE,
+  ADVANCE_ISSUE_BRANCH,
 } from './constants/document-status.constants';
 
 @Injectable()
@@ -132,6 +133,22 @@ export class DocumentStatusService {
         GROUP BY bp."siteId"
       ),
 
+      -- ── Advances awaiting an invoice (PURCHASE only by definition) ───────
+      -- Both a count and the rupee exposure, because "3 advances outstanding" means little
+      -- without knowing whether that is ₹3,000 or ₹3,00,000.
+      advance_agg AS (
+        SELECT
+          ap."siteId",
+          COUNT(ap.id)                        AS unsettled_count,
+          COALESCE(SUM(ap.amount - ap."settledAmount"), 0) AS unsettled_amount
+        FROM advance_payments ap
+        WHERE ap."siteId" = ANY($1)
+          AND ap."deletedAt" IS NULL
+          AND ap."approvalStatus" = 'APPROVED'
+          AND ap.amount > ap."settledAmount"
+        GROUP BY ap."siteId"
+      ),
+
       -- ── Bank Transfers SALE — applicable = approved invoices ─────────────
       -- Net payable = taxableAmount − tdsAmount (TDS now at invoice level)
       sale_bt_agg AS (
@@ -221,7 +238,11 @@ export class DocumentStatusService {
         -- ── PURCHASE Bank Transfer ────────────────────────────────────────────
         COALESCE(pbt.applicable,  0) AS "purchase_bt_applicable",
         COALESCE(pbt.done,        0) AS "purchase_bt_done",
-        COALESCE(pbt.not_started, 0) AS "purchase_bt_not_started"
+        COALESCE(pbt.not_started, 0) AS "purchase_bt_not_started",
+
+        -- ── PURCHASE Advances awaiting an invoice ─────────────────────────────
+        COALESCE(padv.unsettled_count,  0) AS "advance_unsettled_count",
+        COALESCE(padv.unsettled_amount, 0) AS "advance_unsettled_amount"
 
       FROM sites s
       CROSS JOIN site_count sc
@@ -238,6 +259,7 @@ export class DocumentStatusService {
       LEFT JOIN invoice_agg      pinv ON pinv."siteId" = s.id AND pinv."partyType" = 'PURCHASE'
       LEFT JOIN book_payment_agg pbp  ON pbp."siteId"  = s.id
       LEFT JOIN purchase_bt_agg  pbt  ON pbt."siteId"  = s.id
+      LEFT JOIN advance_agg      padv ON padv."siteId" = s.id
 
       WHERE s.id = ANY($1)
         ${companyFilter}
@@ -352,6 +374,11 @@ export class DocumentStatusService {
                 done: Number(r.purchase_bt_done),
                 notStarted: Number(r.purchase_bt_not_started),
               },
+              // Advances exist only on the purchase side, so they live in this block.
+              advance: {
+                unsettledCount: Number(r.advance_unsettled_count),
+                unsettledAmount: Number(r.advance_unsettled_amount),
+              },
             }
           : null,
 
@@ -386,10 +413,14 @@ export class DocumentStatusService {
     let paramIdx = 2;
 
     const extraFilters: string[] = [];
+    // Same filters expressed against the advance branch, which has no `j` in scope and dates its
+    // rows by advanceDate. Built alongside so both branches consume identical parameters.
+    const advanceFilters: string[] = [];
 
     // companyId filter (restricts via site)
     if (companyId?.length) {
       extraFilters.push(`s."companyId" = ANY($${paramIdx})`);
+      advanceFilters.push(`s."companyId" = ANY($${paramIdx})`);
       params.push(companyId);
       paramIdx++;
     }
@@ -397,6 +428,9 @@ export class DocumentStatusService {
     // partyType filter
     if (partyType) {
       extraFilters.push(`j."partyType" = $${paramIdx}`);
+      // An advance is always PURCHASE, so filtering for SALE must drop the branch entirely
+      // rather than compare a constant column.
+      advanceFilters.push(`'PURCHASE' = $${paramIdx}`);
       params.push(partyType);
       paramIdx++;
     }
@@ -404,11 +438,13 @@ export class DocumentStatusService {
     // JMC date range
     if (dateFrom) {
       extraFilters.push(`j."jmcDate" >= $${paramIdx}`);
+      advanceFilters.push(`ap."advanceDate" >= $${paramIdx}`);
       params.push(dateFrom);
       paramIdx++;
     }
     if (dateTo) {
       extraFilters.push(`j."jmcDate" <= $${paramIdx}`);
+      advanceFilters.push(`ap."advanceDate" <= $${paramIdx}`);
       params.push(dateTo);
       paramIdx++;
     }
@@ -416,6 +452,7 @@ export class DocumentStatusService {
     const baseWhere = [`j."siteId" = ANY($1)`, `j."deletedAt" IS NULL`, ...extraFilters].join(
       ' AND ',
     );
+    const advanceWhere = [`ap."siteId" = ANY($1)`, ...advanceFilters].join(' AND ');
 
     // overallStatus filter (applied on the CTE alias, not base table)
     const statusFilters: string[] = [];
@@ -429,14 +466,16 @@ export class DocumentStatusService {
     }
     const statusWhere = statusFilters.length ? `WHERE ${statusFilters.join(' AND ')}` : '';
 
-    // Sort — whitelist field names to prevent injection
+    // Sort — whitelist field names to prevent injection. Applied to the CTE's output aliases
+    // rather than the base tables, because the CTE is now a UNION and the advance branch has no
+    // `j` or `c`/`v` in scope.
     const allowedSortFields: Record<string, string> = {
-      jmcDate: 'j."jmcDate"',
-      jmcNumber: 'j."jmcNumber"',
-      partyName: 'COALESCE(c.name, v.name)',
-      siteName: 's.name',
+      jmcDate: '"jmcDate"',
+      jmcNumber: '"jmcNumber"',
+      partyName: '"partyName"',
+      siteName: '"siteName"',
     };
-    const orderBy = allowedSortFields[sortField] ?? 'j."jmcDate"';
+    const orderBy = allowedSortFields[sortField] ?? '"jmcDate"';
     const orderDir = sortOrder === SortOrder.ASC ? 'ASC' : 'DESC';
 
     const limit = pageSize;
@@ -477,9 +516,12 @@ export class DocumentStatusService {
           bp."paymentTotalAmount",
           bp."hasTransfer",
 
-          ${OVERALL_STATUS_CASE} AS "overallStatus",
+          NULL::uuid    AS "advanceId",
+          NULL::varchar AS "advanceNumber",
+          NULL::numeric AS "advanceAmount",
+          NULL::numeric AS "advanceUnsettled",
 
-          COUNT(*) OVER() AS "totalRecords"
+          ${OVERALL_STATUS_CASE} AS "overallStatus"
 
         FROM jmcs j
         JOIN purchase_orders po
@@ -500,11 +542,20 @@ export class DocumentStatusService {
           ON bp."invoiceId" = si.id AND bp."deletedAt" IS NULL
 
         WHERE ${baseWhere}
-        ORDER BY ${orderBy} ${orderDir}
+
+        UNION ALL
+
+        ${ADVANCE_ISSUE_BRANCH}
+          AND ${advanceWhere}
+      ),
+      filtered AS (
+        SELECT chain.*, COUNT(*) OVER() AS "totalRecords"
+        FROM chain
+        ${statusWhere}
       )
       SELECT *
-      FROM chain
-      ${statusWhere}
+      FROM filtered
+      ORDER BY ${orderBy} ${orderDir}
       LIMIT  $${limitParam}
       OFFSET $${offsetParam}
     `;
@@ -614,6 +665,21 @@ export class DocumentStatusService {
       : [];
     const bpIds = bpRows.map((b) => b.id);
 
+    // 5b) Advances of these POs — a sibling of the JMC subtree, not part of it. An advance exists
+    // precisely because no JMC was raised, so it hangs directly off the PO.
+    const advanceRows: any[] = await this.dataSource.query(
+      `SELECT id, "poId", "advanceNumber", "advanceDate", amount, "settledAmount",
+              "approvalStatus" AS status
+         FROM advance_payments
+        WHERE "poId" = ANY($1) AND "deletedAt" IS NULL
+        ORDER BY "advanceDate" ASC, "createdAt" ASC`,
+      [poIds],
+    );
+    const advanceByPo = new Map<string, any[]>();
+    for (const a of advanceRows) {
+      (advanceByPo.get(a.poId) ?? advanceByPo.set(a.poId, []).get(a.poId))!.push(a);
+    }
+
     // 6) Bank transfers — SALE: by invoiceId; PURCHASE: by bookPaymentId
     const btRows: any[] = invoiceIds.length
       ? await this.dataSource.query(
@@ -674,6 +740,7 @@ export class DocumentStatusService {
       report: { applicable: 0, present: 0, missing: 0 }, // PURCHASE only
       invoice: { ...bucket(), missing: 0 },
       bookPayment: { total: 0, withTransfer: 0, withoutTransfer: 0 },
+      advance: { total: 0, unsettled: 0, unsettledAmount: 0 },
       amounts: { invoiceTotal: 0, paid: 0, remaining: 0 },
     };
 
@@ -736,6 +803,7 @@ export class DocumentStatusService {
         report: { applicable: 0, present: 0, missing: 0 },
         invoice: { ...bucket(), missing: 0 },
         bookPayment: { total: 0, withTransfer: 0, withoutTransfer: 0 },
+        advance: { total: 0, unsettled: 0, unsettledAmount: 0 },
         amounts: { invoiceTotal: 0, paid: 0, remaining: 0 },
       };
       for (const j of jmcs) {
@@ -784,6 +852,27 @@ export class DocumentStatusService {
       summary.amounts.paid += counts.amounts.paid;
       summary.amounts.remaining += counts.amounts.remaining;
 
+      // Advances sit next to the JMC subtree rather than inside it. Only APPROVED ones with a
+      // balance count as outstanding — pending has committed nothing, rejected is void.
+      const advances = (advanceByPo.get(po.id) ?? []).map((a) => ({
+        id: a.id,
+        advanceNumber: a.advanceNumber,
+        advanceDate: a.advanceDate,
+        amount: num(a.amount),
+        settledAmount: num(a.settledAmount),
+        unsettled: num(a.amount) - num(a.settledAmount),
+        status: a.status,
+      }));
+      const outstanding = advances.filter((a) => a.status === 'APPROVED' && a.unsettled > 0);
+      counts.advance = {
+        total: advances.length,
+        unsettled: outstanding.length,
+        unsettledAmount: outstanding.reduce((sum, a) => sum + a.unsettled, 0),
+      };
+      summary.advance.total += counts.advance.total;
+      summary.advance.unsettled += counts.advance.unsettled;
+      summary.advance.unsettledAmount += counts.advance.unsettledAmount;
+
       return {
         id: po.id,
         poNumber: po.poNumber,
@@ -794,6 +883,7 @@ export class DocumentStatusService {
         partyName: po.partyName ?? null,
         site: { id: po.siteId, name: po.siteName, companyName: po.companyName ?? null },
         counts,
+        advances,
         jmcs,
       };
     });
@@ -808,6 +898,49 @@ export class DocumentStatusService {
   private mapIssueRow(r: any) {
     const status = r.overallStatus as OverallStatus;
     const isPurchase = r.partyType === 'PURCHASE';
+
+    // An advance row is PO-anchored: there is no JMC, report, invoice or payment to describe, so
+    // the whole chain below would be a row of nulls dressed up as MISSING states. Returned early
+    // with `jmc: null` and an `advance` node instead — the contract change called out in the spec.
+    if (status === OverallStatus.ADVANCE_UNSETTLED) {
+      const unsettled = Number(r.advanceUnsettled ?? 0);
+      return {
+        siteId: r.siteId,
+        siteName: r.siteName,
+        companyName: r.companyName,
+
+        jmcId: null,
+        jmcNumber: null,
+        jmcDate: r.jmcDate, // the advance date, so shared sorting and date filters still work
+        partyType: r.partyType,
+        partyName: r.partyName ?? null,
+        poId: r.poId,
+        poNumber: r.poNumber,
+
+        overallStatus: status,
+        nextAction: `${NEXT_ACTION[status]} — ₹${unsettled.toLocaleString('en-IN')} outstanding`,
+
+        chain: {
+          po: { id: r.poId, number: r.poNumber, status: r.poStatus },
+          jmc: null,
+          report: { id: null, status: 'N/A' },
+          invoice: { id: null, status: 'MISSING', reason: null, amount: null },
+          bookPayment: { id: null, status: 'N/A', paymentAmount: null },
+          bankTransfer: {
+            status: 'N/A',
+            transferredAmount: null,
+            invoiceAmount: null,
+            percentage: null,
+          },
+          advance: {
+            id: r.advanceId,
+            number: r.advanceNumber,
+            amount: r.advanceAmount ? Number(r.advanceAmount) : null,
+            unsettled,
+          },
+        },
+      };
+    }
 
     // Dynamic next-action for partial bank transfer
     let nextAction: string | null = NEXT_ACTION[status];
@@ -926,6 +1059,8 @@ export class DocumentStatusService {
           number: r.jmcNumber,
           status: r.jmcStatus,
         },
+        // Present on every row so the shape is uniform; only advance rows carry a value.
+        advance: null,
         report: reportChain,
         invoice: invoiceChain,
         bookPayment: bookPaymentChain,

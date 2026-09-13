@@ -1,5 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
 import {
@@ -23,6 +32,7 @@ import {
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
+import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
 
 /**
  * A book payment rolls up onto an invoice only when it is invoice-backed. Advance-backed bookings
@@ -46,6 +56,10 @@ export class BookPaymentService {
    * to enforce the ceiling check (Σ booked ≤ invoice net payable).
    */
   async create(dto: CreateBookPaymentDto, createdBy: string) {
+    if (dto.sourceType === BookPaymentSourceType.ADVANCE) {
+      return await this.createFromAdvance(dto, createdBy);
+    }
+
     return await this.dataSource.transaction(async (em) => {
       // Lock invoice + validate
       const invoice = await em
@@ -146,6 +160,118 @@ export class BookPaymentService {
 
       return { message: BOOK_PAYMENT_RESPONSES.CREATED, id: created.id };
     });
+  }
+
+  /**
+   * Book a payment against an **advance** rather than an invoice.
+   *
+   * An advance is money owed to the vendor with no bill behind it, so there is no invoice to lock,
+   * no net-payable to derive and no tax breakup — the booked figure is simply part of the advance.
+   * `taxableAmount` carries the transferred amount so the payment-advice PDF, which reads that
+   * column, still prints a sensible number.
+   *
+   * The ceiling is the advance's own amount less whatever is already booked against it.
+   * `settledAmount` deliberately plays no part: settlement is invoices consuming the advance, while
+   * booking is releasing the cash — two independent axes over the same money.
+   *
+   * Only `bookedTotal` on the PO moves. There is no invoice rollup to touch, and `paidTotal` stays
+   * where it is until a bank transfer actually goes out, exactly as on the invoice path.
+   */
+  private async createFromAdvance(dto: CreateBookPaymentDto, createdBy: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const advance = await em
+        .getRepository(AdvancePaymentEntity)
+        .createQueryBuilder('ap')
+        .setLock('pessimistic_write')
+        .where('ap.id = :id', { id: dto.advancePaymentId })
+        .andWhere('ap."deletedAt" IS NULL')
+        .getOne();
+
+      if (!advance) throw new NotFoundException(BOOK_PAYMENT_ERRORS.ADVANCE_NOT_FOUND);
+      if (advance.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.ADVANCE_NOT_APPROVED);
+      }
+
+      const advanceAmount = Number(advance.amount);
+      const existingBooked = await this.bookPaymentRepository.sumByAdvance(advance.id, em);
+      const remaining = advanceAmount - existingBooked;
+      if (remaining <= 0) {
+        throw new BadRequestException(
+          BOOK_PAYMENT_ERRORS.ADVANCE_FULLY_BOOKED.replace('{advanceNumber}', advance.advanceNumber)
+            .replace('{amount}', formatInr(advanceAmount))
+            .replace('{booked}', formatInr(existingBooked)),
+        );
+      }
+
+      const transferAmount = Number(dto.transferAmount);
+      if (transferAmount > remaining) {
+        throw new BadRequestException(
+          BOOK_PAYMENT_ERRORS.ADVANCE_CEILING_EXCEEDED.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          )
+            .replace('{amount}', formatInr(advanceAmount))
+            .replace('{booked}', formatInr(existingBooked))
+            .replace('{remaining}', formatInr(remaining))
+            .replace('{requested}', formatInr(transferAmount)),
+        );
+      }
+
+      const created = await this.bookPaymentRepository.create(
+        {
+          sourceType: BookPaymentSourceType.ADVANCE,
+          advancePaymentId: advance.id,
+          invoiceId: null,
+          siteId: advance.siteId,
+          vendorId: advance.vendorId,
+          poId: advance.poId,
+          bookingDate: new Date(dto.bookingDate),
+          taxableAmount: transferAmount,
+          gstAmount: 0,
+          gstPercentage: null,
+          paymentTotalAmount: transferAmount,
+          paymentHoldAmount: 0,
+          paymentHoldReason: dto.paymentHoldReason ?? null,
+          remarks: dto.remarks ?? null,
+          approvalStatus: FinancialApprovalStatus.APPROVED,
+          approvalBy: createdBy,
+          approvalAt: new Date(),
+          isLocked: true,
+          hasTransfer: false,
+          createdBy,
+        } as Partial<BookPaymentEntity>,
+        em,
+      );
+
+      // Freezes the advance against edit and delete — the money has started moving.
+      await em
+        .getRepository(AdvancePaymentEntity)
+        .update({ id: advance.id }, { hasBookPayment: true });
+
+      await this.purchaseOrderService.adjustRollups(
+        advance.poId,
+        { bookedTotal: transferAmount },
+        em,
+      );
+
+      return { message: BOOK_PAYMENT_RESPONSES.CREATED, id: created.id };
+    });
+  }
+
+  /**
+   * Clears `hasBookPayment` once the last booking against an advance is gone, so an advance booked
+   * by mistake becomes editable again instead of being frozen forever.
+   */
+  private async refreshAdvanceBookedFlag(
+    advancePaymentId: string,
+    em: EntityManager,
+  ): Promise<void> {
+    const remainingBookings = await this.bookPaymentRepository.sumByAdvance(advancePaymentId, em);
+    if (remainingBookings <= 0) {
+      await em
+        .getRepository(AdvancePaymentEntity)
+        .update({ id: advancePaymentId }, { hasBookPayment: false });
+    }
   }
 
   async findAll(query: GetBookPaymentDto) {
@@ -368,6 +494,11 @@ export class BookPaymentService {
       await this.bookPaymentRepository.update({ id }, { deletedBy }, em);
       await this.bookPaymentRepository.softDelete({ id }, em);
 
+      // Deleted last booking on an advance → the advance is editable again.
+      if (bp.advancePaymentId) {
+        await this.refreshAdvanceBookedFlag(bp.advancePaymentId, em);
+      }
+
       return { message: BOOK_PAYMENT_RESPONSES.DELETED };
     });
   }
@@ -426,6 +557,13 @@ export class BookPaymentService {
         } as Partial<BookPaymentEntity>,
         em,
       );
+
+      // Rejected after the status update, so sumByAdvance (which skips REJECTED) sees the new
+      // state and can clear the flag when this was the only booking.
+      if (bp.advancePaymentId) {
+        await this.refreshAdvanceBookedFlag(bp.advancePaymentId, em);
+      }
+
       return { message: BOOK_PAYMENT_RESPONSES.REJECTED };
     });
   }

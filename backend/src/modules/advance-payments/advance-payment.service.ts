@@ -34,6 +34,7 @@ import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { RejectDto } from 'src/modules/purchase-orders/dto/approval.dto';
+import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
 
 @Injectable()
 export class AdvancePaymentService {
@@ -41,6 +42,7 @@ export class AdvancePaymentService {
 
   constructor(
     private readonly advanceRepository: AdvancePaymentRepository,
+    private readonly poRepository: PurchaseOrderRepository,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -249,6 +251,20 @@ export class AdvancePaymentService {
         await this.assertWithinPoLimit(po, Number(dto.amount), em, advance.id);
       }
 
+      // An approved advance is already counted in the PO's advancePaidTotal, so a changed amount
+      // has to move the rollup by the difference. A pending one contributes nothing yet.
+      if (
+        dto.amount !== undefined &&
+        Number(dto.amount) !== Number(advance.amount) &&
+        advance.approvalStatus === FinancialApprovalStatus.APPROVED
+      ) {
+        await this.poRepository.adjustRollups(
+          advance.poId,
+          { advancePaidTotal: Number(dto.amount) - Number(advance.amount) },
+          em,
+        );
+      }
+
       await this.advanceRepository.update(
         { id },
         {
@@ -274,6 +290,16 @@ export class AdvancePaymentService {
       const advance = await this.advanceRepository.findOneForUpdate(id, em);
       if (!advance) throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.NOT_FOUND);
       this.assertMutable(advance);
+
+      // Deleting an approved advance takes its money back out of the PO rollup; a pending one was
+      // never in it.
+      if (advance.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        await this.poRepository.adjustRollups(
+          advance.poId,
+          { advancePaidTotal: -Number(advance.amount) },
+          em,
+        );
+      }
 
       await this.advanceRepository.update({ id }, { deletedBy }, em);
       await this.advanceRepository.softDelete({ id }, em);
@@ -308,36 +334,58 @@ export class AdvancePaymentService {
         em,
       );
 
+      // Approval is the point the money becomes committed against the PO — the headroom check
+      // counts APPROVED advances only, so the rollup follows the same rule.
+      await this.poRepository.adjustRollups(
+        advance.poId,
+        { advancePaidTotal: Number(advance.amount) },
+        em,
+      );
+
       this.logger.log(`Advance ${advance.advanceNumber} approved by ${approvedBy}`);
       return { message: ADVANCE_PAYMENT_RESPONSES.APPROVED };
     });
   }
 
   async reject(id: string, dto: RejectDto, rejectedBy: string) {
-    const advance = await this.findActiveOrFail(id);
+    // Transactional because rejecting an already-approved advance also has to take its money back
+    // out of the PO rollup, and the two must not be able to diverge.
+    return await this.dataSource.transaction(async (em) => {
+      const advance = await this.advanceRepository.findOneForUpdate(id, em);
+      if (!advance) throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.NOT_FOUND);
 
-    if (advance.approvalStatus === FinancialApprovalStatus.REJECTED) {
-      throw new BadRequestException(ADVANCE_PAYMENT_ERRORS.ALREADY_REJECTED);
-    }
-    // Rejecting after money has moved would strand a booked payment against a dead document.
-    this.assertMutable(advance);
+      if (advance.approvalStatus === FinancialApprovalStatus.REJECTED) {
+        throw new BadRequestException(ADVANCE_PAYMENT_ERRORS.ALREADY_REJECTED);
+      }
+      // Rejecting after money has moved would strand a booked payment against a dead document.
+      this.assertMutable(advance);
 
-    if (!dto?.reason?.trim()) {
-      throw new BadRequestException(ADVANCE_PAYMENT_ERRORS.REJECT_REASON_REQUIRED);
-    }
+      if (!dto?.reason?.trim()) {
+        throw new BadRequestException(ADVANCE_PAYMENT_ERRORS.REJECT_REASON_REQUIRED);
+      }
 
-    await this.advanceRepository.update(
-      { id },
-      {
-        approvalStatus: FinancialApprovalStatus.REJECTED,
-        approvalBy: rejectedBy,
-        approvalAt: new Date(),
-        rejectionReason: dto.reason.trim(),
-        updatedBy: rejectedBy,
-      },
-    );
+      if (advance.approvalStatus === FinancialApprovalStatus.APPROVED) {
+        await this.poRepository.adjustRollups(
+          advance.poId,
+          { advancePaidTotal: -Number(advance.amount) },
+          em,
+        );
+      }
 
-    return { message: ADVANCE_PAYMENT_RESPONSES.REJECTED };
+      await this.advanceRepository.update(
+        { id },
+        {
+          approvalStatus: FinancialApprovalStatus.REJECTED,
+          approvalBy: rejectedBy,
+          approvalAt: new Date(),
+          rejectionReason: dto.reason.trim(),
+          updatedBy: rejectedBy,
+        },
+        em,
+      );
+
+      return { message: ADVANCE_PAYMENT_RESPONSES.REJECTED };
+    });
   }
 
   // ──────────────────────────────── queries ────────────────────────────────

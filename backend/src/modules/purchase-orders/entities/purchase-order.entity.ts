@@ -132,6 +132,16 @@ export class PurchaseOrderEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   paidTotal: number;
 
+  /**
+   * Money paid against this PO as an advance — i.e. with no invoice behind it yet.
+   *
+   * Deliberately its own rollup rather than folded into `paidTotal`: the dashboard computes
+   * pending billing as `invoicedTotal − paidTotal`, and an advance paid before any invoice exists
+   * would drive that negative. Counts APPROVED advances only, matching the PO headroom check.
+   */
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  advancePaidTotal: number;
+
   @Column({ type: 'timestamp', nullable: true })
   lastInvoiceAt: Date | null;
 

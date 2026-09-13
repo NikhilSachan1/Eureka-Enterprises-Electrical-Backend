@@ -264,4 +264,23 @@ export const BILLING_QUERIES = {
       AND "tdsPaymentId" IS NULL
       AND "deletedAt" IS NULL
   `,
+
+  /**
+   * Advances paid on this site that no invoice has yet accounted for.
+   *
+   * A site closing with an unsettled advance means money left the business against work that was
+   * never billed — the exact exposure advance payments create, so it blocks closure. APPROVED only:
+   * a pending advance has committed nothing, and a rejected one is void.
+   */
+  UNSETTLED_ADVANCES: `
+    SELECT ap.id, ap."advanceNumber", po."poNumber",
+           (ap.amount - ap."settledAmount") as "unsettled"
+    FROM advance_payments ap
+    JOIN purchase_orders po ON po.id = ap."poId"
+    WHERE ap."siteId" = $1
+      AND ap."approvalStatus" = 'APPROVED'
+      AND ap.amount > ap."settledAmount"
+      AND ap."deletedAt" IS NULL
+    ORDER BY ap."advanceDate"
+  `,
 };
