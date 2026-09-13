@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -7,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   DataSource,
+  EntityManager,
   IsNull,
   ILike,
   In,
@@ -35,6 +37,8 @@ import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
+import { AdvancePaymentRepository } from 'src/modules/advance-payments/advance-payment.repository';
+import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -46,11 +50,72 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 
 @Injectable()
 export class SiteInvoiceService {
+  private readonly logger = new Logger(SiteInvoiceService.name);
+
   constructor(
     private readonly invoiceRepository: SiteInvoiceRepository,
     private readonly poRepository: PurchaseOrderRepository,
+    private readonly advanceRepository: AdvancePaymentRepository,
     private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * What the vendor is actually owed in cash for this invoice.
+   *
+   * Identical to the figure the book-payment ceiling uses, deliberately: an advance offsets cash
+   * the vendor receives, so settling against the gross `totalAmount` would treat withheld TDS (and
+   * held-back GST) as money the vendor had already been advanced.
+   */
+  private netPayableOf(inv: SiteInvoiceEntity): number {
+    const taxable = Number(inv.taxableAmount ?? 0);
+    const tds = Number(inv.tdsAmount ?? 0);
+    return inv.isGstHold ? taxable - tds : taxable + Number(inv.gstAmount ?? 0) - tds;
+  }
+
+  /**
+   * Consumes advances already paid on this PO, oldest first, and records how much of the invoice
+   * they covered.
+   *
+   * FIFO by advance date so the oldest money clears first — deterministic, and the order anyone
+   * reconciling by hand would use. `findSettlableByPo` row-locks the advances it returns, so a
+   * concurrent approval on the same PO waits rather than double-spending a balance.
+   *
+   * Sale-side invoices need no guard: advances only exist against PURCHASE POs, so nothing is
+   * returned for a sale PO.
+   */
+  private async settleAdvances(
+    inv: SiteInvoiceEntity,
+    em: EntityManager,
+    actor: string,
+  ): Promise<number> {
+    let remaining = this.netPayableOf(inv);
+    if (remaining <= 0) {
+      return 0;
+    }
+
+    const advances = await this.advanceRepository.findSettlableByPo(inv.poId, em);
+    for (const advance of advances) {
+      if (remaining <= 0) break;
+
+      const available = Number(advance.amount) - Number(advance.settledAmount);
+      if (available <= 0) continue;
+
+      const take = Math.min(available, remaining);
+      await this.advanceRepository.recordSettlement(
+        { advancePaymentId: advance.id, invoiceId: inv.id, amount: take, createdBy: actor },
+        em,
+      );
+      remaining -= take;
+    }
+
+    const covered = this.netPayableOf(inv) - remaining;
+    if (covered > 0) {
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update({ id: inv.id }, { advanceSettledAmount: covered });
+    }
+    return covered;
+  }
 
   async create(dto: CreateSiteInvoiceDto, createdBy: string, activeRole?: string) {
     const jmc = await this.dataSource
@@ -376,6 +441,16 @@ export class SiteInvoiceService {
         em,
       );
 
+      // Money already advanced against this PO now has a bill behind it. Runs inside the same
+      // transaction as the approval so an invoice can never be approved with its settlement half
+      // written, and after the rollup so the PO lock is already held when the advance rows lock.
+      const covered = await this.settleAdvances(inv, em, approvedBy);
+      if (covered > 0) {
+        this.logger.log(
+          `Invoice ${inv.id}: ${formatInr(covered)} covered by advances on PO ${inv.poId}`,
+        );
+      }
+
       // Project GST + TDS register entries atomically with approval.
       await this.projectGstRegisterEntry(inv, em);
       await this.projectTdsRegisterEntry(inv, em);
@@ -526,6 +601,19 @@ export class SiteInvoiceService {
           { invoicedTotal: -Number(inv.totalAmount) },
           em,
         );
+
+        // The invoice goes back to PENDING, so the advances it consumed must become available
+        // again — otherwise a bill that no longer counts would permanently eat advance balance.
+        // Re-approval settles from scratch against whatever the edited amount turns out to be.
+        const restored = await this.advanceRepository.reverseSettlementsForInvoice(inv.id, em);
+        if (restored > 0) {
+          await em
+            .getRepository(SiteInvoiceEntity)
+            .update({ id: inv.id }, { advanceSettledAmount: 0 });
+          this.logger.log(
+            `Invoice ${inv.id} unlocked: ${formatInr(restored)} of advance released back`,
+          );
+        }
 
         // Block unlock if GST payment has already been released — the entry is
         // immutable and cannot be re-projected with edited amounts.

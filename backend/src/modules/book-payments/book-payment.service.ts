@@ -74,15 +74,20 @@ export class BookPaymentService {
         ? invoiceTaxable - Number(invoice.tdsAmount ?? 0)
         : invoiceTaxable + gstAmount - Number(invoice.tdsAmount ?? 0);
 
-      // Ceiling: sum of existing book payments must not exceed invoiceNetPayable
+      // Ceiling: advances already paid to the vendor plus existing bookings must not exceed
+      // invoiceNetPayable. Subtracting the advance is what stops the same work being paid twice —
+      // once when the advance went out, and again as a booking against the full invoice.
+      const advanceSettled = Number(invoice.advanceSettledAmount ?? 0);
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      const remaining = invoiceNetPayable - existingBooked;
+      const remaining = invoiceNetPayable - advanceSettled - existingBooked;
       if (remaining <= 0) {
         throw new BadRequestException(
           BOOK_PAYMENT_ERRORS.INVOICE_FULLY_BOOKED.replace(
             '{netPayable}',
             formatInr(invoiceNetPayable),
-          ).replace('{booked}', formatInr(existingBooked)),
+          )
+            .replace('{advance}', formatInr(advanceSettled))
+            .replace('{booked}', formatInr(existingBooked)),
         );
       }
 
@@ -93,6 +98,7 @@ export class BookPaymentService {
             '{netPayable}',
             formatInr(invoiceNetPayable),
           )
+            .replace('{advance}', formatInr(advanceSettled))
             .replace('{booked}', formatInr(existingBooked))
             .replace('{remaining}', formatInr(remaining))
             .replace('{requested}', formatInr(transferAmount)),
@@ -276,9 +282,12 @@ export class BookPaymentService {
           ? invoiceTaxable - Number(invoice.tdsAmount ?? 0)
           : invoiceTaxable + Number(invoice.gstAmount ?? 0) - Number(invoice.tdsAmount ?? 0);
 
+        // Same advance subtraction as create() — an edit must not be able to reach a total the
+        // original booking was refused for.
+        const advanceSettled = Number(invoice.advanceSettledAmount ?? 0);
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - oldTransferAmount + newTransferAmount;
-        if (adjustedBooked > invoiceNetPayable) {
+        if (adjustedBooked + advanceSettled > invoiceNetPayable) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 

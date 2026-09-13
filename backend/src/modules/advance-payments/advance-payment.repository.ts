@@ -8,6 +8,7 @@ import {
   Repository,
 } from 'typeorm';
 import { AdvancePaymentEntity } from './entities/advance-payment.entity';
+import { AdvanceSettlementEntity } from './entities/advance-settlement.entity';
 
 @Injectable()
 export class AdvancePaymentRepository {
@@ -85,6 +86,69 @@ export class AdvancePaymentRepository {
 
     const row = await qb.getRawOne<{ total: string }>();
     return Number(row?.total ?? 0);
+  }
+
+  /**
+   * Records that `amount` of `advancePaymentId` was consumed by `invoiceId`, and moves the
+   * advance's own running total in the same step so the two can never disagree.
+   *
+   * `settledAmount` is incremented with a SQL expression rather than a read-modify-write: the
+   * caller already holds a row lock from findSettlableByPo, but expressing it this way means a
+   * stale in-memory copy cannot overwrite a concurrent change either.
+   */
+  async recordSettlement(
+    params: { advancePaymentId: string; invoiceId: string; amount: number; createdBy: string },
+    em: EntityManager,
+  ): Promise<void> {
+    const { advancePaymentId, invoiceId, amount, createdBy } = params;
+
+    await em.getRepository(AdvanceSettlementEntity).save(
+      em.getRepository(AdvanceSettlementEntity).create({
+        advancePaymentId,
+        invoiceId,
+        amount,
+        createdBy,
+      }),
+    );
+
+    await em
+      .getRepository(AdvancePaymentEntity)
+      .update({ id: advancePaymentId }, { settledAmount: () => `"settledAmount" + ${amount}` });
+  }
+
+  /**
+   * Undoes every settlement an invoice caused, restoring each advance's balance.
+   *
+   * Returns how much was given back, so the caller can log or assert on it. The advances are
+   * row-locked first: an unlock and a concurrent approval on the same PO would otherwise race on
+   * `settledAmount`.
+   */
+  async reverseSettlementsForInvoice(invoiceId: string, em: EntityManager): Promise<number> {
+    const rows = await em.getRepository(AdvanceSettlementEntity).find({ where: { invoiceId } });
+
+    if (rows.length === 0) {
+      return 0;
+    }
+
+    await em
+      .getRepository(AdvancePaymentEntity)
+      .createQueryBuilder('ap')
+      .setLock('pessimistic_write')
+      .where('ap.id IN (:...ids)', { ids: rows.map((r) => r.advancePaymentId) })
+      .getMany();
+
+    for (const row of rows) {
+      await em
+        .getRepository(AdvancePaymentEntity)
+        .update(
+          { id: row.advancePaymentId },
+          { settledAmount: () => `GREATEST("settledAmount" - ${Number(row.amount)}, 0)` },
+        );
+    }
+
+    await em.getRepository(AdvanceSettlementEntity).delete({ invoiceId });
+
+    return rows.reduce((sum, r) => sum + Number(r.amount), 0);
   }
 
   /** Advances on a PO with balance left, oldest first — the FIFO order settlement consumes in. */
