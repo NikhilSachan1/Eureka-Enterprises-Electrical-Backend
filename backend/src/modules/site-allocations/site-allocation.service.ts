@@ -27,6 +27,7 @@ import {
   DefaultPaginationValues,
   DataSuccessOperationType,
 } from 'src/utils/utility/constants/utility.constants';
+import { Roles } from '../roles/constants/role.constants';
 import { SiteService } from '../sites/site.service';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
@@ -37,6 +38,12 @@ import {
 
 @Injectable()
 export class SiteAllocationService {
+  /**
+   * Roles that make someone allocatable field staff. Anyone holding a role outside this set is
+   * office staff and is kept out of the allocation pool — see getEmployeeOverview().
+   */
+  private static readonly FIELD_STAFF_ROLES = [Roles.EMPLOYEE, Roles.DRIVER];
+
   constructor(
     private readonly siteAllocationRepository: SiteAllocationRepository,
     private readonly siteService: SiteService,
@@ -243,6 +250,31 @@ export class SiteAllocationService {
 
     const conds: string[] = [`u."deletedAt" IS NULL`, `u."status" = 'ACTIVE'`];
     const params: any[] = [];
+
+    // This is the field-staff pool, so office roles are excluded: a person qualifies only if they
+    // hold EMPLOYEE or DRIVER and hold nothing else. Holding EMPLOYEE is not enough on its own —
+    // admins carry it too, which is why the list previously showed everyone.
+    //
+    // The `sa.id IS NOT NULL` escape is deliberate: this screen reports Free/Allocated and its
+    // stats, so someone who *is* allocated must stay visible even if they hold an office role,
+    // otherwise a real allocation silently disappears and the totals stop reconciling.
+    params.push(SiteAllocationService.FIELD_STAFF_ROLES);
+    const fieldStaffParam = `$${params.length}`;
+    conds.push(`(
+      sa.id IS NOT NULL
+      OR (
+        EXISTS (
+          SELECT 1 FROM "user_roles" ur
+            INNER JOIN "roles" r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+           WHERE ur."userId" = u.id AND ur."deletedAt" IS NULL AND r."name" = ANY(${fieldStaffParam})
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "user_roles" ur
+            INNER JOIN "roles" r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+           WHERE ur."userId" = u.id AND ur."deletedAt" IS NULL AND r."name" <> ALL(${fieldStaffParam})
+        )
+      )
+    )`);
     if (allocatedStatus === 'ALLOCATED') conds.push(`sa.id IS NOT NULL`);
     else if (allocatedStatus === 'FREE') conds.push(`sa.id IS NULL`);
     if (search) {
@@ -299,18 +331,36 @@ export class SiteAllocationService {
 
     const countSql = `SELECT COUNT(DISTINCT u.id)::int AS total ${joins}`;
 
+    // Stats stay global (they ignore the table filters), but they must count the same population
+    // the table can ever show — otherwise total/allocated/free describe a different set of people
+    // than the rows underneath them.
     const statsSql = `
       SELECT COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE sa.id IS NOT NULL)::int AS allocated,
         COUNT(*) FILTER (WHERE sa.id IS NULL)::int AS free
       FROM "users" u
       LEFT JOIN "site_allocations" sa ON sa."userId" = u.id AND sa."isCurrentlyAllocated" = true AND sa."deletedAt" IS NULL
-      WHERE u."deletedAt" IS NULL AND u."status" = 'ACTIVE'`;
+      WHERE u."deletedAt" IS NULL AND u."status" = 'ACTIVE'
+        AND (
+          sa.id IS NOT NULL
+          OR (
+            EXISTS (
+              SELECT 1 FROM "user_roles" ur
+                INNER JOIN "roles" r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+               WHERE ur."userId" = u.id AND ur."deletedAt" IS NULL AND r."name" = ANY($1)
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "user_roles" ur
+                INNER JOIN "roles" r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+               WHERE ur."userId" = u.id AND ur."deletedAt" IS NULL AND r."name" <> ALL($1)
+            )
+          )
+        )`;
 
     const [rows, countRows, statsRows] = await Promise.all([
       this.siteAllocationRepository.raw(recordsSql, recordParams),
       this.siteAllocationRepository.raw(countSql, params),
-      this.siteAllocationRepository.raw(statsSql, []),
+      this.siteAllocationRepository.raw(statsSql, [SiteAllocationService.FIELD_STAFF_ROLES]),
     ]);
 
     const s = statsRows[0] ?? {};
