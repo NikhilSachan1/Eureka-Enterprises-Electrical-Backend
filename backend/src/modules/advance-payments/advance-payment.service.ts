@@ -431,15 +431,7 @@ export class AdvancePaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: [
-          'po',
-          'site',
-          'site.company',
-          'vendor',
-          'createdByUser',
-          'updatedByUser',
-          'approvalByUser',
-        ],
+        relations: ['po', 'site', 'site.company', 'vendor', 'createdByUser', 'approvalByUser'],
       }),
       this.advanceRepository.count({ where: baseWheres as never }),
     ]);
@@ -456,15 +448,7 @@ export class AdvancePaymentService {
   async findOne(id: string) {
     const advance = await this.advanceRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: [
-        'po',
-        'site',
-        'site.company',
-        'vendor',
-        'createdByUser',
-        'updatedByUser',
-        'approvalByUser',
-      ],
+      relations: ['po', 'site', 'site.company', 'vendor', 'createdByUser', 'approvalByUser'],
     });
     if (!advance) throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.NOT_FOUND);
     return this.mapRecord(advance);
@@ -474,12 +458,63 @@ export class AdvancePaymentService {
     const amount = Number(advance.amount);
     const settled = Number(advance.settledAmount);
     return {
-      ...advance,
-      createdByUser: formatUser(advance.createdByUser),
-      updatedByUser: formatUser(advance.updatedByUser),
-      approvalByUser: formatUser(advance.approvalByUser),
+      id: advance.id,
+      advanceNumber: advance.advanceNumber,
+      vendorAdvanceNumber: advance.vendorAdvanceNumber,
+      poId: advance.poId,
+      siteId: advance.siteId,
+      vendorId: advance.vendorId,
+      advanceDate: advance.advanceDate,
+      amount,
+      settledAmount: settled,
       balanceAmount: amount - settled,
       isFullySettled: settled >= amount,
+      fileKey: advance.fileKey,
+      fileName: advance.fileName,
+      remarks: advance.remarks,
+      approvalStatus: advance.approvalStatus,
+      approvalAt: advance.approvalAt,
+      rejectionReason: advance.rejectionReason,
+      hasBookPayment: advance.hasBookPayment,
+      createdAt: advance.createdAt,
+      createdByUser: formatUser(advance.createdByUser),
+      approvalByUser: formatUser(advance.approvalByUser),
+      site: advance.site
+        ? {
+            id: advance.site.id,
+            name: advance.site.name,
+            city: advance.site.city ?? null,
+            state: advance.site.state ?? null,
+          }
+        : null,
+      company: advance.site?.company
+        ? {
+            id: advance.site.company.id,
+            name: advance.site.company.name,
+            city: advance.site.company.city ?? null,
+            state: advance.site.company.state ?? null,
+          }
+        : null,
+      vendor: advance.vendor
+        ? {
+            id: advance.vendor.id,
+            name: advance.vendor.name,
+            city: advance.vendor.city ?? null,
+            state: advance.vendor.state ?? null,
+          }
+        : null,
+      po: advance.po
+        ? {
+            id: advance.po.id,
+            poNumber: advance.po.poNumber,
+            poDate: advance.po.poDate,
+            taxableAmount: Number(advance.po.taxableAmount),
+            gstAmount: Number(advance.po.gstAmount),
+            gstPercentage:
+              advance.po.gstPercentage != null ? Number(advance.po.gstPercentage) : null,
+            totalAmount: Number(advance.po.totalAmount),
+          }
+        : null,
     };
   }
 }
