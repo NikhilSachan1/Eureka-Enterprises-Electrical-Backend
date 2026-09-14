@@ -431,15 +431,24 @@ export class AdvancePaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: this.listRelations,
+        relations: [
+          'po',
+          'site',
+          'site.company',
+          'vendor',
+          'createdByUser',
+          'updatedByUser',
+          'approvalByUser',
+        ],
       }),
       this.advanceRepository.count({ where: baseWheres as never }),
     ]);
 
-    const shaped = records.map((r) => this.shape(r));
+    const mapped = records.map((advance) => this.mapRecord(advance));
     // Applied after the query rather than in SQL: `unsettledOnly` is a derived comparison between
     // two columns, and expressing it in the where-object union above would double the clauses.
-    const filtered = unsettledOnly === 'true' ? shaped.filter((r) => r.balanceAmount > 0) : shaped;
+    const filtered =
+      unsettledOnly === 'true' ? mapped.filter((r) => r.balanceAmount > 0) : mapped;
 
     return { records: filtered, totalRecords };
   }
@@ -447,88 +456,30 @@ export class AdvancePaymentService {
   async findOne(id: string) {
     const advance = await this.advanceRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: this.listRelations,
+      relations: [
+        'po',
+        'site',
+        'site.company',
+        'vendor',
+        'createdByUser',
+        'updatedByUser',
+        'approvalByUser',
+      ],
     });
     if (!advance) throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.NOT_FOUND);
-    return this.shape(advance);
+    return this.mapRecord(advance);
   }
 
-  /** Same nested site / PO / vendor relations as JMC, invoice, and payment-request list APIs. */
-  private readonly listRelations = [
-    'po',
-    'site',
-    'site.company',
-    'vendor',
-    'createdByUser',
-    'approvalByUser',
-  ] as const;
-
-  private formatDateOnly(value?: Date | string | null): string | null {
-    if (!value) return null;
-    return new Date(value).toISOString().split('T')[0];
-  }
-
-  /** Adds the derived balance so callers never have to recompute amount − settled themselves. */
-  private shape(a: AdvancePaymentEntity) {
-    const amount = Number(a.amount);
-    const settled = Number(a.settledAmount);
+  private mapRecord(advance: AdvancePaymentEntity) {
+    const amount = Number(advance.amount);
+    const settled = Number(advance.settledAmount);
     return {
-      id: a.id,
-      advanceNumber: a.advanceNumber,
-      vendorAdvanceNumber: a.vendorAdvanceNumber,
-      poId: a.poId,
-      poNumber: a.po?.poNumber ?? null,
-      siteId: a.siteId,
-      siteName: a.site?.name ?? null,
-      vendorId: a.vendorId,
-      vendorName: a.vendor?.name ?? null,
-      advanceDate: a.advanceDate,
-      amount,
-      settledAmount: settled,
+      ...advance,
+      createdByUser: formatUser(advance.createdByUser),
+      updatedByUser: formatUser(advance.updatedByUser),
+      approvalByUser: formatUser(advance.approvalByUser),
       balanceAmount: amount - settled,
       isFullySettled: settled >= amount,
-      fileKey: a.fileKey,
-      fileName: a.fileName,
-      remarks: a.remarks,
-      approvalStatus: a.approvalStatus,
-      approvalAt: a.approvalAt,
-      rejectionReason: a.rejectionReason,
-      hasBookPayment: a.hasBookPayment,
-      createdAt: a.createdAt,
-      createdByUser: formatUser(a.createdByUser),
-      approvalByUser: formatUser(a.approvalByUser),
-      site: a.site
-        ? {
-            id: a.site.id,
-            name: a.site.name,
-            city: a.site.city ?? null,
-            state: a.site.state ?? null,
-            company: a.site.company
-              ? { id: a.site.company.id, name: a.site.company.name }
-              : null,
-          }
-        : null,
-      po: a.po
-        ? {
-            id: a.po.id,
-            poNumber: a.po.poNumber,
-            poDate: this.formatDateOnly(a.po.poDate),
-            partyType: a.po.partyType,
-            taxableAmount: a.po.taxableAmount != null ? Number(a.po.taxableAmount) : null,
-            gstAmount: a.po.gstAmount != null ? Number(a.po.gstAmount) : null,
-            totalAmount: a.po.totalAmount != null ? Number(a.po.totalAmount) : null,
-            invoicedTotal: a.po.invoicedTotal != null ? Number(a.po.invoicedTotal) : null,
-            advancePaidTotal:
-              a.po.advancePaidTotal != null ? Number(a.po.advancePaidTotal) : null,
-            approvalStatus: a.po.approvalStatus,
-          }
-        : null,
-      vendor: a.vendor
-        ? {
-            id: a.vendor.id,
-            name: a.vendor.name,
-          }
-        : null,
     };
   }
 }
