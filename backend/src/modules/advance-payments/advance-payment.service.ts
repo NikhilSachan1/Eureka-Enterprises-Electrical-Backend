@@ -431,7 +431,7 @@ export class AdvancePaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['po', 'site', 'vendor', 'createdByUser', 'approvalByUser'],
+        relations: this.listRelations,
       }),
       this.advanceRepository.count({ where: baseWheres as never }),
     ]);
@@ -447,10 +447,25 @@ export class AdvancePaymentService {
   async findOne(id: string) {
     const advance = await this.advanceRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: ['po', 'site', 'vendor', 'createdByUser', 'approvalByUser'],
+      relations: this.listRelations,
     });
     if (!advance) throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.NOT_FOUND);
     return this.shape(advance);
+  }
+
+  /** Same nested site / PO / vendor relations as JMC, invoice, and payment-request list APIs. */
+  private readonly listRelations = [
+    'po',
+    'site',
+    'site.company',
+    'vendor',
+    'createdByUser',
+    'approvalByUser',
+  ] as const;
+
+  private formatDateOnly(value?: Date | string | null): string | null {
+    if (!value) return null;
+    return new Date(value).toISOString().split('T')[0];
   }
 
   /** Adds the derived balance so callers never have to recompute amount − settled themselves. */
@@ -482,6 +497,38 @@ export class AdvancePaymentService {
       createdAt: a.createdAt,
       createdByUser: formatUser(a.createdByUser),
       approvalByUser: formatUser(a.approvalByUser),
+      site: a.site
+        ? {
+            id: a.site.id,
+            name: a.site.name,
+            city: a.site.city ?? null,
+            state: a.site.state ?? null,
+            company: a.site.company
+              ? { id: a.site.company.id, name: a.site.company.name }
+              : null,
+          }
+        : null,
+      po: a.po
+        ? {
+            id: a.po.id,
+            poNumber: a.po.poNumber,
+            poDate: this.formatDateOnly(a.po.poDate),
+            partyType: a.po.partyType,
+            taxableAmount: a.po.taxableAmount != null ? Number(a.po.taxableAmount) : null,
+            gstAmount: a.po.gstAmount != null ? Number(a.po.gstAmount) : null,
+            totalAmount: a.po.totalAmount != null ? Number(a.po.totalAmount) : null,
+            invoicedTotal: a.po.invoicedTotal != null ? Number(a.po.invoicedTotal) : null,
+            advancePaidTotal:
+              a.po.advancePaidTotal != null ? Number(a.po.advancePaidTotal) : null,
+            approvalStatus: a.po.approvalStatus,
+          }
+        : null,
+      vendor: a.vendor
+        ? {
+            id: a.vendor.id,
+            name: a.vendor.name,
+          }
+        : null,
     };
   }
 }
