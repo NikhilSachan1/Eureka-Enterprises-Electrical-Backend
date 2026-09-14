@@ -1,15 +1,30 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22.3-alpine AS builder
+FROM node:22.3-alpine AS deps
 
 WORKDIR /app
 
 ENV HUSKY=0 \
-    NODE_ENV=development
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+
+COPY package.json package-lock.json ./
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --ignore-scripts
+
+FROM deps AS builder
+
+ENV NODE_ENV=development
 
 COPY . .
 
-RUN npm install --ignore-scripts && npm run build && npm run copy-hbs
+RUN npm run build && npm run copy-hbs
+
+FROM deps AS prod-deps
+
+ENV NODE_ENV=production
+
+RUN npm prune --omit=dev --ignore-scripts
 
 FROM node:22.3-alpine AS production
 
@@ -31,12 +46,8 @@ ENV HUSKY=0 \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-COPY package.json ./
-COPY --from=builder /app/package-lock.json ./
-
-RUN npm ci --omit=dev --ignore-scripts \
-    && chown -R node:node /app
-
+COPY package.json package-lock.json ./
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --chown=node:node entrypoint.sh ./entrypoint.sh
 
