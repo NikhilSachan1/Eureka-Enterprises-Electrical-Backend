@@ -847,6 +847,9 @@ export class PurchaseOrderService {
         po."isLocked",
         COALESCE(c.name, v.name)   AS "partyName",
         COALESCE(c.id, v.id)       AS "partyId",
+        COALESCE(adv."advancePaid", 0)      AS "advancePaid",
+        COALESCE(adv."advanceSettled", 0)   AS "advanceSettled",
+        COALESCE(adv."advanceRemaining", 0) AS "advanceRemaining",
         -- eligibility: NOT REJECTED and invoice ceiling not fully used
         -- (PENDING POs are now allowed for JMC creation; approval chain enforced at approval time)
         CASE
@@ -865,6 +868,16 @@ export class PurchaseOrderService {
       FROM purchase_orders po
       LEFT JOIN contractors c ON c.id = po."contractorId" AND c."deletedAt" IS NULL
       LEFT JOIN vendors     v ON v.id = po."vendorId"     AND v."deletedAt" IS NULL
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(ap.amount), 0) AS "advancePaid",
+          COALESCE(SUM(ap."settledAmount"), 0) AS "advanceSettled",
+          COALESCE(SUM(ap.amount - ap."settledAmount"), 0) AS "advanceRemaining"
+        FROM advance_payments ap
+        WHERE ap."poId" = po.id
+          AND ap."deletedAt" IS NULL
+          AND ap."approvalStatus" = 'APPROVED'
+      ) adv ON true
       WHERE po."siteId"    = $1
         AND po."partyType" = $2
         AND po."deletedAt" IS NULL
@@ -892,6 +905,11 @@ export class PurchaseOrderService {
             invoicedTotal,
             remaining,
             approvalStatus: r.approvalStatus,
+            advancePayment: {
+              amount: Number(r.advancePaid) || 0,
+              settled: Number(r.advanceSettled) || 0,
+              remaining: Number(r.advanceRemaining) || 0,
+            },
           },
         };
       }),
