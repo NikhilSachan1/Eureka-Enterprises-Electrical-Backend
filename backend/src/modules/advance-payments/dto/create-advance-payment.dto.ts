@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsNotEmpty,
@@ -14,12 +14,20 @@ import {
 /**
  * Record an advance paid to a vendor against a PO, before any JMC/invoice exists.
  *
- * `advanceNumber` is deliberately absent — it is generated server-side from the
- * `advance_number_config` config, the same way vendor codes and PO numbers are.
+ * `advanceNumber` is supplied by the caller rather than generated here — the number comes off the
+ * paperwork the business already has, so the system records it instead of inventing its own. It
+ * must be globally unique; no format is imposed.
  *
  * There is no taxable / GST / TDS split: an advance carries a single final amount.
  */
 export class CreateAdvancePaymentDto {
+  @ApiProperty({ description: 'Advance number. Must be unique across all advances.' })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(30)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  advanceNumber: string;
+
   @ApiProperty({ description: 'PO this advance is paid against (must be an APPROVED PURCHASE PO)' })
   @IsNotEmpty()
   @IsUUID()

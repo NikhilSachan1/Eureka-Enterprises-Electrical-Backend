@@ -20,7 +20,6 @@ import { AdvancePaymentRepository } from './advance-payment.repository';
 import { AdvancePaymentEntity } from './entities/advance-payment.entity';
 import { CreateAdvancePaymentDto, UpdateAdvancePaymentDto, GetAdvancePaymentDto } from './dto';
 import {
-  ADVANCE_NUMBER_CONFIG_KEY,
   ADVANCE_PAYMENT_ERRORS,
   ADVANCE_PAYMENT_RESPONSES,
 } from './constants/advance-payment.constants';
@@ -46,53 +45,44 @@ export class AdvancePaymentService {
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
-  // ─────────────────────────── number generation ───────────────────────────
+  // ─────────────────────────── validation helpers ───────────────────────────
 
   /**
-   * Next advance number, e.g. ADV-10001.
-   *
-   * `startFrom` acts as a floor rather than a counter: it only applies while MAX is below it.
-   * Without it an empty table would restart the sequence at 1 — the exact bug the vendor-code
-   * work had to go back and fix, so it is built in here from the start.
+   * Postgres unique-violation SQLSTATE. The repository wraps failures in an
+   * InternalServerErrorException, so the driver error is looked for on the cause too.
    */
-  private async generateAdvanceNumber(em?: EntityManager): Promise<string> {
-    const db = em ?? this.dataSource;
-    const cfgRows = await db.query(
-      `SELECT cs.value
-         FROM config_settings cs
-         JOIN configurations c ON c.id = cs."configId"
-        WHERE c.key = $1 AND cs."isActive" = true AND cs."deletedAt" IS NULL
-        ORDER BY cs."createdAt" DESC
-        LIMIT 1`,
-      [ADVANCE_NUMBER_CONFIG_KEY],
-    );
-
-    // node-pg parses jsonb already — do not JSON.parse again.
-    const cfg = (cfgRows?.[0]?.value ?? {}) as {
-      prefix?: string;
-      padLength?: number;
-      startFrom?: number;
-    };
-    const prefix = cfg.prefix ?? 'ADV-';
-    const padLength = Number(cfg.padLength ?? 5);
-    const startFrom = Number(cfg.startFrom ?? 1);
-
-    const rows = await db.query(
-      `SELECT COALESCE(MAX(CAST(substring("advanceNumber" from '(\\d+)$') AS INTEGER)), 0) AS maxseq
-         FROM advance_payments
-        WHERE "advanceNumber" LIKE $1`,
-      [`${prefix}%`],
-    );
-
-    const next = Math.max(Number(rows?.[0]?.maxseq ?? 0), startFrom - 1) + 1;
-    return `${prefix}${String(next).padStart(padLength, '0')}`;
+  private isUniqueViolation(error: unknown): boolean {
+    const code = (error as { code?: string })?.code;
+    const causeCode = ((error as { cause?: { code?: string } })?.cause ?? {})?.code;
+    return code === '23505' || causeCode === '23505';
   }
 
-  async previewNextNumber(): Promise<{ advanceNumber: string }> {
-    return { advanceNumber: await this.generateAdvanceNumber() };
-  }
+  /**
+   * The advance number comes from the caller, so nothing stops two people entering the same one.
+   *
+   * `UQ_ADVANCE_PAYMENTS_NUMBER` is the real guarantee — a partial unique index over live rows —
+   * but on its own it surfaces as a raw 500. This turns the ordinary case into a readable 400
+   * before anything is written. The index still wins the genuine race between two simultaneous
+   * creates; that path is translated in `create()`.
+   *
+   * Soft-deleted rows are excluded, matching the index: deleting an advance frees its number.
+   */
+  private async assertAdvanceNumberFree(
+    advanceNumber: string,
+    em?: EntityManager,
+    excludeId?: string,
+  ): Promise<void> {
+    const existing = await (em ?? this.dataSource).getRepository(AdvancePaymentEntity).findOne({
+      where: { advanceNumber, deletedAt: IsNull() },
+      select: { id: true },
+    });
 
-  // ─────────────────────────── validation helpers ───────────────────────────
+    if (existing && existing.id !== excludeId) {
+      throw new BadRequestException(
+        ADVANCE_PAYMENT_ERRORS.DUPLICATE_NUMBER.replace('{advanceNumber}', advanceNumber),
+      );
+    }
+  }
 
   /**
    * The PO an advance may be raised against: it must exist, be PURCHASE, and be APPROVED.
@@ -208,27 +198,42 @@ export class AdvancePaymentService {
       await this.assertSiteAccess(po.siteId, createdBy, activeRole);
       await this.assertWithinPoLimit(po, Number(dto.amount), em);
 
-      const advanceNumber = await this.generateAdvanceNumber(em);
+      const advanceNumber = dto.advanceNumber.trim();
+      await this.assertAdvanceNumberFree(advanceNumber, em);
 
-      const created = await this.advanceRepository.create(
-        {
-          advanceNumber,
-          vendorAdvanceNumber: dto.vendorAdvanceNumber?.trim() || null,
-          poId: po.id,
-          siteId: po.siteId,
-          vendorId: po.vendorId,
-          advanceDate: new Date(dto.advanceDate),
-          amount: Number(dto.amount),
-          settledAmount: 0,
-          fileKey: dto.fileKey ?? null,
-          fileName: dto.fileName ?? null,
-          remarks: dto.remarks ?? null,
-          approvalStatus: FinancialApprovalStatus.PENDING,
-          hasBookPayment: false,
-          createdBy,
-        },
-        em,
-      );
+      let created: AdvancePaymentEntity;
+      try {
+        created = await this.advanceRepository.create(
+          {
+            advanceNumber,
+            vendorAdvanceNumber: dto.vendorAdvanceNumber?.trim() || null,
+            poId: po.id,
+            siteId: po.siteId,
+            vendorId: po.vendorId,
+            advanceDate: new Date(dto.advanceDate),
+            amount: Number(dto.amount),
+            settledAmount: 0,
+            fileKey: dto.fileKey ?? null,
+            fileName: dto.fileName ?? null,
+            remarks: dto.remarks ?? null,
+            approvalStatus: FinancialApprovalStatus.PENDING,
+            hasBookPayment: false,
+            createdBy,
+          },
+          em,
+        );
+      } catch (error) {
+        // Two simultaneous creates can both clear the check above; the unique index decides, and
+        // the loser is translated here. Nothing is read from `em` in this branch — a constraint
+        // violation aborts the transaction, so any further query on it would fail with 25P02 and
+        // replace this 400 with a 500.
+        if (this.isUniqueViolation(error)) {
+          throw new BadRequestException(
+            ADVANCE_PAYMENT_ERRORS.DUPLICATE_NUMBER.replace('{advanceNumber}', advanceNumber),
+          );
+        }
+        throw error;
+      }
 
       return {
         message: ADVANCE_PAYMENT_RESPONSES.CREATED,
@@ -439,8 +444,7 @@ export class AdvancePaymentService {
     const mapped = records.map((advance) => this.mapRecord(advance));
     // Applied after the query rather than in SQL: `unsettledOnly` is a derived comparison between
     // two columns, and expressing it in the where-object union above would double the clauses.
-    const filtered =
-      unsettledOnly === 'true' ? mapped.filter((r) => r.balanceAmount > 0) : mapped;
+    const filtered = unsettledOnly === 'true' ? mapped.filter((r) => r.balanceAmount > 0) : mapped;
 
     return { records: filtered, totalRecords };
   }

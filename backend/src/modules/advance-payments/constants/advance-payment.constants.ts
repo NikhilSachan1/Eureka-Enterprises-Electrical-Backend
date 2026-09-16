@@ -1,8 +1,15 @@
-/** Config key holding the advance-number format: { prefix, padLength, startFrom }. */
+/**
+ * Config key holding the advance-number format: { prefix, padLength, startFrom }.
+ *
+ * No longer read: advance numbers are entered by the caller, not generated. The seeded config row
+ * is left in place so the value is not lost if numbering is ever brought back in-house.
+ */
 export const ADVANCE_NUMBER_CONFIG_KEY = 'advance_number_config';
 
 export const ADVANCE_PAYMENT_ERRORS = {
   NOT_FOUND: 'Advance payment not found',
+  DUPLICATE_NUMBER:
+    'Advance number {advanceNumber} is already used by another advance payment. Enter a different number.',
   PO_NOT_FOUND: 'Purchase order not found',
   PO_NOT_PURCHASE: 'Advance payments can only be created against a PURCHASE purchase order.',
   PO_NOT_APPROVED:

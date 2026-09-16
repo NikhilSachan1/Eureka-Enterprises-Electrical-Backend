@@ -22,17 +22,6 @@ import { RejectDto } from 'src/modules/purchase-orders/dto/approval.dto';
 export class AdvancePaymentController {
   constructor(private readonly advanceService: AdvancePaymentService) {}
 
-  /**
-   * Declared before the `:id` routes so the literal path is matched first, following the
-   * `GET /vendors/next-code` precedent in this codebase.
-   */
-  @Get('next-number')
-  @RequiredPermission('financials.advance-payments.view-list')
-  @ApiOperation({ summary: 'Preview the advance number the next created advance will receive' })
-  async nextNumber() {
-    return await this.advanceService.previewNextNumber();
-  }
-
   @Post()
   @RequiredPermission('financials.advance-payments.create')
   @ApiOperation({
@@ -40,7 +29,8 @@ export class AdvancePaymentController {
     description:
       'For money paid before the vendor has raised any JMC/invoice. The PO must be an APPROVED ' +
       'PURCHASE PO, and the caller must be the Project Manager of that site (office roles bypass). ' +
-      'The advance number is generated server-side. Amount is a single final figure — no GST/TDS.',
+      'The advance number is supplied by the caller and must be globally unique. Amount is a ' +
+      'single final figure — no GST/TDS.',
   })
   async create(
     @Request()
