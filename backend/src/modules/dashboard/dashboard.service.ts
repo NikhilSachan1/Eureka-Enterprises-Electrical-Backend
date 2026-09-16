@@ -42,6 +42,12 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { Roles } from '../roles/constants/role.constants';
 
+/**
+ * How many rows each approval card carries as a preview. The card's `count` is a real aggregate,
+ * not this number — see getApprovals().
+ */
+const ITEM_PREVIEW_LIMIT = 20;
+
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
@@ -930,60 +936,86 @@ export class DashboardService {
   }
 
   async getApprovals(): Promise<ApprovalsData> {
-    const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals] =
+    const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals, statRows] =
       await Promise.all([
-        this.executeQuery(queries.getPendingLeaveApprovalsQuery(20)),
-        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(20)),
-        this.executeQuery(queries.getPendingExpenseApprovalsQuery(20)),
-        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(20)),
+        this.executeQuery(queries.getPendingLeaveApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingApprovalStatsQuery()),
       ]);
 
     //TODO: temporary for now
     const siteDocumentsApprovals = [];
 
-    const calculateAging = (items: any[]) => ({
-      days1: items.filter((i) => i.aging <= 1).length,
-      days2_3: items.filter((i) => i.aging >= 2 && i.aging <= 3).length,
-      days4Plus: items.filter((i) => i.aging >= 4).length,
-    });
+    /**
+     * `items` is a capped preview, so counts and aging come from the aggregate instead of from
+     * `items.length` — that is what reported 20 pending attendances when 688 existed.
+     */
+    const statsByType = new Map<
+      string,
+      { total: number; days1: number; days2_3: number; days4Plus: number }
+    >(
+      (statRows as any[]).map((r) => [
+        r.type,
+        {
+          total: Number(r.total ?? 0),
+          days1: Number(r.days1 ?? 0),
+          days2_3: Number(r.days2_3 ?? 0),
+          days4Plus: Number(r.days4Plus ?? 0),
+        },
+      ]),
+    );
+    const statsFor = (type: string) =>
+      statsByType.get(type) ?? { total: 0, days1: 0, days2_3: 0, days4Plus: 0 };
+
+    const aging = (type: string) => {
+      const s = statsFor(type);
+      return { days1: s.days1, days2_3: s.days2_3, days4Plus: s.days4Plus };
+    };
+
+    const leaveStats = statsFor('leave');
+    const attendanceStats = statsFor('attendance');
+    const expenseStats = statsFor('expense');
+    const fuelStats = statsFor('fuelExpense');
 
     return {
       leave: {
-        count: leaveApprovals.length,
+        count: leaveStats.total,
         items: leaveApprovals,
-        aging: calculateAging(leaveApprovals),
+        aging: aging('leave'),
       },
       attendance: {
-        count: attendanceApprovals.length,
+        count: attendanceStats.total,
         items: attendanceApprovals,
-        aging: calculateAging(attendanceApprovals),
+        aging: aging('attendance'),
       },
       expense: {
-        count: expenseApprovals.length,
+        count: expenseStats.total,
         items: expenseApprovals,
-        aging: calculateAging(expenseApprovals),
+        aging: aging('expense'),
       },
       fuelExpense: {
-        count: fuelExpenseApprovals.length,
+        count: fuelStats.total,
         items: fuelExpenseApprovals,
-        aging: calculateAging(fuelExpenseApprovals),
+        aging: aging('fuelExpense'),
       },
       siteDocuments: {
         count: siteDocumentsApprovals.length,
         items: siteDocumentsApprovals,
-        aging: calculateAging(siteDocumentsApprovals),
+        aging: { days1: 0, days2_3: 0, days4Plus: 0 },
       },
       totals: {
-        leave: leaveApprovals.length,
-        attendance: attendanceApprovals.length,
-        expense: expenseApprovals.length,
-        fuelExpense: fuelExpenseApprovals.length,
+        leave: leaveStats.total,
+        attendance: attendanceStats.total,
+        expense: expenseStats.total,
+        fuelExpense: fuelStats.total,
         siteDocuments: siteDocumentsApprovals.length,
         total:
-          leaveApprovals.length +
-          attendanceApprovals.length +
-          expenseApprovals.length +
-          fuelExpenseApprovals.length +
+          leaveStats.total +
+          attendanceStats.total +
+          expenseStats.total +
+          fuelStats.total +
           siteDocumentsApprovals.length,
       },
     };

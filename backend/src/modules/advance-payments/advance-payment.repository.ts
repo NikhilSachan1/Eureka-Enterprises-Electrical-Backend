@@ -151,6 +151,65 @@ export class AdvancePaymentRepository {
     return rows.reduce((sum, r) => sum + Number(r.amount), 0);
   }
 
+  /**
+   * The settlement history for a set of advances — which invoice took how much, and when.
+   *
+   * Batched by id list so a list endpoint costs one query rather than one per row. Ordered oldest
+   * first so the caller sees the same sequence settlement actually consumed them in.
+   */
+  async findSettlementsByAdvanceIds(
+    advanceIds: string[],
+    em?: EntityManager,
+  ): Promise<
+    Array<{
+      advancePaymentId: string;
+      invoiceId: string;
+      invoiceNumber: string | null;
+      invoiceDate: Date | null;
+      amount: string;
+      settledAt: Date;
+    }>
+  > {
+    if (advanceIds.length === 0) return [];
+
+    return await (em ?? this.repository.manager).query(
+      `SELECT s."advancePaymentId", s."invoiceId", i."invoiceNumber", i."invoiceDate",
+              s.amount, s."settledAt"
+         FROM advance_settlements s
+         LEFT JOIN site_invoices i ON i.id = s."invoiceId"
+        WHERE s."advancePaymentId" = ANY($1::uuid[])
+        ORDER BY s."settledAt" ASC`,
+      [advanceIds],
+    );
+  }
+
+  /** The mirror of the above: which advances covered a set of invoices, and by how much. */
+  async findSettlementsByInvoiceIds(
+    invoiceIds: string[],
+    em?: EntityManager,
+  ): Promise<
+    Array<{
+      invoiceId: string;
+      advancePaymentId: string;
+      advanceNumber: string | null;
+      advanceDate: Date | null;
+      amount: string;
+      settledAt: Date;
+    }>
+  > {
+    if (invoiceIds.length === 0) return [];
+
+    return await (em ?? this.repository.manager).query(
+      `SELECT s."invoiceId", s."advancePaymentId", a."advanceNumber", a."advanceDate",
+              s.amount, s."settledAt"
+         FROM advance_settlements s
+         LEFT JOIN advance_payments a ON a.id = s."advancePaymentId"
+        WHERE s."invoiceId" = ANY($1::uuid[])
+        ORDER BY s."settledAt" ASC`,
+      [invoiceIds],
+    );
+  }
+
   /** Advances on a PO with balance left, oldest first — the FIFO order settlement consumes in. */
   async findSettlableByPo(poId: string, em: EntityManager): Promise<AdvancePaymentEntity[]> {
     return await em

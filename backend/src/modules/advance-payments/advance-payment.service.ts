@@ -441,7 +441,11 @@ export class AdvancePaymentService {
       this.advanceRepository.count({ where: baseWheres as never }),
     ]);
 
-    const mapped = records.map((advance) => this.mapRecord(advance));
+    // One query for the whole page rather than one per row.
+    const settlementsByAdvance = await this.loadSettlementsByAdvance(records.map((r) => r.id));
+    const mapped = records.map((advance) =>
+      this.mapRecord(advance, settlementsByAdvance.get(advance.id) ?? []),
+    );
     // Applied after the query rather than in SQL: `unsettledOnly` is a derived comparison between
     // two columns, and expressing it in the where-object union above would double the clauses.
     const filtered = unsettledOnly === 'true' ? mapped.filter((r) => r.balanceAmount > 0) : mapped;
@@ -455,14 +459,53 @@ export class AdvancePaymentService {
       relations: ['po', 'site', 'site.company', 'vendor', 'createdByUser', 'approvalByUser'],
     });
     if (!advance) throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.NOT_FOUND);
-    return this.mapRecord(advance);
+    const settlements = await this.loadSettlementsByAdvance([advance.id]);
+    return this.mapRecord(advance, settlements.get(advance.id) ?? []);
   }
 
-  private mapRecord(advance: AdvancePaymentEntity) {
+  /**
+   * Groups settlement rows by advance so both the list and the detail can be built from one query.
+   */
+  private async loadSettlementsByAdvance(
+    advanceIds: string[],
+  ): Promise<Map<string, ReturnType<AdvancePaymentService['mapSettlement']>[]>> {
+    const rows = await this.advanceRepository.findSettlementsByAdvanceIds(advanceIds);
+    const grouped = new Map<string, ReturnType<AdvancePaymentService['mapSettlement']>[]>();
+    for (const row of rows) {
+      const list = grouped.get(row.advancePaymentId) ?? [];
+      list.push(this.mapSettlement(row));
+      grouped.set(row.advancePaymentId, list);
+    }
+    return grouped;
+  }
+
+  private mapSettlement(row: {
+    invoiceId: string;
+    invoiceNumber: string | null;
+    invoiceDate: Date | null;
+    amount: string;
+    settledAt: Date;
+  }) {
+    return {
+      invoiceId: row.invoiceId,
+      invoiceNumber: row.invoiceNumber ?? null,
+      invoiceDate: row.invoiceDate ?? null,
+      amount: Number(row.amount),
+      settledAt: row.settledAt,
+    };
+  }
+
+  private mapRecord(
+    advance: AdvancePaymentEntity,
+    settlements: ReturnType<AdvancePaymentService['mapSettlement']>[] = [],
+  ) {
     const amount = Number(advance.amount);
     const settled = Number(advance.settledAmount);
     return {
       id: advance.id,
+      // Which invoices consumed this advance and how much each took. `settledAmount` is their sum.
+      settlements,
+      settlementCount: settlements.length,
       advanceNumber: advance.advanceNumber,
       vendorAdvanceNumber: advance.vendorAdvanceNumber,
       poId: advance.poId,

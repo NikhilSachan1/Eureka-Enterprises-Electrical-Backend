@@ -48,6 +48,26 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
+/**
+ * One advance's contribution to one invoice. Shared by the list and the detail so both expose the
+ * breakdown in exactly the same shape.
+ */
+function mapAdvanceSettlement(row: {
+  advancePaymentId: string;
+  advanceNumber: string | null;
+  advanceDate: Date | null;
+  amount: string;
+  settledAt: Date;
+}) {
+  return {
+    advancePaymentId: row.advancePaymentId,
+    advanceNumber: row.advanceNumber ?? null,
+    advanceDate: row.advanceDate ?? null,
+    amount: Number(row.amount),
+    settledAt: row.settledAt,
+  };
+}
+
 @Injectable()
 export class SiteInvoiceService {
   private readonly logger = new Logger(SiteInvoiceService.name);
@@ -245,6 +265,18 @@ export class SiteInvoiceService {
       this.invoiceRepository.count({ where }),
     ]);
 
+    // One query for the whole page, grouped by invoice, so the breakdown is available on the list
+    // as well as the detail without an N+1.
+    const settlementRows = await this.advanceRepository.findSettlementsByInvoiceIds(
+      records.map((r) => r.id),
+    );
+    const settlementsByInvoice = new Map<string, ReturnType<typeof mapAdvanceSettlement>[]>();
+    for (const row of settlementRows) {
+      const list = settlementsByInvoice.get(row.invoiceId) ?? [];
+      list.push(mapAdvanceSettlement(row));
+      settlementsByInvoice.set(row.invoiceId, list);
+    }
+
     return {
       records: records.map((inv) => {
         let isDisabled: boolean;
@@ -276,6 +308,7 @@ export class SiteInvoiceService {
 
         return {
           ...inv,
+          advanceSettlements: settlementsByInvoice.get(inv.id) ?? [],
           createdByUser: formatUser(inv.createdByUser),
           updatedByUser: formatUser(inv.updatedByUser),
           approvalByUser: formatUser(inv.approvalByUser),
@@ -306,8 +339,15 @@ export class SiteInvoiceService {
       ],
     });
     if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
+
+    // Which advances covered this invoice and how much each contributed. `advanceSettledAmount`
+    // on the invoice is their sum; this is the breakdown behind it, in the order settlement
+    // consumed them (oldest advance first).
+    const rows = await this.advanceRepository.findSettlementsByInvoiceIds([invoice.id]);
+
     return {
       ...invoice,
+      advanceSettlements: rows.map(mapAdvanceSettlement),
       createdByUser: formatUser(invoice.createdByUser),
       updatedByUser: formatUser(invoice.updatedByUser),
       approvalByUser: formatUser(invoice.approvalByUser),
