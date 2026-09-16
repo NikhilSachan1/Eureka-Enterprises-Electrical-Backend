@@ -48,6 +48,9 @@ import { Roles } from '../roles/constants/role.constants';
  */
 const ITEM_PREVIEW_LIMIT = 20;
 
+/** The shorter preview the per-module summary cards carry. */
+const PREVIEW_LIMIT_SMALL = 10;
+
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
@@ -558,9 +561,12 @@ export class DashboardService {
       this.executeQuery(
         queries.getUpcomingLeavesQuery(this.formatDate(today), this.formatDate(upcomingEndDate)),
       ),
-      this.executeQuery(queries.getPendingLeaveApprovalsQuery(10)),
+      this.executeQuery(queries.getPendingLeaveApprovalsQuery(PREVIEW_LIMIT_SMALL)),
       this.executeQuery(queries.getLeaveBalanceOverviewQuery(financialYear)),
     ]);
+
+    // `pendingApprovals` is a capped preview, so its count comes from the aggregate.
+    const pendingLeaveCount = await this.pendingApprovalCount('leave');
 
     // Build leave type distribution
     const byType: Record<string, number> = {};
@@ -583,7 +589,7 @@ export class DashboardService {
 
     return {
       pendingApprovals: {
-        count: pendingApprovals.length,
+        count: pendingLeaveCount,
         items: pendingApprovals,
       },
       currentMonthSummary: {
@@ -689,8 +695,11 @@ export class DashboardService {
           DASHBOARD_CONSTANTS.TOP_SPENDERS_LIMIT,
         ),
       ),
-      this.executeQuery(queries.getPendingExpenseApprovalsQuery(10)),
+      this.executeQuery(queries.getPendingExpenseApprovalsQuery(PREVIEW_LIMIT_SMALL)),
     ]);
+
+    // Capped preview above; the card's number is the real backlog.
+    const pendingExpenseCount = await this.pendingApprovalCount('expense');
 
     const summaryData = summary[0] || {};
 
@@ -703,7 +712,7 @@ export class DashboardService {
         rejectedClaims: parseFloat(summaryData.rejectedClaims) || 0,
       },
       pendingApprovals: {
-        count: pendingApprovals.length,
+        count: pendingExpenseCount,
         items: pendingApprovals,
       },
       categoryDistribution: {
@@ -935,6 +944,21 @@ export class DashboardService {
     };
   }
 
+  /**
+   * How many approvals of one kind are genuinely pending.
+   *
+   * The summary cards each show a short preview list, so counting the rows they got back reports
+   * the preview size rather than the backlog. This reads the same aggregate the approvals endpoint
+   * uses, so every card in the dashboard agrees on the number.
+   */
+  private async pendingApprovalCount(
+    type: 'leave' | 'attendance' | 'expense' | 'fuelExpense',
+  ): Promise<number> {
+    const rows = await this.executeQuery(queries.getPendingApprovalStatsQuery());
+    const row = (rows as any[]).find((r) => r.type === type);
+    return Number(row?.total ?? 0);
+  }
+
   async getApprovals(): Promise<ApprovalsData> {
     const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals, statRows] =
       await Promise.all([
@@ -1143,7 +1167,9 @@ export class DashboardService {
           WHEN lp.current_odo < lp.prev_odo THEN 'Odometer rollback: ' || lp.current_odo || ' < previous ' || lp.prev_odo
           ELSE 'Unusual jump: ' || (lp.current_odo - lp.prev_odo) || ' km in short interval'
         END as reason,
-        lp."createdAt"::text as "reportedAt"
+        lp."createdAt"::text as "reportedAt",
+        -- Window functions run before LIMIT, so this is the full match count, not the page size.
+        COUNT(*) OVER()::int as "totalCount"
       FROM log_pairs lp
       JOIN active_versions av ON av."vehicleMasterId" = lp."vehicleId"
       WHERE lp.current_odo < lp.prev_odo
@@ -1168,7 +1194,8 @@ export class DashboardService {
         GROUP BY "vehicleId"
       )
       SELECT av."vehicleMasterId" as "vehicleId", av."registrationNo", av.brand, av.model,
-        lr.last_reading::text as "lastReadingDate"
+        lr.last_reading::text as "lastReadingDate",
+        COUNT(*) OVER()::int as "totalCount"
       FROM active_versions av
       LEFT JOIN last_readings lr ON lr."vehicleId" = av."vehicleMasterId"
       WHERE lr.last_reading IS NULL
@@ -1177,9 +1204,20 @@ export class DashboardService {
       LIMIT 20
     `);
 
+    // `items` is capped at 20; the count comes from the window total so the card reports what
+    // actually exists. `totalCount` is stripped off each row so it does not leak into the payload.
+    const unwrap = (rows: any[]) => ({
+      count: Number(rows[0]?.totalCount ?? 0),
+      items: rows.map((row) => {
+        const item = { ...row };
+        delete item.totalCount;
+        return item;
+      }),
+    });
+
     return {
-      anomalies: { count: anomalies.length, items: anomalies },
-      noReading2Days: { count: noReading.length, items: noReading },
+      anomalies: unwrap(anomalies),
+      noReading2Days: unwrap(noReading),
     };
   }
 
