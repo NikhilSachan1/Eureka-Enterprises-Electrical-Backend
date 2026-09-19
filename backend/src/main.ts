@@ -69,7 +69,10 @@ async function bootstrap() {
   );
   app.setGlobalPrefix(globalPrefix);
 
-  app.enableCors();
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
 
   const moduleRef = app.get(ModuleRef);
   setGlobalModuleRef(moduleRef);
