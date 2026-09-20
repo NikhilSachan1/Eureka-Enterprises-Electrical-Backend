@@ -1,7 +1,7 @@
 # Advance Payments — Frontend Integration Guide
 
 Documents what is **actually shipped**, read off the code. The feature is now complete: create,
-approve, automatic settlement against invoices (§8), and booking the advance out (§9).
+approve, manual settlement against invoices (§8), and booking the advance out (§9).
 
 Base path: `/api/v1/advance-payments`. All routes need the usual four headers
 (`X-Active-Role`, `X-Correlation-Id`, `X-Source-Type`, `X-Client-Type`) plus the bearer token.
@@ -25,33 +25,30 @@ Two consequences that shape the whole UI:
 
 | # | Method | Path | Permission |
 |---|---|---|---|
-| 1 | GET | `/advance-payments/next-number` | `financials.advance-payments.view-list` |
-| 2 | POST | `/advance-payments` | `financials.advance-payments.create` |
-| 3 | GET | `/advance-payments` | `financials.advance-payments.view-list` |
-| 4 | GET | `/advance-payments/:id` | `financials.advance-payments.view-list` |
-| 5 | PATCH | `/advance-payments/:id` | `financials.advance-payments.update` |
-| 6 | DELETE | `/advance-payments/:id` | `financials.advance-payments.delete` |
-| 7 | POST | `/advance-payments/:id/approve` | `financials.advance-payments.approve` |
-| 8 | POST | `/advance-payments/:id/reject` | `financials.advance-payments.approve` |
+| 1 | POST | `/advance-payments` | `financials.advance-payments.create` |
+| 2 | GET | `/advance-payments` | `financials.advance-payments.view-list` |
+| 3 | GET | `/advance-payments/:id` | `financials.advance-payments.view-list` |
+| 4 | PATCH | `/advance-payments/:id` | `financials.advance-payments.update` |
+| 5 | DELETE | `/advance-payments/:id` | `financials.advance-payments.delete` |
+| 6 | POST | `/advance-payments/:id/approve` | `financials.advance-payments.approve` |
+| 7 | POST | `/advance-payments/:id/reject` | `financials.advance-payments.approve` |
+| 8 | POST | `/site-invoices/:id/advance-settlements` | `financials.advance-payments.settle` |
+| 9 | DELETE | `/site-invoices/:id/advance-settlements/:settlementId` | `financials.advance-payments.settle` |
+| 10 | DELETE | `/site-invoices/:id/advance-settlements` | `financials.advance-payments.settle` |
 
 Granted to **SUPER_ADMIN, ADMIN, OPERATION_MANAGER**. Note approve and reject share one permission —
-gate both buttons on `…approve`.
+gate both buttons on `…approve`. Settlement (8–10) lives on the **invoice** and has its own
+permission, `financials.advance-payments.settle`; see §8.
+
+> **Removed:** `GET /advance-payments/next-number`. The advance number is no longer generated
+> server-side — see §3.
 
 ---
 
 ## 3. Create
 
-### 3.1 Preview the number (optional)
-
-```
-GET /advance-payments/next-number
-→ { "advanceNumber": "ADV-00042" }
-```
-
-Display-only. The number is generated **server-side** on create — never send it in the payload, and
-do not assume the previewed value is reserved.
-
-### 3.2 The call
+> **Changed.** `advanceNumber` is now **sent by the client and required**. Nothing is generated or
+> previewed server-side; whatever number the vendor's document carries is what is stored.
 
 ```
 POST /advance-payments
@@ -59,6 +56,7 @@ POST /advance-payments
 
 ```jsonc
 {
+  "advanceNumber": "ADV/2026/42",       // required — ≤30 chars, trimmed, must be globally unique
   "poId": "uuid",                       // required — approved PURCHASE PO
   "advanceDate": "2026-09-05",          // required — ISO date
   "amount": 50000,                      // required — > 0, max 2 decimals
@@ -70,8 +68,14 @@ POST /advance-payments
 ```
 
 ```jsonc
-201 → { "message": "Advance payment recorded successfully", "id": "uuid", "advanceNumber": "ADV-00042" }
+201 → { "message": "Advance payment recorded successfully", "id": "uuid", "advanceNumber": "ADV/2026/42" }
 ```
+
+**Uniqueness is global**, not per-PO or per-vendor, and ignores soft-deleted rows. A duplicate is a
+400: *"Advance number {number} is already used by another advance payment. Enter a different
+number."* No format is enforced — any string up to 30
+characters is accepted. The number **cannot be changed later**: `PATCH` does not accept
+`advanceNumber`. Delete and recreate if it was typed wrong (possible while unbooked and unsettled).
 
 `siteId` and `vendorId` are **derived from the PO** — do not send them, they are ignored.
 
@@ -132,9 +136,14 @@ Sorting via `sortField` + `sortOrder`; sortable fields are `advanceNumber`, `adv
   "vendorId": "uuid", "vendorName": "Lrs Consultant And Engineers",
   "advanceDate": "2026-09-05",
   "amount": 50000,
-  "settledAmount": 0,        // live — moves when an invoice settles against it (§8)
+  "settledAmount": 0,        // moves only when someone settles/unsettles it (§8)
   "balanceAmount": 50000,    // amount − settledAmount, computed server-side
   "isFullySettled": false,
+  "settlementCount": 2,
+  "settlements": [           // which invoices took how much, oldest first
+    { "settlementId": "uuid", "invoiceId": "uuid", "invoiceNumber": "INV-77",
+      "invoiceDate": "2026-09-10", "amount": 30000, "settledAt": "2026-09-10T…" }
+  ],
   "fileKey": "…", "fileName": "…",
   "remarks": "…",
   "approvalStatus": "pending",   // pending | approved | rejected
@@ -147,7 +156,9 @@ Sorting via `sortField` + `sortOrder`; sortable fields are `advanceNumber`, `adv
 }
 ```
 
-`balanceAmount` and `isFullySettled` are derived for you — don't recompute them client-side.
+`balanceAmount` and `isFullySettled` are derived for you — don't recompute them client-side. The
+`settlements[]` breakdown is on both the list and the detail (one query for the whole page, so it is
+not an extra cost), and `settledAmount` is exactly the sum of its `amount`s.
 
 **One gotcha with `unsettledOnly=true`:** it is applied *after* pagination, in memory. So a page can
 come back with fewer rows than `pageSize` while `totalRecords` still reports the unfiltered count.
@@ -207,26 +218,101 @@ already-*approved* is refused. So the reject action is not terminal in the UI.
 
 ---
 
-## 8. Settlement — live, and entirely automatic
+## 8. Settlement — manual, driven from the invoice
 
-There is **no settlement endpoint and no settle button**. It happens by itself when a PURCHASE
-invoice on the same PO is approved:
+> **Changed.** Settlement used to happen by itself when an invoice was approved. It no longer does.
+> Approving an invoice settles **nothing**; approving an advance settles **nothing**. An operator
+> now decides which advance clears which invoice, and by how much, through the endpoints below.
+>
+> The reason: automatic settlement only fired at the moment of invoice approval, so the very common
+> real sequence — invoice approved first, advance approved a few days later — silently settled
+> nothing and left both documents looking wrong with no way to correct them.
+
+All three endpoints live on the **invoice**, and all three require the permission
+`financials.advance-payments.settle` (seeded to SUPER_ADMIN, ADMIN, OPERATION_MANAGER).
+
+### Settle
 
 ```
-invoice approved (net payable ₹40,000)  →  oldest advances on that PO consumed first (FIFO)
-                                        →  advance.settledAmount += 40,000
-                                        →  invoice.advanceSettledAmount = 40,000
+POST /site-invoices/:id/advance-settlements
+{ "advancePaymentId": "uuid", "amount": 40000 }
 ```
 
-- **FIFO by `advanceDate`**, then `createdAt`. The oldest money clears first.
-- Settlement consumes **net payable** (`isGstHold ? taxable − tds : taxable + gst − tds`), not the
-  gross invoice total — an advance is cash to the vendor, so it offsets cash the vendor is owed.
-- An advance larger than the invoice carries its balance forward to the next one; it is never split.
-- **Unlocking an approved invoice reverses it** — settlement rows are deleted and balances restored.
-  Re-approving settles again from scratch against the edited amount.
+```jsonc
+// 201
+{
+  "message": "Advance settled against the invoice successfully",
+  "settledAmount": 40000,
+  "advanceBalanceAfter": 10000,   // advance.amount − advance.settledAmount, after this call
+  "invoiceDueAfter": 0            // net payable − advanceSettled − booked, after this call
+}
+```
 
-So `settledAmount`, `balanceAmount` and `isFullySettled` are now **live values that change on their
-own**. Poll or re-fetch after an invoice approval; don't cache them.
+Use `advanceBalanceAfter` / `invoiceDueAfter` to refresh both cards without a second fetch.
+
+**Rules, in the order they are checked** — each is a 400 with a message to surface verbatim:
+
+| Condition | Message |
+|---|---|
+| Invoice is not PURCHASE-side | Advances can only be settled against PURCHASE side invoices. |
+| Invoice not APPROVED | The invoice must be approved before an advance can be settled against it. |
+| Advance not found / soft-deleted | Advance payment not found. *(404)* |
+| Advance not APPROVED | The advance payment must be approved before it can be settled. |
+| Advance belongs to another PO | This advance belongs to a different purchase order… |
+| Advance already fully settled | Advance {number} is already fully settled. |
+| Amount > advance balance | Advance {number} has only {balance} left to settle. You entered {requested}. |
+| Invoice has no due left | This invoice has nothing left to settle — its net payable of {netPayable} is already covered by advances and booked payments. |
+| Amount > invoice due | Only {due} is due on this invoice. You entered {requested}. |
+
+- **Same PO only.** An advance can only be settled against invoices of its own purchase order.
+- **Partial amounts are allowed**, and the same (advance, invoice) pair can be settled more than
+  once — ₹60,000 today, ₹40,000 next week. The pair stays **one row** that accumulates to
+  ₹1,00,000; reversing it gives back the whole ₹1,00,000, not just the last tranche.
+- "Due" is **net payable − already settled − already booked**, where net payable is
+  `isGstHold ? taxable − tds : taxable + gst − tds`. An advance is cash to the vendor, so it
+  offsets cash the vendor is owed, and it can never overlap money already booked for payment.
+
+### Unsettle one
+
+```
+DELETE /site-invoices/:id/advance-settlements/:settlementId
+```
+
+```jsonc
+// 200
+{ "message": "Advance settlement reversed successfully", "releasedAmount": 40000 }
+```
+
+### Unsettle all on the invoice
+
+```
+DELETE /site-invoices/:id/advance-settlements
+```
+
+Same response shape; `releasedAmount` is the total given back. Both return **404
+"No settlement found to reverse for this invoice."** when there is nothing to reverse, and a
+settlement can only be reversed through *its own* invoice's endpoint — passing a settlement id that
+belongs to another invoice is a 404, not a silent success.
+
+### Unlocking an invoice that has settlements
+
+Unlock no longer reverses anything behind the operator's back. Instead **both `unlock-request` and
+`unlock-grant` are refused** while any settlement exists:
+
+> This invoice has 1 advance settlement(s) totalling ₹1,00,000.00. Remove them first — unlocking
+> would let the amount change while the settlement still points at the old figure.
+
+So the UI flow for editing a settled invoice is: unsettle → unlock → edit → re-approve → settle
+again. The requester is told at *request* time, not only at grant time.
+
+`settledAmount`, `balanceAmount` and `isFullySettled` on the advance change only as a result of
+these calls, so re-fetch after a settle/unsettle — not after an invoice approval.
+
+### Which advances can I settle against this invoice?
+
+There is **no dedicated dropdown/eligibility endpoint yet**. For now, list advances on the
+invoice's PO with `GET /advance-payments?poId=<invoice.poId>&unsettledOnly=true` and let the
+server's validation messages handle the rest.
 
 ### What this means for booking a payment
 
@@ -319,9 +405,11 @@ the user needs. Don't replace them with generic copy.
 ## 11. Suggested build order
 
 1. List + detail (read-only) — everything needed is live.
-2. Create form: PO picker → `next-number` preview → amount + date + optional file.
+2. Create form: PO picker → advance number (typed in, required) → amount + date + optional file.
 3. Approve / reject actions, both gated on `…approve`, both followed by a re-fetch.
 4. Edit / delete, gated on `hasBookPayment === false && settledAmount === 0`.
-5. Show `balanceAmount` / `isFullySettled` on the list and detail — they move on their own (§8).
-6. Surface the new `ADVANCE_UNSETTLED` rows and the `advances-settled` closing condition (§8).
+5. **Settle / unsettle on the invoice screen** (§8), gated on `financials.advance-payments.settle`;
+   re-fetch both the invoice and the advance afterwards.
+6. Show `balanceAmount` / `isFullySettled` on the list and detail — they move on settle/unsettle (§8).
+7. Surface the new `ADVANCE_UNSETTLED` rows and the `advances-settled` closing condition (§8).
 

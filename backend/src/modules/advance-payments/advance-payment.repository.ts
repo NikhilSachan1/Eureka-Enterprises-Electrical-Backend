@@ -102,13 +102,16 @@ export class AdvancePaymentRepository {
   ): Promise<void> {
     const { advancePaymentId, invoiceId, amount, createdBy } = params;
 
-    await em.getRepository(AdvanceSettlementEntity).save(
-      em.getRepository(AdvanceSettlementEntity).create({
-        advancePaymentId,
-        invoiceId,
-        amount,
-        createdBy,
-      }),
+    // `UQ_ADVANCE_SETTLEMENT_PAIR` keeps one row per (advance, invoice). Manual settlement can
+    // legitimately touch the same pair more than once — ₹60,000 today, ₹40,000 next week — so the
+    // row accumulates instead of a second insert failing on the constraint. The row therefore
+    // means "total settled between these two", which is also what reversing it undoes.
+    await em.query(
+      `INSERT INTO advance_settlements ("advancePaymentId", "invoiceId", amount, "createdBy")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("advancePaymentId", "invoiceId")
+       DO UPDATE SET amount = advance_settlements.amount + EXCLUDED.amount`,
+      [advancePaymentId, invoiceId, amount, createdBy],
     );
 
     await em
@@ -162,6 +165,7 @@ export class AdvancePaymentRepository {
     em?: EntityManager,
   ): Promise<
     Array<{
+      id: string;
       advancePaymentId: string;
       invoiceId: string;
       invoiceNumber: string | null;
@@ -173,7 +177,7 @@ export class AdvancePaymentRepository {
     if (advanceIds.length === 0) return [];
 
     return await (em ?? this.repository.manager).query(
-      `SELECT s."advancePaymentId", s."invoiceId", i."invoiceNumber", i."invoiceDate",
+      `SELECT s.id, s."advancePaymentId", s."invoiceId", i."invoiceNumber", i."invoiceDate",
               s.amount, s."settledAt"
          FROM advance_settlements s
          LEFT JOIN site_invoices i ON i.id = s."invoiceId"
@@ -183,12 +187,50 @@ export class AdvancePaymentRepository {
     );
   }
 
+  /**
+   * Undoes exactly one settlement, restoring that advance's balance. Returns the amount released,
+   * or 0 when the row does not exist or does not belong to the given invoice.
+   *
+   * Scoped by invoice as well as id so a settlement can never be reversed through the wrong
+   * invoice's endpoint.
+   */
+  async reverseSettlement(
+    settlementId: string,
+    invoiceId: string,
+    em: EntityManager,
+  ): Promise<number> {
+    const row = await em
+      .getRepository(AdvanceSettlementEntity)
+      .findOne({ where: { id: settlementId, invoiceId } });
+    if (!row) return 0;
+
+    // Lock the advance before moving its running total, matching recordSettlement.
+    await em
+      .getRepository(AdvancePaymentEntity)
+      .createQueryBuilder('ap')
+      .setLock('pessimistic_write')
+      .where('ap.id = :id', { id: row.advancePaymentId })
+      .getOne();
+
+    const amount = Number(row.amount);
+    await em
+      .getRepository(AdvancePaymentEntity)
+      .update(
+        { id: row.advancePaymentId },
+        { settledAmount: () => `GREATEST("settledAmount" - ${amount}, 0)` },
+      );
+    await em.getRepository(AdvanceSettlementEntity).delete({ id: settlementId });
+
+    return amount;
+  }
+
   /** The mirror of the above: which advances covered a set of invoices, and by how much. */
   async findSettlementsByInvoiceIds(
     invoiceIds: string[],
     em?: EntityManager,
   ): Promise<
     Array<{
+      id: string;
       invoiceId: string;
       advancePaymentId: string;
       advanceNumber: string | null;
@@ -200,7 +242,7 @@ export class AdvancePaymentRepository {
     if (invoiceIds.length === 0) return [];
 
     return await (em ?? this.repository.manager).query(
-      `SELECT s."invoiceId", s."advancePaymentId", a."advanceNumber", a."advanceDate",
+      `SELECT s.id, s."invoiceId", s."advancePaymentId", a."advanceNumber", a."advanceDate",
               s.amount, s."settledAt"
          FROM advance_settlements s
          LEFT JOIN advance_payments a ON a.id = s."advancePaymentId"

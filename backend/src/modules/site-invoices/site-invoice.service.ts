@@ -19,7 +19,12 @@ import {
 } from 'typeorm';
 import { SiteInvoiceRepository } from './site-invoice.repository';
 import { SiteInvoiceEntity } from './entities/site-invoice.entity';
-import { CreateSiteInvoiceDto, UpdateSiteInvoiceDto, GetSiteInvoiceDto } from './dto';
+import {
+  CreateSiteInvoiceDto,
+  UpdateSiteInvoiceDto,
+  GetSiteInvoiceDto,
+  SettleAdvanceDto,
+} from './dto';
 import {
   ApproveDto,
   RejectDto,
@@ -53,6 +58,7 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
  * breakdown in exactly the same shape.
  */
 function mapAdvanceSettlement(row: {
+  id: string;
   advancePaymentId: string;
   advanceNumber: string | null;
   advanceDate: Date | null;
@@ -60,6 +66,8 @@ function mapAdvanceSettlement(row: {
   settledAt: Date;
 }) {
   return {
+    // The id the single-reverse endpoint takes: DELETE /site-invoices/:id/advance-settlements/:settlementId
+    settlementId: row.id,
     advancePaymentId: row.advancePaymentId,
     advanceNumber: row.advanceNumber ?? null,
     advanceDate: row.advanceDate ?? null,
@@ -93,48 +101,175 @@ export class SiteInvoiceService {
   }
 
   /**
-   * Consumes advances already paid on this PO, oldest first, and records how much of the invoice
-   * they covered.
+   * How much of this invoice is still uncovered — what an advance may be settled against.
    *
-   * FIFO by advance date so the oldest money clears first — deterministic, and the order anyone
-   * reconciling by hand would use. `findSettlableByPo` row-locks the advances it returns, so a
-   * concurrent approval on the same PO waits rather than double-spending a balance.
-   *
-   * Sale-side invoices need no guard: advances only exist against PURCHASE POs, so nothing is
-   * returned for a sale PO.
+   * Booked payments are subtracted alongside advances because both are ways the vendor gets this
+   * invoice's money. Ignoring bookings here would let an advance settle against an amount already
+   * committed to a bank transfer, and the vendor would be paid twice.
    */
-  private async settleAdvances(
-    inv: SiteInvoiceEntity,
-    em: EntityManager,
-    actor: string,
-  ): Promise<number> {
-    let remaining = this.netPayableOf(inv);
-    if (remaining <= 0) {
-      return 0;
-    }
+  private async dueForSettlement(inv: SiteInvoiceEntity): Promise<number> {
+    return (
+      this.netPayableOf(inv) - Number(inv.advanceSettledAmount ?? 0) - Number(inv.bookedTotal ?? 0)
+    );
+  }
 
-    const advances = await this.advanceRepository.findSettlableByPo(inv.poId, em);
-    for (const advance of advances) {
-      if (remaining <= 0) break;
+  /**
+   * Settle a chosen advance against this invoice, for a chosen amount.
+   *
+   * Deliberately manual. Settlement used to run by itself when an invoice was approved, consuming
+   * whatever advances existed on the PO oldest-first — which meant approving an advance could reach
+   * back and silently clear an older, already part-paid invoice. Pairing an advance with an invoice
+   * is a business judgement, so it is now an explicit action; only the arithmetic is enforced here.
+   */
+  async settleAdvance(invoiceId: string, dto: SettleAdvanceDto, actor: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const invoice = await em
+        .getRepository(SiteInvoiceEntity)
+        .createQueryBuilder('inv')
+        .setLock('pessimistic_write')
+        .where('inv.id = :id', { id: invoiceId })
+        .andWhere('inv."deletedAt" IS NULL')
+        .getOne();
+      if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
 
-      const available = Number(advance.amount) - Number(advance.settledAmount);
-      if (available <= 0) continue;
+      if (invoice.partyType !== PartyType.PURCHASE) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_INVOICE_NOT_PURCHASE);
+      }
+      if (invoice.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_INVOICE_NOT_APPROVED);
+      }
 
-      const take = Math.min(available, remaining);
+      const advance = await this.advanceRepository.findOneForUpdate(dto.advancePaymentId, em);
+      if (!advance) throw new NotFoundException(INVOICE_ERRORS.SETTLE_ADVANCE_NOT_FOUND);
+      if (advance.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_ADVANCE_NOT_APPROVED);
+      }
+
+      // An advance is raised against one PO's uninvoiced work and validated against that PO's
+      // headroom. Settling it elsewhere would leave both POs' figures describing money that is no
+      // longer where they think it is.
+      if (advance.poId !== invoice.poId) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_DIFFERENT_PO);
+      }
+
+      const amount = Number(dto.amount);
+      const advanceBalance = Number(advance.amount) - Number(advance.settledAmount);
+      if (advanceBalance <= 0) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_ADVANCE_FULLY_SETTLED.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          ),
+        );
+      }
+      if (amount > advanceBalance) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_EXCEEDS_ADVANCE_BALANCE.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          )
+            .replace('{balance}', formatInr(advanceBalance))
+            .replace('{requested}', formatInr(amount)),
+        );
+      }
+
+      const due = await this.dueForSettlement(invoice);
+      if (due <= 0) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_NO_DUE.replace(
+            '{netPayable}',
+            formatInr(this.netPayableOf(invoice)),
+          ),
+        );
+      }
+      if (amount > due) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_EXCEEDS_DUE.replace('{due}', formatInr(due)).replace(
+            '{requested}',
+            formatInr(amount),
+          ),
+        );
+      }
+
       await this.advanceRepository.recordSettlement(
-        { advancePaymentId: advance.id, invoiceId: inv.id, amount: take, createdBy: actor },
+        { advancePaymentId: advance.id, invoiceId: invoice.id, amount, createdBy: actor },
         em,
       );
-      remaining -= take;
-    }
-
-    const covered = this.netPayableOf(inv) - remaining;
-    if (covered > 0) {
       await em
         .getRepository(SiteInvoiceEntity)
-        .update({ id: inv.id }, { advanceSettledAmount: covered });
-    }
-    return covered;
+        .update(
+          { id: invoice.id },
+          { advanceSettledAmount: () => `"advanceSettledAmount" + ${amount}` },
+        );
+
+      this.logger.log(
+        `Invoice ${invoice.id}: ${formatInr(amount)} settled from advance ${advance.advanceNumber}`,
+      );
+      return {
+        message: INVOICE_RESPONSES.ADVANCE_SETTLED,
+        settledAmount: amount,
+        advanceBalanceAfter: advanceBalance - amount,
+        invoiceDueAfter: due - amount,
+      };
+    });
+  }
+
+  /**
+   * Refuses the operation while any advance is still settled against this invoice.
+   *
+   * Guards unlock: an unlocked invoice can be edited to a different amount, and a settlement made
+   * against the old figure would then be describing money that no longer matches the bill.
+   */
+  private async assertNoAdvanceSettlements(invoiceId: string, em: EntityManager): Promise<void> {
+    const rows = await this.advanceRepository.findSettlementsByInvoiceIds([invoiceId], em);
+    if (rows.length === 0) return;
+
+    const total = rows.reduce((sum, r) => sum + Number(r.amount), 0);
+    throw new BadRequestException(
+      INVOICE_ERRORS.CANNOT_UNLOCK_HAS_SETTLEMENTS.replace('{count}', String(rows.length)).replace(
+        '{amount}',
+        formatInr(total),
+      ),
+    );
+  }
+
+  /**
+   * Undo settlements on this invoice — one row, or all of them.
+   *
+   * Allowed while the invoice is approved and locked, because unsettling is exactly what a user
+   * has to do *before* unlocking it (see grantUnlock).
+   */
+  async unsettleAdvance(invoiceId: string, settlementId: string | null, actor: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const invoice = await em
+        .getRepository(SiteInvoiceEntity)
+        .createQueryBuilder('inv')
+        .setLock('pessimistic_write')
+        .where('inv.id = :id', { id: invoiceId })
+        .andWhere('inv."deletedAt" IS NULL')
+        .getOne();
+      if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
+
+      const restored = settlementId
+        ? await this.advanceRepository.reverseSettlement(settlementId, invoiceId, em)
+        : await this.advanceRepository.reverseSettlementsForInvoice(invoiceId, em);
+
+      if (restored <= 0) {
+        throw new NotFoundException(INVOICE_ERRORS.SETTLEMENT_NOT_FOUND);
+      }
+
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update(
+          { id: invoice.id },
+          { advanceSettledAmount: () => `GREATEST("advanceSettledAmount" - ${restored}, 0)` },
+        );
+
+      this.logger.log(
+        `Invoice ${invoiceId}: ${formatInr(restored)} of advance released by ${actor}`,
+      );
+      return { message: INVOICE_RESPONSES.ADVANCE_UNSETTLED, releasedAmount: restored };
+    });
   }
 
   async create(dto: CreateSiteInvoiceDto, createdBy: string, activeRole?: string) {
@@ -481,15 +616,8 @@ export class SiteInvoiceService {
         em,
       );
 
-      // Money already advanced against this PO now has a bill behind it. Runs inside the same
-      // transaction as the approval so an invoice can never be approved with its settlement half
-      // written, and after the rollup so the PO lock is already held when the advance rows lock.
-      const covered = await this.settleAdvances(inv, em, approvedBy);
-      if (covered > 0) {
-        this.logger.log(
-          `Invoice ${inv.id}: ${formatInr(covered)} covered by advances on PO ${inv.poId}`,
-        );
-      }
+      // Approval deliberately does NOT settle advances. Deciding which advance clears which
+      // invoice is a business judgement — it is done explicitly via settleAdvance().
 
       // Project GST + TDS register entries atomically with approval.
       await this.projectGstRegisterEntry(inv, em);
@@ -608,6 +736,10 @@ export class SiteInvoiceService {
     if (!inv.isLocked || inv.approvalStatus !== FinancialApprovalStatus.APPROVED) {
       throw new BadRequestException(INVOICE_ERRORS.ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK);
     }
+    // Checked here as well as at grant time, so the requester is told to unsettle now rather than
+    // after waiting for an approver who would only hit the same wall.
+    await this.assertNoAdvanceSettlements(id, this.dataSource.manager);
+
     await this.invoiceRepository.update(
       { id },
       {
@@ -642,18 +774,11 @@ export class SiteInvoiceService {
           em,
         );
 
-        // The invoice goes back to PENDING, so the advances it consumed must become available
-        // again — otherwise a bill that no longer counts would permanently eat advance balance.
-        // Re-approval settles from scratch against whatever the edited amount turns out to be.
-        const restored = await this.advanceRepository.reverseSettlementsForInvoice(inv.id, em);
-        if (restored > 0) {
-          await em
-            .getRepository(SiteInvoiceEntity)
-            .update({ id: inv.id }, { advanceSettledAmount: 0 });
-          this.logger.log(
-            `Invoice ${inv.id} unlocked: ${formatInr(restored)} of advance released back`,
-          );
-        }
+        // Settlements are NOT reversed automatically here. Unlocking makes the amount editable,
+        // so a settlement recorded against the old figure must not survive — but silently undoing
+        // it would be the system moving money on its own, which is the behaviour this feature was
+        // deliberately moved away from. The user unsettles explicitly, then unlocks.
+        await this.assertNoAdvanceSettlements(inv.id, em);
 
         // Block unlock if GST payment has already been released — the entry is
         // immutable and cannot be re-projected with edited amounts.

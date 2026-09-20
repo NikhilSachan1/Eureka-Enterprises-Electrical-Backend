@@ -44,8 +44,8 @@ advances, part payments against a PO, and so on. Previously there was nowhere in
 record this, so such payments either went untracked or were forced through the invoice flow with a
 fake invoice.
 
-The full lifecycle: **record → approve → (optionally) pay out → settle automatically against
-invoices as they arrive.**
+The full lifecycle: **record → approve → (optionally) pay out → settle manually against the
+invoices it covers.**
 
 ## Business rules
 
@@ -60,24 +60,39 @@ invoices as they arrive.**
 | The PO it belongs to **cannot be changed** | Delete and recreate instead; moving it would invalidate the headroom it was created under. |
 | A rejected advance **can be approved later** | Reject is not terminal. Only *already approved* is refused. |
 
-### Settlement — automatic, no button
+### Settlement — manual, decided by an operator
 
-When a PURCHASE invoice on the same PO is approved, advances on that PO are consumed
-**oldest first (FIFO by advance date)**:
+An operator picks the advance, the invoice and the amount. Approving an invoice settles nothing;
+approving an advance settles nothing.
 
 ```
-invoice approved, net payable ₹40,000
-advance A (01 Sep, ₹1,00,000 balance)  →  ₹40,000 taken
-                                       →  advance A balance ₹60,000
-                                       →  invoice.advanceSettledAmount = ₹40,000
+POST   /site-invoices/:id/advance-settlements                  { advancePaymentId, amount }
+DELETE /site-invoices/:id/advance-settlements/:settlementId     — reverse one
+DELETE /site-invoices/:id/advance-settlements                   — reverse all on the invoice
 ```
 
+All three require the new permission `financials.advance-payments.settle` (SUPER_ADMIN, ADMIN,
+OPERATION_MANAGER).
+
+- **Same PO only** — an advance can only be settled against invoices of its own purchase order.
 - Settlement consumes **net payable** — `isGstHold ? taxable − tds : taxable + gst − tds` — not the
   gross invoice value. An advance is cash to the vendor, so it offsets cash the vendor is owed;
   withheld TDS never reaches them.
-- An advance larger than the invoice **carries its balance forward**; it is never split.
-- **Unlocking an approved invoice reverses it** — settlements are deleted and balances restored.
-  Re-approving settles afresh against the edited amount.
+- The settleable amount is `net payable − already settled − already booked`; anything above it is a
+  400 stating the exact figure that is due.
+- Both documents must be **APPROVED**, and the invoice must be PURCHASE-side.
+- **Partial and repeated** settlement is allowed. The same (advance, invoice) pair is one row that
+  accumulates, so reversing it returns the whole accumulated amount.
+- **An invoice with settlements cannot be unlocked** — `unlock-request` and `unlock-grant` are both
+  refused, naming the count and total. Unsettle first, then unlock. Nothing is ever reversed
+  silently on the operator's behalf.
+
+> **Changed from the earlier build.** Settlement used to run by itself on invoice approval (FIFO by
+> advance date) and to be reversed automatically on unlock. Both behaviours are gone. The automatic
+> version only fired at the instant of invoice approval, so the common real-world sequence — invoice
+> approved first, advance approved days later — settled nothing at all and could not be corrected.
+> Existing settlement rows made by the old automatic run are untouched and can be reversed through
+> the new endpoints.
 
 ### The double-payment guard
 
@@ -99,7 +114,6 @@ is invoices *consuming* the advance, booking is *releasing the cash* — two ind
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/advance-payments/next-number` | `financials.advance-payments.view-list` |
 | POST | `/advance-payments` | `financials.advance-payments.create` |
 | GET | `/advance-payments` | `financials.advance-payments.view-list` |
 | GET | `/advance-payments/:id` | `financials.advance-payments.view-list` |
@@ -107,14 +121,20 @@ is invoices *consuming* the advance, booking is *releasing the cash* — two ind
 | DELETE | `/advance-payments/:id` | `financials.advance-payments.delete` |
 | POST | `/advance-payments/:id/approve` | `financials.advance-payments.approve` |
 | POST | `/advance-payments/:id/reject` | `financials.advance-payments.approve` |
+| POST | `/site-invoices/:id/advance-settlements` | `financials.advance-payments.settle` |
+| DELETE | `/site-invoices/:id/advance-settlements/:settlementId` | `financials.advance-payments.settle` |
+| DELETE | `/site-invoices/:id/advance-settlements` | `financials.advance-payments.settle` |
 
 Granted to **SUPER_ADMIN, ADMIN, OPERATION_MANAGER**. Approve and reject share one permission.
+
+`GET /advance-payments/next-number` has been **removed** — the number now comes from the client.
 
 ### Create
 
 ```jsonc
 POST /advance-payments
 {
+  "advanceNumber": "ADV/2026/42",       // required — ≤30 chars, globally unique
   "poId": "uuid",                       // required — approved PURCHASE PO
   "advanceDate": "2026-09-05",          // required
   "amount": 50000,                      // required, > 0, max 2 decimals
@@ -124,12 +144,13 @@ POST /advance-payments
   "remarks": "50% mobilisation"         // optional
 }
 
-201 → { "message": "Advance payment recorded successfully", "id": "uuid", "advanceNumber": "ADV-10001" }
+201 → { "message": "Advance payment recorded successfully", "id": "uuid", "advanceNumber": "ADV/2026/42" }
 ```
 
-`advanceNumber` is generated server-side — never send it. `siteId` and `vendorId` are derived from
-the PO. `GET /advance-payments/next-number` → `{ "advanceNumber": "ADV-10002" }` is a display-only
-preview and does not reserve the number.
+`advanceNumber` is **typed in by the user**, not generated. Uniqueness is global (soft-deleted rows
+ignored) and no format is enforced; a duplicate is a 400 — *"Advance number {number} is already used
+by another advance payment. Enter a different number."* It cannot be changed afterwards — `PATCH`
+does not accept `advanceNumber`. `siteId` and `vendorId` are derived from the PO.
 
 ### List / detail
 
@@ -150,9 +171,14 @@ Paging: `page`, `pageSize`.
   "vendorId": "uuid", "vendorName": "Acme Traders",
   "advanceDate": "2026-09-05",
   "amount": 100000,
-  "settledAmount": 40000,      // moves on its own when invoices are approved
+  "settledAmount": 40000,      // moves only on a settle / unsettle call
   "balanceAmount": 60000,      // amount − settledAmount
   "isFullySettled": false,
+  "settlementCount": 1,
+  "settlements": [             // which invoices took how much, oldest first
+    { "settlementId": "uuid", "invoiceId": "uuid", "invoiceNumber": "INV-77",
+      "invoiceDate": "2026-09-10", "amount": 40000, "settledAt": "2026-09-10T…" }
+  ],
   "fileKey": "…", "fileName": "…",
   "remarks": "…",
   "approvalStatus": "PENDING", // PENDING | APPROVED | REJECTED
@@ -177,6 +203,52 @@ POST   /advance-payments/:id/reject       { "reason": "…" }   // required, ≤
 ```
 
 All four return `{ message }` only — **re-fetch** afterwards.
+
+### Settle / unsettle
+
+```jsonc
+POST /site-invoices/:id/advance-settlements
+{ "advancePaymentId": "uuid", "amount": 40000 }
+
+201 → {
+  "message": "Advance settled against the invoice successfully",
+  "settledAmount": 40000,
+  "advanceBalanceAfter": 60000,   // advance.amount − settledAmount, after this call
+  "invoiceDueAfter": 0            // net payable − advanceSettled − booked, after this call
+}
+```
+
+```jsonc
+DELETE /site-invoices/:id/advance-settlements/:settlementId   // one
+DELETE /site-invoices/:id/advance-settlements                 // all on this invoice
+
+200 → { "message": "Advance settlement reversed successfully", "releasedAmount": 40000 }
+404 → "No settlement found to reverse for this invoice."
+```
+
+A settlement can only be reversed through **its own** invoice's endpoint; passing an id belonging to
+another invoice is a 404, never a silent success.
+
+Refusals are all 400 and all carry the figure the user needs: wrong party type, either document not
+approved, advance from a different PO, advance already fully settled, amount above the advance
+balance, amount above the invoice's due, or nothing due at all. Surface them verbatim.
+
+**The invoice list and detail** (`GET /site-invoices`, `GET /site-invoices/:id`) carry the mirror
+breakdown:
+
+```jsonc
+"advanceSettledAmount": 40000,
+"advanceSettlements": [
+  { "settlementId": "uuid", "advancePaymentId": "uuid", "advanceNumber": "ADV/2026/42",
+    "advanceDate": "2026-09-05", "amount": 40000, "settledAt": "2026-09-10T…" }
+]
+```
+
+`settlementId` is what the single-reverse endpoint takes.
+
+There is **no eligibility/dropdown endpoint yet** — to pick an advance, list the PO's advances with
+`GET /advance-payments?poId=<invoice.poId>&unsettledOnly=true` and let the validation messages do
+the rest.
 
 ### Booking an advance out
 
@@ -234,6 +306,11 @@ never folded into it, so it can never go negative.
 
 SALE-side advances (money received is a different document), a PDF for the advance itself, GST/TDS
 on advances, and refund/recovery of an unused advance (the balance carries forward instead).
+
+Also not built yet: an **eligibility/dropdown endpoint** for "which advances can settle this
+invoice" in the `isDisabled` / `disabledReason` style used by the PO → invoice and
+invoice → book-payment pickers. Until it exists, the FE filters
+`GET /advance-payments?poId=…&unsettledOnly=true` itself.
 
 ---
 
@@ -614,7 +691,7 @@ They are commented out rather than deleted, so re-enabling is a one-line change.
 
 # Breaking changes
 
-Three, all on the FE side.
+Five, all on the FE side.
 
 ### 1. `GET /purchase-orders/items/suggestions` — response shape
 
@@ -644,6 +721,25 @@ See [§10](#10-unlock-permission-alignment). Any FE gating on `…unlock-grant` 
 **Deploy order matters:** the permission guard fails closed, so if the code ships before the
 migration runs, nobody can grant or reject an unlock on those two modules.
 
+### 4. `GET /advance-payments/next-number` is gone, and `advanceNumber` is now required on create
+
+The number is typed in by the user and must be globally unique. A create without it is a 400 from
+the validation pipe. See [§1](#1-advance-payments).
+
+### 5. Advance settlement is manual — approving an invoice no longer settles anything
+
+The FE must add a settle action on the invoice screen
+(`POST /site-invoices/:id/advance-settlements`), gated on the new permission
+`financials.advance-payments.settle`. Two further consequences:
+
+- **Unlock is refused while an invoice has settlements** (both request and grant), instead of
+  reversing them silently as before. The UI has to offer "reverse settlements" before "unlock".
+- `settledAmount` / `balanceAmount` no longer change as a side effect of an invoice approval, so
+  re-fetch after settle/unsettle rather than after approval.
+
+Settlement rows written by the old automatic behaviour are left as they are and can be reversed
+through the new endpoints.
+
 ---
 
 # Deployment checklist
@@ -655,13 +751,14 @@ migration runs, nobody can grant or reject an unlock on those two modules.
 | `…056` | Backfills `asset_event_types` config |
 | `…057` | Creates `advance_payments` |
 | `…058` | Creates `advance_settlements` |
-| `…059` | Seeds the advance-number config |
+| `…059` | Seeds the advance-number config — **now unused**, the number comes from the client. Harmless to leave. |
 | `…060` | Seeds advance-payment permissions |
 | `…061` | `book_payments`: nullable `invoiceId`, `sourceType`, `advancePaymentId` + source CHECK |
 | `…062` | Seeds `financials.book-payments.unlock` and `financials.site-reports.unlock` |
 | `…063` | `site_invoices.advanceSettledAmount` |
 | `…064` | `purchase_orders.advancePaidTotal` (**with backfill** of existing approved advances) |
 | `…065` | Recreates both financial materialized views with the advance columns |
+| `…066` | Seeds `financials.advance-payments.settle` (SUPER_ADMIN, ADMIN, OPERATION_MANAGER) |
 
 Earlier migrations in this cycle also cover PO item `unit` columns, the `po_units` and
 `po_gst_types` configs, vendor code renumbering, and the `employee.reset-password` permission.
@@ -675,6 +772,7 @@ dashboard reading them will show zeros in between.
 | Permission | Roles |
 |---|---|
 | `financials.advance-payments.{view-list,create,update,delete,approve}` | SUPER_ADMIN, ADMIN, OPERATION_MANAGER |
+| `financials.advance-payments.settle` | SUPER_ADMIN, ADMIN, OPERATION_MANAGER |
 | `financials.book-payments.unlock` | SUPER_ADMIN, ADMIN, OPERATION_MANAGER |
 | `financials.site-reports.unlock` | SUPER_ADMIN, ADMIN, OPERATION_MANAGER |
 | `employee.reset-password` | SUPER_ADMIN, ADMIN, HR, OPERATION_MANAGER |
@@ -683,8 +781,8 @@ All are seeded by the migrations above; the table is for the BA's reference.
 
 ### Config to verify after deploy
 
-`po_units` (39 values), `po_gst_types` (CGST + SGST, IGST), `advance_number_config`
-(`{ prefix, padLength, startFrom }`), `asset_event_types`.
+`po_units` (39 values), `po_gst_types` (CGST + SGST, IGST), `asset_event_types`.
+(`advance_number_config` is no longer read by anything — advance numbers are entered by the user.)
 
 ---
 

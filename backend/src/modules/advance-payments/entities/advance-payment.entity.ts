@@ -23,7 +23,10 @@ import { FinancialApprovalStatus } from 'src/modules/common/financials/financial
 @Index('IDX_ADVANCE_PAYMENTS_vendorId', ['vendorId'])
 @Index('IDX_ADVANCE_PAYMENTS_approvalStatus', ['approvalStatus'])
 export class AdvancePaymentEntity extends BaseEntity {
-  /** Auto-generated, e.g. ADV-10001. Format from the `advance_number_config` config. */
+  /**
+   * Supplied by the caller, not generated — it is whatever number the paying document carries.
+   * Globally unique among live rows via `UQ_ADVANCE_PAYMENTS_NUMBER`; no format is imposed.
+   */
   @Column({ type: 'varchar', length: 30 })
   advanceNumber: string;
 

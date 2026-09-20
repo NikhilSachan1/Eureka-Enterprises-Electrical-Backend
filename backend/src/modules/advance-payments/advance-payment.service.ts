@@ -480,6 +480,7 @@ export class AdvancePaymentService {
   }
 
   private mapSettlement(row: {
+    id: string;
     invoiceId: string;
     invoiceNumber: string | null;
     invoiceDate: Date | null;
@@ -487,6 +488,8 @@ export class AdvancePaymentService {
     settledAt: Date;
   }) {
     return {
+      // Reversal happens through the invoice's endpoint, so the id travels with the row.
+      settlementId: row.id,
       invoiceId: row.invoiceId,
       invoiceNumber: row.invoiceNumber ?? null,
       invoiceDate: row.invoiceDate ?? null,
