@@ -395,11 +395,132 @@ export class AdvancePaymentService {
 
   // ──────────────────────────────── queries ────────────────────────────────
 
+  /**
+   * The advances on a PO, for the "which advance do I settle?" picker — the same shape as the
+   * PO → JMC, JMC → invoice and invoice → book-payment dropdowns: every row is returned, with
+   * `eligible` and a `reason` when it is not, so the user sees *why* an advance cannot be picked
+   * instead of wondering where it went.
+   *
+   * `invoiceId` is optional. Given one, the PO is taken from the invoice (the settle screen already
+   * knows the invoice, not the PO) and each row also carries `maxSettleableAmount` — the smaller of
+   * the advance's balance and the invoice's remaining due, which is exactly the cap the settle
+   * endpoint enforces.
+   */
+  async getDropdown(poId?: string, invoiceId?: string) {
+    let resolvedPoId = poId;
+    let invoice: {
+      id: string;
+      invoiceNumber: string | null;
+      poId: string | null;
+      due: string;
+    } | null = null;
+
+    if (invoiceId) {
+      const rows = await this.dataSource.query(
+        `SELECT i.id, i."invoiceNumber", i."poId",
+                GREATEST(
+                  CASE WHEN i."isGstHold"
+                       THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0)
+                       ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0)
+                  END
+                  - COALESCE(i."advanceSettledAmount", 0) - COALESCE(i."bookedTotal", 0), 0) AS due
+           FROM site_invoices i
+          WHERE i.id = $1 AND i."deletedAt" IS NULL`,
+        [invoiceId],
+      );
+      if (!rows.length) {
+        throw new NotFoundException(ADVANCE_PAYMENT_ERRORS.DROPDOWN_INVOICE_NOT_FOUND);
+      }
+      invoice = rows[0];
+      if (resolvedPoId && invoice.poId && resolvedPoId !== invoice.poId) {
+        // Answering for the PO asked would return advances that can never settle this invoice, so
+        // the mismatch is reported rather than quietly producing an all-ineligible list.
+        throw new BadRequestException(ADVANCE_PAYMENT_ERRORS.DROPDOWN_PO_INVOICE_MISMATCH);
+      }
+      resolvedPoId = resolvedPoId ?? invoice.poId ?? undefined;
+    }
+
+    if (!resolvedPoId) {
+      throw new BadRequestException(ADVANCE_PAYMENT_ERRORS.DROPDOWN_PO_REQUIRED);
+    }
+
+    const invoiceDue = invoice ? Number(invoice.due) : null;
+
+    const rows = await this.dataSource.query(
+      `
+      SELECT
+        a.id,
+        a."advanceNumber",
+        a."vendorAdvanceNumber",
+        to_char(a."advanceDate", 'YYYY-MM-DD') AS "advanceDate",
+        a.amount,
+        a."settledAmount",
+        a.amount - a."settledAmount" AS balance,
+        a."approvalStatus",
+        po."poNumber",
+        v.name AS "vendorName",
+        CASE
+          WHEN a."approvalStatus" <> 'APPROVED'                   THEN false
+          WHEN a.amount - a."settledAmount" <= 0                  THEN false
+          WHEN $2::numeric IS NOT NULL AND $2::numeric <= 0       THEN false
+          ELSE true
+        END AS eligible,
+        CASE
+          WHEN a."approvalStatus" = 'PENDING'  THEN 'Advance is pending admin approval'
+          WHEN a."approvalStatus" = 'REJECTED' THEN 'Advance was rejected'
+          WHEN a.amount - a."settledAmount" <= 0
+            THEN 'Advance is fully settled — no balance left'
+          WHEN $2::numeric IS NOT NULL AND $2::numeric <= 0
+            THEN 'Invoice has nothing left to settle — already covered by advances and booked payments'
+          ELSE NULL
+        END AS reason
+      FROM advance_payments a
+      JOIN purchase_orders po ON po.id = a."poId"
+      LEFT JOIN vendors    v  ON v.id  = a."vendorId" AND v."deletedAt" IS NULL
+      WHERE a."poId" = $1
+        AND a."deletedAt" IS NULL
+      ORDER BY a."advanceDate" ASC, a."createdAt" ASC
+      `,
+      [resolvedPoId, invoiceDue],
+    );
+
+    return {
+      // Echoed back so the settle screen can show what it is settling against without a second call.
+      invoice: invoice
+        ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, due: invoiceDue }
+        : null,
+      records: rows.map((r: Record<string, string | boolean | null>) => {
+        const balance = Number(r.balance);
+        return {
+          id: r.id,
+          label: `${r.advanceNumber} — ${formatInr(Number(r.amount))}`,
+          eligible: r.eligible,
+          reason: r.reason ?? null,
+          meta: {
+            advanceNumber: r.advanceNumber,
+            vendorAdvanceNumber: r.vendorAdvanceNumber,
+            advanceDate: r.advanceDate,
+            amount: Number(r.amount),
+            settledAmount: Number(r.settledAmount),
+            balanceAmount: balance,
+            approvalStatus: r.approvalStatus,
+            poId: resolvedPoId,
+            poNumber: r.poNumber,
+            vendorName: r.vendorName,
+            // Only meaningful with an invoice in hand; it is the cap `settleAdvance` enforces.
+            maxSettleableAmount: invoiceDue === null ? null : Math.min(balance, invoiceDue),
+          },
+        };
+      }),
+    };
+  }
+
   async findAll(query: GetAdvancePaymentDto) {
     const {
       siteId,
       vendorId,
       poId,
+      poNumber,
       approvalStatus,
       dateFrom,
       dateTo,
@@ -415,6 +536,10 @@ export class AdvancePaymentService {
     if (siteId?.length) where.siteId = In(siteId);
     if (vendorId?.length) where.vendorId = In(vendorId);
     if (poId) where.poId = poId;
+    // Its own filter rather than part of `search`: the PO number is the one thing a user searches
+    // by that does not live on the advance itself, and mixing it into the OR above would make
+    // "find everything on PO-00311" also match a remark that happens to contain the digits.
+    if (poNumber) where.po = { poNumber: ILike(`%${poNumber}%`) };
     if (approvalStatus?.length) where.approvalStatus = In(approvalStatus);
     if (dateFrom && dateTo) where.advanceDate = Between(dateFrom, dateTo);
     else if (dateFrom) where.advanceDate = MoreThanOrEqual(dateFrom);

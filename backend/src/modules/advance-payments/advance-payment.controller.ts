@@ -47,6 +47,27 @@ export class AdvancePaymentController {
     return await this.advanceService.findAll(query);
   }
 
+  // Declared before `:id` — otherwise "dropdown" is read as an id and rejected by ParseUUIDPipe.
+  @Get('dropdown')
+  @RequiredPermission('financials.advance-payments.view-list')
+  @ApiOperation({
+    summary: 'Advance dropdown for settling against an invoice',
+    description:
+      'Every advance on the PO, in advance-date order, with eligibility flags. An advance is ' +
+      'eligible when it is APPROVED and still has a balance. Ineligible ones are included with ' +
+      'eligible=false and a human-readable reason.\n' +
+      'Pass poId, or invoiceId on its own — the PO is then taken from the invoice and each row ' +
+      'also carries maxSettleableAmount (the lesser of the advance balance and the invoice due).',
+  })
+  async getDropdown(
+    // Validated here rather than in the query: an unparseable uuid would otherwise reach Postgres
+    // and come back as a 500 instead of a 400.
+    @Query('poId', new ParseUUIDPipe({ optional: true })) poId?: string,
+    @Query('invoiceId', new ParseUUIDPipe({ optional: true })) invoiceId?: string,
+  ) {
+    return await this.advanceService.getDropdown(poId, invoiceId);
+  }
+
   @Get(':id')
   @RequiredPermission('financials.advance-payments.view-list')
   @ApiOperation({ summary: 'Get an advance payment by id' })

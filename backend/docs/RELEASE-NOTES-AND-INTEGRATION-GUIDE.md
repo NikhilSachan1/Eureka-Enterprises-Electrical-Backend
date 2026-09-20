@@ -115,6 +115,7 @@ is invoices *consuming* the advance, booking is *releasing the cash* — two ind
 | Method | Path | Permission |
 |---|---|---|
 | POST | `/advance-payments` | `financials.advance-payments.create` |
+| GET | `/advance-payments/dropdown` | `financials.advance-payments.view-list` |
 | GET | `/advance-payments` | `financials.advance-payments.view-list` |
 | GET | `/advance-payments/:id` | `financials.advance-payments.view-list` |
 | PATCH | `/advance-payments/:id` | `financials.advance-payments.update` |
@@ -156,8 +157,14 @@ does not accept `advanceNumber`. `siteId` and `vendorId` are derived from the PO
 
 `GET /advance-payments` → `{ records: [...], totalRecords: n }`
 
-Filters: `siteId[]`, `vendorId[]`, `poId`, `approvalStatus[]`, `dateFrom`, `dateTo`, `search`
-(advance number / vendor advance number / remarks), `unsettledOnly=true`.
+Filters: `siteId[]`, `vendorId[]`, `poId`, `poNumber`, `approvalStatus[]`, `dateFrom`, `dateTo`,
+`search` (advance number / vendor advance number / remarks), `unsettledOnly=true`.
+
+`siteId`, `vendorId` and `approvalStatus` take **either one value or many** — `?siteId=<id>` and
+`?siteId=<a>&siteId=<b>` both work. `poNumber` is a separate partial, case-insensitive search on the
+parent PO's number, deliberately kept out of `search` so "everything on PO-00311" cannot also drag
+in an advance whose remark happens to contain those digits. It combines with the other filters as
+AND, and `totalRecords` is counted after it is applied.
 Sort: `sortField` ∈ `advanceNumber | advanceDate | amount | createdAt`, `sortOrder`.
 Paging: `page`, `pageSize`.
 
@@ -246,9 +253,38 @@ breakdown:
 
 `settlementId` is what the single-reverse endpoint takes.
 
-There is **no eligibility/dropdown endpoint yet** — to pick an advance, list the PO's advances with
-`GET /advance-payments?poId=<invoice.poId>&unsettledOnly=true` and let the validation messages do
-the rest.
+### Picking the advance — dropdown
+
+```
+GET /advance-payments/dropdown?invoiceId=<invoiceId>     // or ?poId=<poId>
+```
+
+Follows the existing dropdown chain (PO → JMC → invoice → book payment). **Every** advance on the PO
+is returned, oldest first; ineligible ones carry `eligible: false` and a reason rather than being
+hidden.
+
+```jsonc
+{
+  "invoice": { "id": "uuid", "invoiceNumber": "INV-77", "due": 90000 },  // null when called with poId
+  "records": [{
+    "id": "uuid",
+    "label": "ADV/2026/42 — ₹2,00,000.00",
+    "eligible": true,
+    "reason": null,
+    "meta": { "advanceNumber": "…", "advanceDate": "2026-09-01", "amount": 200000,
+              "settledAmount": 0, "balanceAmount": 200000, "approvalStatus": "APPROVED",
+              "poId": "uuid", "poNumber": "PO-00311", "vendorName": "Acme Traders",
+              "maxSettleableAmount": 90000 }      // min(balance, invoice due); null with poId
+  }]
+}
+```
+
+- `invoiceId` alone is the settle-screen call — the PO comes from the invoice and
+  `maxSettleableAmount` is the same cap the settle endpoint enforces.
+- `poId` alone lists a PO's advances with no invoice context.
+- Both together must agree, else 400. Neither → 400, unknown invoice → 404, non-uuid → 400.
+- Ineligible reasons: pending approval, rejected, fully settled, or (with an invoice) the invoice has
+  nothing left to settle.
 
 ### Booking an advance out
 
@@ -307,10 +343,7 @@ never folded into it, so it can never go negative.
 SALE-side advances (money received is a different document), a PDF for the advance itself, GST/TDS
 on advances, and refund/recovery of an unused advance (the balance carries forward instead).
 
-Also not built yet: an **eligibility/dropdown endpoint** for "which advances can settle this
-invoice" in the `isDisabled` / `disabledReason` style used by the PO → invoice and
-invoice → book-payment pickers. Until it exists, the FE filters
-`GET /advance-payments?poId=…&unsettledOnly=true` itself.
+The settle dropdown **is** built — see *Picking the advance* above.
 
 ---
 

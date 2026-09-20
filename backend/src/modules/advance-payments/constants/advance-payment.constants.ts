@@ -8,6 +8,10 @@ export const ADVANCE_NUMBER_CONFIG_KEY = 'advance_number_config';
 
 export const ADVANCE_PAYMENT_ERRORS = {
   NOT_FOUND: 'Advance payment not found',
+  DROPDOWN_PO_REQUIRED: 'Pass poId, or an invoiceId to take the PO from.',
+  DROPDOWN_INVOICE_NOT_FOUND: 'Invoice not found.',
+  DROPDOWN_PO_INVOICE_MISMATCH:
+    'That invoice belongs to a different purchase order. An advance can only be settled against invoices of its own PO.',
   DUPLICATE_NUMBER:
     'Advance number {advanceNumber} is already used by another advance payment. Enter a different number.',
   PO_NOT_FOUND: 'Purchase order not found',

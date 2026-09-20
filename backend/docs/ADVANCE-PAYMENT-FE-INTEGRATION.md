@@ -26,6 +26,7 @@ Two consequences that shape the whole UI:
 | # | Method | Path | Permission |
 |---|---|---|---|
 | 1 | POST | `/advance-payments` | `financials.advance-payments.create` |
+| 1a | GET | `/advance-payments/dropdown` | `financials.advance-payments.view-list` |
 | 2 | GET | `/advance-payments` | `financials.advance-payments.view-list` |
 | 3 | GET | `/advance-payments/:id` | `financials.advance-payments.view-list` |
 | 4 | PATCH | `/advance-payments/:id` | `financials.advance-payments.update` |
@@ -119,10 +120,20 @@ GET /advance-payments?page=1&pageSize=20
 → { "records": [ … ], "totalRecords": 57 }
 ```
 
-Filters (all optional): `siteId[]`, `vendorId[]`, `poId`, `approvalStatus[]`, `dateFrom`, `dateTo`,
-`search` (advance number / vendor advance number / remarks), `unsettledOnly=true`.
+Filters (all optional): `siteId[]`, `vendorId[]`, `poId`, `poNumber`, `approvalStatus[]`,
+`dateFrom`, `dateTo`, `search` (advance number / vendor advance number / remarks),
+`unsettledOnly=true`.
 Sorting via `sortField` + `sortOrder`; sortable fields are `advanceNumber`, `advanceDate`, `amount`,
 `createdAt`. Pagination via `page` / `pageSize` (`BaseGetDto`).
+
+**The three array filters take one value or many.** `?siteId=<id>` and `?siteId=<a>&siteId=<b>` are
+both accepted for `siteId`, `vendorId` and `approvalStatus` — a single value no longer fails with
+*"siteId must be an array"*. A malformed uuid is still a 400.
+
+**`poNumber` is its own search**, separate from `search`: partial and case-insensitive on the parent
+PO's number, e.g. `?poNumber=PO-003`. It is kept out of `search` on purpose — searching for
+everything on a PO should not also match an advance whose remark happens to contain the same digits.
+Filters combine as AND, and `totalRecords` reflects them (so pagination does not overshoot).
 
 `GET /advance-payments/:id` returns a single record in the **same shape** as a list row:
 
@@ -310,9 +321,53 @@ these calls, so re-fetch after a settle/unsettle — not after an invoice approv
 
 ### Which advances can I settle against this invoice?
 
-There is **no dedicated dropdown/eligibility endpoint yet**. For now, list advances on the
-invoice's PO with `GET /advance-payments?poId=<invoice.poId>&unsettledOnly=true` and let the
-server's validation messages handle the rest.
+```
+GET /advance-payments/dropdown?invoiceId=<invoiceId>      // or ?poId=<poId>
+```
+
+Same shape as the PO → JMC, JMC → invoice and invoice → book-payment dropdowns: **every** advance on
+the PO comes back, ineligible ones included with `eligible: false` and a reason, so the user sees why
+an advance cannot be picked instead of wondering where it went. Ordered oldest advance first.
+
+```jsonc
+{
+  "invoice": { "id": "uuid", "invoiceNumber": "INV-77", "due": 90000 },   // null when called with poId
+  "records": [
+    {
+      "id": "uuid",
+      "label": "ADV/2026/42 — ₹2,00,000.00",
+      "eligible": true,
+      "reason": null,
+      "meta": {
+        "advanceNumber": "ADV/2026/42",
+        "vendorAdvanceNumber": "…",
+        "advanceDate": "2026-09-01",
+        "amount": 200000,
+        "settledAmount": 0,
+        "balanceAmount": 200000,
+        "approvalStatus": "APPROVED",
+        "poId": "uuid", "poNumber": "PO-00311",
+        "vendorName": "Acme Traders",
+        "maxSettleableAmount": 90000   // min(balance, invoice due) — null when called with poId
+      }
+    }
+  ]
+}
+```
+
+- Pass **`invoiceId` alone** on the settle screen: the PO is taken from the invoice, and
+  `maxSettleableAmount` is exactly the cap the settle endpoint enforces — use it for the amount
+  field's max.
+- Pass **`poId` alone** when you are browsing a PO's advances; `invoice` is `null` and
+  `maxSettleableAmount` is `null`, since there is no invoice to cap against.
+- Passing both is fine when they agree; a `poId` that is not the invoice's PO is a 400.
+- Neither → 400. Unknown invoice → 404. Non-uuid → 400.
+
+Reasons you will get back: *"Advance is pending admin approval"*, *"Advance was rejected"*,
+*"Advance is fully settled — no balance left"*, and (only with an invoice)
+*"Invoice has nothing left to settle — already covered by advances and booked payments"*.
+
+Permission: `financials.advance-payments.view-list`.
 
 ### What this means for booking a payment
 
@@ -408,8 +463,9 @@ the user needs. Don't replace them with generic copy.
 2. Create form: PO picker → advance number (typed in, required) → amount + date + optional file.
 3. Approve / reject actions, both gated on `…approve`, both followed by a re-fetch.
 4. Edit / delete, gated on `hasBookPayment === false && settledAmount === 0`.
-5. **Settle / unsettle on the invoice screen** (§8), gated on `financials.advance-payments.settle`;
-   re-fetch both the invoice and the advance afterwards.
+5. **Settle / unsettle on the invoice screen** (§8), gated on `financials.advance-payments.settle`.
+   Populate the advance picker from `GET /advance-payments/dropdown?invoiceId=…`, cap the amount
+   field at `meta.maxSettleableAmount`, and re-fetch both the invoice and the advance afterwards.
 6. Show `balanceAmount` / `isFullySettled` on the list and detail — they move on settle/unsettle (§8).
 7. Surface the new `ADVANCE_UNSETTLED` rows and the `advances-settled` closing condition (§8).
 
