@@ -5,8 +5,17 @@
  * configured window, the system penalises the receiver and assigns the item to them anyway.
  */
 
-/** Expense category the penalty is booked under. Seeded into `expense_categories`. */
-export const HANDOVER_PENALTY_CATEGORY = 'asset_penalty';
+/**
+ * Expense category each penalty is booked under. Both are seeded into `expense_categories`.
+ *
+ * One category per module, not one shared "Asset Penalty": the expense list filters by category,
+ * so a vehicle penalty filed under "Asset Penalty" could neither be filtered out nor filtered for,
+ * and read as the wrong thing in any listing.
+ */
+export const HANDOVER_PENALTY_CATEGORIES = {
+  ASSET: 'asset_penalty',
+  VEHICLE: 'vehicle_penalty',
+} as const;
 
 /** Goes on the expense's `approvalReason`, and distinguishes the two modules in reporting. */
 export const HANDOVER_PENALTY_REFERENCE_TYPES = {

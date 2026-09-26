@@ -32,7 +32,7 @@ import {
   VehicleStatus,
 } from '../../vehicle-masters/constants/vehicle-masters.constants';
 import {
-  HANDOVER_PENALTY_CATEGORY,
+  HANDOVER_PENALTY_CATEGORIES,
   HANDOVER_PENALTY_DEFAULTS,
   HANDOVER_PENALTY_REFERENCE_TYPES,
   HandoverPenaltyConfig,
@@ -60,6 +60,8 @@ interface ModuleSpec {
   eventsTable: string;
   itemIdColumn: string;
   referenceType: string;
+  /** Expense category the penalty is filed under — one per module, so each can be filtered. */
+  expenseCategory: string;
   select: (hours: number) => { query: string; params: unknown[] };
   createEvent: (
     em: EntityManager,
@@ -252,7 +254,7 @@ export class HandoverPenaltyCronService {
 
       const expense = await this.expenseTrackerService.createSystemExpense({
         userId: row.receiverId,
-        category: HANDOVER_PENALTY_CATEGORY,
+        category: spec.expenseCategory,
         amount: config.amount,
         description,
         createdBy: row.initiatorId ?? row.receiverId,
@@ -276,12 +278,16 @@ export class HandoverPenaltyCronService {
 
     if (!notify) return false;
 
-    await this.notifyReceiver(row, config.amount);
+    await this.notifyReceiver(row, config.amount, spec.expenseCategory);
     return true;
   }
 
   /** Non-blocking: a failed message must not undo a committed penalty. */
-  private async notifyReceiver(row: StaleHandoverRow, amount: number): Promise<void> {
+  private async notifyReceiver(
+    row: StaleHandoverRow,
+    amount: number,
+    category: string,
+  ): Promise<void> {
     try {
       if (!row.receiverWhatsappOptIn || !row.receiverPhone) return;
       await this.whatsAppService.sendExpenseForceCreated(
@@ -289,7 +295,7 @@ export class HandoverPenaltyCronService {
         {
           employeeName: `${row.receiverFirstName ?? ''} ${row.receiverLastName ?? ''}`.trim(),
           amount: `₹${amount.toLocaleString('en-IN')}`,
-          category: HANDOVER_PENALTY_CATEGORY,
+          category,
           createdByName: 'System',
         },
         { referenceId: row.eventId, recipientId: row.receiverId },
@@ -315,6 +321,7 @@ export class HandoverPenaltyCronService {
       eventsTable: 'assets_events',
       itemIdColumn: 'assetMasterId',
       referenceType: HANDOVER_PENALTY_REFERENCE_TYPES.ASSET,
+      expenseCategory: HANDOVER_PENALTY_CATEGORIES.ASSET,
       select: getStaleAssetHandoversQuery,
       createEvent: async (em, row) => {
         const metadata = this.baseMetadata(row);
@@ -368,6 +375,7 @@ export class HandoverPenaltyCronService {
       eventsTable: 'vehicles_events',
       itemIdColumn: 'vehicleMasterId',
       referenceType: HANDOVER_PENALTY_REFERENCE_TYPES.VEHICLE,
+      expenseCategory: HANDOVER_PENALTY_CATEGORIES.VEHICLE,
       select: getStaleVehicleHandoversQuery,
       createEvent: async (em, row) => {
         const metadata = this.baseMetadata(row);

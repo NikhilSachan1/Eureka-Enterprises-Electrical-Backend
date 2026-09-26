@@ -1,6 +1,6 @@
 # Asset / Vehicle Handover — 48-Hour Auto Penalty & Reassignment
 
-Status: **built and verified on dev** (41 assertions, all passing). Shipping **disabled** — the
+Status: **built and verified on dev** (45 assertions, all passing). Shipping **disabled** — the
 config switch below has to be turned on deliberately. Read *Before switching it on* first.
 
 ## The rule
@@ -22,7 +22,7 @@ The existing Accept / Reject / Cancel paths are not touched. Nothing about them 
 | Penalty kis par? | The **receiver** (`toUser` of the initiate event) — "jis employee ke liye initiation create ki gayi thi". |
 | Penalty ka accounting type | `CREDIT`, because of the ledger direction below. |
 | Penalty "feel" | New `expenseEntryType: 'penalty'` tag. UI keys off the tag, not the amount sign. |
-| Category | New expense category `asset_penalty` ("Asset Penalty") — gives the filter for free. |
+| Category | Two new expense categories — `asset_penalty` ("Asset Penalty") and `vehicle_penalty` ("Vehicle Penalty"). One per module, so each can be filtered on its own. |
 | On/off | Config-driven, ships **disabled**. No deploy needed to switch it on or off. |
 
 ### Why the penalty is a CREDIT and not a DEBIT
@@ -66,17 +66,25 @@ a different flavour (`expense-tracker.service.ts:386`). `PENALTY` is its mirror.
 
 FE: `expenseEntryType === 'penalty'` → red row, `− ₹500`, "Penalty" chip. Everything else unchanged.
 
-### The "Asset Penalty" filter
+### The penalty filters
 
 Nothing new to build on the server. The expense list already takes `categories[]`, so
-`GET /expenses?categories=asset_penalty` works the moment the category exists, and `totalRecords`
-respects it.
+`GET /expenses?categories=asset_penalty` — or `vehicle_penalty`, or both — works the moment the
+categories exist, and `totalRecords` respects them.
 
-The dropdown the FE builds that filter from is the `expense_categories` config, which migration
-`…067` seeds into:
+**One category per module, not one shared one.** An asset penalty is filed under `asset_penalty`
+and a vehicle penalty under `vehicle_penalty`. Both under "Asset Penalty" would have been a trap:
+the expense list filters by category, so a vehicle penalty sitting there could neither be filtered
+for nor filtered out, and would read as the wrong thing in any listing. The internal
+`referenceType` does distinguish them, but nothing on the UI filters by it.
+
+The dropdown the FE builds those filters from is the `expense_categories` config, seeded by
+migrations `…067` and `…070`:
 
 ```jsonc
-{ "name": "asset_penalty", "label": "Asset Penalty", "icon": "alert-triangle",
+{ "name": "asset_penalty",   "label": "Asset Penalty",   "icon": "alert-triangle",
+  "isSystemGenerated": true, "allowedRoles": ["SUPER_ADMIN", "ADMIN", "HR"] }
+{ "name": "vehicle_penalty", "label": "Vehicle Penalty", "icon": "alert-triangle",
   "isSystemGenerated": true, "allowedRoles": ["SUPER_ADMIN", "ADMIN", "HR"] }
 ```
 
@@ -164,7 +172,7 @@ Vehicles: the same query against `vehicles_events` / `vehicleMasterId`.
    Same `fileKey`s, new `assetEventsId`. Nothing is re-uploaded and nothing is moved in storage.
 3. Update the active version: `status = ASSIGNED`, `assignedTo = <receiver>` — identical to what
    Accept does (`asset-events.service.ts:322`).
-4. `createSystemExpense({ userId: receiver, category: 'asset_penalty', amount, transactionType:
+4. `createSystemExpense({ userId: receiver, category: <asset_penalty | vehicle_penalty>, amount, transactionType:
    CREDIT, expenseEntryType: PENALTY, referenceId: eventId, referenceType:
    'ASSET_HANDOVER_AUTO_PENALTY' })` — already approved, already attributed to the system user.
 
@@ -184,6 +192,7 @@ longer `HANDOVER_INITIATED`, so the next run cannot pick it again. The expense's
 | `scheduler/queries/` | **new** — the two selection queries |
 | `cron-trigger` constants + service | registers `HANDOVER_AUTO_PENALTY` so it can be run by hand from `POST /admin/cron/trigger`, including `dryRun` |
 | `migration/1860000000067-seed-handover-auto-penalty.ts` | seeds the `asset_penalty` expense category (same idiom as `1822000000000`), the `handover_auto_penalty` config (disabled), and the new event type in both lists |
+| `migration/1860000000070-seed-vehicle-penalty-category.ts` | adds `vehicle_penalty`, so a vehicle penalty is no longer filed under "Asset Penalty" |
 
 No schema change. Everything is config seeds plus one new cron file.
 
