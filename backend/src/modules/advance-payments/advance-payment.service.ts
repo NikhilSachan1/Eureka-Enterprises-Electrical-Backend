@@ -34,6 +34,7 @@ import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { RejectDto } from 'src/modules/purchase-orders/dto/approval.dto';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
+import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 
 @Injectable()
 export class AdvancePaymentService {
@@ -42,6 +43,7 @@ export class AdvancePaymentService {
   constructor(
     private readonly advanceRepository: AdvancePaymentRepository,
     private readonly poRepository: PurchaseOrderRepository,
+    private readonly bookPaymentService: BookPaymentService,
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
@@ -347,8 +349,35 @@ export class AdvancePaymentService {
         em,
       );
 
-      this.logger.log(`Advance ${advance.advanceNumber} approved by ${approvedBy}`);
-      return { message: ADVANCE_PAYMENT_RESPONSES.APPROVED };
+      // Every payable amount in this system leaves through Book Payment → Payment Sheet → Bank
+      // Transfer. An approved advance is a payable amount, so approval opens that route for it
+      // instead of waiting for someone to book it by hand. Same transaction as the approval: an
+      // approval with no payable row, or a payable row from an approval that rolled back, is worse
+      // than neither happening.
+      //
+      // Already-booked advances are skipped rather than refused — the manual booking route still
+      // exists, and an advance that was booked before this ran must not be double-booked.
+      const alreadyBooked = await this.bookPaymentService.sumBookedForAdvance(advance.id, em);
+      let bookPaymentId: string | null = null;
+      if (alreadyBooked <= 0) {
+        const booked = await this.bookPaymentService.bookAdvanceWithin(em, {
+          advancePaymentId: advance.id,
+          transferAmount: Number(advance.amount),
+          bookingDate: new Date(),
+          remarks: ADVANCE_PAYMENT_RESPONSES.AUTO_BOOKED_REMARK.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          ),
+          createdBy: approvedBy,
+        });
+        bookPaymentId = booked.id;
+      }
+
+      this.logger.log(
+        `Advance ${advance.advanceNumber} approved by ${approvedBy}` +
+          (bookPaymentId ? ` — book payment ${bookPaymentId} created` : ' — already booked'),
+      );
+      return { message: ADVANCE_PAYMENT_RESPONSES.APPROVED, bookPaymentId };
     });
   }
 

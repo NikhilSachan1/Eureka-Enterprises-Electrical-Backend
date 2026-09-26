@@ -47,6 +47,12 @@ export interface PaymentAdvicePdfData {
   invoiceNumber: string | null;
   invoiceDate: string | null;
   poNumber: string | null;
+  /**
+   * Advance-backed payments have no invoice, so the document identifies itself by the advance
+   * instead. Null for the ordinary invoice route.
+   */
+  advanceNumber?: string | null;
+  advanceDate?: string | null;
 }
 
 @Injectable()
@@ -284,6 +290,19 @@ export class PaymentAdvicePdfService {
       rightRows.push(
         `<tr><td class="lbl">Vendor Bill No.</td><td class="sep">:</td><td class="val">${d.invoiceNumber}</td></tr>`,
       );
+    // An advance is paid against the PO, not a bill — so it names the advance in the bill's place.
+    if (d.advanceNumber) {
+      rightRows.push(
+        `<tr><td class="lbl">Advance No.</td><td class="sep">:</td><td class="val">${d.advanceNumber}</td></tr>`,
+      );
+      if (d.advanceDate)
+        rightRows.push(
+          `<tr><td class="lbl">Advance Date</td><td class="sep">:</td><td class="val">${d.advanceDate}</td></tr>`,
+        );
+      rightRows.push(
+        `<tr><td class="lbl">Payment Type</td><td class="sep">:</td><td class="val">Advance Payment</td></tr>`,
+      );
+    }
     rightRows.push(
       `<tr><td class="lbl">Site</td><td class="sep">:</td><td class="val">${d.siteName}</td></tr>`,
     );
@@ -311,7 +330,7 @@ export class PaymentAdvicePdfService {
         </thead>
         <tbody>
           <tr>
-            <td>${d.invoiceNumber ?? '-'}</td>
+            <td>${d.invoiceNumber ?? d.advanceNumber ?? '-'}</td>
             <td class="r">${fmtN(grossAmount)}</td>
             <td>TDS Deduction</td>
             <td class="r">${fmtN(tdsAmount)}</td>
@@ -469,7 +488,7 @@ export class PaymentAdvicePdfService {
     </thead>
     <tbody>
       <tr>
-        <td>${d.invoiceNumber ?? '-'}</td>
+        <td>${d.invoiceNumber ?? d.advanceNumber ?? '-'}</td>
         <td>${fmtDate(d.invoiceDate)}</td>
         <td class="r">${fmtN(grossAmount)}</td>
         <td class="r">${fmtN(totalDeduction)}</td>

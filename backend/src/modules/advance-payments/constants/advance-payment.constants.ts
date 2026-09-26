@@ -40,6 +40,8 @@ export const ADVANCE_PAYMENT_RESPONSES = {
   UPDATED: 'Advance payment updated successfully',
   DELETED: 'Advance payment deleted successfully',
   APPROVED: 'Advance payment approved successfully',
+  /** Goes on the book payment raised by approval, so its origin is obvious in any listing. */
+  AUTO_BOOKED_REMARK: 'Auto-booked on approval of advance {advanceNumber}',
   REJECTED: 'Advance payment rejected successfully',
 };
 

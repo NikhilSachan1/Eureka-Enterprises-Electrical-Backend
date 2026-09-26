@@ -22,6 +22,7 @@ import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from
 import { BANK_TRANSFER_ERRORS, BANK_TRANSFER_RESPONSES } from './constants/bank-transfer.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
+import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
@@ -254,14 +255,22 @@ export class BankTransferService {
         em,
       );
 
-      // Fetch vendor, site, invoice, and PO details for PDF
-      const [vendor, site, invoiceForPdf, poForPdf] = await Promise.all([
+      // Fetch vendor, site, invoice/advance, and PO details for PDF. An advance-backed booking has
+      // no invoice — the advance takes its place on the document.
+      const [vendor, site, invoiceForPdf, poForPdf, advanceForPdf] = await Promise.all([
         em.getRepository(VendorEntity).findOne({ where: { id: bp.vendorId } }),
         em.getRepository(SiteEntity).findOne({ where: { id: bp.siteId }, relations: ['company'] }),
-        em
-          .getRepository(SiteInvoiceEntity)
-          .findOne({ where: { id: bp.invoiceId, deletedAt: IsNull() } }),
+        bp.invoiceId
+          ? em
+              .getRepository(SiteInvoiceEntity)
+              .findOne({ where: { id: bp.invoiceId, deletedAt: IsNull() } })
+          : Promise.resolve(null),
         em.getRepository(PurchaseOrderEntity).findOne({ where: { id: bp.poId } }),
+        bp.advancePaymentId
+          ? em
+              .getRepository(AdvancePaymentEntity)
+              .findOne({ where: { id: bp.advancePaymentId, deletedAt: IsNull() } })
+          : Promise.resolve(null),
       ]);
 
       // Auto-generate payment advice (§5.1.9)
@@ -315,6 +324,10 @@ export class BankTransferService {
             ? String(invoiceForPdf.invoiceDate).split('T')[0]
             : null,
           poNumber: poForPdf?.poNumber ?? null,
+          advanceNumber: advanceForPdf?.advanceNumber ?? null,
+          advanceDate: advanceForPdf?.advanceDate
+            ? String(advanceForPdf.advanceDate).split('T')[0]
+            : null,
         },
         new Date(dto.transferDate),
       );

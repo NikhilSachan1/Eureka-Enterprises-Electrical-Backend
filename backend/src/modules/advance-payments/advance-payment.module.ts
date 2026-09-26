@@ -6,6 +6,7 @@ import { AdvancePaymentController } from './advance-payment.controller';
 import { AdvancePaymentService } from './advance-payment.service';
 import { AdvancePaymentRepository } from './advance-payment.repository';
 import { PurchaseOrderModule } from '../purchase-orders/purchase-order.module';
+import { BookPaymentModule } from '../book-payments/book-payment.module';
 
 @Module({
   // PurchaseOrderModule for the advancePaidTotal rollup. PO does not import this module back, so
@@ -13,6 +14,8 @@ import { PurchaseOrderModule } from '../purchase-orders/purchase-order.module';
   imports: [
     TypeOrmModule.forFeature([AdvancePaymentEntity, AdvanceSettlementEntity]),
     PurchaseOrderModule,
+    // Approval raises the advance's book payment. No cycle: book-payments does not import this.
+    BookPaymentModule,
   ],
   controllers: [AdvancePaymentController],
   providers: [AdvancePaymentService, AdvancePaymentRepository],

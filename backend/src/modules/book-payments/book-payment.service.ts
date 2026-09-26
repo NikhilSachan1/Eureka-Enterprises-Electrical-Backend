@@ -178,7 +178,51 @@ export class BookPaymentService {
    * where it is until a bank transfer actually goes out, exactly as on the invoice path.
    */
   private async createFromAdvance(dto: CreateBookPaymentDto, createdBy: string) {
-    return await this.dataSource.transaction(async (em) => {
+    return await this.dataSource.transaction(async (em) =>
+      this.bookAdvanceWithin(em, {
+        advancePaymentId: dto.advancePaymentId,
+        transferAmount: Number(dto.transferAmount),
+        bookingDate: new Date(dto.bookingDate),
+        paymentHoldReason: dto.paymentHoldReason ?? null,
+        remarks: dto.remarks ?? null,
+        createdBy,
+      }),
+    );
+  }
+
+  /** Total already booked against an advance, ignoring rejected rows. */
+  async sumBookedForAdvance(advancePaymentId: string, em?: EntityManager): Promise<number> {
+    return await this.bookPaymentRepository.sumByAdvance(advancePaymentId, em);
+  }
+
+  /**
+   * Books an advance inside a transaction the caller already owns.
+   *
+   * Split out of `createFromAdvance` so advance *approval* can create the booking in the very same
+   * transaction it approves in. An approval that marks money payable but fails to create the
+   * payable row — or a booking that survives a rolled-back approval — is worse than neither.
+   */
+  async bookAdvanceWithin(
+    em: EntityManager,
+    params: {
+      advancePaymentId: string;
+      transferAmount: number;
+      bookingDate: Date;
+      paymentHoldReason?: string | null;
+      remarks?: string | null;
+      createdBy: string;
+    },
+  ) {
+    const dto = {
+      advancePaymentId: params.advancePaymentId,
+      transferAmount: params.transferAmount,
+      bookingDate: params.bookingDate,
+      paymentHoldReason: params.paymentHoldReason ?? null,
+      remarks: params.remarks ?? null,
+    };
+    const createdBy = params.createdBy;
+
+    {
       const advance = await em
         .getRepository(AdvancePaymentEntity)
         .createQueryBuilder('ap')
@@ -255,7 +299,7 @@ export class BookPaymentService {
       );
 
       return { message: BOOK_PAYMENT_RESPONSES.CREATED, id: created.id };
-    });
+    }
   }
 
   /**

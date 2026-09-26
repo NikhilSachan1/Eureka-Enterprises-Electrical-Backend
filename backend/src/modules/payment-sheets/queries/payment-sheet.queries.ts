@@ -85,6 +85,9 @@ export const usersFuelPendingQuery = (userIds: string[]) => ({
  *
  * invoiceNetPayable: isGstHold ? taxable − tds : taxable + gst − tds.
  * invoicePendingToBook = invoiceNetPayable − invoiceBookedTotal (still un-booked, overall).
+ *
+ * Serves both kinds of book payment. `sourceType` says which set of columns is populated: the
+ * invoice ones for INVOICE, the advance + PO ones for ADVANCE. The other set comes back null.
  */
 export const bookPaymentInvoiceDetailQuery = (bookPaymentIds: string[]) => {
   const invNetPayable = `(CASE WHEN inv."isGstHold" = true
@@ -95,12 +98,20 @@ export const bookPaymentInvoiceDetailQuery = (bookPaymentIds: string[]) => {
     query: `
       SELECT
         bp."id"                  AS "bookPaymentId",
+        bp."sourceType"          AS "sourceType",
         inv."id"                 AS "invoiceId",
         inv."invoiceNumber",
         inv."invoiceDate",
         inv."bookedTotal"        AS "invoiceBookedTotal",
         ${invNetPayable}         AS "invoiceNetPayableAmount",
         (${invNetPayable} - COALESCE(inv."bookedTotal"::numeric, 0)) AS "invoicePendingToBook",
+        ap."id"                  AS "advancePaymentId",
+        ap."advanceNumber",
+        ap."advanceDate",
+        ap."amount"              AS "advanceAmount",
+        ap."settledAmount"       AS "advanceSettledAmount",
+        po."id"                  AS "poId",
+        po."poNumber",
         c."id"                   AS "companyId",
         c."name"                 AS "companyName",
         s."id"                   AS "siteId",
@@ -108,9 +119,13 @@ export const bookPaymentInvoiceDetailQuery = (bookPaymentIds: string[]) => {
         s."city"                 AS "siteCity",
         s."state"                AS "siteState"
       FROM "book_payments" bp
-      INNER JOIN "site_invoices" inv ON inv."id" = bp."invoiceId" AND inv."deletedAt" IS NULL
-      INNER JOIN "sites"         s   ON s."id"   = bp."siteId"    AND s."deletedAt" IS NULL
-      INNER JOIN "companies"     c   ON c."id"   = s."companyId"  AND c."deletedAt" IS NULL
+      -- LEFT, not INNER: an advance-backed book payment has no invoiceId, and an inner join here
+      -- dropped those rows from the sheet's enrichment entirely — the line showed with no detail.
+      LEFT  JOIN "site_invoices"    inv ON inv."id" = bp."invoiceId"        AND inv."deletedAt" IS NULL
+      LEFT  JOIN "advance_payments" ap  ON ap."id"  = bp."advancePaymentId" AND ap."deletedAt" IS NULL
+      LEFT  JOIN "purchase_orders"  po  ON po."id"  = bp."poId"             AND po."deletedAt" IS NULL
+      INNER JOIN "sites"            s   ON s."id"   = bp."siteId"           AND s."deletedAt" IS NULL
+      INNER JOIN "companies"        c   ON c."id"   = s."companyId"         AND c."deletedAt" IS NULL
       WHERE bp."id" = ANY($1) AND bp."deletedAt" IS NULL
     `,
     params: [bookPaymentIds],
