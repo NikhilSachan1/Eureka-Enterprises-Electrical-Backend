@@ -132,6 +132,22 @@ export enum AssetEventTypes {
   RECOVERED = 'RECOVERED',
 }
 
+/**
+ * The handover leg of the lifecycle.
+ *
+ * `latestEvent` on the asset list/detail exists so the UI can show where a handover stands, so it
+ * is only filled when the newest event is one of these. A calibration or a status change is the
+ * newest event far more often than a handover is, and returning it there made the field read as
+ * "handover info" while carrying something else entirely.
+ */
+export const HANDOVER_EVENT_TYPES: AssetEventTypes[] = [
+  AssetEventTypes.HANDOVER_INITIATED,
+  AssetEventTypes.HANDOVER_ACCEPTED,
+  AssetEventTypes.HANDOVER_REJECTED,
+  AssetEventTypes.HANDOVER_CANCELLED,
+  AssetEventTypes.HANDOVER_AUTO_ACCEPTED,
+];
+
 export enum AssetMasterSortFields {
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',

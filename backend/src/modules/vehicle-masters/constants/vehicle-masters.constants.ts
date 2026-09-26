@@ -82,6 +82,18 @@ export enum VehicleEventTypes {
   HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
 }
 
+/**
+ * The handover leg of the lifecycle. `latestEvent` is only filled when the newest event is one of
+ * these — see the asset constant for the reasoning.
+ */
+export const HANDOVER_EVENT_TYPES: VehicleEventTypes[] = [
+  VehicleEventTypes.HANDOVER_INITIATED,
+  VehicleEventTypes.HANDOVER_ACCEPTED,
+  VehicleEventTypes.HANDOVER_REJECTED,
+  VehicleEventTypes.HANDOVER_CANCELLED,
+  VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
+];
+
 export enum DocumentStatus {
   ACTIVE = 'ACTIVE',
   EXPIRING_SOON = 'EXPIRING_SOON',
