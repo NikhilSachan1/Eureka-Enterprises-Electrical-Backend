@@ -15,6 +15,7 @@ import { ConfigSettingCronService } from './crons/config-setting.cron.service';
 import { FinancialCronService } from './crons/financial.cron.service';
 import { CronOrchestratorService } from './crons/cron-orchestrator.service';
 import { HandoverPenaltyCronService } from './crons/handover-penalty.cron.service';
+import { LogRetentionCronService } from './crons/log-retention.cron.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { UsersModule } from '../users/user.module';
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
@@ -56,6 +57,7 @@ import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module'
     ConfigSettingCronService,
     FinancialCronService,
     HandoverPenaltyCronService,
+    LogRetentionCronService,
     // Orchestrator (manages grouped crons)
     CronOrchestratorService,
   ],
@@ -75,6 +77,7 @@ import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module'
     ConfigSettingCronService,
     FinancialCronService,
     HandoverPenaltyCronService,
+    LogRetentionCronService,
     CronOrchestratorService,
   ],
 })

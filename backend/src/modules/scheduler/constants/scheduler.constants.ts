@@ -113,6 +113,10 @@ export const CRON_SCHEDULES = {
   // Every 10 minutes
   EVERY_10_MINUTES: '*/10 * * * *',
 
+  // 2:00 AM IST — log retention cleanup. Deliberately away from the midnight orchestrator and the
+  // 9 AM alert block: it issues a lot of deletes and should not compete with them.
+  DAILY_2AM_IST: '30 20 * * *',
+
   // 10:00 AM and 6:00 PM IST — the handover auto-penalty cron.
   // Twice a day rather than daily so a window closing just after the morning run is not left until
   // the next day, and both runs sit inside working hours because each one can send the employee a
@@ -172,6 +176,9 @@ export const CRON_NAMES = {
 
   // Handover
   HANDOVER_AUTO_PENALTY: 'HandoverAutoPenalty',
+
+  // Housekeeping
+  LOG_RETENTION_CLEANUP: 'LogRetentionCleanup',
 
   // User/HR
   BIRTHDAY_ANNIVERSARY_WISHES: 'BirthdayAnniversaryWishes',

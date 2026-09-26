@@ -23,6 +23,7 @@ import { LeaveCronService } from '../scheduler/crons/leave.cron.service';
 import { CardCronService } from '../scheduler/crons/card.cron.service';
 import { AssetCronService } from '../scheduler/crons/asset.cron.service';
 import { HandoverPenaltyCronService } from '../scheduler/crons/handover-penalty.cron.service';
+import { LogRetentionCronService } from '../scheduler/crons/log-retention.cron.service';
 import { VehicleCronService } from '../scheduler/crons/vehicle.cron.service';
 import { ExpenseCronService } from '../scheduler/crons/expense.cron.service';
 import { PayrollCronService } from '../scheduler/crons/payroll.cron.service';
@@ -46,6 +47,7 @@ export class CronTriggerService {
     private readonly cardCronService: CardCronService,
     private readonly assetCronService: AssetCronService,
     private readonly handoverPenaltyCronService: HandoverPenaltyCronService,
+    private readonly logRetentionCronService: LogRetentionCronService,
     private readonly vehicleCronService: VehicleCronService,
     private readonly expenseCronService: ExpenseCronService,
     private readonly payrollCronService: PayrollCronService,
@@ -149,6 +151,10 @@ export class CronTriggerService {
             ? CRON_TRIGGER_SUCCESS.DRY_RUN_COMPLETE
             : CRON_TRIGGER_SUCCESS.JOB_COMPLETED,
           jobName,
+          // The job's own result. The `details` summary below only knows about processed/skipped
+          // counts, so without this a dry run's answer — which is the whole reason to do one —
+          // never reached the caller.
+          result,
           details: {
             recordsProcessed: result?.processed || result?.count || 0,
             recordsSkipped: result?.skipped || 0,
@@ -484,6 +490,25 @@ export class CronTriggerService {
           recipients: 'Asset managers and assigned users',
         };
 
+      case TriggerableCronJob.LOG_RETENTION_CLEANUP: {
+        // A real count rather than a description. What is on the other side of this switch is a
+        // large, irreversible delete, so "how many rows exactly" is the question worth answering.
+        const preview = await this.logRetentionCronService.previewLogRetentionCleanup();
+        return {
+          ...baseResponse,
+          message: `Would delete ${preview.tables.reduce((n, t) => n + t.eligible, 0)} log rows`,
+          description:
+            'Per-table counts of rows older than their configured retention. Nothing is deleted by this call.',
+          enabled: preview.enabled,
+          tables: preview.tables.map((t) => ({
+            table: t.table,
+            retentionDays: t.retentionDays,
+            rowsOlderThanRetention: t.eligible,
+          })),
+          ignoredTables: preview.ignoredTables,
+        };
+      }
+
       case TriggerableCronJob.HANDOVER_AUTO_PENALTY:
         return {
           ...baseResponse,
@@ -748,6 +773,9 @@ export class CronTriggerService {
       case TriggerableCronJob.HANDOVER_AUTO_PENALTY:
         return await this.handoverPenaltyCronService.handleHandoverAutoPenalty();
 
+      case TriggerableCronJob.LOG_RETENTION_CLEANUP:
+        return await this.logRetentionCronService.handleLogRetentionCleanup();
+
       case TriggerableCronJob.VEHICLE_DOCUMENT_EXPIRY_ALERT:
         return await this.vehicleCronService.handleVehicleDocumentExpiryAlerts();
 
@@ -809,6 +837,7 @@ export class CronTriggerService {
       ASSET_CALIBRATION_EXPIRY_ALERT: 'ASSET',
       ASSET_WARRANTY_EXPIRY_ALERT: 'ASSET',
       HANDOVER_AUTO_PENALTY: 'ASSET',
+      LOG_RETENTION_CLEANUP: 'CLEANUP',
       VEHICLE_DOCUMENT_EXPIRY_ALERT: 'VEHICLE',
       VEHICLE_SERVICE_DUE_REMINDER: 'VEHICLE',
       PENDING_EXPENSE_REMINDER: 'EXPENSE',

@@ -1,6 +1,8 @@
 export const CONFIGURATION_KEYS = {
   // SYSTEM / NOTIFICATIONS
   NOTIFICATION_EMAILS: 'notification_emails',
+  // Per-table retention (days) for the log-cleanup cron. Ships disabled.
+  LOG_RETENTION: 'log_retention',
   //ATTENDANCE
   MODULES: 'modules',
   SHIFT_CONFIGS: 'shift_configs',

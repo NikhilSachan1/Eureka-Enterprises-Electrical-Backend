@@ -99,6 +99,13 @@ export class TriggerCronResponseDto {
   @ApiProperty({ description: 'Job name that was triggered' })
   jobName: string;
 
+  @ApiPropertyOptional({
+    description:
+      "The job's own result object, exactly as it returns it. For a dry run this is the preview " +
+      'of what would have happened; the `details` summary below cannot carry that.',
+  })
+  result?: unknown;
+
   @ApiPropertyOptional({ description: 'Execution details' })
   details?: {
     recordsProcessed?: number;

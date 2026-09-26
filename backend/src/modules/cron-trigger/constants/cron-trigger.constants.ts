@@ -18,12 +18,15 @@ export enum TriggerableCronJob {
   VEHICLE_DOCUMENT_EXPIRY_ALERT = 'VEHICLE_DOCUMENT_EXPIRY_ALERT',
   VEHICLE_SERVICE_DUE_REMINDER = 'VEHICLE_SERVICE_DUE_REMINDER',
   PENDING_EXPENSE_REMINDER = 'PENDING_EXPENSE_REMINDER',
-
-  // Hourly
-  HANDOVER_AUTO_PENALTY = 'HANDOVER_AUTO_PENALTY',
   FY_LEAVE_CONFIG_REMINDER = 'FY_LEAVE_CONFIG_REMINDER',
   LEAVE_APPROVAL_REMINDER = 'LEAVE_APPROVAL_REMINDER',
   ATTENDANCE_APPROVAL_REMINDER = 'ATTENDANCE_APPROVAL_REMINDER',
+
+  // Twice daily
+  HANDOVER_AUTO_PENALTY = 'HANDOVER_AUTO_PENALTY',
+
+  // Housekeeping
+  LOG_RETENTION_CLEANUP = 'LOG_RETENTION_CLEANUP',
 
   // Daily 8 AM - Celebration
   CELEBRATION_WISHES = 'CELEBRATION_WISHES',
@@ -83,6 +86,7 @@ export const CRON_DEPENDENCIES: Record<TriggerableCronJob, TriggerableCronJob[]>
   [TriggerableCronJob.ASSET_CALIBRATION_EXPIRY_ALERT]: [],
   [TriggerableCronJob.ASSET_WARRANTY_EXPIRY_ALERT]: [],
   [TriggerableCronJob.HANDOVER_AUTO_PENALTY]: [],
+  [TriggerableCronJob.LOG_RETENTION_CLEANUP]: [],
   [TriggerableCronJob.VEHICLE_DOCUMENT_EXPIRY_ALERT]: [],
   [TriggerableCronJob.VEHICLE_SERVICE_DUE_REMINDER]: [],
   [TriggerableCronJob.PENDING_EXPENSE_REMINDER]: [],
@@ -133,6 +137,8 @@ export const CRON_JOB_DESCRIPTIONS: Record<TriggerableCronJob, string> = {
     'Sends alerts for assets with warranty expiring soon',
   [TriggerableCronJob.HANDOVER_AUTO_PENALTY]:
     'Penalises the receiver and auto-assigns asset/vehicle handovers left unattended past the configured window',
+  [TriggerableCronJob.LOG_RETENTION_CLEANUP]:
+    'Deletes rows older than their configured retention from the write-only log tables (communication, entity audit, request audit, cron, payment advice email)',
   [TriggerableCronJob.VEHICLE_DOCUMENT_EXPIRY_ALERT]:
     'Sends alerts for vehicle documents expiring soon',
   [TriggerableCronJob.VEHICLE_SERVICE_DUE_REMINDER]: 'Sends reminders for vehicles due for service',
@@ -213,6 +219,10 @@ export const CRON_JOB_SCHEDULES: Record<
   [TriggerableCronJob.HANDOVER_AUTO_PENALTY]: {
     cron: CRON_SCHEDULES.TWICE_DAILY_10AM_6PM_IST,
     timezoneLabel: '10:00 AM and 6:00 PM IST',
+  },
+  [TriggerableCronJob.LOG_RETENTION_CLEANUP]: {
+    cron: CRON_SCHEDULES.DAILY_2AM_IST,
+    timezoneLabel: '2:00 AM IST',
   },
   [TriggerableCronJob.VEHICLE_DOCUMENT_EXPIRY_ALERT]: {
     cron: CRON_SCHEDULES.DAILY_9AM_VEHICLE_DOCS,
