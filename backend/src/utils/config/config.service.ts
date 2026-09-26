@@ -143,7 +143,9 @@ export class ConfigService {
       username: Environments.DATABASE_USERNAME,
       password: Environments.DATABASE_PASSWORD,
       database: Environments.DATABASE_NAME,
-      logging: true,
+      // Every SQL statement was being printed on every environment — by far the largest share of
+      // the log volume on UAT and production. Locally it stays on because that is where it helps.
+      logging: this.isLocal() ? true : ['error', 'warn', 'migration'],
       migrationsRun,
       // Connection pool settings for remote database stability
       extra: {
