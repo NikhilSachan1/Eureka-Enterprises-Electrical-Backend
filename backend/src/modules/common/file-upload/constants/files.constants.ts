@@ -59,9 +59,9 @@ export const ALLOWED_FILE_CATEGORY = {
 };
 
 export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
-  'image/jpeg': 2 * 1024 * 1024, // 2 MB
-  'image/jpg': 2 * 1024 * 1024, // 2 MB
-  'image/png': 2 * 1024 * 1024, // 2 MB
+  'image/jpeg': 10 * 1024 * 1024, // 10 MB
+  'image/jpg': 10 * 1024 * 1024, // 10 MB
+  'image/png': 10 * 1024 * 1024, // 10 MB
   'application/pdf': 10 * 1024 * 1024, // 10 MB
   'text/plain': 10 * 1024 * 1024, // 10 MB
   'text/csv': 10 * 1024 * 1024, // 10 MB
