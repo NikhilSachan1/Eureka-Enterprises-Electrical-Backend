@@ -14,6 +14,7 @@ import { SalaryStructureCronService } from './crons/salary-structure.cron.servic
 import { ConfigSettingCronService } from './crons/config-setting.cron.service';
 import { FinancialCronService } from './crons/financial.cron.service';
 import { CronOrchestratorService } from './crons/cron-orchestrator.service';
+import { HandoverPenaltyCronService } from './crons/handover-penalty.cron.service';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { UsersModule } from '../users/user.module';
 import { LeaveApplicationsModule } from '../leave-applications/leave-applications.module';
@@ -23,6 +24,7 @@ import { PayrollModule } from '../payroll/payroll.module';
 import { EmailModule } from '../common/email/email.module';
 import { SharedModule } from '../shared/shared.module';
 import { CronLogModule } from '../cron-logs/cron-log.module';
+import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module';
 
 @Module({
   controllers: [SchedulerController],
@@ -36,6 +38,7 @@ import { CronLogModule } from '../cron-logs/cron-log.module';
     PayrollModule,
     EmailModule,
     CronLogModule,
+    ExpenseTrackerModule,
   ],
   providers: [
     SchedulerService,
@@ -52,6 +55,7 @@ import { CronLogModule } from '../cron-logs/cron-log.module';
     SalaryStructureCronService,
     ConfigSettingCronService,
     FinancialCronService,
+    HandoverPenaltyCronService,
     // Orchestrator (manages grouped crons)
     CronOrchestratorService,
   ],
@@ -70,6 +74,7 @@ import { CronLogModule } from '../cron-logs/cron-log.module';
     SalaryStructureCronService,
     ConfigSettingCronService,
     FinancialCronService,
+    HandoverPenaltyCronService,
     CronOrchestratorService,
   ],
 })

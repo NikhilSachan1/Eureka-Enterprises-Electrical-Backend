@@ -42,6 +42,8 @@ export const CONFIGURATION_KEYS = {
   WARRANTY_STATUSES: 'warranty_statuses',
   CALIBRATION_STATUSES: 'calibration_statuses',
   ASSET_EVENT_TYPES: 'asset_event_types',
+  // Shared by the asset and vehicle handover auto-penalty cron. Shipping value is disabled.
+  HANDOVER_AUTO_PENALTY: 'handover_auto_penalty',
   //VEHICLES
   VEHICLE_FUEL_TYPES: 'vehicle_fuel_types',
   VEHICLE_STATUSES: 'vehicle_statuses',

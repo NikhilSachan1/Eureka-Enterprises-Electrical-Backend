@@ -78,6 +78,8 @@ export enum VehicleEventTypes {
   HANDOVER_ACCEPTED = 'HANDOVER_ACCEPTED',
   HANDOVER_REJECTED = 'HANDOVER_REJECTED',
   HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
+  /** Auto-penalty cron's counterpart to HANDOVER_ACCEPTED — see the asset enum for the reasoning. */
+  HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
 }
 
 export enum DocumentStatus {

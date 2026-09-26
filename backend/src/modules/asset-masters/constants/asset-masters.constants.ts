@@ -122,6 +122,12 @@ export enum AssetEventTypes {
   HANDOVER_ACCEPTED = 'HANDOVER_ACCEPTED',
   HANDOVER_REJECTED = 'HANDOVER_REJECTED',
   HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
+  /**
+   * Written by the auto-penalty cron when a handover sat untouched past the configured window.
+   * Kept distinct from HANDOVER_ACCEPTED so history shows nobody actually accepted it.
+   * It is never a user-supplied action, so it is deliberately absent from VALID_ACTIONS_BY_STATUS.
+   */
+  HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
   LOST = 'LOST',
   RECOVERED = 'RECOVERED',
 }
