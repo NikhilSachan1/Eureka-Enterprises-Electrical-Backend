@@ -339,8 +339,10 @@ export class JmcService {
       throw new BadRequestException(JMC_ERRORS.PO_NOT_APPROVED_FOR_APPROVAL);
     }
 
-    // The signed (uploaded) JMC is mandatory before approval.
-    if (!jmc.fileKey) {
+    // A real JMC needs the signed copy before it can be approved. A No-JMC placeholder
+    // has no document — it only exists so a Supply Item invoice has a parent row — so
+    // there is nothing to upload.
+    if (!jmc.isNoJmc && !jmc.fileKey) {
       throw new BadRequestException(JMC_ERRORS.UPLOAD_REQUIRED_FOR_APPROVAL);
     }
 
