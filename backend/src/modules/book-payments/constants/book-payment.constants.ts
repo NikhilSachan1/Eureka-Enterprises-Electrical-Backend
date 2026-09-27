@@ -1,7 +1,15 @@
 export const BOOK_PAYMENT_ERRORS = {
   NOT_FOUND: 'Book payment not found.',
   CANNOT_UPDATE_HAS_TRANSFER: 'Cannot update book payment — a bank transfer exists.',
+  ADVANCE_BACKED_AMOUNT_NOT_EDITABLE:
+    'The amount of an advance-backed book payment cannot be edited here. Adjust the advance payment instead.',
   INVOICE_NOT_FOUND: 'Invoice not found.',
+  ADVANCE_NOT_FOUND: 'Advance payment not found.',
+  ADVANCE_NOT_APPROVED: 'Advance payment must be approved before a payment can be booked for it.',
+  ADVANCE_FULLY_BOOKED:
+    'Advance {advanceNumber} of {amount} is already fully booked ({booked}). No further payment can be booked against it.',
+  ADVANCE_CEILING_EXCEEDED:
+    'Advance {advanceNumber} is {amount}. {booked} is already booked, so you can book at most {remaining}. You entered {requested}.',
   INVOICE_NOT_APPROVED: 'Invoice must be approved before booking payment.',
   INVOICE_NOT_PURCHASE: 'Book payments can only be created for PURCHASE side invoices.',
   INVOICE_CEILING_EXCEEDED:
@@ -9,9 +17,9 @@ export const BOOK_PAYMENT_ERRORS = {
   // Same rule as INVOICE_CEILING_EXCEEDED, but stating the figures so the user knows what
   // to enter instead of having to work the remainder out themselves.
   INVOICE_CEILING_EXCEEDED_DETAIL:
-    'Invoice net payable is {netPayable}. {booked} is already booked, so you can book at most {remaining}. You entered {requested}.',
+    'Invoice net payable is {netPayable}. {advance} was already paid as an advance and {booked} is already booked, so you can book at most {remaining}. You entered {requested}.',
   INVOICE_FULLY_BOOKED:
-    'Invoice net payable of {netPayable} is already fully booked ({booked}). No further payment can be booked against it.',
+    'Invoice net payable of {netPayable} is already fully covered ({advance} by advance, {booked} booked). No further payment can be booked against it.',
   CANNOT_DELETE_HAS_TRANSFER:
     'Cannot delete book payment — a bank transfer exists. Delete the bank transfer first.',
   CANNOT_UPDATE_TDS_PAID:
@@ -46,3 +54,15 @@ export const BOOK_PAYMENT_RESPONSES = {
   UNLOCK_GRANTED: 'Book payment unlocked',
   UNLOCK_REJECTED: 'Unlock request rejected — book payment remains locked',
 };
+
+/**
+ * What a book payment is raised against. Exactly one of `invoiceId` / `advancePaymentId` is set
+ * to match, enforced in the database by CHK_BOOK_PAYMENT_SOURCE.
+ *
+ * INVOICE is the default so every row that predates advance payments reads correctly — all of them
+ * were invoice-backed, since nothing else was possible.
+ */
+export enum BookPaymentSourceType {
+  INVOICE = 'INVOICE',
+  ADVANCE = 'ADVANCE',
+}

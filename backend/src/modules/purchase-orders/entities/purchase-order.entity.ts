@@ -78,6 +78,16 @@ export class PurchaseOrderEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 10, default: 'CGST_SGST' })
   gstType: string;
 
+  /**
+   * What the PO buys: SUPPLY_ITEM | SERVICE_ITEM | BOTH.
+   *
+   * Decides whether an invoice may skip the JMC — material supply has nothing to measure and
+   * certify, so only SUPPLY_ITEM opens the "No JMC" route. Nullable because every PO created
+   * before this existed has no type, and those keep the ordinary JMC-mandatory flow.
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  poType: string | null;
+
   // Terms & Conditions printed on the PO (pre-filled from the default template, editable).
   @Column({ type: 'text', nullable: true })
   termsAndConditions: string | null;
@@ -131,6 +141,16 @@ export class PurchaseOrderEntity extends BaseEntity {
 
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   paidTotal: number;
+
+  /**
+   * Money paid against this PO as an advance — i.e. with no invoice behind it yet.
+   *
+   * Deliberately its own rollup rather than folded into `paidTotal`: the dashboard computes
+   * pending billing as `invoicedTotal − paidTotal`, and an advance paid before any invoice exists
+   * would drive that negative. Counts APPROVED advances only, matching the PO headroom check.
+   */
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  advancePaidTotal: number;
 
   @Column({ type: 'timestamp', nullable: true })
   lastInvoiceAt: Date | null;

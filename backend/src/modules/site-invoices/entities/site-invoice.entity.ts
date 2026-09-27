@@ -82,6 +82,17 @@ export class SiteInvoiceEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   totalAmount: number | null;
 
+  /**
+   * How much of this invoice was covered by advances already paid to the vendor, set when the
+   * invoice is approved and cleared when it is unlocked.
+   *
+   * Maintained only by settlement — never accepted on a write DTO. It exists so the book-payment
+   * ceiling can subtract money the vendor has already received; without it the same work would be
+   * payable twice, once as the advance and once as a booking against the full invoice.
+   */
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  advanceSettledAmount: number;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   fileKey: string | null;
 

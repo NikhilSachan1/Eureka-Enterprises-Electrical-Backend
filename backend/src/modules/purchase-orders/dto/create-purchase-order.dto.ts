@@ -17,6 +17,7 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 import { PoItemDto } from './po-item.dto';
+import { PoType } from '../constants/purchase-order.constants';
 
 export class CreatePurchaseOrderDto {
   @ApiProperty({ description: 'Site ID' })
@@ -79,6 +80,16 @@ export class CreatePurchaseOrderDto {
   @IsIn(['CGST_SGST', 'IGST'])
   @IsOptional()
   gstType?: 'CGST_SGST' | 'IGST';
+
+  @ApiPropertyOptional({
+    description:
+      'What the PO buys. Only SUPPLY_ITEM lets an invoice be raised without a JMC. Left unset, ' +
+      'the PO behaves as JMC-mandatory.',
+    enum: PoType,
+  })
+  @IsEnum(PoType)
+  @IsOptional()
+  poType?: PoType;
 
   @ApiPropertyOptional({ description: 'Terms & Conditions (pre-filled from default template)' })
   @IsString()

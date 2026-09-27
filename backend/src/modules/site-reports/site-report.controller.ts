@@ -95,7 +95,7 @@ export class SiteReportController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.site-reports.unlock-grant')
+  @RequiredPermission('financials.site-reports.unlock')
   @ApiOperation({ summary: 'Grant unlock request — admin (report becomes editable)' })
   async grantUnlock(
     @Param('id', ParseUUIDPipe) id: string,
@@ -105,7 +105,7 @@ export class SiteReportController {
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.site-reports.unlock-request-reject')
+  @RequiredPermission('financials.site-reports.unlock')
   @ApiOperation({ summary: 'Reject unlock request — admin (report stays locked)' })
   async rejectUnlock(
     @Param('id', ParseUUIDPipe) id: string,

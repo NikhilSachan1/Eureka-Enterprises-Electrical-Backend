@@ -41,6 +41,17 @@ export enum PoEntityFields {
   PO = 'Purchase Order',
 }
 
+/**
+ * What the PO buys. Only SUPPLY_ITEM may raise an invoice without a JMC — there is nothing to
+ * measure and certify on material supply. A PO with no type (everything created before this
+ * existed) is treated as JMC-mandatory.
+ */
+export enum PoType {
+  SUPPLY_ITEM = 'SUPPLY_ITEM',
+  SERVICE_ITEM = 'SERVICE_ITEM',
+  BOTH = 'BOTH',
+}
+
 export const PO_SORT_FIELD_MAPPING: Record<string, string> = {
   poNumber: 'po."poNumber"',
   poDate: 'po."poDate"',

@@ -39,12 +39,14 @@ export const BILLING_QUERIES = {
       (po."invoicedTotal" - po."paidTotal")   AS "pendingPayment",
 
       -- Document counts
+      -- No-JMC placeholders are excluded throughout: they are not JMCs anyone raised, and counting
+      -- them would overstate how much of this PO has been certified.
       (SELECT COUNT(*)::int FROM jmcs j
-        WHERE j."poId" = po.id AND j."deletedAt" IS NULL)                          AS "jmcCount",
+        WHERE j."poId" = po.id AND j."deletedAt" IS NULL AND j."isNoJmc" = false)  AS "jmcCount",
       (SELECT COUNT(*)::int FROM jmcs j
-        WHERE j."poId" = po.id AND j."approvalStatus" = 'APPROVED' AND j."deletedAt" IS NULL) AS "jmcApprovedCount",
+        WHERE j."poId" = po.id AND j."approvalStatus" = 'APPROVED' AND j."deletedAt" IS NULL AND j."isNoJmc" = false) AS "jmcApprovedCount",
       (SELECT COUNT(*)::int FROM jmcs j
-        WHERE j."poId" = po.id AND j."approvalStatus" = 'PENDING'  AND j."deletedAt" IS NULL) AS "jmcPendingCount",
+        WHERE j."poId" = po.id AND j."approvalStatus" = 'PENDING'  AND j."deletedAt" IS NULL AND j."isNoJmc" = false) AS "jmcPendingCount",
 
       (SELECT COUNT(*)::int FROM site_reports sr
         JOIN jmcs j2 ON j2.id = sr."jmcId"
@@ -263,5 +265,24 @@ export const BILLING_QUERIES = {
       AND "isVerified" = true
       AND "tdsPaymentId" IS NULL
       AND "deletedAt" IS NULL
+  `,
+
+  /**
+   * Advances paid on this site that no invoice has yet accounted for.
+   *
+   * A site closing with an unsettled advance means money left the business against work that was
+   * never billed — the exact exposure advance payments create, so it blocks closure. APPROVED only:
+   * a pending advance has committed nothing, and a rejected one is void.
+   */
+  UNSETTLED_ADVANCES: `
+    SELECT ap.id, ap."advanceNumber", po."poNumber",
+           (ap.amount - ap."settledAmount") as "unsettled"
+    FROM advance_payments ap
+    JOIN purchase_orders po ON po.id = ap."poId"
+    WHERE ap."siteId" = $1
+      AND ap."approvalStatus" = 'APPROVED'
+      AND ap.amount > ap."settledAmount"
+      AND ap."deletedAt" IS NULL
+    ORDER BY ap."advanceDate"
   `,
 };

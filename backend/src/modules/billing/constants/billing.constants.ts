@@ -9,6 +9,7 @@ export const CLOSING_CONDITION_IDS = {
   PURCHASE_FULLY_PAID: 'purchase-fully-paid',
   NO_PENDING_OR_REJECTED_DOCS: 'no-pending-or-rejected-docs',
   GST_TDS_SETTLED: 'gst-tds-settled',
+  ADVANCES_SETTLED: 'advances-settled',
 } as const;
 
 export const CLOSING_CONDITION_DETAILS = {
@@ -18,4 +19,6 @@ export const CLOSING_CONDITION_DETAILS = {
   INVOICE_UNPAID: (invoiceNumber: string, unpaid: number) =>
     `Invoice ${invoiceNumber} has ${unpaid} unpaid`,
   GST_TDS_ENTRIES: (type: string, count: number) => `${type}: ${count} entries`,
+  ADVANCE_UNSETTLED: (advanceNumber: string, poNumber: string, unsettled: number) =>
+    `Advance ${advanceNumber} on PO ${poNumber} has ${unsettled} not yet covered by an invoice`,
 } as const;

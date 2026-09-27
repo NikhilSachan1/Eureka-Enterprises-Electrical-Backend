@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -7,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   DataSource,
+  EntityManager,
   IsNull,
   ILike,
   In,
@@ -17,7 +19,12 @@ import {
 } from 'typeorm';
 import { SiteInvoiceRepository } from './site-invoice.repository';
 import { SiteInvoiceEntity } from './entities/site-invoice.entity';
-import { CreateSiteInvoiceDto, UpdateSiteInvoiceDto, GetSiteInvoiceDto } from './dto';
+import {
+  CreateSiteInvoiceDto,
+  UpdateSiteInvoiceDto,
+  GetSiteInvoiceDto,
+  SettleAdvanceDto,
+} from './dto';
 import {
   ApproveDto,
   RejectDto,
@@ -35,6 +42,10 @@ import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
+import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
+import { PoType } from 'src/modules/purchase-orders/constants/purchase-order.constants';
+import { AdvancePaymentRepository } from 'src/modules/advance-payments/advance-payment.repository';
+import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -44,16 +55,300 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
+/**
+ * One advance's contribution to one invoice. Shared by the list and the detail so both expose the
+ * breakdown in exactly the same shape.
+ */
+function mapAdvanceSettlement(row: {
+  id: string;
+  advancePaymentId: string;
+  advanceNumber: string | null;
+  advanceDate: Date | null;
+  amount: string;
+  settledAt: Date;
+}) {
+  return {
+    // The id the single-reverse endpoint takes: DELETE /site-invoices/:id/advance-settlements/:settlementId
+    settlementId: row.id,
+    advancePaymentId: row.advancePaymentId,
+    advanceNumber: row.advanceNumber ?? null,
+    advanceDate: row.advanceDate ?? null,
+    amount: Number(row.amount),
+    settledAt: row.settledAt,
+  };
+}
+
 @Injectable()
 export class SiteInvoiceService {
+  private readonly logger = new Logger(SiteInvoiceService.name);
+
   constructor(
     private readonly invoiceRepository: SiteInvoiceRepository,
     private readonly poRepository: PurchaseOrderRepository,
+    private readonly advanceRepository: AdvancePaymentRepository,
     private readonly dataSource: DataSource,
   ) {}
 
+  /**
+   * What the vendor is actually owed in cash for this invoice.
+   *
+   * Identical to the figure the book-payment ceiling uses, deliberately: an advance offsets cash
+   * the vendor receives, so settling against the gross `totalAmount` would treat withheld TDS (and
+   * held-back GST) as money the vendor had already been advanced.
+   */
+  private netPayableOf(inv: SiteInvoiceEntity): number {
+    const taxable = Number(inv.taxableAmount ?? 0);
+    const tds = Number(inv.tdsAmount ?? 0);
+    return inv.isGstHold ? taxable - tds : taxable + Number(inv.gstAmount ?? 0) - tds;
+  }
+
+  /**
+   * How much of this invoice is still uncovered — what an advance may be settled against.
+   *
+   * Booked payments are subtracted alongside advances because both are ways the vendor gets this
+   * invoice's money. Ignoring bookings here would let an advance settle against an amount already
+   * committed to a bank transfer, and the vendor would be paid twice.
+   */
+  private async dueForSettlement(inv: SiteInvoiceEntity): Promise<number> {
+    return (
+      this.netPayableOf(inv) - Number(inv.advanceSettledAmount ?? 0) - Number(inv.bookedTotal ?? 0)
+    );
+  }
+
+  /**
+   * Settle a chosen advance against this invoice, for a chosen amount.
+   *
+   * Deliberately manual. Settlement used to run by itself when an invoice was approved, consuming
+   * whatever advances existed on the PO oldest-first — which meant approving an advance could reach
+   * back and silently clear an older, already part-paid invoice. Pairing an advance with an invoice
+   * is a business judgement, so it is now an explicit action; only the arithmetic is enforced here.
+   */
+  async settleAdvance(invoiceId: string, dto: SettleAdvanceDto, actor: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const invoice = await em
+        .getRepository(SiteInvoiceEntity)
+        .createQueryBuilder('inv')
+        .setLock('pessimistic_write')
+        .where('inv.id = :id', { id: invoiceId })
+        .andWhere('inv."deletedAt" IS NULL')
+        .getOne();
+      if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
+
+      if (invoice.partyType !== PartyType.PURCHASE) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_INVOICE_NOT_PURCHASE);
+      }
+      if (invoice.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_INVOICE_NOT_APPROVED);
+      }
+
+      const advance = await this.advanceRepository.findOneForUpdate(dto.advancePaymentId, em);
+      if (!advance) throw new NotFoundException(INVOICE_ERRORS.SETTLE_ADVANCE_NOT_FOUND);
+      if (advance.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_ADVANCE_NOT_APPROVED);
+      }
+
+      // An advance is raised against one PO's uninvoiced work and validated against that PO's
+      // headroom. Settling it elsewhere would leave both POs' figures describing money that is no
+      // longer where they think it is.
+      if (advance.poId !== invoice.poId) {
+        throw new BadRequestException(INVOICE_ERRORS.SETTLE_DIFFERENT_PO);
+      }
+
+      const amount = Number(dto.amount);
+      const advanceBalance = Number(advance.amount) - Number(advance.settledAmount);
+      if (advanceBalance <= 0) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_ADVANCE_FULLY_SETTLED.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          ),
+        );
+      }
+      if (amount > advanceBalance) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_EXCEEDS_ADVANCE_BALANCE.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          )
+            .replace('{balance}', formatInr(advanceBalance))
+            .replace('{requested}', formatInr(amount)),
+        );
+      }
+
+      const due = await this.dueForSettlement(invoice);
+      if (due <= 0) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_NO_DUE.replace(
+            '{netPayable}',
+            formatInr(this.netPayableOf(invoice)),
+          ),
+        );
+      }
+      if (amount > due) {
+        throw new BadRequestException(
+          INVOICE_ERRORS.SETTLE_EXCEEDS_DUE.replace('{due}', formatInr(due)).replace(
+            '{requested}',
+            formatInr(amount),
+          ),
+        );
+      }
+
+      await this.advanceRepository.recordSettlement(
+        { advancePaymentId: advance.id, invoiceId: invoice.id, amount, createdBy: actor },
+        em,
+      );
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update(
+          { id: invoice.id },
+          { advanceSettledAmount: () => `"advanceSettledAmount" + ${amount}` },
+        );
+
+      this.logger.log(
+        `Invoice ${invoice.id}: ${formatInr(amount)} settled from advance ${advance.advanceNumber}`,
+      );
+      return {
+        message: INVOICE_RESPONSES.ADVANCE_SETTLED,
+        settledAmount: amount,
+        advanceBalanceAfter: advanceBalance - amount,
+        invoiceDueAfter: due - amount,
+      };
+    });
+  }
+
+  /**
+   * Refuses the operation while any advance is still settled against this invoice.
+   *
+   * Guards unlock: an unlocked invoice can be edited to a different amount, and a settlement made
+   * against the old figure would then be describing money that no longer matches the bill.
+   */
+  private async assertNoAdvanceSettlements(invoiceId: string, em: EntityManager): Promise<void> {
+    const rows = await this.advanceRepository.findSettlementsByInvoiceIds([invoiceId], em);
+    if (rows.length === 0) return;
+
+    const total = rows.reduce((sum, r) => sum + Number(r.amount), 0);
+    throw new BadRequestException(
+      INVOICE_ERRORS.CANNOT_UNLOCK_HAS_SETTLEMENTS.replace('{count}', String(rows.length)).replace(
+        '{amount}',
+        formatInr(total),
+      ),
+    );
+  }
+
+  /**
+   * Undo settlements on this invoice — one row, or all of them.
+   *
+   * Allowed while the invoice is approved and locked, because unsettling is exactly what a user
+   * has to do *before* unlocking it (see grantUnlock).
+   */
+  async unsettleAdvance(invoiceId: string, settlementId: string | null, actor: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const invoice = await em
+        .getRepository(SiteInvoiceEntity)
+        .createQueryBuilder('inv')
+        .setLock('pessimistic_write')
+        .where('inv.id = :id', { id: invoiceId })
+        .andWhere('inv."deletedAt" IS NULL')
+        .getOne();
+      if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
+
+      const restored = settlementId
+        ? await this.advanceRepository.reverseSettlement(settlementId, invoiceId, em)
+        : await this.advanceRepository.reverseSettlementsForInvoice(invoiceId, em);
+
+      if (restored <= 0) {
+        throw new NotFoundException(INVOICE_ERRORS.SETTLEMENT_NOT_FOUND);
+      }
+
+      await em
+        .getRepository(SiteInvoiceEntity)
+        .update(
+          { id: invoice.id },
+          { advanceSettledAmount: () => `GREATEST("advanceSettledAmount" - ${restored}, 0)` },
+        );
+
+      this.logger.log(
+        `Invoice ${invoiceId}: ${formatInr(restored)} of advance released by ${actor}`,
+      );
+      return { message: INVOICE_RESPONSES.ADVANCE_UNSETTLED, releasedAmount: restored };
+    });
+  }
+
+  /**
+   * The placeholder JMC a No-JMC invoice hangs off.
+   *
+   * Allowed only on an approved PURCHASE PO of type SUPPLY_ITEM — material supply has nothing to
+   * measure and certify, which is the whole reason the route exists. The row carries the PO's
+   * site, party and vendor/contractor, because those are the fields the invoice reads off its JMC.
+   *
+   * Created already APPROVED and locked: invoice approval refuses an unapproved parent JMC, and
+   * there is nothing for a person to approve on a document that does not exist.
+   */
+  private async createNoJmcPlaceholder(poId: string, createdBy: string, em: EntityManager) {
+    const po = await em
+      .getRepository(PurchaseOrderEntity)
+      .findOne({ where: { id: poId, deletedAt: IsNull() } });
+
+    if (!po) throw new NotFoundException(INVOICE_ERRORS.NO_JMC_PO_NOT_FOUND);
+    if (po.partyType !== PartyType.PURCHASE) {
+      throw new BadRequestException(INVOICE_ERRORS.NO_JMC_PO_NOT_PURCHASE);
+    }
+    if (po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(INVOICE_ERRORS.NO_JMC_PO_NOT_APPROVED);
+    }
+    if (po.poType !== PoType.SUPPLY_ITEM) {
+      throw new BadRequestException(
+        INVOICE_ERRORS.NO_JMC_PO_NOT_SUPPLY_ITEM.replace(
+          '{poType}',
+          po.poType ? String(po.poType).replace(/_/g, ' ').toLowerCase() : 'not set',
+        ),
+      );
+    }
+
+    return await em.getRepository(JmcEntity).save({
+      poId: po.id,
+      siteId: po.siteId,
+      partyType: po.partyType,
+      contractorId: po.contractorId ?? null,
+      vendorId: po.vendorId ?? null,
+      jmcNumber: null,
+      jmcDate: new Date(),
+      fileKey: null,
+      fileName: null,
+      isNoJmc: true,
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: createdBy,
+      approvalAt: new Date(),
+      isLocked: true,
+      createdBy,
+    } as Partial<JmcEntity>);
+  }
+
   async create(dto: CreateSiteInvoiceDto, createdBy: string, activeRole?: string) {
-    const jmc = await this.dataSource
+    // The No-JMC route creates its placeholder first, then falls into the ordinary path below
+    // completely unchanged — the invoice still hangs off a real JMC row.
+    if (dto.noJmc === true) {
+      return await this.dataSource.transaction(async (em) => {
+        const placeholder = await this.createNoJmcPlaceholder(dto.poId, createdBy, em);
+        return await this.createAgainstJmc(
+          { ...dto, jmcId: placeholder.id },
+          createdBy,
+          activeRole,
+          em,
+        );
+      });
+    }
+
+    return await this.createAgainstJmc(dto, createdBy, activeRole);
+  }
+
+  private async createAgainstJmc(
+    dto: CreateSiteInvoiceDto,
+    createdBy: string,
+    activeRole?: string,
+    em?: EntityManager,
+  ) {
+    const jmc = await (em ?? this.dataSource)
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(INVOICE_ERRORS.JMC_NOT_FOUND);
@@ -65,15 +360,18 @@ export class SiteInvoiceService {
     if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     // 1 JMC = 1 Invoice
-    const dup = await this.invoiceRepository.findOne({
-      where: { jmcId: dto.jmcId, deletedAt: IsNull() },
-    });
+    const dup = await this.invoiceRepository.findOne(
+      { where: { jmcId: dto.jmcId, deletedAt: IsNull() } },
+      em,
+    );
     if (dup) throw new ConflictException(INVOICE_ERRORS.INVOICE_ALREADY_EXISTS_FOR_JMC);
 
     // Auto-resolve reportId from JMC — PURCHASE side requires a report to exist first
+    // A report hangs off a JMC, so a No-JMC invoice cannot have one — requiring it would close
+    // the route entirely. Ordinary JMC-backed invoices keep the rule exactly as it was.
     let resolvedReportId: string | null = null;
-    if (jmc.partyType === PartyType.PURCHASE) {
-      const report = await this.dataSource
+    if (jmc.partyType === PartyType.PURCHASE && !jmc.isNoJmc) {
+      const report = await (em ?? this.dataSource)
         .getRepository(SiteReportEntity)
         .findOne({ where: { jmcId: dto.jmcId, deletedAt: IsNull() } });
       if (!report) throw new BadRequestException(INVOICE_ERRORS.REPORT_REQUIRED_FOR_PURCHASE);
@@ -86,30 +384,33 @@ export class SiteInvoiceService {
       await this.assertPoCeiling(jmc.poId, dto.totalAmount, null);
     }
 
-    const created = await this.invoiceRepository.create({
-      jmcId: jmc.id,
-      reportId: resolvedReportId,
-      siteId: jmc.siteId,
-      partyType: jmc.partyType,
-      contractorId: jmc.contractorId,
-      vendorId: jmc.vendorId,
-      poId: jmc.poId,
-      invoiceNumber: dto.invoiceNumber ?? null,
-      invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : null,
-      taxableAmount: dto.taxableAmount ?? null,
-      gstAmount: dto.gstAmount ?? null,
-      gstPercentage: dto.gstPercentage ?? null,
-      tdsAmount: dto.tdsAmount ?? null,
-      tdsPercentage: dto.tdsPercentage ?? null,
-      totalAmount: dto.totalAmount ?? null,
-      isGstHold: dto.isGstHold ?? false,
-      fileKey: dto.fileKey ?? null,
-      fileName: dto.fileName ?? null,
-      remarks: dto.remarks,
-      approvalStatus: FinancialApprovalStatus.PENDING,
-      isLocked: false,
-      createdBy,
-    });
+    const created = await this.invoiceRepository.create(
+      {
+        jmcId: jmc.id,
+        reportId: resolvedReportId,
+        siteId: jmc.siteId,
+        partyType: jmc.partyType,
+        contractorId: jmc.contractorId,
+        vendorId: jmc.vendorId,
+        poId: jmc.poId,
+        invoiceNumber: dto.invoiceNumber ?? null,
+        invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : null,
+        taxableAmount: dto.taxableAmount ?? null,
+        gstAmount: dto.gstAmount ?? null,
+        gstPercentage: dto.gstPercentage ?? null,
+        tdsAmount: dto.tdsAmount ?? null,
+        tdsPercentage: dto.tdsPercentage ?? null,
+        totalAmount: dto.totalAmount ?? null,
+        isGstHold: dto.isGstHold ?? false,
+        fileKey: dto.fileKey ?? null,
+        fileName: dto.fileName ?? null,
+        remarks: dto.remarks,
+        approvalStatus: FinancialApprovalStatus.PENDING,
+        isLocked: false,
+        createdBy,
+      },
+      em,
+    );
 
     return { message: INVOICE_RESPONSES.CREATED, id: created.id };
   }
@@ -180,6 +481,18 @@ export class SiteInvoiceService {
       this.invoiceRepository.count({ where }),
     ]);
 
+    // One query for the whole page, grouped by invoice, so the breakdown is available on the list
+    // as well as the detail without an N+1.
+    const settlementRows = await this.advanceRepository.findSettlementsByInvoiceIds(
+      records.map((r) => r.id),
+    );
+    const settlementsByInvoice = new Map<string, ReturnType<typeof mapAdvanceSettlement>[]>();
+    for (const row of settlementRows) {
+      const list = settlementsByInvoice.get(row.invoiceId) ?? [];
+      list.push(mapAdvanceSettlement(row));
+      settlementsByInvoice.set(row.invoiceId, list);
+    }
+
     return {
       records: records.map((inv) => {
         let isDisabled: boolean;
@@ -211,6 +524,7 @@ export class SiteInvoiceService {
 
         return {
           ...inv,
+          advanceSettlements: settlementsByInvoice.get(inv.id) ?? [],
           createdByUser: formatUser(inv.createdByUser),
           updatedByUser: formatUser(inv.updatedByUser),
           approvalByUser: formatUser(inv.approvalByUser),
@@ -241,8 +555,15 @@ export class SiteInvoiceService {
       ],
     });
     if (!invoice) throw new NotFoundException(INVOICE_ERRORS.NOT_FOUND);
+
+    // Which advances covered this invoice and how much each contributed. `advanceSettledAmount`
+    // on the invoice is their sum; this is the breakdown behind it, in the order settlement
+    // consumed them (oldest advance first).
+    const rows = await this.advanceRepository.findSettlementsByInvoiceIds([invoice.id]);
+
     return {
       ...invoice,
+      advanceSettlements: rows.map(mapAdvanceSettlement),
       createdByUser: formatUser(invoice.createdByUser),
       updatedByUser: formatUser(invoice.updatedByUser),
       approvalByUser: formatUser(invoice.approvalByUser),
@@ -376,6 +697,9 @@ export class SiteInvoiceService {
         em,
       );
 
+      // Approval deliberately does NOT settle advances. Deciding which advance clears which
+      // invoice is a business judgement — it is done explicitly via settleAdvance().
+
       // Project GST + TDS register entries atomically with approval.
       await this.projectGstRegisterEntry(inv, em);
       await this.projectTdsRegisterEntry(inv, em);
@@ -493,6 +817,10 @@ export class SiteInvoiceService {
     if (!inv.isLocked || inv.approvalStatus !== FinancialApprovalStatus.APPROVED) {
       throw new BadRequestException(INVOICE_ERRORS.ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK);
     }
+    // Checked here as well as at grant time, so the requester is told to unsettle now rather than
+    // after waiting for an approver who would only hit the same wall.
+    await this.assertNoAdvanceSettlements(id, this.dataSource.manager);
+
     await this.invoiceRepository.update(
       { id },
       {
@@ -526,6 +854,12 @@ export class SiteInvoiceService {
           { invoicedTotal: -Number(inv.totalAmount) },
           em,
         );
+
+        // Settlements are NOT reversed automatically here. Unlocking makes the amount editable,
+        // so a settlement recorded against the old figure must not survive — but silently undoing
+        // it would be the system moving money on its own, which is the behaviour this feature was
+        // deliberately moved away from. The user unsettles explicitly, then unlocks.
+        await this.assertNoAdvanceSettlements(inv.id, em);
 
         // Block unlock if GST payment has already been released — the entry is
         // immutable and cannot be re-projected with edited amounts.

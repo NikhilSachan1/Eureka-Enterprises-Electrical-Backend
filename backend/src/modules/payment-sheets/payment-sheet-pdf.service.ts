@@ -133,14 +133,20 @@ export class PaymentSheetPdfService {
 
   /** Bottom-of-sheet approver signature block: OM / HR / Admin / Accountant.
    * Name and Signature are left blank for manual fill-in on the printed sheet. */
-  private approverSignatures(): string {
-    const approvers = ['Operation Manager', 'HR', 'Admin', 'Accountant'];
+  private approverSignatures(roleHolders: Map<string, string> = new Map()): string {
+    // Label shown on the sheet → the system role it is filled from.
+    const approvers: Array<[label: string, role: string]> = [
+      ['Operation Manager', 'OPERATION_MANAGER'],
+      ['HR', 'HR'],
+      ['Admin', 'ADMIN'],
+      ['Accountant', 'ACCOUNTS'],
+    ];
     const rows = approvers
       .map(
-        (label) => `
+        ([label, role]) => `
         <tr>
           <td class="role">${this.esc(label)}</td>
-          <td class="name"></td>
+          <td class="name">${this.esc(roleHolders.get(role) ?? '')}</td>
           <td class="sig"></td>
           <td class="date"></td>
         </tr>`,
@@ -179,6 +185,41 @@ export class PaymentSheetPdfService {
     return map;
   }
 
+  /**
+   * Current holders of the four approval roles, as `ROLE → "Name, Name"`.
+   *
+   * Every ACTIVE holder is listed rather than one being picked: several people commonly hold the
+   * same role, and choosing one arbitrarily would put the wrong name against a signature. A role
+   * nobody holds is simply absent from the map, which renders as a blank cell.
+   *
+   * Deduplicated by name — a user can hold a role through more than one row.
+   */
+  private async loadApprovalRoleHolders(): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    try {
+      const rows = await this.repo.raw(
+        `SELECT ro."name" AS role,
+                string_agg(DISTINCT TRIM(CONCAT_WS(' ', u."firstName", u."lastName")), ', ') AS names
+           FROM user_roles ur
+           JOIN roles ro ON ro.id = ur."roleId"
+           JOIN users u  ON u.id  = ur."userId"
+          WHERE ro."name" = ANY($1)
+            AND ur."deletedAt" IS NULL
+            AND u."deletedAt" IS NULL
+            AND u."status" = 'ACTIVE'
+          GROUP BY ro."name"`,
+        [['OPERATION_MANAGER', 'HR', 'ACCOUNTS', 'ADMIN']],
+      );
+      for (const r of rows ?? []) {
+        if (r?.names) map.set(String(r.role), String(r.names));
+      }
+    } catch (err) {
+      // A name lookup must never stop the sheet from downloading; the cells stay blank.
+      this.logger.warn(`Approval role holders unavailable: ${err}`);
+    }
+    return map;
+  }
+
   /** Resolve a stored bank value to its label; fall back to a prettified value. */
   private bankLabel(value: unknown, map: Map<string, string>): string {
     if (!value) return '';
@@ -192,6 +233,7 @@ export class PaymentSheetPdfService {
     filterLabel: string | undefined,
     logoBase64: string | null,
     bankLabels: Map<string, string> = new Map(),
+    roleHolders: Map<string, string> = new Map(),
   ): string {
     const rows = items
       .map((it: any, idx) => {
@@ -211,6 +253,10 @@ export class PaymentSheetPdfService {
           bank?.accountNumber ? ' · ' + this.esc(bank.accountNumber) : ''
         }</div>
               <div class="muted">${this.esc(bank?.ifscCode ?? '')}</div>
+            </td>
+            <td>
+              <div>${this.esc(this.bankLabel(it.paidFromAccount?.bankName, bankLabels))}</div>
+              <div class="muted">${this.esc(it.paidFromAccount?.accountName ?? '')}</div>
             </td>
             <td class="r strong">${this.money(Number(it.currentAmount))}</td>
             <td class="c">${this.statusBadge(it.itemStatus)}</td>
@@ -359,16 +405,17 @@ export class PaymentSheetPdfService {
         <th>Beneficiary</th>
         <th>Source</th>
         <th>Bank Account</th>
+        <th>Paid From</th>
         <th class="r">Amount</th>
         <th class="c">Status</th>
         <th class="r">Paid</th>
         <th class="c" style="width:96px">UTR No.</th>
       </tr>
     </thead>
-    <tbody>${rows || `<tr><td colspan="8" class="empty">No line items</td></tr>`}</tbody>
+    <tbody>${rows || `<tr><td colspan="9" class="empty">No line items</td></tr>`}</tbody>
     <tfoot>
       <tr>
-        <td colspan="4" class="r">${totalsLabel}</td>
+        <td colspan="5" class="r">${totalsLabel}</td>
         <td class="r">${this.money(totalCurrent)}</td>
         <td></td>
         <td class="r">${this.money(totalPaid)}</td>
@@ -377,7 +424,7 @@ export class PaymentSheetPdfService {
     </tfoot>
   </table>
 
-  ${this.approverSignatures()}
+  ${this.approverSignatures(roleHolders)}
 
 </div>
 </body>
@@ -403,8 +450,18 @@ export class PaymentSheetPdfService {
     const logoBase64 = await this.fetchUrlAsBase64(PAYMENT_ADVICE_COMPANY_DETAILS.LOGO_URL).catch(
       () => null,
     );
-    const bankLabels = await this.loadBankLabels();
-    const html = this.buildHtml(detail, items, opts.filterLabel, logoBase64, bankLabels);
+    const [bankLabels, roleHolders] = await Promise.all([
+      this.loadBankLabels(),
+      this.loadApprovalRoleHolders(),
+    ]);
+    const html = this.buildHtml(
+      detail,
+      items,
+      opts.filterLabel,
+      logoBase64,
+      bankLabels,
+      roleHolders,
+    );
     let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
     try {
       browser = await puppeteer.launch({

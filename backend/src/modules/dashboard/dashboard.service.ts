@@ -42,6 +42,15 @@ import { UtilityService } from 'src/utils/utility/utility.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { Roles } from '../roles/constants/role.constants';
 
+/**
+ * How many rows each approval card carries as a preview. The card's `count` is a real aggregate,
+ * not this number — see getApprovals().
+ */
+const ITEM_PREVIEW_LIMIT = 20;
+
+/** The shorter preview the per-module summary cards carry. */
+const PREVIEW_LIMIT_SMALL = 10;
+
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
@@ -552,9 +561,12 @@ export class DashboardService {
       this.executeQuery(
         queries.getUpcomingLeavesQuery(this.formatDate(today), this.formatDate(upcomingEndDate)),
       ),
-      this.executeQuery(queries.getPendingLeaveApprovalsQuery(10)),
+      this.executeQuery(queries.getPendingLeaveApprovalsQuery(PREVIEW_LIMIT_SMALL)),
       this.executeQuery(queries.getLeaveBalanceOverviewQuery(financialYear)),
     ]);
+
+    // `pendingApprovals` is a capped preview, so its count comes from the aggregate.
+    const pendingLeaveCount = await this.pendingApprovalCount('leave');
 
     // Build leave type distribution
     const byType: Record<string, number> = {};
@@ -577,7 +589,7 @@ export class DashboardService {
 
     return {
       pendingApprovals: {
-        count: pendingApprovals.length,
+        count: pendingLeaveCount,
         items: pendingApprovals,
       },
       currentMonthSummary: {
@@ -683,8 +695,11 @@ export class DashboardService {
           DASHBOARD_CONSTANTS.TOP_SPENDERS_LIMIT,
         ),
       ),
-      this.executeQuery(queries.getPendingExpenseApprovalsQuery(10)),
+      this.executeQuery(queries.getPendingExpenseApprovalsQuery(PREVIEW_LIMIT_SMALL)),
     ]);
+
+    // Capped preview above; the card's number is the real backlog.
+    const pendingExpenseCount = await this.pendingApprovalCount('expense');
 
     const summaryData = summary[0] || {};
 
@@ -697,7 +712,7 @@ export class DashboardService {
         rejectedClaims: parseFloat(summaryData.rejectedClaims) || 0,
       },
       pendingApprovals: {
-        count: pendingApprovals.length,
+        count: pendingExpenseCount,
         items: pendingApprovals,
       },
       categoryDistribution: {
@@ -929,61 +944,102 @@ export class DashboardService {
     };
   }
 
+  /**
+   * How many approvals of one kind are genuinely pending.
+   *
+   * The summary cards each show a short preview list, so counting the rows they got back reports
+   * the preview size rather than the backlog. This reads the same aggregate the approvals endpoint
+   * uses, so every card in the dashboard agrees on the number.
+   */
+  private async pendingApprovalCount(
+    type: 'leave' | 'attendance' | 'expense' | 'fuelExpense',
+  ): Promise<number> {
+    const rows = await this.executeQuery(queries.getPendingApprovalStatsQuery());
+    const row = (rows as any[]).find((r) => r.type === type);
+    return Number(row?.total ?? 0);
+  }
+
   async getApprovals(): Promise<ApprovalsData> {
-    const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals] =
+    const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals, statRows] =
       await Promise.all([
-        this.executeQuery(queries.getPendingLeaveApprovalsQuery(20)),
-        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(20)),
-        this.executeQuery(queries.getPendingExpenseApprovalsQuery(20)),
-        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(20)),
+        this.executeQuery(queries.getPendingLeaveApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT)),
+        this.executeQuery(queries.getPendingApprovalStatsQuery()),
       ]);
 
     //TODO: temporary for now
     const siteDocumentsApprovals = [];
 
-    const calculateAging = (items: any[]) => ({
-      days1: items.filter((i) => i.aging <= 1).length,
-      days2_3: items.filter((i) => i.aging >= 2 && i.aging <= 3).length,
-      days4Plus: items.filter((i) => i.aging >= 4).length,
-    });
+    /**
+     * `items` is a capped preview, so counts and aging come from the aggregate instead of from
+     * `items.length` — that is what reported 20 pending attendances when 688 existed.
+     */
+    const statsByType = new Map<
+      string,
+      { total: number; days1: number; days2_3: number; days4Plus: number }
+    >(
+      (statRows as any[]).map((r) => [
+        r.type,
+        {
+          total: Number(r.total ?? 0),
+          days1: Number(r.days1 ?? 0),
+          days2_3: Number(r.days2_3 ?? 0),
+          days4Plus: Number(r.days4Plus ?? 0),
+        },
+      ]),
+    );
+    const statsFor = (type: string) =>
+      statsByType.get(type) ?? { total: 0, days1: 0, days2_3: 0, days4Plus: 0 };
+
+    const aging = (type: string) => {
+      const s = statsFor(type);
+      return { days1: s.days1, days2_3: s.days2_3, days4Plus: s.days4Plus };
+    };
+
+    const leaveStats = statsFor('leave');
+    const attendanceStats = statsFor('attendance');
+    const expenseStats = statsFor('expense');
+    const fuelStats = statsFor('fuelExpense');
 
     return {
       leave: {
-        count: leaveApprovals.length,
+        count: leaveStats.total,
         items: leaveApprovals,
-        aging: calculateAging(leaveApprovals),
+        aging: aging('leave'),
       },
       attendance: {
-        count: attendanceApprovals.length,
+        count: attendanceStats.total,
         items: attendanceApprovals,
-        aging: calculateAging(attendanceApprovals),
+        aging: aging('attendance'),
       },
       expense: {
-        count: expenseApprovals.length,
+        count: expenseStats.total,
         items: expenseApprovals,
-        aging: calculateAging(expenseApprovals),
+        aging: aging('expense'),
       },
       fuelExpense: {
-        count: fuelExpenseApprovals.length,
+        count: fuelStats.total,
         items: fuelExpenseApprovals,
-        aging: calculateAging(fuelExpenseApprovals),
+        aging: aging('fuelExpense'),
       },
       siteDocuments: {
         count: siteDocumentsApprovals.length,
         items: siteDocumentsApprovals,
-        aging: calculateAging(siteDocumentsApprovals),
+        aging: { days1: 0, days2_3: 0, days4Plus: 0 },
       },
       totals: {
-        leave: leaveApprovals.length,
-        attendance: attendanceApprovals.length,
-        expense: expenseApprovals.length,
-        fuelExpense: fuelExpenseApprovals.length,
+        leave: leaveStats.total,
+        attendance: attendanceStats.total,
+        expense: expenseStats.total,
+        fuelExpense: fuelStats.total,
         siteDocuments: siteDocumentsApprovals.length,
         total:
-          leaveApprovals.length +
-          attendanceApprovals.length +
-          expenseApprovals.length +
-          fuelExpenseApprovals.length +
+          leaveStats.total +
+          attendanceStats.total +
+          expenseStats.total +
+          fuelStats.total +
           siteDocumentsApprovals.length,
       },
     };
@@ -1111,7 +1167,9 @@ export class DashboardService {
           WHEN lp.current_odo < lp.prev_odo THEN 'Odometer rollback: ' || lp.current_odo || ' < previous ' || lp.prev_odo
           ELSE 'Unusual jump: ' || (lp.current_odo - lp.prev_odo) || ' km in short interval'
         END as reason,
-        lp."createdAt"::text as "reportedAt"
+        lp."createdAt"::text as "reportedAt",
+        -- Window functions run before LIMIT, so this is the full match count, not the page size.
+        COUNT(*) OVER()::int as "totalCount"
       FROM log_pairs lp
       JOIN active_versions av ON av."vehicleMasterId" = lp."vehicleId"
       WHERE lp.current_odo < lp.prev_odo
@@ -1136,7 +1194,8 @@ export class DashboardService {
         GROUP BY "vehicleId"
       )
       SELECT av."vehicleMasterId" as "vehicleId", av."registrationNo", av.brand, av.model,
-        lr.last_reading::text as "lastReadingDate"
+        lr.last_reading::text as "lastReadingDate",
+        COUNT(*) OVER()::int as "totalCount"
       FROM active_versions av
       LEFT JOIN last_readings lr ON lr."vehicleId" = av."vehicleMasterId"
       WHERE lr.last_reading IS NULL
@@ -1145,9 +1204,20 @@ export class DashboardService {
       LIMIT 20
     `);
 
+    // `items` is capped at 20; the count comes from the window total so the card reports what
+    // actually exists. `totalCount` is stripped off each row so it does not leak into the payload.
+    const unwrap = (rows: any[]) => ({
+      count: Number(rows[0]?.totalCount ?? 0),
+      items: rows.map((row) => {
+        const item = { ...row };
+        delete item.totalCount;
+        return item;
+      }),
+    });
+
     return {
-      anomalies: { count: anomalies.length, items: anomalies },
-      noReading2Days: { count: noReading.length, items: noReading },
+      anomalies: unwrap(anomalies),
+      noReading2Days: unwrap(noReading),
     };
   }
 
@@ -1682,6 +1752,8 @@ export class DashboardService {
                j."contractorId", j."vendorId"
         FROM jmcs j
         JOIN sites s ON s.id = j."siteId"
+        -- No-JMC placeholders have no number to show and are not documents a user filed.
+        AND j."isNoJmc" = false
         ${whereClause.replace(/d\./g, 'j.')}
         
         UNION ALL

@@ -5,23 +5,46 @@ import { SiteEntity } from 'src/modules/sites/entities/site.entity';
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
+import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
+import { BookPaymentSourceType } from '../constants/book-payment.constants';
 
 /**
  * Book Payment — PURCHASE side only (§5.1.7)
- * Represents a payment booking against an approved invoice before the actual bank transfer.
+ * Represents a payment booking before the actual bank transfer, against either an approved
+ * **invoice** (the original flow) or an approved **advance payment** (pre-invoice money).
+ *
+ * Exactly one source is set, matching `sourceType`. That is enforced in the database by
+ * CHK_BOOK_PAYMENT_SOURCE rather than left to application code.
  */
 @Entity('book_payments')
 @Index('IDX_BOOK_PAYMENT_INVOICE', ['invoiceId'])
+@Index('IDX_BOOK_PAYMENT_ADVANCE', ['advancePaymentId'])
 @Index('IDX_BOOK_PAYMENT_SITE', ['siteId'])
 @Index('IDX_BOOK_PAYMENT_VENDOR', ['vendorId'])
 @Index('IDX_BOOK_PAYMENT_PO', ['poId'])
 export class BookPaymentEntity extends BaseEntity {
-  @Column({ type: 'uuid' })
-  invoiceId: string;
+  /**
+   * Which document this booking is against. Defaults to INVOICE so every pre-existing row — all
+   * of which were necessarily invoice-backed — reads correctly without a backfill.
+   */
+  @Column({ type: 'varchar', length: 20, default: BookPaymentSourceType.INVOICE })
+  sourceType: string;
 
-  @ManyToOne(() => SiteInvoiceEntity)
+  /** Set when sourceType = INVOICE. Null for advance-backed bookings. */
+  @Column({ type: 'uuid', nullable: true })
+  invoiceId: string | null;
+
+  @ManyToOne(() => SiteInvoiceEntity, { nullable: true })
   @JoinColumn({ name: 'invoiceId' })
-  invoice: SiteInvoiceEntity;
+  invoice: SiteInvoiceEntity | null;
+
+  /** Set when sourceType = ADVANCE. Null for invoice-backed bookings. */
+  @Column({ type: 'uuid', nullable: true })
+  advancePaymentId: string | null;
+
+  @ManyToOne(() => AdvancePaymentEntity, { nullable: true })
+  @JoinColumn({ name: 'advancePaymentId' })
+  advancePayment: AdvancePaymentEntity | null;
 
   @Column({ type: 'uuid' })
   siteId: string;

@@ -1,7 +1,10 @@
 process.env.TZ = 'UTC';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
-import { CustomLoggerService } from './utils/custom-logger';
+import {
+  muteConsoleChatterOnDeployedEnvironments,
+  resolveLogLevels,
+} from './utils/custom-logger/log-levels';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as pkg from '../package.json';
 import { ValidationPipe } from '@nestjs/common';
@@ -52,10 +55,12 @@ async function bootstrap() {
     }
   }
 
-  const app = await NestFactory.create(AppModule);
+  // Done before the app is built so boot-time chatter is covered too.
+  muteConsoleChatterOnDeployedEnvironments();
+
+  const app = await NestFactory.create(AppModule, { logger: resolveLogLevels() });
   const appPort = Environments.APP_PORT || 3333;
   const globalPrefix = 'api/v1';
-  const customLogger = new CustomLoggerService();
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   app.use(json({ limit: '100mb' }));
   app.use(urlencoded({ limit: '100mb', extended: true }));
@@ -144,7 +149,13 @@ async function bootstrap() {
   }
 
   await app.listen(appPort, () => {
-    customLogger.log(`Listening at http://localhost:${appPort}/${globalPrefix}`);
+    // Written straight to stdout rather than through the logger: on deployed environments the
+    // `log` level is off, and "the app came up" is the one line worth keeping there — it is how a
+    // deploy is confirmed from the logs.
+    process.stdout.write(
+      `Listening at http://localhost:${appPort}/${globalPrefix} ` +
+        `[env: ${Environments.APP_ENVIRONMENT}, logs: ${resolveLogLevels().join(',')}]\n`,
+    );
   });
 }
 bootstrap();

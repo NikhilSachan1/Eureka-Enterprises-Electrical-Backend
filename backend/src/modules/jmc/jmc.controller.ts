@@ -51,8 +51,11 @@ export class JmcController {
     @Query('siteId') siteId: string,
     @Query('partyType') partyType: string,
     @Query('forDocument') forDocument: 'report' | 'invoice',
+    // Optional. Narrows the list to one PO, and — for an invoice on a Supply Item PO — adds the
+    // "No JMC" option. Validated here so a malformed id is a 400 rather than a 500 from Postgres.
+    @Query('poId', new ParseUUIDPipe({ optional: true })) poId?: string,
   ) {
-    return await this.jmcService.getDropdown(siteId, partyType, forDocument);
+    return await this.jmcService.getDropdown(siteId, partyType, forDocument, poId);
   }
 
   @Get('items/suggestions')

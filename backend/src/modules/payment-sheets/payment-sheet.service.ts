@@ -712,7 +712,25 @@ export class PaymentSheetService {
           city: string;
           state: string;
         } | null = null;
-        if (row) {
+        // An advance-backed line has no invoice at all, so the two blocks are mutually exclusive:
+        // whichever one applies is filled and the other stays null. Nothing about the invoice
+        // shape changes.
+        let advance: {
+          advancePaymentId: string;
+          advanceNumber: string;
+          advanceDate: Date;
+          advanceAmount: number;
+          settledAmount: number;
+          payableAmount: number;
+          poId: string | null;
+          poNumber: string | null;
+          companyName: string;
+          projectName: string;
+          city: string;
+          state: string;
+        } | null = null;
+
+        if (row && row.invoiceId) {
           const netPayable = Number(row.invoiceNetPayableAmount);
           const bookedTotal = Number(row.invoiceBookedTotal);
           invoice = {
@@ -727,6 +745,21 @@ export class PaymentSheetService {
             city: row.siteCity,
             state: row.siteState,
           };
+        } else if (row && row.advancePaymentId) {
+          advance = {
+            advancePaymentId: row.advancePaymentId,
+            advanceNumber: row.advanceNumber,
+            advanceDate: row.advanceDate,
+            advanceAmount: Number(row.advanceAmount),
+            settledAmount: Number(row.advanceSettledAmount ?? 0),
+            payableAmount,
+            poId: row.poId ?? null,
+            poNumber: row.poNumber ?? null,
+            companyName: row.companyName,
+            projectName: row.siteName,
+            city: row.siteCity,
+            state: row.siteState,
+          };
         }
         const advice = alloc.bankTransferId ? adviceMap.get(alloc.bankTransferId) : null;
         return {
@@ -734,7 +767,10 @@ export class PaymentSheetService {
           bookPaymentId: alloc.bookPaymentId,
           allocatedAmount: payableAmount,
           bankTransferId: alloc.bankTransferId ?? null,
+          // Tells the UI which of the two blocks below to read.
+          sourceType: row?.sourceType ?? null,
           invoice,
+          advance,
           paymentAdvice: advice
             ? {
                 id: advice.id,

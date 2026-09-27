@@ -178,6 +178,19 @@ export class BillingService {
       detail: gstTdsDetail,
     });
 
+    // Condition 7: No advance left unsettled. Closing with one means money was paid out against
+    // work that was never billed — the exposure advance payments introduce.
+    const unsettledAdvances = await this.dataSource.query(BILLING_QUERIES.UNSETTLED_ADVANCES, [
+      dto.siteId,
+    ]);
+    conditions.push({
+      id: CLOSING_CONDITION_IDS.ADVANCES_SETTLED,
+      pass: unsettledAdvances.length === 0,
+      detail: unsettledAdvances.map((r: any) =>
+        CLOSING_CONDITION_DETAILS.ADVANCE_UNSETTLED(r.advanceNumber, r.poNumber, r.unsettled),
+      ),
+    });
+
     const canClose = conditions.every((c) => c.pass);
 
     return { canClose, conditions };

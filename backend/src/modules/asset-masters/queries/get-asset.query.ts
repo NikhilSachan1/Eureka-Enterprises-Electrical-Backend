@@ -2,6 +2,7 @@ import { AssetQueryDto } from '../dto/asset-query.dto';
 import {
   ASSET_SORT_FIELD_MAPPING,
   AssetEventTypes,
+  HANDOVER_EVENT_TYPES,
   AssetType,
   AssetStatus,
   AssetFileTypes,
@@ -354,7 +355,13 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         ),
         '[]'::json
       ) as "files",
-      CASE WHEN ale."id" IS NOT NULL THEN json_build_object(
+      -- Only a handover shows up here. The newest event is frequently a calibration or a status
+      -- change, and returning that made the field look like handover information while carrying
+      -- something else. The lateral below still picks the genuinely newest event, so this is
+      -- "is the asset's last action a handover?", not "find the last handover".
+      CASE WHEN ale."id" IS NOT NULL
+            AND ale."eventType" IN (${HANDOVER_EVENT_TYPES.map((t) => `'${t}'`).join(', ')})
+      THEN json_build_object(
         'id', ale."id",
         'eventType', ale."eventType",
         'fromUser', ale."fromUser",

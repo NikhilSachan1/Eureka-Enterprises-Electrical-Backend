@@ -3,6 +3,7 @@ import {
   VehicleStatus,
   VehicleFuelType,
   VehicleFileTypes,
+  HANDOVER_EVENT_TYPES,
   DEFAULT_EXPIRING_SOON_DAYS,
   DocumentStatus,
   ServiceDueStatus,
@@ -412,7 +413,10 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         )
         ELSE NULL
       END as "associatedCard",
-      CASE WHEN vle."id" IS NOT NULL THEN json_build_object(
+      -- Only a handover shows up here — same rule as the asset list; see the constant's comment.
+      CASE WHEN vle."id" IS NOT NULL
+            AND vle."eventType" IN (${HANDOVER_EVENT_TYPES.map((t) => `'${t}'`).join(', ')})
+      THEN json_build_object(
         'id', vle."id",
         'eventType', vle."eventType",
         'fromUser', vle."fromUser",

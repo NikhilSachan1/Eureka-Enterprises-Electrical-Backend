@@ -45,14 +45,18 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
   const invPendingToBook = `(${invNetPayable} - COALESCE(inv."bookedTotal"::numeric, 0))`;
 
   // ── Join fragments ──
+  // LEFT on the invoice: an advance-backed booking has no invoiceId, and an inner join
+  // dropped the row before any parent chain could be attached. PO hangs off the booking's
+  // own poId so both chains resolve — invoice → JMC → PO, and advance → PO.
   const bookPaymentJoin = `
     FROM "book_payments" bp
-    INNER JOIN "site_invoices" inv  ON inv."id"        = bp."invoiceId"  AND inv."deletedAt" IS NULL
-    LEFT  JOIN "jmcs"          jmc  ON jmc."id"        = inv."jmcId"     AND jmc."deletedAt" IS NULL
-    LEFT  JOIN "purchase_orders" po ON po."id"         = jmc."poId"      AND po."deletedAt" IS NULL
-    INNER JOIN "sites"         s    ON s."id"          = bp."siteId"     AND s."deletedAt" IS NULL
-    INNER JOIN "companies"     c    ON c."id"          = s."companyId"   AND c."deletedAt" IS NULL
-    INNER JOIN "vendors"       v    ON v."id"          = bp."vendorId"   AND v."deletedAt" IS NULL
+    LEFT  JOIN "site_invoices"    inv ON inv."id" = bp."invoiceId"        AND inv."deletedAt" IS NULL
+    LEFT  JOIN "jmcs"             jmc ON jmc."id" = inv."jmcId"           AND jmc."deletedAt" IS NULL
+    LEFT  JOIN "advance_payments" ap  ON ap."id"  = bp."advancePaymentId" AND ap."deletedAt" IS NULL
+    LEFT  JOIN "purchase_orders"  po  ON po."id"  = bp."poId"             AND po."deletedAt" IS NULL
+    INNER JOIN "sites"            s   ON s."id"   = bp."siteId"           AND s."deletedAt" IS NULL
+    INNER JOIN "companies"        c   ON c."id"   = s."companyId"         AND c."deletedAt" IS NULL
+    INNER JOIN "vendors"          v   ON v."id"   = bp."vendorId"         AND v."deletedAt" IS NULL
   `;
   const invoiceJoin = `
     FROM "site_invoices" inv
@@ -79,7 +83,7 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
     if (search) {
       const p = ph(`%${search}%`);
       c.push(
-        `(LOWER(v."name") LIKE LOWER(${p}) OR LOWER(inv."invoiceNumber") LIKE LOWER(${p}) OR LOWER(po."poNumber") LIKE LOWER(${p}))`,
+        `(LOWER(v."name") LIKE LOWER(${p}) OR LOWER(inv."invoiceNumber") LIKE LOWER(${p}) OR LOWER(ap."advanceNumber") LIKE LOWER(${p}) OR LOWER(po."poNumber") LIKE LOWER(${p}))`,
       );
     }
     return c.join(' AND ');
@@ -150,6 +154,7 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       bp."remarks",
       bp."approvalStatus",
       bp."hasTransfer",
+      bp."sourceType",
 
       v."id"                    AS "vendorId",
       v."name"                  AS "vendorName",
@@ -175,6 +180,12 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       ${invNetPayable}          AS "invoiceNetPayableAmount",
       ${invPendingToBook}       AS "invoicePendingToBook",
       inv."approvalStatus"      AS "invoiceApprovalStatus",
+
+      ap."id"                   AS "advancePaymentId",
+      ap."advanceNumber",
+      ap."advanceDate",
+      ap."amount"               AS "advanceAmount",
+      ap."settledAmount"        AS "advanceSettledAmount",
 
       jmc."id"                  AS "jmcId",
       jmc."jmcNumber",

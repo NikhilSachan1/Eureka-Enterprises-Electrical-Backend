@@ -122,9 +122,31 @@ export enum AssetEventTypes {
   HANDOVER_ACCEPTED = 'HANDOVER_ACCEPTED',
   HANDOVER_REJECTED = 'HANDOVER_REJECTED',
   HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
+  /**
+   * Written by the auto-penalty cron when a handover sat untouched past the configured window.
+   * Kept distinct from HANDOVER_ACCEPTED so history shows nobody actually accepted it.
+   * It is never a user-supplied action, so it is deliberately absent from VALID_ACTIONS_BY_STATUS.
+   */
+  HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
   LOST = 'LOST',
   RECOVERED = 'RECOVERED',
 }
+
+/**
+ * The handover leg of the lifecycle.
+ *
+ * `latestEvent` on the asset list/detail exists so the UI can show where a handover stands, so it
+ * is only filled when the newest event is one of these. A calibration or a status change is the
+ * newest event far more often than a handover is, and returning it there made the field read as
+ * "handover info" while carrying something else entirely.
+ */
+export const HANDOVER_EVENT_TYPES: AssetEventTypes[] = [
+  AssetEventTypes.HANDOVER_INITIATED,
+  AssetEventTypes.HANDOVER_ACCEPTED,
+  AssetEventTypes.HANDOVER_REJECTED,
+  AssetEventTypes.HANDOVER_CANCELLED,
+  AssetEventTypes.HANDOVER_AUTO_ACCEPTED,
+];
 
 export enum AssetMasterSortFields {
   CREATED_AT = 'createdAt',

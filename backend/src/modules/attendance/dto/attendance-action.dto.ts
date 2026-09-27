@@ -111,7 +111,7 @@ export class AssignmentSnapshotDto {
   @Type(() => AssignmentSnapshotSiteDto)
   @IsOptional()
   site?: AssignmentSnapshotSiteDto;
-
+  jmc;
   @ApiPropertyOptional({ type: AssignmentSnapshotCompanyDto })
   @ValidateNested()
   @Type(() => AssignmentSnapshotCompanyDto)

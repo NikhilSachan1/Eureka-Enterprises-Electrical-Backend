@@ -78,7 +78,21 @@ export enum VehicleEventTypes {
   HANDOVER_ACCEPTED = 'HANDOVER_ACCEPTED',
   HANDOVER_REJECTED = 'HANDOVER_REJECTED',
   HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
+  /** Auto-penalty cron's counterpart to HANDOVER_ACCEPTED — see the asset enum for the reasoning. */
+  HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
 }
+
+/**
+ * The handover leg of the lifecycle. `latestEvent` is only filled when the newest event is one of
+ * these — see the asset constant for the reasoning.
+ */
+export const HANDOVER_EVENT_TYPES: VehicleEventTypes[] = [
+  VehicleEventTypes.HANDOVER_INITIATED,
+  VehicleEventTypes.HANDOVER_ACCEPTED,
+  VehicleEventTypes.HANDOVER_REJECTED,
+  VehicleEventTypes.HANDOVER_CANCELLED,
+  VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
+];
 
 export enum DocumentStatus {
   ACTIVE = 'ACTIVE',
