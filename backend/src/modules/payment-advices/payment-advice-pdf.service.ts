@@ -52,7 +52,6 @@ export interface PaymentAdvicePdfData {
    * instead. Null for the ordinary invoice route.
    */
   advanceNumber?: string | null;
-  advanceDate?: string | null;
 }
 
 @Injectable()
@@ -295,10 +294,6 @@ export class PaymentAdvicePdfService {
       rightRows.push(
         `<tr><td class="lbl">Advance No.</td><td class="sep">:</td><td class="val">${d.advanceNumber}</td></tr>`,
       );
-      if (d.advanceDate)
-        rightRows.push(
-          `<tr><td class="lbl">Advance Date</td><td class="sep">:</td><td class="val">${d.advanceDate}</td></tr>`,
-        );
       rightRows.push(
         `<tr><td class="lbl">Payment Type</td><td class="sep">:</td><td class="val">Advance Payment</td></tr>`,
       );

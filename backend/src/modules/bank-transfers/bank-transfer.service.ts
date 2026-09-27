@@ -325,9 +325,6 @@ export class BankTransferService {
             : null,
           poNumber: poForPdf?.poNumber ?? null,
           advanceNumber: advanceForPdf?.advanceNumber ?? null,
-          advanceDate: advanceForPdf?.advanceDate
-            ? String(advanceForPdf.advanceDate).split('T')[0]
-            : null,
         },
         new Date(dto.transferDate),
       );
