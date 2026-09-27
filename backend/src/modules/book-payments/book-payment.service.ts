@@ -43,6 +43,26 @@ function isInvoiceBacked(bp: Pick<BookPaymentEntity, 'sourceType' | 'invoiceId'>
   return bp.sourceType !== BookPaymentSourceType.ADVANCE && !!bp.invoiceId;
 }
 
+/**
+ * Parent chain the list and detail screens render as a breadcrumb.
+ * Invoice bookings: invoice → JMC → PO. Advance bookings have no JMC, so the chain is
+ * advance payment → PO. Site and company sit on the booking itself for both.
+ */
+const BOOK_PAYMENT_READ_RELATIONS = [
+  'invoice',
+  'invoice.jmc',
+  'invoice.jmc.po',
+  'advancePayment',
+  'advancePayment.po',
+  'site',
+  'site.company',
+  'vendor',
+  'createdByUser',
+  'updatedByUser',
+  'approvalByUser',
+  'unlockRequestedByUser',
+];
+
 @Injectable()
 export class BookPaymentService {
   constructor(
@@ -359,18 +379,7 @@ export class BookPaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: [
-          'invoice',
-          'invoice.jmc',
-          'invoice.jmc.po',
-          'site',
-          'site.company',
-          'vendor',
-          'createdByUser',
-          'updatedByUser',
-          'approvalByUser',
-          'unlockRequestedByUser',
-        ],
+        relations: BOOK_PAYMENT_READ_RELATIONS,
       }),
       this.bookPaymentRepository.count({ where }),
     ]);
@@ -390,18 +399,7 @@ export class BookPaymentService {
   async findById(id: string) {
     const bp = await this.bookPaymentRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: [
-        'invoice',
-        'invoice.jmc',
-        'invoice.jmc.po',
-        'site',
-        'site.company',
-        'vendor',
-        'createdByUser',
-        'updatedByUser',
-        'approvalByUser',
-        'unlockRequestedByUser',
-      ],
+      relations: BOOK_PAYMENT_READ_RELATIONS,
     });
     if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
     return {
@@ -846,10 +844,11 @@ export class BookPaymentService {
 
         const bookPayments = bpVendorRows.map((r) => {
           const tdsAmount = r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : 0;
-          const isGstHold: boolean = r.invoiceIsGstHold;
+          const isGstHold = r.invoiceIsGstHold === true;
           const netPayableAmount = isGstHold
             ? Number(r.taxableAmount) - tdsAmount
             : Number(r.taxableAmount) + Number(r.gstAmount) - tdsAmount;
+          const isAdvance = r.sourceType === BookPaymentSourceType.ADVANCE;
           return {
             id: r.bpId,
             bookingDate: r.bookingDate,
@@ -865,27 +864,44 @@ export class BookPaymentService {
             remarks: r.remarks ?? null,
             approvalStatus: r.approvalStatus,
             hasTransfer: r.hasTransfer,
+            sourceType: r.sourceType ?? BookPaymentSourceType.INVOICE,
             displayName: displayNameOf(r),
-            invoice: {
-              id: r.invoiceId,
-              invoiceNumber: r.invoiceNumber ?? null,
-              invoiceDate: r.invoiceDate ?? null,
-              totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
-              taxableAmount:
-                r.invoiceTaxableAmount !== null ? Number(r.invoiceTaxableAmount) : null,
-              gstAmount: r.invoiceGstAmount !== null ? Number(r.invoiceGstAmount) : null,
-              gstPercentage:
-                r.invoiceGstPercentage !== null ? Number(r.invoiceGstPercentage) : null,
-              tdsAmount: r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : null,
-              isGstHold: r.invoiceIsGstHold,
-              netPayableAmount:
-                r.invoiceNetPayableAmount !== null ? Number(r.invoiceNetPayableAmount) : null,
-              bookedTotal: r.invoiceBookedTotal !== null ? Number(r.invoiceBookedTotal) : null,
-              pendingToBook:
-                r.invoicePendingToBook !== null ? Number(r.invoicePendingToBook) : null,
-              approvalStatus: r.invoiceApprovalStatus,
-            },
-            jmc: r.jmcId ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate } : null,
+            // Invoice chain stops at the invoice; advance chain starts at the advance. The other
+            // block stays null so the UI reads exactly one parent.
+            invoice: isAdvance
+              ? null
+              : {
+                  id: r.invoiceId,
+                  invoiceNumber: r.invoiceNumber ?? null,
+                  invoiceDate: r.invoiceDate ?? null,
+                  totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
+                  taxableAmount:
+                    r.invoiceTaxableAmount !== null ? Number(r.invoiceTaxableAmount) : null,
+                  gstAmount: r.invoiceGstAmount !== null ? Number(r.invoiceGstAmount) : null,
+                  gstPercentage:
+                    r.invoiceGstPercentage !== null ? Number(r.invoiceGstPercentage) : null,
+                  tdsAmount: r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : null,
+                  isGstHold: r.invoiceIsGstHold,
+                  netPayableAmount:
+                    r.invoiceNetPayableAmount !== null ? Number(r.invoiceNetPayableAmount) : null,
+                  bookedTotal: r.invoiceBookedTotal !== null ? Number(r.invoiceBookedTotal) : null,
+                  pendingToBook:
+                    r.invoicePendingToBook !== null ? Number(r.invoicePendingToBook) : null,
+                  approvalStatus: r.invoiceApprovalStatus,
+                },
+            advance: isAdvance
+              ? {
+                  id: r.advancePaymentId,
+                  advanceNumber: r.advanceNumber ?? null,
+                  advanceDate: r.advanceDate ?? null,
+                  amount: r.advanceAmount !== null ? Number(r.advanceAmount) : null,
+                  settledAmount:
+                    r.advanceSettledAmount !== null ? Number(r.advanceSettledAmount) : 0,
+                }
+              : null,
+            jmc: !isAdvance && r.jmcId
+              ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate }
+              : null,
             po: r.poId
               ? {
                   id: r.poId,

@@ -54,7 +54,7 @@ export class BookPaymentController {
   @ApiOperation({
     summary: 'Vendor book payments list',
     description:
-      'Returns all vendors with their approved book payments, each enriched with invoice, JMC, PO, site and company details. Paginated on vendor level.',
+      'Returns all vendors with their approved book payments. Invoice bookings carry invoice → JMC → PO → site → company. Advance bookings carry advance → PO → site → company. Paginated on vendor level.',
   })
   getVendorList(@Query() query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
     return this.bookPaymentService.getVendorList(query);
