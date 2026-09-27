@@ -39,12 +39,14 @@ export const BILLING_QUERIES = {
       (po."invoicedTotal" - po."paidTotal")   AS "pendingPayment",
 
       -- Document counts
+      -- No-JMC placeholders are excluded throughout: they are not JMCs anyone raised, and counting
+      -- them would overstate how much of this PO has been certified.
       (SELECT COUNT(*)::int FROM jmcs j
-        WHERE j."poId" = po.id AND j."deletedAt" IS NULL)                          AS "jmcCount",
+        WHERE j."poId" = po.id AND j."deletedAt" IS NULL AND j."isNoJmc" = false)  AS "jmcCount",
       (SELECT COUNT(*)::int FROM jmcs j
-        WHERE j."poId" = po.id AND j."approvalStatus" = 'APPROVED' AND j."deletedAt" IS NULL) AS "jmcApprovedCount",
+        WHERE j."poId" = po.id AND j."approvalStatus" = 'APPROVED' AND j."deletedAt" IS NULL AND j."isNoJmc" = false) AS "jmcApprovedCount",
       (SELECT COUNT(*)::int FROM jmcs j
-        WHERE j."poId" = po.id AND j."approvalStatus" = 'PENDING'  AND j."deletedAt" IS NULL) AS "jmcPendingCount",
+        WHERE j."poId" = po.id AND j."approvalStatus" = 'PENDING'  AND j."deletedAt" IS NULL AND j."isNoJmc" = false) AS "jmcPendingCount",
 
       (SELECT COUNT(*)::int FROM site_reports sr
         JOIN jmcs j2 ON j2.id = sr."jmcId"

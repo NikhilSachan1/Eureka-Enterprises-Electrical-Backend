@@ -42,6 +42,8 @@ import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
+import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
+import { PoType } from 'src/modules/purchase-orders/constants/purchase-order.constants';
 import { AdvancePaymentRepository } from 'src/modules/advance-payments/advance-payment.repository';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import {
@@ -272,8 +274,81 @@ export class SiteInvoiceService {
     });
   }
 
+  /**
+   * The placeholder JMC a No-JMC invoice hangs off.
+   *
+   * Allowed only on an approved PURCHASE PO of type SUPPLY_ITEM — material supply has nothing to
+   * measure and certify, which is the whole reason the route exists. The row carries the PO's
+   * site, party and vendor/contractor, because those are the fields the invoice reads off its JMC.
+   *
+   * Created already APPROVED and locked: invoice approval refuses an unapproved parent JMC, and
+   * there is nothing for a person to approve on a document that does not exist.
+   */
+  private async createNoJmcPlaceholder(poId: string, createdBy: string, em: EntityManager) {
+    const po = await em
+      .getRepository(PurchaseOrderEntity)
+      .findOne({ where: { id: poId, deletedAt: IsNull() } });
+
+    if (!po) throw new NotFoundException(INVOICE_ERRORS.NO_JMC_PO_NOT_FOUND);
+    if (po.partyType !== PartyType.PURCHASE) {
+      throw new BadRequestException(INVOICE_ERRORS.NO_JMC_PO_NOT_PURCHASE);
+    }
+    if (po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(INVOICE_ERRORS.NO_JMC_PO_NOT_APPROVED);
+    }
+    if (po.poType !== PoType.SUPPLY_ITEM) {
+      throw new BadRequestException(
+        INVOICE_ERRORS.NO_JMC_PO_NOT_SUPPLY_ITEM.replace(
+          '{poType}',
+          po.poType ? String(po.poType).replace(/_/g, ' ').toLowerCase() : 'not set',
+        ),
+      );
+    }
+
+    return await em.getRepository(JmcEntity).save({
+      poId: po.id,
+      siteId: po.siteId,
+      partyType: po.partyType,
+      contractorId: po.contractorId ?? null,
+      vendorId: po.vendorId ?? null,
+      jmcNumber: null,
+      jmcDate: new Date(),
+      fileKey: null,
+      fileName: null,
+      isNoJmc: true,
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: createdBy,
+      approvalAt: new Date(),
+      isLocked: true,
+      createdBy,
+    } as Partial<JmcEntity>);
+  }
+
   async create(dto: CreateSiteInvoiceDto, createdBy: string, activeRole?: string) {
-    const jmc = await this.dataSource
+    // The No-JMC route creates its placeholder first, then falls into the ordinary path below
+    // completely unchanged — the invoice still hangs off a real JMC row.
+    if (dto.noJmc === true) {
+      return await this.dataSource.transaction(async (em) => {
+        const placeholder = await this.createNoJmcPlaceholder(dto.poId, createdBy, em);
+        return await this.createAgainstJmc(
+          { ...dto, jmcId: placeholder.id },
+          createdBy,
+          activeRole,
+          em,
+        );
+      });
+    }
+
+    return await this.createAgainstJmc(dto, createdBy, activeRole);
+  }
+
+  private async createAgainstJmc(
+    dto: CreateSiteInvoiceDto,
+    createdBy: string,
+    activeRole?: string,
+    em?: EntityManager,
+  ) {
+    const jmc = await (em ?? this.dataSource)
       .getRepository(JmcEntity)
       .findOne({ where: { id: dto.jmcId, deletedAt: IsNull() } });
     if (!jmc) throw new NotFoundException(INVOICE_ERRORS.JMC_NOT_FOUND);
@@ -285,15 +360,18 @@ export class SiteInvoiceService {
     if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
 
     // 1 JMC = 1 Invoice
-    const dup = await this.invoiceRepository.findOne({
-      where: { jmcId: dto.jmcId, deletedAt: IsNull() },
-    });
+    const dup = await this.invoiceRepository.findOne(
+      { where: { jmcId: dto.jmcId, deletedAt: IsNull() } },
+      em,
+    );
     if (dup) throw new ConflictException(INVOICE_ERRORS.INVOICE_ALREADY_EXISTS_FOR_JMC);
 
     // Auto-resolve reportId from JMC — PURCHASE side requires a report to exist first
+    // A report hangs off a JMC, so a No-JMC invoice cannot have one — requiring it would close
+    // the route entirely. Ordinary JMC-backed invoices keep the rule exactly as it was.
     let resolvedReportId: string | null = null;
-    if (jmc.partyType === PartyType.PURCHASE) {
-      const report = await this.dataSource
+    if (jmc.partyType === PartyType.PURCHASE && !jmc.isNoJmc) {
+      const report = await (em ?? this.dataSource)
         .getRepository(SiteReportEntity)
         .findOne({ where: { jmcId: dto.jmcId, deletedAt: IsNull() } });
       if (!report) throw new BadRequestException(INVOICE_ERRORS.REPORT_REQUIRED_FOR_PURCHASE);
@@ -306,30 +384,33 @@ export class SiteInvoiceService {
       await this.assertPoCeiling(jmc.poId, dto.totalAmount, null);
     }
 
-    const created = await this.invoiceRepository.create({
-      jmcId: jmc.id,
-      reportId: resolvedReportId,
-      siteId: jmc.siteId,
-      partyType: jmc.partyType,
-      contractorId: jmc.contractorId,
-      vendorId: jmc.vendorId,
-      poId: jmc.poId,
-      invoiceNumber: dto.invoiceNumber ?? null,
-      invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : null,
-      taxableAmount: dto.taxableAmount ?? null,
-      gstAmount: dto.gstAmount ?? null,
-      gstPercentage: dto.gstPercentage ?? null,
-      tdsAmount: dto.tdsAmount ?? null,
-      tdsPercentage: dto.tdsPercentage ?? null,
-      totalAmount: dto.totalAmount ?? null,
-      isGstHold: dto.isGstHold ?? false,
-      fileKey: dto.fileKey ?? null,
-      fileName: dto.fileName ?? null,
-      remarks: dto.remarks,
-      approvalStatus: FinancialApprovalStatus.PENDING,
-      isLocked: false,
-      createdBy,
-    });
+    const created = await this.invoiceRepository.create(
+      {
+        jmcId: jmc.id,
+        reportId: resolvedReportId,
+        siteId: jmc.siteId,
+        partyType: jmc.partyType,
+        contractorId: jmc.contractorId,
+        vendorId: jmc.vendorId,
+        poId: jmc.poId,
+        invoiceNumber: dto.invoiceNumber ?? null,
+        invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : null,
+        taxableAmount: dto.taxableAmount ?? null,
+        gstAmount: dto.gstAmount ?? null,
+        gstPercentage: dto.gstPercentage ?? null,
+        tdsAmount: dto.tdsAmount ?? null,
+        tdsPercentage: dto.tdsPercentage ?? null,
+        totalAmount: dto.totalAmount ?? null,
+        isGstHold: dto.isGstHold ?? false,
+        fileKey: dto.fileKey ?? null,
+        fileName: dto.fileName ?? null,
+        remarks: dto.remarks,
+        approvalStatus: FinancialApprovalStatus.PENDING,
+        isLocked: false,
+        createdBy,
+      },
+      em,
+    );
 
     return { message: INVOICE_RESPONSES.CREATED, id: created.id };
   }

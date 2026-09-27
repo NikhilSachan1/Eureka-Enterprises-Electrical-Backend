@@ -70,7 +70,8 @@ export class DocumentStatusService {
           COUNT(*) FILTER (WHERE "approvalStatus" = 'PENDING')  AS pending,
           COUNT(*) FILTER (WHERE "approvalStatus" = 'REJECTED') AS rejected
         FROM jmcs
-        WHERE "siteId" = ANY($1) AND "deletedAt" IS NULL
+        -- Placeholders carry No-JMC invoices; they are not JMCs to count or certify.
+        WHERE "siteId" = ANY($1) AND "deletedAt" IS NULL AND "isNoJmc" = false
         GROUP BY "siteId", "partyType"
       ),
 
@@ -87,6 +88,9 @@ export class DocumentStatusService {
         WHERE j."siteId" = ANY($1)
           AND j."deletedAt" IS NULL
           AND j."partyType" = 'PURCHASE'
+          -- Without this a No-JMC invoice would be reported as a missing report forever: a report
+          -- hangs off a JMC, and this one deliberately has none.
+          AND j."isNoJmc" = false
         GROUP BY j."siteId"
       ),
 
@@ -541,7 +545,9 @@ export class DocumentStatusService {
         LEFT JOIN book_payments bp
           ON bp."invoiceId" = si.id AND bp."deletedAt" IS NULL
 
-        WHERE ${baseWhere}
+        -- A No-JMC placeholder has nothing of its own to chase — no number, no document, no
+        -- report. Its invoice raises its own issues; the phantom JMC must not raise any.
+        WHERE j."isNoJmc" = false AND ${baseWhere}
 
         UNION ALL
 
@@ -627,7 +633,9 @@ export class DocumentStatusService {
 
     // 2) JMCs of these POs
     const jmcRows: any[] = await this.dataSource.query(
-      `SELECT id, "jmcNumber", "jmcDate", "poId", "approvalStatus" AS status,
+      // Placeholders stay in THIS one: the invoice hangs off them, so dropping them would drop a
+      // No-JMC invoice out of the PO's chain altogether. They are labelled instead of hidden.
+      `SELECT id, "jmcNumber", "jmcDate", "poId", "approvalStatus" AS status, "isNoJmc",
               "isSystemGenerated", ("fileKey" IS NOT NULL) AS "hasUpload"
        FROM jmcs WHERE "poId" = ANY($1) AND "deletedAt" IS NULL ORDER BY "createdAt" ASC`,
       [poIds],
@@ -751,7 +759,8 @@ export class DocumentStatusService {
         const inv = invoiceByJmc.get(j.id);
         return {
           id: j.id,
-          jmcNumber: j.jmcNumber,
+          jmcNumber: j.isNoJmc ? 'No JMC' : j.jmcNumber,
+          isNoJmc: !!j.isNoJmc,
           jmcDate: j.jmcDate,
           status: j.status,
           // System-generated (created in-app with items) vs upload-only, and whether a signed

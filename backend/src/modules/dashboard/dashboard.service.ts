@@ -1752,6 +1752,8 @@ export class DashboardService {
                j."contractorId", j."vendorId"
         FROM jmcs j
         JOIN sites s ON s.id = j."siteId"
+        -- No-JMC placeholders have no number to show and are not documents a user filed.
+        AND j."isNoJmc" = false
         ${whereClause.replace(/d\./g, 'j.')}
         
         UNION ALL

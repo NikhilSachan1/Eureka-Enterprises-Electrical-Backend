@@ -17,6 +17,15 @@ export const INVOICE_ERRORS = {
   CANNOT_UNLOCK_HAS_SETTLEMENTS:
     'This invoice has {count} advance settlement(s) totalling {amount}. Remove them first — unlocking would let the amount change while the settlement still points at the old figure.',
 
+  // ── No-JMC invoices (SUPPLY_ITEM purchase orders only) ────────────────────
+  NO_JMC_PO_NOT_FOUND: 'Purchase order not found.',
+  NO_JMC_PO_NOT_PURCHASE: 'An invoice without a JMC can only be raised against a PURCHASE PO.',
+  NO_JMC_PO_NOT_APPROVED:
+    'The purchase order must be approved before an invoice can be raised against it.',
+  NO_JMC_PO_NOT_SUPPLY_ITEM:
+    'Only a Supply Item PO can raise an invoice without a JMC — this PO is {poType}. ' +
+    'Create or upload a JMC and raise the invoice against it.',
+
   NOT_FOUND: 'Invoice not found',
   ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK: 'Only APPROVED locked invoices can request unlock.',
   JMC_NOT_FOUND: 'Parent JMC not found',

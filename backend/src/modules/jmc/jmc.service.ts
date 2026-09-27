@@ -38,6 +38,7 @@ import { checkJmcHasChildrenQuery } from './queries/jmc.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
+import { PoType } from 'src/modules/purchase-orders/constants/purchase-order.constants';
 import {
   FinancialApprovalStatus,
   FINANCIAL_ERRORS,
@@ -135,7 +136,8 @@ export class JmcService {
       pageSize = DefaultPaginationValues.PAGE_SIZE,
     } = query;
 
-    const where: any = { deletedAt: IsNull() };
+    // Placeholders exist only to carry a No-JMC invoice; they are not part of the JMC register.
+    const where: any = { deletedAt: IsNull(), isNoJmc: false };
     if (poId) where.poId = poId;
     if (companyId?.length) where.site = { companyId: In(companyId) };
     if (siteId?.length) where.siteId = In(siteId);
@@ -521,7 +523,21 @@ export class JmcService {
    *   APPROVED AND no existing Invoice AND
    *   (PURCHASE → Report must exist first).
    */
-  async getDropdown(siteId: string, partyType: string, forDocument: 'report' | 'invoice') {
+  /**
+   * JMCs to pick from when creating a report or an invoice.
+   *
+   * `poId` is optional. Given one, the list narrows to that PO, and — when the PO is a Supply Item
+   * and we are picking for an invoice — one synthetic "No JMC" row is appended. That row is not a
+   * JMC: it carries `id: null`, and choosing it means calling invoice create with `noJmc: true`.
+   * It is offered only where the server would actually accept it, so the UI cannot present a choice
+   * that then gets refused.
+   */
+  async getDropdown(
+    siteId: string,
+    partyType: string,
+    forDocument: 'report' | 'invoice',
+    poId?: string,
+  ) {
     const rows = await this.dataSource.query(
       `
       SELECT
@@ -564,27 +580,71 @@ export class JmcService {
       WHERE j."siteId"    = $1
         AND j."partyType" = $2
         AND j."deletedAt" IS NULL
+        -- Placeholders are not JMCs anyone picks; they exist only to carry a No-JMC invoice.
+        AND j."isNoJmc" = false
+        AND ($4::uuid IS NULL OR j."poId" = $4::uuid)
       ORDER BY j."createdAt" DESC
       `,
-      [siteId, partyType, forDocument],
+      [siteId, partyType, forDocument, poId ?? null],
     );
 
-    return {
-      records: rows.map((r: any) => ({
-        id: r.id,
-        label: `${r.jmcNumber} — ${r.partyName ?? 'Unknown'}`,
-        eligible: r.eligible,
-        reason: r.reason ?? null,
-        meta: {
-          jmcNumber: r.jmcNumber,
-          jmcDate: r.jmcDate,
-          partyType: r.partyType,
-          partyName: r.partyName,
-          approvalStatus: r.approvalStatus,
-          hasReport: Number(r.reportCount) > 0,
-          hasInvoice: Number(r.invoiceCount) > 0,
-        },
-      })),
-    };
+    const records = rows.map((r: any) => ({
+      id: r.id,
+      label: `${r.jmcNumber} — ${r.partyName ?? 'Unknown'}`,
+      eligible: r.eligible,
+      reason: r.reason ?? null,
+      meta: {
+        jmcNumber: r.jmcNumber,
+        jmcDate: r.jmcDate,
+        partyType: r.partyType,
+        partyName: r.partyName,
+        approvalStatus: r.approvalStatus,
+        hasReport: Number(r.reportCount) > 0,
+        hasInvoice: Number(r.invoiceCount) > 0,
+        isNoJmc: false,
+      },
+    }));
+
+    if (forDocument === 'invoice' && poId) {
+      const [po] = await this.dataSource.query(
+        `SELECT "poNumber", "poType", "partyType", "approvalStatus"
+           FROM purchase_orders WHERE id = $1 AND "deletedAt" IS NULL`,
+        [poId],
+      );
+      const usable =
+        po &&
+        po.poType === PoType.SUPPLY_ITEM &&
+        po.partyType === PartyType.PURCHASE &&
+        po.approvalStatus === FinancialApprovalStatus.APPROVED;
+
+      if (usable) {
+        const today = new Date();
+        const label = `No JMC - ${String(today.getDate()).padStart(2, '0')}/${String(
+          today.getMonth() + 1,
+        ).padStart(2, '0')}/${today.getFullYear()}`;
+        records.push({
+          // Null id is the signal: there is no JMC to reference. Invoice create takes
+          // `noJmc: true` + `poId` instead.
+          id: null,
+          label,
+          eligible: true,
+          reason: null,
+          meta: {
+            jmcNumber: null,
+            jmcDate: null,
+            partyType: po.partyType,
+            partyName: null,
+            approvalStatus: null,
+            hasReport: false,
+            hasInvoice: false,
+            isNoJmc: true,
+            poId,
+            poNumber: po.poNumber,
+          },
+        } as (typeof records)[number]);
+      }
+    }
+
+    return { records };
   }
 }
