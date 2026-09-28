@@ -268,7 +268,13 @@ export class DashboardService {
   }
 
   isAdminRole(userRole: string): boolean {
-    return [Roles.SUPER_ADMIN, Roles.ADMIN, Roles.HR, Roles.MANAGER].includes(userRole as Roles);
+    return [
+      Roles.SUPER_ADMIN,
+      Roles.ADMIN,
+      Roles.HR,
+      Roles.MANAGER,
+      Roles.OPERATION_MANAGER,
+    ].includes(userRole as Roles);
   }
 
   // ==================== Section Implementations ====================
