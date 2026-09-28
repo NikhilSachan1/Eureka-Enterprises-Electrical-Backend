@@ -9,10 +9,17 @@ import {
   IsArray,
   ValidateNested,
   ArrayMaxSize,
+  IsBoolean,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JmcItemDto } from './jmc-item.dto';
 
+/**
+ * `noJmc: true` raises a No-JMC entry instead of an ordinary JMC: a record that exists only so a
+ * Supply Item invoice has something to hang off. It carries no number, no date of its own and no
+ * signed copy, so every other field here is ignored for it — send `poId` and the flag, nothing else.
+ */
 export class CreateJmcDto {
   @ApiProperty({ description: 'Parent PO ID' })
   @IsUUID('4')
@@ -20,7 +27,18 @@ export class CreateJmcDto {
 
   @ApiPropertyOptional({
     description:
-      'JMC Number. Optional — omit to auto-generate (SALE flow). Provide to set manually.',
+      'Create a No-JMC entry against this PO. Allowed only on an APPROVED, PURCHASE, Supply Item ' +
+      'PO. All other fields are ignored. The entry then appears in the invoice JMC dropdown as ' +
+      '"No JMC — <party> — <date>".',
+  })
+  @IsOptional()
+  @IsBoolean()
+  noJmc?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'JMC Number. Optional — omit to auto-generate (SALE flow). Provide to set manually. ' +
+      'Never applies to a No-JMC entry, which has no number.',
   })
   @IsString()
   @IsNotEmpty()
@@ -28,7 +46,8 @@ export class CreateJmcDto {
   @IsOptional()
   jmcNumber?: string;
 
-  @ApiProperty({ description: 'JMC Date (ISO)' })
+  @ApiPropertyOptional({ description: 'JMC Date (ISO). Not required for a No-JMC entry.' })
+  @ValidateIf((o) => o.noJmc !== true)
   @IsDateString()
   jmcDate: string;
 
