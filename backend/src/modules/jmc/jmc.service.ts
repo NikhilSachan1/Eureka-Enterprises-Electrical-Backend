@@ -33,7 +33,7 @@ import {
   RejectDto,
   UnlockRequestDto,
 } from 'src/modules/purchase-orders/dto/approval.dto';
-import { JMC_ERRORS, JMC_RESPONSES } from './constants/jmc.constants';
+import { JMC_ERRORS, JMC_RESPONSES, NO_JMC_LABEL } from './constants/jmc.constants';
 import { checkJmcHasChildrenQuery } from './queries/jmc.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
@@ -47,6 +47,17 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
+/** DD/MM/YYYY — the form dropdown labels use, so two entries on one PO are told apart by date. */
+function formatDayMonthYear(value: Date | string | null): string {
+  if (!value) return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(
+    2,
+    '0',
+  )}/${d.getFullYear()}`;
+}
+
 @Injectable()
 export class JmcService {
   constructor(
@@ -54,6 +65,62 @@ export class JmcService {
     private readonly dataSource: DataSource,
     private readonly jmcPdfService: JmcPdfService,
   ) {}
+
+  /**
+   * A No-JMC entry: a record that stands in for a JMC that will never exist, so a Supply Item
+   * invoice has a parent. Material supply has nothing to measure and certify, so there is no
+   * number, no date of the user's choosing and no signed copy to attach.
+   *
+   * Created already APPROVED and locked — invoice approval refuses an unapproved parent, and there
+   * is nothing on it for a person to approve. Nothing about it is ever edited, so it is written
+   * once here and only ever read or deleted afterwards.
+   */
+  private async createNoJmcEntry(dto: CreateJmcDto, po: PurchaseOrderEntity, createdBy: string) {
+    if (dto.items?.length) throw new BadRequestException(JMC_ERRORS.NO_JMC_WITH_ITEMS);
+    if (po.partyType !== PartyType.PURCHASE) {
+      throw new BadRequestException(JMC_ERRORS.NO_JMC_PO_NOT_PURCHASE);
+    }
+    if (po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(JMC_ERRORS.NO_JMC_PO_NOT_APPROVED);
+    }
+    if (po.poType !== PoType.SUPPLY_ITEM) {
+      throw new BadRequestException(
+        JMC_ERRORS.NO_JMC_PO_NOT_SUPPLY_ITEM.replace(
+          '{poType}',
+          po.poType ? String(po.poType).replace(/_/g, ' ').toLowerCase() : 'not set',
+        ),
+      );
+    }
+
+    // Deliberately unlimited per PO: a Supply Item PO can be invoiced many times, and each invoice
+    // needs its own parent (1 JMC = 1 invoice). Consumed entries drop out of the dropdown by
+    // themselves, so they do not accumulate in front of the user.
+    const created = await this.jmcRepository.create({
+      poId: po.id,
+      siteId: po.siteId,
+      partyType: po.partyType,
+      contractorId: po.contractorId,
+      vendorId: po.vendorId,
+      jmcNumber: null,
+      jmcDate: new Date(),
+      fileKey: null,
+      fileName: null,
+      isNoJmc: true,
+      approvalStatus: FinancialApprovalStatus.APPROVED,
+      approvalBy: createdBy,
+      approvalAt: new Date(),
+      isLocked: true,
+      remarks: dto.remarks ?? null,
+      createdBy,
+    } as Partial<JmcEntity>);
+
+    return {
+      message: JMC_RESPONSES.NO_JMC_CREATED,
+      id: created.id,
+      jmcNumber: null,
+      isNoJmc: true,
+    };
+  }
 
   async create(dto: CreateJmcDto, createdBy: string, activeRole?: string) {
     const po = await this.dataSource
@@ -66,6 +133,10 @@ export class JmcService {
       activeRole,
     });
     if (!access.allowed) throw new ForbiddenException(access.reason ?? undefined);
+
+    // No-JMC shares this route's PO lookup and access check, then diverges completely — it has no
+    // number to allocate, no uniqueness to enforce and no items.
+    if (dto.noJmc === true) return await this.createNoJmcEntry(dto, po, createdBy);
 
     const items = dto.items ?? [];
     const isSale = po.partyType === PartyType.SALE;
@@ -136,8 +207,10 @@ export class JmcService {
       pageSize = DefaultPaginationValues.PAGE_SIZE,
     } = query;
 
-    // Placeholders exist only to carry a No-JMC invoice; they are not part of the JMC register.
-    const where: any = { deletedAt: IsNull(), isNoJmc: false };
+    // No-JMC entries are listed alongside ordinary JMCs — the user raised them deliberately and
+    // expects to find them here. They stay out of billing counts and document-status, where they
+    // are not documents at all.
+    const where: any = { deletedAt: IsNull() };
     if (poId) where.poId = poId;
     if (companyId?.length) where.site = { companyId: In(companyId) };
     if (siteId?.length) where.siteId = In(siteId);
@@ -177,6 +250,9 @@ export class JmcService {
     return {
       records: records.map((jmc) => ({
         ...jmc,
+        // A No-JMC entry has no number by design, so the list shows the words instead of a blank
+        // cell. `isNoJmc` stays on the row for anything that needs to tell the two apart.
+        jmcNumber: jmc.isNoJmc ? NO_JMC_LABEL : jmc.jmcNumber,
         items: (jmc.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
         hasUpload: !!jmc.fileKey,
         createdByUser: formatUser(jmc.createdByUser),
@@ -307,7 +383,10 @@ export class JmcService {
 
   async remove(id: string, deletedBy: string) {
     const jmc = await this.findActiveById(id);
-    this.assertEditable(jmc);
+    // A No-JMC entry is approved and locked from birth, so the editable check would make a
+    // mistaken one permanent — and with no cap per PO, mistakes would pile up in the dropdown.
+    // The child check below is the real guard: once an invoice hangs off it, it stays.
+    if (!jmc.isNoJmc) this.assertEditable(jmc);
 
     const childCheck = await this.dataSource.query(checkJmcHasChildrenQuery, [id]);
     if (childCheck.length > 0) {
@@ -323,6 +402,7 @@ export class JmcService {
 
   async approve(id: string, dto: ApproveDto, approvedBy: string) {
     const jmc = await this.findActiveById(id);
+    if (jmc.isNoJmc) throw new BadRequestException(JMC_ERRORS.NO_JMC_NOT_EDITABLE);
     if (jmc.approvalStatus === FinancialApprovalStatus.APPROVED) {
       throw new ConflictException(FINANCIAL_ERRORS.ALREADY_APPROVED);
     }
@@ -339,10 +419,9 @@ export class JmcService {
       throw new BadRequestException(JMC_ERRORS.PO_NOT_APPROVED_FOR_APPROVAL);
     }
 
-    // A real JMC needs the signed copy before it can be approved. A No-JMC placeholder
-    // has no document — it only exists so a Supply Item invoice has a parent row — so
-    // there is nothing to upload.
-    if (!jmc.isNoJmc && !jmc.fileKey) {
+    // A real JMC needs the signed copy before it can be approved. No-JMC entries never reach
+    // here — they are approved at birth and refused above.
+    if (!jmc.fileKey) {
       throw new BadRequestException(JMC_ERRORS.UPLOAD_REQUIRED_FOR_APPROVAL);
     }
 
@@ -365,6 +444,7 @@ export class JmcService {
 
   async reject(id: string, dto: RejectDto, rejectedBy: string) {
     const jmc = await this.findActiveById(id);
+    if (jmc.isNoJmc) throw new BadRequestException(JMC_ERRORS.NO_JMC_NOT_EDITABLE);
     if (jmc.approvalStatus === FinancialApprovalStatus.APPROVED) {
       throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_REJECT_APPROVED);
     }
@@ -404,6 +484,9 @@ export class JmcService {
 
   async requestUnlock(id: string, dto: UnlockRequestDto, requestedBy: string) {
     const jmc = await this.findActiveById(id);
+    // A No-JMC entry is approved and locked from birth, so it would otherwise sail through the
+    // check below and sit in the admin's unlock queue — with nothing on it to unlock.
+    if (jmc.isNoJmc) throw new BadRequestException(JMC_ERRORS.NO_JMC_NOT_EDITABLE);
     if (!jmc.isLocked || jmc.approvalStatus !== FinancialApprovalStatus.APPROVED) {
       throw new BadRequestException(JMC_ERRORS.ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK);
     }
@@ -450,6 +533,12 @@ export class JmcService {
   }
 
   private assertEditable(jmc: JmcEntity): void {
+    // A No-JMC entry is born APPROVED and locked, so the checks below would already stop this —
+    // but with a message about approval or locking that explains nothing. There is no document on
+    // it to edit, upload or approve in the first place.
+    if (jmc.isNoJmc) {
+      throw new BadRequestException(JMC_ERRORS.NO_JMC_NOT_EDITABLE);
+    }
     if (jmc.approvalStatus !== FinancialApprovalStatus.PENDING) {
       throw new BadRequestException(FINANCIAL_ERRORS.CANNOT_DELETE_NOT_PENDING);
     }
@@ -528,11 +617,9 @@ export class JmcService {
   /**
    * JMCs to pick from when creating a report or an invoice.
    *
-   * `poId` is optional. Given one, the list narrows to that PO, and — when the PO is a Supply Item
-   * and we are picking for an invoice — one synthetic "No JMC" row is appended. That row is not a
-   * JMC: it carries `id: null`, and choosing it means calling invoice create with `noJmc: true`.
-   * It is offered only where the server would actually accept it, so the UI cannot present a choice
-   * that then gets refused.
+   * `poId` is optional; given one, the list narrows to that PO. No-JMC entries appear here like any
+   * other row — real records with real ids — but only when picking a parent for an invoice. A
+   * report is the very thing they stand in for, so they are never offered for one.
    */
   async getDropdown(
     siteId: string,
@@ -555,11 +642,12 @@ export class JmcService {
         (SELECT COUNT(*)::int FROM site_invoices   si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) AS "invoiceCount",
         -- eligibility computed per forDocument
         -- PENDING JMCs are now eligible (creation allowed); only REJECTED is blocked
+        j."isNoJmc",
         CASE
           WHEN j."approvalStatus" = 'REJECTED' THEN false
           WHEN $3 = 'report'  AND (SELECT COUNT(*) FROM site_reports  sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) > 0 THEN false
           WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0 THEN false
-          WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
+          WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE' AND j."isNoJmc" = false
                AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0
             THEN false
           ELSE true
@@ -570,7 +658,7 @@ export class JmcService {
             THEN 'Report already exists for this JMC'
           WHEN $3 = 'invoice' AND (SELECT COUNT(*) FROM site_invoices  si WHERE si."jmcId" = j.id AND si."deletedAt" IS NULL) > 0
             THEN 'Invoice already exists for this JMC'
-          WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE'
+          WHEN $3 = 'invoice' AND j."partyType" = 'PURCHASE' AND j."isNoJmc" = false
                AND (SELECT COUNT(*) FROM site_reports sr WHERE sr."jmcId" = j.id AND sr."deletedAt" IS NULL) = 0
             THEN 'Report must be created first (PURCHASE side)'
           WHEN j."approvalStatus" = 'PENDING' THEN 'JMC not yet approved — document can be created but invoice cannot be approved until JMC is approved'
@@ -582,8 +670,9 @@ export class JmcService {
       WHERE j."siteId"    = $1
         AND j."partyType" = $2
         AND j."deletedAt" IS NULL
-        -- Placeholders are not JMCs anyone picks; they exist only to carry a No-JMC invoice.
-        AND j."isNoJmc" = false
+        -- A No-JMC entry exists only to carry an invoice: offer it when picking a parent for one,
+        -- never when picking a parent for a report (a report is exactly what it stands in for).
+        AND (j."isNoJmc" = false OR $3 = 'invoice')
         AND ($4::uuid IS NULL OR j."poId" = $4::uuid)
       ORDER BY j."createdAt" DESC
       `,
@@ -592,7 +681,11 @@ export class JmcService {
 
     const records = rows.map((r: any) => ({
       id: r.id,
-      label: `${r.jmcNumber} — ${r.partyName ?? 'Unknown'}`,
+      // A No-JMC entry has no number to lead with, so it is named by what it is, plus the date it
+      // was raised — that is what separates two of them on the same PO.
+      label: r.isNoJmc
+        ? `${NO_JMC_LABEL} — ${r.partyName ?? 'Unknown'} — ${formatDayMonthYear(r.jmcDate)}`
+        : `${r.jmcNumber} — ${r.partyName ?? 'Unknown'}`,
       eligible: r.eligible,
       reason: r.reason ?? null,
       meta: {
@@ -603,49 +696,9 @@ export class JmcService {
         approvalStatus: r.approvalStatus,
         hasReport: Number(r.reportCount) > 0,
         hasInvoice: Number(r.invoiceCount) > 0,
-        isNoJmc: false,
+        isNoJmc: r.isNoJmc,
       },
     }));
-
-    if (forDocument === 'invoice' && poId) {
-      const [po] = await this.dataSource.query(
-        `SELECT "poNumber", "poType", "partyType", "approvalStatus"
-           FROM purchase_orders WHERE id = $1 AND "deletedAt" IS NULL`,
-        [poId],
-      );
-      const usable =
-        po &&
-        po.poType === PoType.SUPPLY_ITEM &&
-        po.partyType === PartyType.PURCHASE &&
-        po.approvalStatus === FinancialApprovalStatus.APPROVED;
-
-      if (usable) {
-        const today = new Date();
-        const label = `No JMC - ${String(today.getDate()).padStart(2, '0')}/${String(
-          today.getMonth() + 1,
-        ).padStart(2, '0')}/${today.getFullYear()}`;
-        records.push({
-          // Null id is the signal: there is no JMC to reference. Invoice create takes
-          // `noJmc: true` + `poId` instead.
-          id: null,
-          label,
-          eligible: true,
-          reason: null,
-          meta: {
-            jmcNumber: null,
-            jmcDate: null,
-            partyType: po.partyType,
-            partyName: null,
-            approvalStatus: null,
-            hasReport: false,
-            hasInvoice: false,
-            isNoJmc: true,
-            poId,
-            poNumber: po.poNumber,
-          },
-        } as (typeof records)[number]);
-      }
-    }
 
     return { records };
   }

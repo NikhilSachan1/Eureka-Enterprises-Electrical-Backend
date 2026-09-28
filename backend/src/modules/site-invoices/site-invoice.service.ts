@@ -42,8 +42,6 @@ import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
-import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
-import { PoType } from 'src/modules/purchase-orders/constants/purchase-order.constants';
 import { AdvancePaymentRepository } from 'src/modules/advance-payments/advance-payment.repository';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import {
@@ -274,71 +272,7 @@ export class SiteInvoiceService {
     });
   }
 
-  /**
-   * The placeholder JMC a No-JMC invoice hangs off.
-   *
-   * Allowed only on an approved PURCHASE PO of type SUPPLY_ITEM — material supply has nothing to
-   * measure and certify, which is the whole reason the route exists. The row carries the PO's
-   * site, party and vendor/contractor, because those are the fields the invoice reads off its JMC.
-   *
-   * Created already APPROVED and locked: invoice approval refuses an unapproved parent JMC, and
-   * there is nothing for a person to approve on a document that does not exist.
-   */
-  private async createNoJmcPlaceholder(poId: string, createdBy: string, em: EntityManager) {
-    const po = await em
-      .getRepository(PurchaseOrderEntity)
-      .findOne({ where: { id: poId, deletedAt: IsNull() } });
-
-    if (!po) throw new NotFoundException(INVOICE_ERRORS.NO_JMC_PO_NOT_FOUND);
-    if (po.partyType !== PartyType.PURCHASE) {
-      throw new BadRequestException(INVOICE_ERRORS.NO_JMC_PO_NOT_PURCHASE);
-    }
-    if (po.approvalStatus !== FinancialApprovalStatus.APPROVED) {
-      throw new BadRequestException(INVOICE_ERRORS.NO_JMC_PO_NOT_APPROVED);
-    }
-    if (po.poType !== PoType.SUPPLY_ITEM) {
-      throw new BadRequestException(
-        INVOICE_ERRORS.NO_JMC_PO_NOT_SUPPLY_ITEM.replace(
-          '{poType}',
-          po.poType ? String(po.poType).replace(/_/g, ' ').toLowerCase() : 'not set',
-        ),
-      );
-    }
-
-    return await em.getRepository(JmcEntity).save({
-      poId: po.id,
-      siteId: po.siteId,
-      partyType: po.partyType,
-      contractorId: po.contractorId ?? null,
-      vendorId: po.vendorId ?? null,
-      jmcNumber: null,
-      jmcDate: new Date(),
-      fileKey: null,
-      fileName: null,
-      isNoJmc: true,
-      approvalStatus: FinancialApprovalStatus.APPROVED,
-      approvalBy: createdBy,
-      approvalAt: new Date(),
-      isLocked: true,
-      createdBy,
-    } as Partial<JmcEntity>);
-  }
-
   async create(dto: CreateSiteInvoiceDto, createdBy: string, activeRole?: string) {
-    // The No-JMC route creates its placeholder first, then falls into the ordinary path below
-    // completely unchanged — the invoice still hangs off a real JMC row.
-    if (dto.noJmc === true) {
-      return await this.dataSource.transaction(async (em) => {
-        const placeholder = await this.createNoJmcPlaceholder(dto.poId, createdBy, em);
-        return await this.createAgainstJmc(
-          { ...dto, jmcId: placeholder.id },
-          createdBy,
-          activeRole,
-          em,
-        );
-      });
-    }
-
     return await this.createAgainstJmc(dto, createdBy, activeRole);
   }
 

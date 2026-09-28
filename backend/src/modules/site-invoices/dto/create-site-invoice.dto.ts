@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
   IsUUID,
@@ -7,38 +7,18 @@ import {
   Min,
   IsDateString,
   MaxLength,
-  IsBoolean,
-  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 /**
- * Exactly one of `jmcId` or `noJmc` identifies what the invoice hangs off.
- *
- * The No-JMC route exists only for SUPPLY_ITEM purchase orders — material supply has nothing to
- * measure and certify. Everything else about the invoice is unchanged either way.
+ * An invoice always hangs off a JMC. For a Supply Item PO, where there is nothing to measure and
+ * certify, that parent is a No-JMC entry created through `POST /jmcs` with `noJmc: true` — from
+ * here it is an ordinary `jmcId` like any other.
  */
 export class CreateSiteInvoiceDto {
-  @ApiPropertyOptional({
-    description: 'Parent JMC ID. Required unless `noJmc` is true.',
-  })
-  @ValidateIf((o) => o.noJmc !== true)
+  @ApiProperty({ description: 'Parent JMC ID' })
   @IsUUID('4')
-  jmcId?: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Raise this invoice without a JMC. Allowed only when the PO is SUPPLY_ITEM. ' +
-      'Send `poId` with it, and leave `jmcId` out.',
-  })
-  @IsOptional()
-  @IsBoolean()
-  noJmc?: boolean;
-
-  @ApiPropertyOptional({ description: 'Purchase order. Required when `noJmc` is true.' })
-  @ValidateIf((o) => o.noJmc === true)
-  @IsUUID('4')
-  poId?: string;
+  jmcId: string;
 
   @ApiPropertyOptional({ description: 'Invoice Number (can be filled later)' })
   @IsString()

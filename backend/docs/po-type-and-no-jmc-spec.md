@@ -1,21 +1,24 @@
-# PO Type & the "No JMC" invoice route
+# PO Type & the "No JMC" entry
 
-Status: **built and verified on dev** (35 assertions, all passing). Migrations run on dev only.
+Status: **built and verified on dev** (42 assertions, all passing). Migrations run on dev only.
 
 ## What it is
 
-A PO gets a type — **Supply Item**, **Service Item** or **Both**. For a *Supply Item* PO only, an
-invoice may be raised without a JMC, because material supply has nothing to measure and certify.
-Everything else stays exactly as it is.
+A PO gets a type — **Supply Item**, **Service Item** or **Both**. For a *Supply Item* PO only, a
+**No-JMC entry** can be raised in place of a JMC, because material supply has nothing to measure
+and certify. The invoice flow itself is untouched: it still hangs off a `jmcId` like any other.
 
 ```
-Supply Item   → JMC  OR  No JMC → Invoice
-Service Item  → JMC mandatory   → Invoice
-Both          → JMC mandatory   → Invoice
+Supply Item   → JMC  OR  No JMC entry → Invoice
+Service Item  → JMC mandatory         → Invoice
+Both          → JMC mandatory         → Invoice
 (legacy PO, type NULL) → JMC mandatory → Invoice
 ```
 
-## Why a flagged placeholder row, not a nullable `jmcId`
+Both parents are created the same way, through `POST /jmcs`, and both are then picked from the same
+invoice dropdown. Nothing downstream of the invoice can tell the difference, which is the point.
+
+## Why a flagged row, not a nullable `jmcId`
 
 `site_invoices.jmcId` is **NOT NULL** and carries a **unique** index (1 JMC = 1 invoice), and the
 invoice derives its site, party, vendor/contractor and PO *from the JMC*. Beyond that, `jmc` is
@@ -23,7 +26,7 @@ joined all over the place — the payment sheet, document status, bank transfers
 (`bookPayment.invoice.jmc.po`), the invoice PDF. Making `jmcId` nullable would mean touching every
 one of those and finding the ones we missed in production.
 
-So a "No JMC" **is** a JMC row, flagged as one and carrying no number or document — the same shape
+So a No-JMC entry **is** a JMC row, flagged as one and carrying no number or document — the same shape
 the codebase already uses for system-generated JMCs, where migration `…029` dropped `NOT NULL` from
 `fileKey`/`fileName` and added `isSystemGenerated`. This reuses that idea rather than inventing a
 second one:
@@ -54,8 +57,8 @@ a Supply Item PO can carry **several** No-JMC invoices without collisions. Stori
 string like `"No JMC - 24/09/2026"` instead would collide the moment two No-JMC invoices were
 raised on the same PO on the same day.
 
-The label is therefore **computed, never stored**: `No JMC - DD/MM/YYYY` from `jmcDate`. A stored
-label would be one more thing that can go stale.
+The label is therefore **computed, never stored**: `No JMC — <party> — DD/MM/YYYY` from `jmcDate`
+and the vendor/contractor. A stored label would be one more thing that can go stale.
 
 ## API changes
 
@@ -88,39 +91,45 @@ decide whether to offer the No-JMC option at all:
   "meta": { "poNumber": "PO-00311", "poType": "SUPPLY_ITEM", /* …existing fields… */ } }
 ```
 
-### JMC dropdown
+### JMC create — the No-JMC entry
 
-`GET /jmcs/dropdown?forDocument=invoice` gains an optional **`poId`**. When it is supplied:
-
-- the list is narrowed to that PO's JMCs (useful on its own), and
-- if that PO is `SUPPLY_ITEM`, one extra synthetic row is appended:
+A No-JMC entry is raised the same way an ordinary JMC is, through `POST /jmcs`, with one flag:
 
 ```jsonc
-{ "id": null, "label": "No JMC - 24/09/2026", "eligible": true, "reason": null,
-  "meta": { "isNoJmc": true, "poId": "uuid", "poNumber": "PO-00311" } }
+{ "poId": "uuid", "noJmc": true }
 ```
 
-`id: null` is the signal that this is not a real JMC. For a Service Item or Both PO — or a legacy
-PO with no type — the row is simply absent, so the FE cannot offer what the server would refuse.
+`jmcNumber`, `jmcDate`, `fileKey` and `items` are not sent and not required — it has none of them.
+The server checks the PO is PURCHASE, approved and **`SUPPLY_ITEM`**, then writes the row: no
+number, no file, `isNoJmc: true`, dated today, already APPROVED and locked. Refusals are 400 naming
+the rule that failed, including `poType: null` (reported as "not set").
+
+**No cap per PO, deliberately.** A Supply Item PO is invoiced many times and one JMC carries one
+invoice, so each invoice needs its own entry. Consumed entries fall out of the dropdown by
+themselves, and an unused one can be deleted — which matters precisely because there is no cap.
+
+Nothing on an entry is ever edited: update, upload, approve, reject and unlock-request all return
+400. The unlock guard is the non-obvious one — an entry is APPROVED and locked from birth, so
+without it a request would pass the "only approved locked JMCs" check and sit in the admin's queue
+with nothing to unlock.
+
+### JMC dropdown
+
+`GET /jmcs/dropdown?forDocument=invoice` gains an optional **`poId`** that narrows the list to one
+PO. No-JMC entries appear here as ordinary rows with real ids:
+
+```jsonc
+{ "id": "uuid", "label": "No JMC — Acme Traders — 24/09/2026", "eligible": true, "reason": null,
+  "meta": { "isNoJmc": true, "jmcNumber": null, "jmcDate": "2026-09-24", /* …existing… */ } }
+```
+
+They are offered **only for `forDocument=invoice`** — a report is the very thing they stand in for.
 
 ### Invoice create
 
-`POST /site-invoices` accepts `noJmc: true` **instead of** `jmcId`, together with `poId`:
-
-```jsonc
-{ "noJmc": true, "poId": "uuid", "invoiceNumber": "INV-77", "invoiceDate": "2026-09-24",
-  "taxableAmount": 100000, "totalAmount": 100000, "fileKey": "…", "fileName": "…" }
-```
-
-Exactly one of `jmcId` or `noJmc` must be sent. With `noJmc`, in a single transaction the server:
-
-1. checks the PO exists, is PURCHASE, is approved, and is **`SUPPLY_ITEM`**,
-2. creates the placeholder JMC (flagged, no number, no file, approved, locked) carrying the PO's
-   site, party, vendor and contractor — the same fields an ordinary JMC would hand the invoice,
-3. creates the invoice against it, unchanged in every other respect.
-
-Refusals are 400 with a message that says which rule failed: PO not found, not PURCHASE, not
-approved, or not a Supply Item PO.
+Unchanged. `jmcId` is mandatory as it always was; a No-JMC entry is passed as an ordinary `jmcId`.
+Creating the parent and creating the invoice stay two separate steps, so a failed invoice never
+leaves a half-built chain behind, and a mistaken entry can be deleted instead of being permanent.
 
 ### The report requirement
 
@@ -129,30 +138,34 @@ A PURCHASE invoice currently refuses to be created unless a site report exists f
 No-JMC invoice is exempt** — a report hangs off a JMC, so requiring one would make the No-JMC route
 impossible. Ordinary JMC-backed invoices keep the requirement exactly as it is.
 
-## Keeping the placeholder out of the way
+## Keeping it out of the counts
 
-A placeholder is a row in `jmcs`, so it would otherwise show up wherever JMCs are counted or
-listed. Every one of the thirteen places that read the table was checked; these now filter it out:
+A No-JMC entry is a row in `jmcs`, so it would otherwise show up wherever JMCs are counted. Every
+one of the thirteen places that read the table was checked; these filter it out:
 
 | Where | Why it matters |
 |---|---|
 | `document-status` report aggregate | **The worst one.** It counts every PURCHASE JMC with no report as a *missing report* — a No-JMC invoice would have shown as a permanent problem on the document-status screen. |
 | `document-status` JMC counts | Would have overstated how many JMCs a site has. |
-| `document-status/issues` | A phantom JMC has no number and nothing to chase; its invoice raises its own issues. |
+| `document-status/issues` | It has no number and nothing to chase; its invoice raises its own issues. |
 | Billing readiness (`jmcCount`, `jmcApprovedCount`, `jmcPendingCount`) | Would have overstated how much of a PO is certified. |
 | Dashboard recent documents | Would have listed a document with no number. |
-| JMC list and JMC dropdown | Not a JMC anyone manages or picks. |
 
-One place deliberately **keeps** them: the PO breakdown chain, where the invoice hangs off the
-placeholder. Filtering there would have dropped a No-JMC invoice out of its own PO's chain, so the
-node is labelled `"No JMC"` and carries `isNoJmc: true` instead of being hidden.
+Two places deliberately **keep** them:
 
-Left alone on purpose: the "PO has children" check that blocks PO deletion — a placeholder *is* a
+- **The JMC list.** The user raised the entry on purpose and expects to find it. It is listed with
+  `jmcNumber: "No JMC"` — presentation only; the column itself stays NULL — and `isNoJmc: true`.
+- **The PO breakdown chain**, where the invoice hangs off it. Filtering there would have dropped a
+  No-JMC invoice out of its own PO's chain, so the node is labelled `"No JMC"` instead.
+
+Left alone on purpose: the "PO has children" check that blocks PO deletion — a No-JMC entry *is* a
 child, and its invoice must keep the PO from being deleted.
 
 ## What is deliberately not touched
 
-- The existing JMC create / upload / approve flow — unchanged.
+- The existing JMC create / upload / approve flow — unchanged. `POST /jmcs` without `noJmc` behaves
+  exactly as before, including auto-generating `JMC/{FY}/{seq}` when `jmcNumber` is omitted.
+- Invoice create — unchanged. `jmcId` is mandatory; there is no No-JMC field on the invoice at all.
 - Ordinary invoices — unchanged, including the report requirement and the 1-JMC-1-invoice rule.
 - Report, book payment, payment sheet, bank transfer, settlement — all keep working because the
   invoice still has a real `jmcId`.

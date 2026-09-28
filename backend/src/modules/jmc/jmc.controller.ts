@@ -28,7 +28,13 @@ export class JmcController {
 
   @Post()
   @RequiredPermission('financials.jmcs.create')
-  @ApiOperation({ summary: 'Create a JMC against an APPROVED PO' })
+  @ApiOperation({
+    summary: 'Create a JMC against an APPROVED PO',
+    description:
+      'Send `noJmc: true` with `poId` to raise a No-JMC entry instead — allowed only on an ' +
+      'APPROVED, PURCHASE, Supply Item PO. It has no number, no date and no signed copy, and ' +
+      'exists only so an invoice on such a PO has a parent to hang off.',
+  })
   async create(
     @Request()
     { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
@@ -45,7 +51,9 @@ export class JmcController {
       'Returns JMCs for a site+partyType with per-item eligibility flags. ' +
       'Use forDocument=report when building the JMC dropdown for Report creation; ' +
       'use forDocument=invoice when building the JMC dropdown for Invoice creation. ' +
-      'Ineligible items include the reason so the UI can show a tooltip.',
+      'Ineligible items include the reason so the UI can show a tooltip. ' +
+      'No-JMC entries appear only for forDocument=invoice, labelled "No JMC — <party> — <date>" ' +
+      'and flagged with meta.isNoJmc.',
   })
   async getDropdown(
     @Query('siteId') siteId: string,
