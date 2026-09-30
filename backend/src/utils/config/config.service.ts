@@ -17,6 +17,7 @@ import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-ba
 import { ExpenseTrackerEntity } from 'src/modules/expense-tracker/entities/expense-tracker.entity';
 import { ExpenseFilesEntity } from 'src/modules/expense-files/entities/expense-files.entity';
 import { CardsEntity } from 'src/modules/cards/entities/card.entity';
+import { PetroCardWalletRechargeEntity } from 'src/modules/petro-card-wallet/entities/petro-card-wallet-recharge.entity';
 import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-file.entity';
 import { VehicleEventEntity } from 'src/modules/vehicle-events/entities/vehicle-event.entity';
 import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicle-master.entity';
@@ -171,6 +172,7 @@ export class ConfigService {
         ExpenseTrackerEntity,
         ExpenseFilesEntity,
         CardsEntity,
+        PetroCardWalletRechargeEntity,
         VehicleMasterEntity,
         VehicleVersionEntity,
         VehicleFileEntity,

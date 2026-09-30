@@ -66,6 +66,7 @@ import {
 } from './queries/fuel-expense.queries';
 import { EmailService } from '../common/email/email.service';
 import { CompanyBankAccountService } from '../company-bank-accounts/company-bank-account.service';
+import { PetroCardWalletService } from '../petro-card-wallet/petro-card-wallet.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { Environments } from 'env-configs';
 import {
@@ -92,7 +93,30 @@ export class FuelExpenseService {
     private readonly emailService: EmailService,
     private readonly whatsAppService: WhatsAppService,
     private readonly companyBankAccountService: CompanyBankAccountService,
+    private readonly petroCardWalletService: PetroCardWalletService,
   ) {}
+
+  /**
+   * Refuse a petro-card entry the common wallet cannot cover.
+   *
+   * Runs **inside** the caller's transaction on purpose: the advisory lock it takes then also
+   * covers the insert that follows, so two entries cannot both pass against the same balance.
+   *
+   * Only creation is gated. Nothing is needed for deduct or restore — a fuel entry consumes wallet
+   * money purely by being petro-card, active, undeleted and pending-or-approved, so rejecting,
+   * cancelling, editing and deleting all move the balance on their own.
+   *
+   * Keyed on `paymentMode`, matching how the rest of the fuel module identifies a petro-card fill
+   * (every balance query excludes them with `paymentMode <> 'petro_card'`).
+   */
+  private async assertWalletCoversEntry(
+    paymentMode: string,
+    fuelAmount: number,
+    entityManager: EntityManager,
+  ): Promise<void> {
+    if (paymentMode !== TransactionType.PETRO_CARD) return;
+    await this.petroCardWalletService.assertSufficientBalance(Number(fuelAmount), entityManager);
+  }
 
   /** Validates the paying company bank account, if one was supplied (throws if invalid). */
   private async validatePaidFromAccount(paidFromAccountId?: string): Promise<string | null> {
@@ -152,6 +176,12 @@ export class FuelExpenseService {
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
       const result = await this.dataSource.transaction(async (entityManager) => {
+        await this.assertWalletCoversEntry(
+          paymentMode,
+          createFuelExpenseDto.fuelAmount,
+          entityManager,
+        );
+
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
             ...createFuelExpenseDto,
@@ -262,6 +292,14 @@ export class FuelExpenseService {
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
       const result = await this.dataSource.transaction(async (entityManager) => {
+        // A forced entry is approved on creation, and approved entries consume wallet money just
+        // as pending ones do — so it is gated exactly like an ordinary create.
+        await this.assertWalletCoversEntry(
+          paymentMode,
+          createFuelExpenseDto.fuelAmount,
+          entityManager,
+        );
+
         const fuelExpense = await this.fuelExpenseRepository.create(
           {
             ...createFuelExpenseDto,
@@ -481,6 +519,19 @@ export class FuelExpenseService {
         await this.fuelExpenseRepository.update(
           { id },
           { isActive: false, updatedBy },
+          entityManager,
+        );
+
+        // Checked only *after* the old version is deactivated, so the balance read below already
+        // excludes it. Checking first would count the entry twice and refuse an edit that merely
+        // nudges the amount up by ₹10.
+        //
+        // The DTO's payment mode wins, falling back to the existing one: an edit may switch the
+        // entry onto or off the card, and the new version carries whatever was sent. Switching on
+        // is gated here; switching off frees the money with no extra code.
+        await this.assertWalletCoversEntry(
+          editFuelExpenseDto.paymentMode ?? fuelExpense.paymentMode,
+          editFuelExpenseDto.fuelAmount ?? fuelExpense.fuelAmount,
           entityManager,
         );
 
