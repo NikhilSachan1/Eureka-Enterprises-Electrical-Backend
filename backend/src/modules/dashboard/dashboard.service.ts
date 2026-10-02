@@ -38,6 +38,9 @@ import {
 } from './dashboard.types';
 import * as queries from './queries/dashboard.queries';
 import * as mobileQueries from './queries/mobile-dashboard.queries';
+// Reused rather than restated: the wallet balance must be defined in exactly one place, or the
+// dashboard and the wallet screen can disagree about how much money there is.
+import { walletBalanceQuery } from '../petro-card-wallet/queries/petro-card-wallet.queries';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { Roles } from '../roles/constants/role.constants';
@@ -268,7 +271,13 @@ export class DashboardService {
   }
 
   isAdminRole(userRole: string): boolean {
-    return [Roles.SUPER_ADMIN, Roles.ADMIN, Roles.HR, Roles.MANAGER].includes(userRole as Roles);
+    return [
+      Roles.SUPER_ADMIN,
+      Roles.ADMIN,
+      Roles.HR,
+      Roles.MANAGER,
+      Roles.OPERATION_MANAGER,
+    ].includes(userRole as Roles);
   }
 
   // ==================== Section Implementations ====================
@@ -278,12 +287,14 @@ export class DashboardService {
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
 
-    const [employeeSummary, todayAttendance, pendingApprovals, payrollSummary] = await Promise.all([
-      this.executeQuery(queries.getEmployeeSummaryQuery()),
-      this.executeQuery(queries.getTodayAttendanceSummaryQuery(today)),
-      this.executeQuery(queries.getPendingApprovalsCountQuery()),
-      this.executeQuery(queries.getCurrentMonthPayrollSummaryQuery(currentMonth, currentYear)),
-    ]);
+    const [employeeSummary, todayAttendance, pendingApprovals, payrollSummary, walletBalance] =
+      await Promise.all([
+        this.executeQuery(queries.getEmployeeSummaryQuery()),
+        this.executeQuery(queries.getTodayAttendanceSummaryQuery(today)),
+        this.executeQuery(queries.getPendingApprovalsCountQuery()),
+        this.executeQuery(queries.getCurrentMonthPayrollSummaryQuery(currentMonth, currentYear)),
+        this.executeQuery({ query: walletBalanceQuery, params: [] }),
+      ]);
 
     const empData = employeeSummary[0] || {};
     const attData = todayAttendance[0] || {};
@@ -323,6 +334,11 @@ export class DashboardService {
         paid: payData.paid || 0,
         cancelled: payData.cancelled || 0,
         totalAmount: parseFloat(payData.totalAmount) || 0,
+      },
+      // Can legitimately be negative — a recharge may be corrected after the money was spent — so
+      // this is not clamped at zero. A negative figure is the signal that a top-up is overdue.
+      petroCardWallet: {
+        balance: Number(walletBalance[0]?.balance ?? 0),
       },
     };
   }

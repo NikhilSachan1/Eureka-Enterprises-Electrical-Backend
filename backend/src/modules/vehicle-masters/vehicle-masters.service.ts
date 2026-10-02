@@ -477,6 +477,10 @@ export class VehicleMastersService {
             dueSoon: serviceDueStats.dueSoon,
             overdue: serviceDueStats.overdue,
           },
+          handoverStatus: {
+            initiated: Number(stats.handoverInitiated || 0),
+            accepted: Number(stats.handoverAccepted || 0),
+          },
         },
         records: filteredVehicles,
         totalRecords: hasComputedStatusFilter

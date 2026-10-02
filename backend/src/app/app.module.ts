@@ -29,6 +29,7 @@ import { LeaveBalancesModule } from 'src/modules/leave-balances/leave-balances.m
 import { LeaveApplicationsModule } from 'src/modules/leave-applications/leave-applications.module';
 import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';
 import { CardsModule } from 'src/modules/cards/cards.module';
+import { PetroCardWalletModule } from 'src/modules/petro-card-wallet/petro-card-wallet.module';
 import { VehicleMastersModule } from 'src/modules/vehicle-masters/vehicle-masters.module';
 import { VehicleEventsModule } from 'src/modules/vehicle-events/vehicle-events.module';
 import { VehicleVersionsModule } from 'src/modules/vehicle-versions/vehicle-versions.module';
@@ -112,6 +113,7 @@ import { PublicInfoModule } from 'src/modules/public-info/public-info.module';
     LeaveBalancesModule,
     ExpenseTrackerModule,
     CardsModule,
+    PetroCardWalletModule,
     VehicleMastersModule,
     VehicleVersionsModule,
     VehicleEventsModule,

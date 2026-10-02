@@ -9,7 +9,22 @@ import {
   CalibrationStatus,
   WarrantyStatus,
   EXPIRING_SOON_DAYS,
+  HandoverStatus,
+  HANDOVER_STATUS_EVENT_TYPES,
 } from '../constants/asset-masters.constants';
+
+const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
+
+/** A column of the same row the list returns as `latestEvent`, for an outer alias `am`. */
+const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
+  SELECT ae."${column}"
+  FROM "assets_events" ae
+  WHERE ae."assetMasterId" = am."id"
+    AND ae."deletedAt" IS NULL
+    AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+  ORDER BY ae."createdAt" DESC, ae."id" DESC
+  LIMIT 1
+)`;
 
 export const getLostAssetsQuery = () => `
   SELECT
@@ -111,7 +126,17 @@ export const getAssetStatsQuery = () => {
       COUNT(DISTINCT CASE 
         WHEN av."warrantyEndDate" IS NULL 
         THEN am."id" 
-      END) as "warrantyNotApplicable"
+      END) as "warrantyNotApplicable",
+
+      -- Handover status breakdown (based on latestEvent)
+      COUNT(DISTINCT CASE
+        WHEN lh."eventType" IN (${toSqlList(HANDOVER_STATUS_EVENT_TYPES[HandoverStatus.INITIATED])})
+        THEN am."id"
+      END) as "handoverInitiated",
+      COUNT(DISTINCT CASE
+        WHEN lh."eventType" IN (${toSqlList(HANDOVER_STATUS_EVENT_TYPES[HandoverStatus.ACCEPTED])})
+        THEN am."id"
+      END) as "handoverAccepted"
       
     FROM "asset_masters" am
     INNER JOIN LATERAL (
@@ -122,6 +147,7 @@ export const getAssetStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) av ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
     WHERE am."deletedAt" IS NULL
   `;
 };
@@ -137,6 +163,8 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     status,
     calibrationStatus,
     warrantyStatus,
+    handoverStatus,
+    handoverToUser,
     assignedTo,
     search,
     includeLatestEventFiles,
@@ -283,6 +311,18 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     }
   }
 
+  if (handoverStatus && handoverStatus.length > 0) {
+    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
+    params.push(handoverStatus.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
+    paramIndex++;
+  }
+
+  if (handoverToUser && handoverToUser.length > 0) {
+    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    params.push(handoverToUser);
+    paramIndex++;
+  }
+
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const orderByColumn = ASSET_SORT_FIELD_MAPPING[sortField] || 'am."createdAt"';
 
@@ -355,12 +395,9 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         ),
         '[]'::json
       ) as "files",
-      -- Only a handover shows up here. The newest event is frequently a calibration or a status
-      -- change, and returning that made the field look like handover information while carrying
-      -- something else. The lateral below still picks the genuinely newest event, so this is
-      -- "is the asset's last action a handover?", not "find the last handover".
+      -- The lateral below only looks at HANDOVER_EVENT_TYPES, so this is the asset's most recent
+      -- initiated / accepted handover even when other events happened after it.
       CASE WHEN ale."id" IS NOT NULL
-            AND ale."eventType" IN (${HANDOVER_EVENT_TYPES.map((t) => `'${t}'`).join(', ')})
       THEN json_build_object(
         'id', ale."id",
         'eventType', ale."eventType",
@@ -409,7 +446,9 @@ export const getAssetQuery = (query: AssetQueryDto) => {
       FROM "assets_events" ae
       LEFT JOIN "users" fu ON ae."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ae."toUser" = tu."id" AND tu."deletedAt" IS NULL
-      WHERE ae."assetMasterId" = am."id" AND ae."deletedAt" IS NULL
+      WHERE ae."assetMasterId" = am."id"
+        AND ae."deletedAt" IS NULL
+        AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
       ORDER BY ae."createdAt" DESC, ae."id" DESC
       LIMIT 1
     ) ale ON true

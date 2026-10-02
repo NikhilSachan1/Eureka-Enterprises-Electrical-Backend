@@ -230,7 +230,7 @@ export class DashboardController {
   private assertAdminAccess(req: any): void {
     const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
     if (!this.dashboardService.isAdminRole(userRole)) {
-      throw new ForbiddenException('Access denied. Admin/Manager/HR role required.');
+      throw new ForbiddenException('Access denied. Admin/Manager/HR/Operation Manager role required.');
     }
   }
 }
