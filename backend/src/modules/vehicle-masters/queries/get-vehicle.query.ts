@@ -13,9 +13,9 @@ import {
 
 const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
 
-/** eventType of the same row the list returns as `latestEvent`, for an outer alias `vm`. */
-const latestHandoverEventTypeSql = `(
-  SELECT ve."eventType"
+/** A column of the same row the list returns as `latestEvent`, for an outer alias `vm`. */
+const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
+  SELECT ve."${column}"
   FROM "vehicles_events" ve
   WHERE ve."vehicleMasterId" = vm."id"
     AND ve."deletedAt" IS NULL
@@ -129,7 +129,7 @@ export const getVehicleStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) vv ON true
-    LEFT JOIN LATERAL (SELECT ${latestHandoverEventTypeSql} AS "eventType") lh ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
     WHERE vm."deletedAt" IS NULL
   `;
 };
@@ -147,6 +147,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     fitnessStatuses,
     serviceDueStatuses,
     handoverStatuses,
+    handoverToUser,
     assignedTo,
     search,
     includeLatestEventFiles,
@@ -295,8 +296,14 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
   }
 
   if (handoverStatuses && handoverStatuses.length > 0) {
-    filters.push(`${latestHandoverEventTypeSql} = ANY($${paramIndex})`);
+    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
     params.push(handoverStatuses.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
+    paramIndex++;
+  }
+
+  if (handoverToUser && handoverToUser.length > 0) {
+    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    params.push(handoverToUser);
     paramIndex++;
   }
 

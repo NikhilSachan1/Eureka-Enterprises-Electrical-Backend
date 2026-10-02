@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional, IsString, IsArray } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsArray, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 import {
@@ -164,6 +164,20 @@ export class VehicleQueryDto extends BaseGetDto {
   })
   @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
   handoverStatuses?: HandoverStatus[];
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by the user the latestEvent handover was made to (latestEvent.toUser, supports multiple values). Combine with handoverStatuses, e.g. INITIATED for pending handovers to a user.',
+    example: ['123e4567-e89b-12d3-a456-426614174000'],
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @Transform(({ value }) =>
+    Array.isArray(value) ? value : value ? String(value).split(',').map((v) => v.trim()) : undefined,
+  )
+  handoverToUser?: string[];
 
   @ApiPropertyOptional({
     description: 'Filter by assigned user ID',

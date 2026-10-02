@@ -136,6 +136,19 @@ export class AssetQueryDto extends BaseGetDto {
   handoverStatus?: HandoverStatus[];
 
   @ApiProperty({
+    description:
+      'Filter by the user the latestEvent handover was made to (latestEvent.toUser, supports multiple values). Combine with handoverStatus, e.g. INITIATED for pending handovers to a user.',
+    example: ['123e4567-e89b-12d3-a456-426614174000'],
+    isArray: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @Transform(({ value }) => toArray(value))
+  handoverToUser?: string[];
+
+  @ApiProperty({
     description: 'Filter by assigned user (supports multiple values)',
     example: ['123e4567-e89b-12d3-a456-426614174000'],
     isArray: true,
