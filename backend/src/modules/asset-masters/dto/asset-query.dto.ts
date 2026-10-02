@@ -8,6 +8,7 @@ import {
   AssetStatus,
   CalibrationStatus,
   WarrantyStatus,
+  HandoverStatus,
 } from '../constants/asset-masters.constants';
 
 const toArray = (value: any): string[] => {
@@ -120,6 +121,19 @@ export class AssetQueryDto extends BaseGetDto {
   @IsEnum(WarrantyStatus, { each: true })
   @Transform(({ value }) => toArray(value))
   warrantyStatus?: WarrantyStatus[];
+
+  @ApiProperty({
+    description:
+      'Filter by latestEvent handover status (supports multiple values). ACCEPTED includes auto-accepted.',
+    enum: HandoverStatus,
+    isArray: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(HandoverStatus, { each: true })
+  @Transform(({ value }) => toArray(value))
+  handoverStatus?: HandoverStatus[];
 
   @ApiProperty({
     description: 'Filter by assigned user (supports multiple values)',

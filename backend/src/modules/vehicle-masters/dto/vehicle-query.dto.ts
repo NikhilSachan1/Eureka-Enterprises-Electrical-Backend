@@ -8,6 +8,7 @@ import {
   VehicleFuelType,
   DocumentStatus,
   ServiceDueStatus,
+  HandoverStatus,
   VEHICLE_DTO_ERRORS,
 } from '../constants/vehicle-masters.constants';
 
@@ -145,6 +146,24 @@ export class VehicleQueryDto extends BaseGetDto {
   })
   @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
   serviceDueStatuses?: ServiceDueStatus[];
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by latestEvent handover status (supports multiple values). ACCEPTED includes auto-accepted.',
+    enum: HandoverStatus,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(HandoverStatus, {
+    each: true,
+    message: VEHICLE_DTO_ERRORS.INVALID_HANDOVER_STATUS.replace(
+      '{handoverStatuses}',
+      Object.values(HandoverStatus).join(', '),
+    ),
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value : value ? [value] : undefined))
+  handoverStatuses?: HandoverStatus[];
 
   @ApiPropertyOptional({
     description: 'Filter by assigned user ID',
