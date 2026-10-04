@@ -74,7 +74,7 @@ export class AssetListResponseDto {
   @ApiProperty({
     type: [Object],
     description:
-      'List of assets; each item includes latestEvent when present — latest HANDOVER_INITIATED / HANDOVER_ACCEPTED / HANDOVER_AUTO_ACCEPTED event from assets_events by createdAt, null if there is none',
+      'List of assets; each item includes latestEvent when present — latest HANDOVER_INITIATED / HANDOVER_ACCEPTED / HANDOVER_AUTO_ACCEPTED / HANDOVER_REJECTED / HANDOVER_CANCELLED / DEALLOCATED event from assets_events by createdAt, null if there is none',
   })
   records: any[];
 
