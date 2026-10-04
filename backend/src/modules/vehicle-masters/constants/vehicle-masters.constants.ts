@@ -85,13 +85,16 @@ export enum VehicleEventTypes {
 }
 
 /**
- * Handover events shown as `latestEvent` on the vehicle list — the most recent one of these wins.
- * Rejected / cancelled handovers and non-handover events (service, status change) are skipped.
+ * Events shown as `latestEvent` on the vehicle list — the most recent one of these wins.
+ * Other events (service, status change, assign) are skipped.
  */
 export const HANDOVER_EVENT_TYPES: VehicleEventTypes[] = [
   VehicleEventTypes.HANDOVER_INITIATED,
   VehicleEventTypes.HANDOVER_ACCEPTED,
   VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
+  VehicleEventTypes.HANDOVER_REJECTED,
+  VehicleEventTypes.HANDOVER_CANCELLED,
+  VehicleEventTypes.DEALLOCATED,
 ];
 
 /** Status of `latestEvent`, used by the `handoverStatuses` list filter and the handover stats. */

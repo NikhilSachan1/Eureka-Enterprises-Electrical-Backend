@@ -133,13 +133,16 @@ export enum AssetEventTypes {
 }
 
 /**
- * Handover events shown as `latestEvent` on the asset list — the most recent one of these wins.
- * Rejected / cancelled handovers and non-handover events (calibration, status change) are skipped.
+ * Events shown as `latestEvent` on the asset list — the most recent one of these wins.
+ * Other events (calibration, status change, assign) are skipped.
  */
 export const HANDOVER_EVENT_TYPES: AssetEventTypes[] = [
   AssetEventTypes.HANDOVER_INITIATED,
   AssetEventTypes.HANDOVER_ACCEPTED,
   AssetEventTypes.HANDOVER_AUTO_ACCEPTED,
+  AssetEventTypes.HANDOVER_REJECTED,
+  AssetEventTypes.HANDOVER_CANCELLED,
+  AssetEventTypes.DEALLOCATED,
 ];
 
 /** Status of `latestEvent`, used by the `handoverStatus` list filter and the handover stats. */
