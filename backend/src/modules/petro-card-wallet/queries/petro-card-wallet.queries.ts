@@ -78,7 +78,18 @@ export const walletTransactionsQuery = `
       r."referenceNumber"                    AS "referenceNumber",
       r."paymentMode"                        AS "paymentMode",
       r."remarks"                            AS "remarks",
-      cba."accountHolderName"                AS "paidFromAccount",
+      CASE
+        WHEN cba."id" IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', cba."id",
+          'accountName', cba."accountName",
+          'accountHolderName', cba."accountHolderName",
+          'bankName', cba."bankName",
+          'accountNumber', cba."accountNumber",
+          'ifscCode', cba."ifscCode",
+          'branchName', cba."branchName"
+        )
+      END                                    AS "paidFromAccount",
       NULL::text                             AS "cardNumber",
       NULL::text                             AS "vehicleNumber",
       NULL::text                             AS "employeeName",
@@ -101,7 +112,7 @@ export const walletTransactionsQuery = `
       fe."transactionId"                     AS "referenceNumber",
       fe."paymentMode"                       AS "paymentMode",
       fe."description"                       AS "remarks",
-      NULL::text                             AS "paidFromAccount",
+      NULL::jsonb                            AS "paidFromAccount",
       c."cardNumber"                         AS "cardNumber",
       vm."registrationNo"                    AS "vehicleNumber",
       TRIM(CONCAT_WS(' ', fu."firstName", fu."lastName")) AS "employeeName",
