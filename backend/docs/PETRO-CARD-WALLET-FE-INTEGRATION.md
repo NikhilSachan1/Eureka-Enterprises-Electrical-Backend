@@ -66,7 +66,16 @@ Query: `page`, `pageSize`, `type` (`RECHARGE` or `FUEL`, omit for both), `dateFr
     { "type": "RECHARGE", "id": "<rechargeId>", "date": "2026-09-27",
       "amount": 5000, "editable": true,
       "meta": { "referenceNumber": "UTR…", "paymentMode": "NEFT",
-                "paidFromAccount": "…", "remarks": "…", "recordedBy": "…" } }
+                "paidFromAccount": {
+                  "id": "<uuid>",
+                  "accountName": "ICICI Ops",
+                  "accountHolderName": "Eureka Enterprises",
+                  "bankName": "ICICI Bank",
+                  "accountNumber": "111222333444",
+                  "ifscCode": "ICIC0000999",
+                  "branchName": "Andheri"
+                },
+                "remarks": "…", "recordedBy": "…" } }
   ],
   "totalRecords": 2
 }

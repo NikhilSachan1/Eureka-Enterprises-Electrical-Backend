@@ -272,7 +272,17 @@ export class PetroCardWalletService {
         referenceNumber: r.referenceNumber,
         paymentMode: r.paymentMode,
         paidFromAccountId: r.paidFromAccountId,
-        paidFromAccount: r.paidFromAccount?.accountHolderName ?? null,
+        paidFromAccount: r.paidFromAccount
+          ? {
+              id: r.paidFromAccount.id,
+              accountName: r.paidFromAccount.accountName,
+              accountHolderName: r.paidFromAccount.accountHolderName,
+              bankName: r.paidFromAccount.bankName,
+              accountNumber: r.paidFromAccount.accountNumber,
+              ifscCode: r.paidFromAccount.ifscCode,
+              branchName: r.paidFromAccount.branchName ?? null,
+            }
+          : null,
         remarks: r.remarks,
         createdAt: r.createdAt,
         createdByUser: formatUser(r.createdByUser),

@@ -439,6 +439,10 @@ export class AssetMastersService {
           expired: Number(stats.warrantyExpired || 0),
           notApplicable: Number(stats.warrantyNotApplicable || 0),
         },
+        handover: {
+          initiated: Number(stats.handoverInitiated || 0),
+          accepted: Number(stats.handoverAccepted || 0),
+        },
       },
       records: assetsWithStatus,
       totalRecords: Number(totalResult[0]?.total || 0),
