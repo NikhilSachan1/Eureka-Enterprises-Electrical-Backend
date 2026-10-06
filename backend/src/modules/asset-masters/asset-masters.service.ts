@@ -96,7 +96,17 @@ export class AssetMastersService {
                 WHERE af."assetVersionId" = av.id
                   AND af."fileType" = 'CALIBRATION_CERTIFICATE'
                   AND af."deletedAt" IS NULL
-              ) AS "hasCalibrationCertificate"
+              ) AS "hasCalibrationCertificate",
+              -- The certificate itself, for the annexure. Latest wins, matching what the public
+              -- certificate endpoint resolves, so the report and that link never disagree.
+              (
+                SELECT af."fileKey" FROM assets_files af
+                WHERE af."assetVersionId" = av.id
+                  AND af."fileType" = 'CALIBRATION_CERTIFICATE'
+                  AND af."deletedAt" IS NULL
+                ORDER BY af."createdAt" DESC
+                LIMIT 1
+              ) AS "calibrationCertificateKey"
        FROM asset_masters am
        JOIN asset_versions av
          ON av."assetMasterId" = am.id AND av."isActive" = true AND av."deletedAt" IS NULL
@@ -111,7 +121,18 @@ export class AssetMastersService {
 
     // Absolute base for the public "view calibration certificate" links embedded in the PDF.
     const certBaseUrl = Environments.API_BASE_URL;
-    const key = await this.assetReportPdfService.generate(rows, certBaseUrl);
+    const key = await this.assetReportPdfService.generate(rows, certBaseUrl, {
+      // Every selected asset appears in the annexure, including those with nothing on file —
+      // a page that admits the gap is more useful in an audit than a silent omission.
+      certificates: rows.map((r: any) => ({
+        assetMasterId: r.assetMasterId,
+        assetId: r.assetId,
+        name: r.name,
+        calibrationStartDate: r.calibrationStartDate,
+        calibrationEndDate: r.calibrationEndDate,
+        fileKey: r.calibrationCertificateKey ?? null,
+      })),
+    });
     return await this.assetReportPdfService.getDownloadUrl(key);
   }
 
