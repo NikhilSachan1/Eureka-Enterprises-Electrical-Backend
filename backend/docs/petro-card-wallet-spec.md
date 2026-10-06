@@ -212,6 +212,66 @@ rejected entry, and refusing an approver mid-flow over a balance that dropped af
 spent it is worse than letting the wallet go briefly negative — which is visible on the dashboard.
 Say if you would rather it were blocked.
 
+## Recharging through the Payment Sheet
+
+A recharge has two origins. Both end in a row in `petro_card_wallet_recharges`; what differs is
+**when** the money counts.
+
+| Origin | Raised where | Balance moves | Editable after |
+|---|---|---|---|
+| Payment Sheet line | `POST /payment-sheets/:id/items` with `beneficiaryType: WALLET` | **when the line is paid** | no — never |
+| Manual recharge | `POST /petro-card-wallet/recharges` | immediately | yes, until it is deleted |
+
+The payment sheet is the normal route: the top-up goes through the same approval chain as every
+other payable, and the wallet is credited at the moment the money actually leaves. The manual route
+stays for corrections and for anything recorded outside that chain.
+
+### The line
+
+```jsonc
+{ "beneficiaryType": "WALLET", "sourceType": "PETRO_CARD_WALLET", "requestedAmount": 7000 }
+```
+
+That is the whole input. **No beneficiary and no bank details** — there is no vendor to register,
+which was the explicit requirement. `beneficiaryType` gains a third value rather than becoming
+nullable, so the column stays NOT NULL and every query can still tell the three kinds apart.
+
+Several wallet lines may sit on one sheet: each top-up is its own decision, and there is nothing to
+double-pay. The duplicate check that protects user lines is skipped for them — it compares `userId`,
+and two nulls would otherwise read as the same beneficiary.
+
+### Unpaid is not in the balance
+
+An unpaid line is **not** counted, which is the point of crediting on payment. So `/balance` reports
+it separately:
+
+```jsonc
+{ "balance": 4000, "pendingRecharge": 7000, … }
+```
+
+Without that figure, someone who just raised a ₹7,000 top-up would see an unchanged balance and
+assume it was lost. `pendingRecharge` sums wallet lines in `PENDING` or `HOLD`; a rejected line
+drops out of both.
+
+### Paid is final, in both directions
+
+A payment sheet item is already terminal once `PAID` — pay, hold and reject all require `PENDING`,
+so nothing in that module can move it. The recharge it produced is locked to match: it carries
+`paymentSheetItemId`, and the wallet's own update and delete refuse it. Without that guard the
+wallet CRUD would be a back door around a rule the payment sheet enforces.
+
+The credit is written **inside the payment sheet's own stamping transaction**, so the money and the
+`PAID` stamp commit together. A unique index on `paymentSheetItemId` makes a retried pay idempotent.
+
+### What does not happen
+
+**No payment advice is generated** — as asked. This needs no code: an advice hangs off a bank
+transfer, and only the vendor branch of `payItem` creates one. A wallet line never reaches it.
+
+No bank transfer either, for the same reason, so the missing bank details break nothing downstream.
+The only place that would have rendered blanks is the sheet PDF, which now names the line
+"PetroCard Wallet" / "PetroCard Wallet Recharge".
+
 ## Dashboard
 
 `GET /dashboard/overview` (web) gains:
@@ -242,6 +302,14 @@ Granted to **SUPER_ADMIN, ADMIN and OPERATION_MANAGER** — the roles that alrea
 | Recharge delete driving balance negative | **Allowed** | Wallet can sit negative; new entries blocked until recharged |
 | Cancelled entries | **Restore** | Extended beyond the written requirement, which named only rejected |
 | Wallet scope | **One global wallet** | Cards carry no company link today; per-company would mean adding one and mapping existing cards |
+| Payment sheet beneficiary | **Optional — none at all** | The sheet shows a line with no payee; the PDF names it rather than printing dashes |
+| Recharge entry points | **Both kept** | The balance moves at two different moments, so `pendingRecharge` exists to explain the gap |
+| A paid line | **Never reverted** | Already how the payment sheet behaved; the wallet CRUD now matches so it is not a back door |
+
+**The cost of crediting on payment, worth saying plainly:** a top-up now waits for approval and an
+actual transfer, which can take days. Fuel entries stay blocked that whole time, where before an
+operator could unblock a site immediately. The manual recharge route is the release valve for that,
+which is part of why keeping both entry points matters.
 
 ## What is deliberately not touched
 
@@ -264,6 +332,7 @@ Granted to **SUPER_ADMIN, ADMIN and OPERATION_MANAGER** — the roles that alrea
 | 6 | Module registered | `src/app/app.module.ts` |
 | 7 | One helper + three blocking calls | `fuel-expense.service.ts`, `fuel-expense.module.ts` |
 | 8 | `petroCardWallet.balance` on `overview` | `dashboard.service.ts`, `dashboard.types.ts` |
+| 9 | Recharge via Payment Sheet; recharge↔line link | `…077-alter-wallet-recharge-add-payment-sheet-item.ts`, `payment-sheet.service.ts`, `payment-sheet-pdf.service.ts`, wallet service + queries |
 
 Item 3 was not in the original plan. It surfaced while testing: `paymentMode = 'petro_card'` could
 never be submitted because the config did not list it, which also meant the existing

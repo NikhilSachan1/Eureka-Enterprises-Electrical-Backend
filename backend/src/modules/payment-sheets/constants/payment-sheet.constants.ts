@@ -26,12 +26,21 @@ export enum PaymentSheetItemStatus {
 export enum BeneficiaryType {
   USER = 'USER',
   VENDOR = 'VENDOR',
+  /**
+   * The company's own PetroCard wallet. There is no person or vendor to pay and no bank details to
+   * snapshot — the money moves to the card company outside this system, and the sheet records it.
+   * A third value rather than a nullable `beneficiaryType`, so the column stays NOT NULL and every
+   * query can still tell the three kinds apart.
+   */
+  WALLET = 'WALLET',
 }
 
 export enum PaymentSourceType {
   EXPENSE = 'EXPENSE',
   FUEL_EXPENSE = 'FUEL_EXPENSE',
   VENDOR_PAYMENT = 'VENDOR_PAYMENT',
+  /** A recharge of the common PetroCard wallet. Credits the wallet when the line is paid. */
+  PETRO_CARD_WALLET = 'PETRO_CARD_WALLET',
 }
 
 // ── Configurable workflow stages (default chain — overridable via config_settings) ──
@@ -140,6 +149,7 @@ export const PAYMENT_SHEET_ERRORS = {
   NOT_EDITABLE_STAGE: 'You are not authorized to act on this sheet at its current stage',
   AMOUNT_EXCEEDS_PENDING: 'Amount cannot exceed the beneficiary current pending amount',
   AMOUNT_MUST_BE_POSITIVE: 'Amount must be greater than zero',
+  WALLET_SOURCE_MISMATCH: 'Wallet items must use sourceType PETRO_CARD_WALLET',
   AMOUNT_INCREASE_NOT_ALLOWED: 'Amount can only be decreased at this stage',
   AMOUNT_EDIT_NOT_ALLOWED: 'Amount editing is not allowed at this stage',
   ADD_REMOVE_NOT_ALLOWED: 'Adding or removing beneficiaries is not allowed at this stage',

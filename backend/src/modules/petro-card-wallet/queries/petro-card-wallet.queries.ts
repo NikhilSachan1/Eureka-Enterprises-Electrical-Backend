@@ -49,13 +49,24 @@ export const walletBalanceQuery = `
       COALESCE(SUM(fe."fuelAmount") FILTER (WHERE fe."approvalStatus" = '${ApprovalStatus.APPROVED}'), 0) AS approved
       FROM fuel_expenses fe
      WHERE ${WALLET_CONSUMING_FUEL_PREDICATE}
+  ),
+  -- Wallet top-ups raised on a payment sheet but not yet paid. Deliberately NOT part of the
+  -- balance: the money only lands when the line is paid. Reported alongside so a user who just
+  -- raised a ₹50,000 recharge does not think it was lost when the balance has not moved.
+  awaiting AS (
+    SELECT COALESCE(SUM(psi."currentAmount"), 0) AS total
+      FROM payment_sheet_items psi
+     WHERE psi."sourceType" = 'PETRO_CARD_WALLET'
+       AND psi."deletedAt" IS NULL
+       AND psi."itemStatus" IN ('PENDING', 'HOLD')
   )
   SELECT
     (SELECT total FROM recharged) - (SELECT total FROM consumed) AS balance,
     (SELECT total FROM recharged)    AS "totalRecharged",
     (SELECT total FROM consumed)     AS "totalConsumed",
     (SELECT pending FROM consumed)   AS "pendingConsumed",
-    (SELECT approved FROM consumed)  AS "approvedConsumed"
+    (SELECT approved FROM consumed)  AS "approvedConsumed",
+    (SELECT total FROM awaiting)     AS "pendingRecharge"
 `;
 
 /**
@@ -74,7 +85,9 @@ export const walletTransactionsQuery = `
       r."id"                                 AS "id",
       r."rechargeDate"                       AS "date",
       r."amount"                             AS "amount",
-      true                                   AS "editable",
+      -- A recharge that came off a paid payment sheet line is a record of a payment, not an entry:
+      -- the line is terminal once PAID, so this row cannot be edited or deleted either.
+      (r."paymentSheetItemId" IS NULL)       AS "editable",
       r."referenceNumber"                    AS "referenceNumber",
       r."paymentMode"                        AS "paymentMode",
       r."remarks"                            AS "remarks",

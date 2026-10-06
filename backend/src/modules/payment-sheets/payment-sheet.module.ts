@@ -12,6 +12,7 @@ import { PaymentSheetPdfService } from './payment-sheet-pdf.service';
 import { PaymentSheetController } from './payment-sheet.controller';
 import { ExpenseTrackerModule } from 'src/modules/expense-tracker/expense-tracker.module';
 import { FuelExpenseModule } from 'src/modules/fuel-expense/fuel-expense.module';
+import { PetroCardWalletModule } from '../petro-card-wallet/petro-card-wallet.module';
 import { BankTransferModule } from 'src/modules/bank-transfers/bank-transfer.module';
 import { EmailModule } from 'src/modules/common/email/email.module';
 import { FilesModule } from 'src/modules/common/file-upload/files.module';
@@ -29,6 +30,7 @@ import { FilesModule } from 'src/modules/common/file-upload/files.module';
     ExpenseTrackerModule,
     FuelExpenseModule,
     BankTransferModule,
+    PetroCardWalletModule,
     EmailModule,
     FilesModule,
   ],

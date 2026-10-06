@@ -33,6 +33,8 @@ export interface WalletBalance {
   totalConsumed: number;
   pendingConsumed: number;
   approvedConsumed: number;
+  /** Raised on a payment sheet, not yet paid — so not in `balance` yet. */
+  pendingRecharge: number;
 }
 
 @Injectable()
@@ -67,6 +69,7 @@ export class PetroCardWalletService {
       totalConsumed: Number(row?.totalConsumed ?? 0),
       pendingConsumed: Number(row?.pendingConsumed ?? 0),
       approvedConsumed: Number(row?.approvedConsumed ?? 0),
+      pendingRecharge: Number(row?.pendingRecharge ?? 0),
     };
   }
 
@@ -96,6 +99,60 @@ export class PetroCardWalletService {
       .getRepository(CompanyBankAccountEntity)
       .findOne({ where: { id, deletedAt: IsNull() } });
     if (!account) throw new NotFoundException(PETRO_CARD_WALLET_ERRORS.BANK_ACCOUNT_NOT_FOUND);
+  }
+
+  /**
+   * Credit the wallet for a Payment Sheet line that has just been paid.
+   *
+   * Called from inside the payment sheet's own stamping transaction, so the credit and the PAID
+   * stamp commit together — the wallet can never hold money for a line that did not finish paying.
+   *
+   * The row carries `paymentSheetItemId`, which makes it read-only to the recharge CRUD: a paid
+   * line cannot be reverted, and deleting the recharge it produced would be a way round that.
+   */
+  async creditFromPaymentSheetItem(
+    params: {
+      paymentSheetItemId: string;
+      amount: number;
+      rechargeDate: Date;
+      referenceNumber: string | null;
+      paymentMode: string | null;
+      paidFromAccountId: string | null;
+      remarks: string | null;
+      createdBy: string;
+    },
+    em: EntityManager,
+  ) {
+    await this.lockWallet(em);
+
+    // Idempotent: a retried pay step must not credit twice. The unique index backs this up, but
+    // returning the existing row keeps the retry a success rather than a constraint error.
+    const existing = await this.rechargeRepository.findOne(
+      { where: { paymentSheetItemId: params.paymentSheetItemId, deletedAt: IsNull() } },
+      em,
+    );
+    if (existing) return existing;
+
+    return await this.rechargeRepository.create(
+      {
+        amount: params.amount,
+        rechargeDate: params.rechargeDate,
+        referenceNumber: params.referenceNumber,
+        paymentMode: params.paymentMode,
+        paidFromAccountId: params.paidFromAccountId,
+        remarks: params.remarks,
+        paymentSheetItemId: params.paymentSheetItemId,
+        createdBy: params.createdBy,
+      },
+      em,
+    );
+  }
+
+  /** A recharge that came from a paid payment sheet line is a record of a payment, not an entry. */
+  private assertManualRecharge(recharge: PetroCardWalletRechargeEntity): void {
+    if (recharge.paymentSheetItemId) {
+      throw new BadRequestException(PETRO_CARD_WALLET_ERRORS.RECHARGE_FROM_PAYMENT_SHEET);
+    }
   }
 
   async createRecharge(dto: CreateWalletRechargeDto, createdBy: string) {
@@ -132,6 +189,7 @@ export class PetroCardWalletService {
         em,
       );
       if (!existing) throw new NotFoundException(PETRO_CARD_WALLET_ERRORS.RECHARGE_NOT_FOUND);
+      this.assertManualRecharge(existing);
 
       await this.assertBankAccountExists(dto.paidFromAccountId, em);
 
@@ -165,6 +223,7 @@ export class PetroCardWalletService {
       );
       if (!existing) throw new NotFoundException(PETRO_CARD_WALLET_ERRORS.RECHARGE_NOT_FOUND);
 
+      this.assertManualRecharge(existing);
       // No reversal step: the row leaves the SUM, so the balance moves by itself.
       await this.rechargeRepository.update({ id }, { deletedBy, updatedBy: deletedBy }, em);
       await this.rechargeRepository.softDelete({ id }, em);

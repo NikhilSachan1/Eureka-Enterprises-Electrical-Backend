@@ -37,4 +37,13 @@ export class PetroCardWalletRechargeEntity extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
+
+  /**
+   * The paid Payment Sheet line this recharge came from, or NULL for a manual correction.
+   *
+   * Set means read-only: a payment sheet item is terminal once PAID, so letting the wallet CRUD
+   * edit or delete the row it produced would be a back door around that.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  paymentSheetItemId: string | null;
 }

@@ -20,6 +20,9 @@ export const PETRO_CARD_WALLET_ERRORS = {
   INSUFFICIENT_BALANCE:
     'Insufficient PetroCard Wallet balance. Available {available}, this entry needs {required}. ' +
     'Recharge the wallet before recording this fuel entry.',
+  RECHARGE_FROM_PAYMENT_SHEET:
+    'This recharge came from a paid Payment Sheet line and cannot be edited or deleted. ' +
+    'A paid line is final.',
 };
 
 export const PETRO_CARD_WALLET_RESPONSES = {

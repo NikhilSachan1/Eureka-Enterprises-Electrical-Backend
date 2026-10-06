@@ -45,6 +45,7 @@ import {
 import { ExpenseTrackerService } from 'src/modules/expense-tracker/expense-tracker.service';
 import { FuelExpenseService } from 'src/modules/fuel-expense/fuel-expense.service';
 import { BankTransferService } from 'src/modules/bank-transfers/bank-transfer.service';
+import { PetroCardWalletService } from 'src/modules/petro-card-wallet/petro-card-wallet.service';
 import { EmailService } from 'src/modules/common/email/email.service';
 import { PaymentSheetPdfService } from './payment-sheet-pdf.service';
 import { PartyType, getFinancialYear } from 'src/modules/common/financials/financial.constants';
@@ -68,6 +69,7 @@ export class PaymentSheetService {
     private readonly expenseService: ExpenseTrackerService,
     private readonly fuelService: FuelExpenseService,
     private readonly bankTransferService: BankTransferService,
+    private readonly petroCardWalletService: PetroCardWalletService,
     private readonly emailService: EmailService,
     private readonly pdfService: PaymentSheetPdfService,
   ) {}
@@ -221,6 +223,12 @@ export class PaymentSheetService {
       const r = await this.repo.raw(query, params, em);
       return Math.max(0, Number(r?.[0]?.pending ?? 0));
     }
+    // A wallet top-up settles nothing, so there is no external figure to re-check against. Its own
+    // amount is the ceiling — without this it would fall through to the vendor branch, find no
+    // allocations, return 0, and every wallet line would fail to pay.
+    if (item.sourceType === PaymentSourceType.PETRO_CARD_WALLET) {
+      return Number(item.currentAmount);
+    }
     // Vendor: Σ transferable of still-un-transferred, approved allocations.
     const allocations = await this.repo.findAllocations(
       { where: { itemId: item.id, deletedAt: IsNull() } },
@@ -246,6 +254,37 @@ export class PaymentSheetService {
     item: PaymentSheetItemEntity;
     allocations: Array<{ bookPaymentId: string; allocatedAmount: number }>;
   }> {
+    if (input.beneficiaryType === BeneficiaryType.WALLET) {
+      if (input.sourceType !== PaymentSourceType.PETRO_CARD_WALLET) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.WALLET_SOURCE_MISMATCH);
+      }
+      const requested = Number(input.requestedAmount);
+      if (!(requested > 0)) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
+      }
+      // No pending source to check against: a wallet top-up is a decision, not a settlement of
+      // something already owed. The snapshot is the requested amount so the live-pending re-check
+      // at pay time has something consistent to compare with.
+      const item = await this.repo.createItem(
+        {
+          paymentSheetId: sheetId,
+          beneficiaryType: BeneficiaryType.WALLET,
+          userId: null,
+          vendorId: null,
+          sourceType: PaymentSourceType.PETRO_CARD_WALLET,
+          pendingSnapshot: requested,
+          requestedAmount: requested,
+          currentAmount: requested,
+          // No beneficiary, so nothing to snapshot. The PDF renders this case by name instead.
+          bankSnapshot: null,
+          itemStatus: PaymentSheetItemStatus.PENDING,
+          createdBy,
+        },
+        em,
+      );
+      return { item, allocations: [] };
+    }
+
     if (input.beneficiaryType === BeneficiaryType.VENDOR) {
       if (input.sourceType !== PaymentSourceType.VENDOR_PAYMENT) {
         throw new BadRequestException('Vendor items must use sourceType VENDOR_PAYMENT');
@@ -400,6 +439,10 @@ export class PaymentSheetService {
       }
       return;
     }
+    // Wallet lines have no beneficiary, so the userId check below would read null === null and
+    // reject a second top-up on the same sheet. Several are legitimate — there is nothing to
+    // double-pay, each line is its own decision.
+    if (input.beneficiaryType === BeneficiaryType.WALLET) return;
     const dup = existing.find(
       (i) => i.sourceType === input.sourceType && i.userId === input.userId,
     );
@@ -1579,6 +1622,13 @@ export class PaymentSheetService {
         paidFromAccountId: dto.paidFromAccountId,
       } as any);
       utrNumber = dto.transactionId ?? null;
+    } else if (item.sourceType === PaymentSourceType.PETRO_CARD_WALLET) {
+      // Nothing to settle in another module — the wallet is credited in the stamping transaction
+      // below, so a failure there cannot leave money in the wallet against an unpaid line.
+      if (!dto.paymentMode || !dto.paidDate) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.PAYMENT_DETAILS_REQUIRED);
+      }
+      utrNumber = dto.transactionId ?? null;
     } else {
       // Vendor — create a bank transfer per allocation.
       const transfers = dto.transfers ?? [];
@@ -1628,6 +1678,26 @@ export class PaymentSheetService {
         em,
       );
       if (!fresh) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
+
+      // "Tumhara bhi plus hoga jab payment ho jayega" — the wallet is credited here, on payment,
+      // not when the line was raised. Same transaction as the PAID stamp, so the two can never
+      // disagree; the unique index on paymentSheetItemId makes a retry idempotent.
+      if (fresh.sourceType === PaymentSourceType.PETRO_CARD_WALLET) {
+        await this.petroCardWalletService.creditFromPaymentSheetItem(
+          {
+            paymentSheetItemId: fresh.id,
+            amount,
+            rechargeDate: dto.paidDate ? new Date(dto.paidDate) : new Date(),
+            referenceNumber: dto.transactionId ?? null,
+            paymentMode: dto.paymentMode ?? null,
+            paidFromAccountId: dto.paidFromAccountId ?? null,
+            remarks: dto.description ?? `Recharged via Payment Sheet ${sheet.sheetNumber}`,
+            createdBy: user.id,
+          },
+          em,
+        );
+      }
+
       await this.repo.updateItem(
         { id: itemId },
         {
