@@ -21,8 +21,14 @@ import {
   PETRO_CARD_WALLET_LOCK_KEY,
   PETRO_CARD_WALLET_ERRORS,
   PETRO_CARD_WALLET_RESPONSES,
+  WalletRechargeStatus,
 } from './constants/petro-card-wallet.constants';
-import { walletBalanceQuery, walletTransactionsQuery } from './queries/petro-card-wallet.queries';
+import {
+  walletBalanceQuery,
+  walletTransactionsQuery,
+  outstandingRechargesQuery,
+  RECHARGE_CLAIMED_BY_LIVE_SHEET,
+} from './queries/petro-card-wallet.queries';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { DefaultPaginationValues } from 'src/utils/utility/constants/utility.constants';
@@ -33,8 +39,10 @@ export interface WalletBalance {
   totalConsumed: number;
   pendingConsumed: number;
   approvedConsumed: number;
-  /** Raised on a payment sheet, not yet paid — so not in `balance` yet. */
+  /** Raised and not yet paid, wherever it has got to — so not in `balance` yet. */
   pendingRecharge: number;
+  /** The part of `pendingRecharge` still waiting to be picked onto a Payment Sheet. */
+  outstandingRecharge: number;
 }
 
 @Injectable()
@@ -70,6 +78,7 @@ export class PetroCardWalletService {
       pendingConsumed: Number(row?.pendingConsumed ?? 0),
       approvedConsumed: Number(row?.approvedConsumed ?? 0),
       pendingRecharge: Number(row?.pendingRecharge ?? 0),
+      outstandingRecharge: Number(row?.outstandingRecharge ?? 0),
     };
   }
 
@@ -102,15 +111,97 @@ export class PetroCardWalletService {
   }
 
   /**
-   * Credit the wallet for a Payment Sheet line that has just been paid.
+   * What state is this recharge in, and is a live Payment Sheet line holding it?
    *
-   * Called from inside the payment sheet's own stamping transaction, so the credit and the PAID
-   * stamp commit together — the wallet can never hold money for a line that did not finish paying.
-   *
-   * The row carries `paymentSheetItemId`, which makes it read-only to the recharge CRUD: a paid
-   * line cannot be reverted, and deleting the recharge it produced would be a way round that.
+   * One round trip, because every guard below needs all three answers: the status, whether a
+   * sheet still claims it, and which sheet that is so the refusal can name it.
    */
-  async creditFromPaymentSheetItem(
+  private async loadRechargeState(id: string, em: EntityManager) {
+    const [row] = await em.query(
+      `
+        SELECT r."id", r."amount", r."status",
+               ${RECHARGE_CLAIMED_BY_LIVE_SHEET} AS "claimed",
+               ps."sheetNumber" AS "sheetNumber"
+          FROM petro_card_wallet_recharges r
+          LEFT JOIN payment_sheet_items psi ON psi."id" = r."paymentSheetItemId"
+          LEFT JOIN payment_sheets ps       ON ps."id"  = psi."paymentSheetId"
+         WHERE r."id" = $1 AND r."deletedAt" IS NULL
+      `,
+      [id],
+    );
+    if (!row) throw new NotFoundException(PETRO_CARD_WALLET_ERRORS.RECHARGE_NOT_FOUND);
+    return {
+      amount: Number(row.amount),
+      status: row.status as WalletRechargeStatus,
+      claimed: Boolean(row.claimed),
+      sheetNumber: (row.sheetNumber as string | null) ?? null,
+    };
+  }
+
+  /**
+   * A recharge may only be changed while it is still nothing but a request.
+   *
+   * Two different refusals on purpose: "already paid" is final and the user should stop, while
+   * "it is on sheet PS-0012" tells them exactly where to go to undo it.
+   */
+  private assertOutstanding(state: {
+    status: WalletRechargeStatus;
+    claimed: boolean;
+    sheetNumber: string | null;
+  }): void {
+    if (state.status === WalletRechargeStatus.PAID) {
+      throw new BadRequestException(PETRO_CARD_WALLET_ERRORS.RECHARGE_FROM_PAYMENT_SHEET);
+    }
+    if (state.claimed) {
+      throw new BadRequestException(
+        PETRO_CARD_WALLET_ERRORS.RECHARGE_ON_A_SHEET.replace(
+          '{sheet}',
+          state.sheetNumber ?? 'a Payment Sheet',
+        ),
+      );
+    }
+  }
+
+  /**
+   * Claim an outstanding recharge for a Payment Sheet line being added.
+   *
+   * Called from inside the sheet own transaction. Taking the link here rather than at payment
+   * is what stops one recharge being picked onto two sheets and paid twice; the unique index on
+   * the column is the backstop if two sheets are built at the same moment.
+   *
+   * Returns the amount, which the line is then built from — the initiator does not type it, so a
+   * line can never ask for more than was actually raised.
+   */
+  async claimForPaymentSheetItem(
+    params: { rechargeId: string; paymentSheetItemId: string; updatedBy: string },
+    em: EntityManager,
+  ): Promise<number> {
+    await this.lockWallet(em);
+    const state = await this.loadRechargeState(params.rechargeId, em);
+    if (state.status !== WalletRechargeStatus.PENDING || state.claimed) {
+      throw new BadRequestException(PETRO_CARD_WALLET_ERRORS.RECHARGE_NOT_OUTSTANDING);
+    }
+    await this.rechargeRepository.update(
+      { id: params.rechargeId },
+      { paymentSheetItemId: params.paymentSheetItemId, updatedBy: params.updatedBy },
+      em,
+    );
+    return state.amount;
+  }
+
+  /**
+   * Mark the recharge behind a Payment Sheet line PAID — the only thing that moves money into
+   * the wallet.
+   *
+   * Runs inside the sheet stamping transaction, so the credit and the PAID stamp commit together
+   * and the wallet can never hold money for a line that did not finish paying. Idempotent: a
+   * retried pay step finds the row already PAID and returns it.
+   *
+   * The payment details are written here rather than kept from when the recharge was raised,
+   * because until it is paid nobody knows the UTR, the mode, or which account it actually went
+   * from. The amount follows the line, so a figure trimmed at review is what lands in the wallet.
+   */
+  async markPaidForPaymentSheetItem(
     params: {
       paymentSheetItemId: string;
       amount: number;
@@ -119,46 +210,52 @@ export class PetroCardWalletService {
       paymentMode: string | null;
       paidFromAccountId: string | null;
       remarks: string | null;
-      createdBy: string;
+      updatedBy: string;
     },
     em: EntityManager,
   ) {
     await this.lockWallet(em);
 
-    // Idempotent: a retried pay step must not credit twice. The unique index backs this up, but
-    // returning the existing row keeps the retry a success rather than a constraint error.
     const existing = await this.rechargeRepository.findOne(
       { where: { paymentSheetItemId: params.paymentSheetItemId, deletedAt: IsNull() } },
       em,
     );
-    if (existing) return existing;
+    // No row means the line was built before this flow existed. Nothing to credit and nothing to
+    // guess at, so the pay step is allowed to finish rather than stranding the sheet.
+    if (!existing) return null;
+    if (existing.status === WalletRechargeStatus.PAID) return existing;
 
-    return await this.rechargeRepository.create(
+    await this.rechargeRepository.update(
+      { id: existing.id },
       {
+        status: WalletRechargeStatus.PAID,
         amount: params.amount,
         rechargeDate: params.rechargeDate,
         referenceNumber: params.referenceNumber,
         paymentMode: params.paymentMode,
         paidFromAccountId: params.paidFromAccountId,
         remarks: params.remarks,
-        paymentSheetItemId: params.paymentSheetItemId,
-        createdBy: params.createdBy,
+        updatedBy: params.updatedBy,
       },
       em,
     );
+    return await this.rechargeRepository.findOne({ where: { id: existing.id } }, em);
   }
-
-  /** A recharge that came from a paid payment sheet line is a record of a payment, not an entry. */
-  private assertManualRecharge(recharge: PetroCardWalletRechargeEntity): void {
-    if (recharge.paymentSheetItemId) {
-      throw new BadRequestException(PETRO_CARD_WALLET_ERRORS.RECHARGE_FROM_PAYMENT_SHEET);
-    }
-  }
-
+  /**
+   * Raise a recharge. This does **not** credit the wallet.
+   *
+   * It records that the company intends to put money on the cards. The row lands PENDING, shows up
+   * in the outstanding list, and the balance does not move until a Payment Sheet line for it is
+   * paid. Until that happened this method credited on the spot, which is how a balance appeared
+   * against a payment nobody had made.
+   *
+   * Payment details may be sent and are kept as what was intended; the pay step overwrites them
+   * with the UTR, mode and account the money actually went out on.
+   */
   async createRecharge(dto: CreateWalletRechargeDto, createdBy: string) {
     return await this.dataSource.transaction(async (em) => {
-      // A recharge changes the balance, so it takes the same lock a balance check does — otherwise
-      // it could land between another transaction's read and its write.
+      // The balance does not move here, but the same lock is still taken: the response reports it,
+      // and reporting a figure read outside the lock is how confusing screenshots start.
       await this.lockWallet(em);
       await this.assertBankAccountExists(dto.paidFromAccountId, em);
 
@@ -170,13 +267,20 @@ export class PetroCardWalletService {
           paymentMode: dto.paymentMode ?? null,
           paidFromAccountId: dto.paidFromAccountId ?? null,
           remarks: dto.remarks ?? null,
+          status: WalletRechargeStatus.PENDING,
           createdBy,
         },
         em,
       );
 
-      const { balance } = await this.getBalance(em);
-      return { message: PETRO_CARD_WALLET_RESPONSES.RECHARGE_CREATED, id: created.id, balance };
+      const { balance, outstandingRecharge } = await this.getBalance(em);
+      return {
+        message: PETRO_CARD_WALLET_RESPONSES.RECHARGE_CREATED,
+        id: created.id,
+        status: WalletRechargeStatus.PENDING,
+        balance,
+        outstandingRecharge,
+      };
     });
   }
 
@@ -184,12 +288,7 @@ export class PetroCardWalletService {
     return await this.dataSource.transaction(async (em) => {
       await this.lockWallet(em);
 
-      const existing = await this.rechargeRepository.findOne(
-        { where: { id, deletedAt: IsNull() } },
-        em,
-      );
-      if (!existing) throw new NotFoundException(PETRO_CARD_WALLET_ERRORS.RECHARGE_NOT_FOUND);
-      this.assertManualRecharge(existing);
+      this.assertOutstanding(await this.loadRechargeState(id, em));
 
       await this.assertBankAccountExists(dto.paidFromAccountId, em);
 
@@ -205,11 +304,15 @@ export class PetroCardWalletService {
 
       await this.rechargeRepository.update({ id }, patch, em);
 
-      // Reducing an amount can drive the balance negative, and that is allowed on purpose: the
-      // money may genuinely have been spent already. The consequence is that new petro-card fuel
-      // entries are refused until the wallet is topped up, which is the signal we want.
-      const { balance } = await this.getBalance(em);
-      return { message: PETRO_CARD_WALLET_RESPONSES.RECHARGE_UPDATED, id, balance };
+      // The balance cannot move here — only PENDING rows can be edited and they are not in it —
+      // but it is still returned so the screen that just saved has the current figures.
+      const { balance, outstandingRecharge } = await this.getBalance(em);
+      return {
+        message: PETRO_CARD_WALLET_RESPONSES.RECHARGE_UPDATED,
+        id,
+        balance,
+        outstandingRecharge,
+      };
     });
   }
 
@@ -217,20 +320,55 @@ export class PetroCardWalletService {
     return await this.dataSource.transaction(async (em) => {
       await this.lockWallet(em);
 
-      const existing = await this.rechargeRepository.findOne(
-        { where: { id, deletedAt: IsNull() } },
-        em,
-      );
-      if (!existing) throw new NotFoundException(PETRO_CARD_WALLET_ERRORS.RECHARGE_NOT_FOUND);
+      this.assertOutstanding(await this.loadRechargeState(id, em));
 
-      this.assertManualRecharge(existing);
-      // No reversal step: the row leaves the SUM, so the balance moves by itself.
+      // Withdrawing a request, not reversing money: a PENDING row was never in the balance, so
+      // there is nothing to put back.
       await this.rechargeRepository.update({ id }, { deletedBy, updatedBy: deletedBy }, em);
       await this.rechargeRepository.softDelete({ id }, em);
 
-      const { balance } = await this.getBalance(em);
-      return { message: PETRO_CARD_WALLET_RESPONSES.RECHARGE_DELETED, id, balance };
+      const { balance, outstandingRecharge } = await this.getBalance(em);
+      return {
+        message: PETRO_CARD_WALLET_RESPONSES.RECHARGE_DELETED,
+        id,
+        balance,
+        outstandingRecharge,
+      };
     });
+  }
+
+  /**
+   * What the wallet is still owed: raised, unpaid, and not already on a live Payment Sheet.
+   *
+   * The Payment Sheet's beneficiary picker reads this, which is the whole point — a wallet top-up
+   * is now picked from here rather than typed as a free amount, so the line can never ask for more
+   * than was actually raised.
+   *
+   * Its own list rather than a row in the per-employee pending-settlement API: a top-up has no
+   * employee, no employee code and no bank details, so it cannot take that shape without breaking
+   * it for every caller already reading those fields.
+   */
+  async getOutstanding(query: GetWalletRechargesDto) {
+    const { page = DefaultPaginationValues.PAGE, pageSize = DefaultPaginationValues.PAGE_SIZE } =
+      query;
+
+    const rows = await this.dataSource.query(outstandingRechargesQuery, [
+      pageSize,
+      (page - 1) * pageSize,
+    ]);
+
+    return {
+      records: rows.map((r: Record<string, unknown>) => ({
+        id: r.id,
+        amount: Number(r.amount),
+        rechargeDate: r.rechargeDate,
+        remarks: r.remarks,
+        raisedBy: r.raisedBy,
+        createdAt: r.createdAt,
+      })),
+      totalRecords: Number(rows[0]?.totalRecords ?? 0),
+      totalOutstanding: Number(rows[0]?.totalOutstanding ?? 0),
+    };
   }
 
   /** The recharge grid — recharges only, which is where the CRUD buttons live. */
@@ -268,6 +406,7 @@ export class PetroCardWalletService {
       records: records.map((r) => ({
         id: r.id,
         amount: Number(r.amount),
+        status: r.status,
         rechargeDate: r.rechargeDate,
         referenceNumber: r.referenceNumber,
         paymentMode: r.paymentMode,
@@ -330,6 +469,7 @@ export class PetroCardWalletService {
         meta:
           r.type === 'RECHARGE'
             ? {
+                status: r.rechargeStatus,
                 referenceNumber: r.referenceNumber,
                 paymentMode: r.paymentMode,
                 paidFromAccount: r.paidFromAccount,

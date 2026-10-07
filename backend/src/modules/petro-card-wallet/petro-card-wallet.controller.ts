@@ -52,6 +52,20 @@ export class PetroCardWalletController {
     return await this.walletService.getTransactions(query);
   }
 
+  @Get('outstanding')
+  @RequiredPermission('petro-card.wallet-view')
+  @ApiOperation({
+    summary: 'Outstanding wallet recharges — what the company still owes the cards',
+    description:
+      'Recharges that have been raised, are not paid, and are not already sitting on a live ' +
+      'Payment Sheet. This is what the Payment Sheet beneficiary picker reads for a wallet line: ' +
+      'the amount comes from the recharge, so a line can never ask for more than was raised. ' +
+      'Returns the running total alongside the page.',
+  })
+  async getOutstanding(@Query() query: GetWalletRechargesDto) {
+    return await this.walletService.getOutstanding(query);
+  }
+
   @Get('recharges')
   @RequiredPermission('petro-card.wallet-view')
   @ApiOperation({ summary: 'Recharge list — the CRUD grid' })
@@ -61,7 +75,14 @@ export class PetroCardWalletController {
 
   @Post('recharges')
   @RequiredPermission('petro-card.wallet-manage')
-  @ApiOperation({ summary: 'Record a wallet recharge' })
+  @ApiOperation({
+    summary: 'Raise a wallet recharge — does not credit the wallet',
+    description:
+      'Records that money is to be put on the cards. The recharge lands PENDING and appears in ' +
+      'the outstanding list; the balance moves only when a Payment Sheet line for it is paid. ' +
+      'Payment details sent here are kept as what was intended and are overwritten at payment ' +
+      'with the UTR, mode and account the money actually went out on.',
+  })
   async createRecharge(
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() dto: CreateWalletRechargeDto,
@@ -72,11 +93,11 @@ export class PetroCardWalletController {
   @Patch('recharges/:id')
   @RequiredPermission('petro-card.wallet-manage')
   @ApiOperation({
-    summary: 'Correct a wallet recharge',
+    summary: 'Correct a wallet recharge while it is still outstanding',
     description:
-      'Only the fields sent are changed. Reducing the amount can drive the balance negative when ' +
-      'the money has already been spent; that is allowed, and new petro-card fuel entries are ' +
-      'then refused until the wallet is topped up.',
+      'Only the fields sent are changed. Allowed only while the recharge is PENDING and no live ' +
+      'Payment Sheet is holding it — once it is on a sheet the amount must not move under the ' +
+      'accountant about to pay it, and once paid it is a record of a payment and is final.',
   })
   async updateRecharge(
     @Param('id', ParseUUIDPipe) id: string,
@@ -89,10 +110,11 @@ export class PetroCardWalletController {
   @Delete('recharges/:id')
   @RequiredPermission('petro-card.wallet-manage')
   @ApiOperation({
-    summary: 'Delete a wallet recharge',
+    summary: 'Withdraw an outstanding wallet recharge',
     description:
-      'The balance reverses by itself — the row simply leaves the sum. Allowed even when it makes ' +
-      'the balance negative.',
+      'Withdraws a request, it does not reverse money: a PENDING recharge was never in the ' +
+      'balance. Allowed only while it is outstanding — refused once a live Payment Sheet is ' +
+      'holding it, and once it has been paid.',
   })
   async deleteRecharge(
     @Param('id', ParseUUIDPipe) id: string,

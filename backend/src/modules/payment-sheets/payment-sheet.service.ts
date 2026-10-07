@@ -46,6 +46,7 @@ import { ExpenseTrackerService } from 'src/modules/expense-tracker/expense-track
 import { FuelExpenseService } from 'src/modules/fuel-expense/fuel-expense.service';
 import { BankTransferService } from 'src/modules/bank-transfers/bank-transfer.service';
 import { PetroCardWalletService } from 'src/modules/petro-card-wallet/petro-card-wallet.service';
+import { PETRO_CARD_WALLET_ERRORS } from 'src/modules/petro-card-wallet/constants/petro-card-wallet.constants';
 import { EmailService } from 'src/modules/common/email/email.service';
 import { PaymentSheetPdfService } from './payment-sheet-pdf.service';
 import { PartyType, getFinancialYear } from 'src/modules/common/financials/financial.constants';
@@ -258,13 +259,12 @@ export class PaymentSheetService {
       if (input.sourceType !== PaymentSourceType.PETRO_CARD_WALLET) {
         throw new BadRequestException(PAYMENT_SHEET_ERRORS.WALLET_SOURCE_MISMATCH);
       }
-      const requested = Number(input.requestedAmount);
-      if (!(requested > 0)) {
-        throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
+      if (!input.rechargeId) {
+        throw new BadRequestException(PETRO_CARD_WALLET_ERRORS.RECHARGE_ID_REQUIRED);
       }
-      // No pending source to check against: a wallet top-up is a decision, not a settlement of
-      // something already owed. The snapshot is the requested amount so the live-pending re-check
-      // at pay time has something consistent to compare with.
+      // The line is created first so the recharge has an id to be claimed by, then the claim runs
+      // and fails the whole transaction if that recharge is not outstanding — which is also what
+      // stops two sheets picking up the same top-up.
       const item = await this.repo.createItem(
         {
           paymentSheetId: sheetId,
@@ -272,9 +272,9 @@ export class PaymentSheetService {
           userId: null,
           vendorId: null,
           sourceType: PaymentSourceType.PETRO_CARD_WALLET,
-          pendingSnapshot: requested,
-          requestedAmount: requested,
-          currentAmount: requested,
+          pendingSnapshot: 0,
+          requestedAmount: 0,
+          currentAmount: 0,
           // No beneficiary, so nothing to snapshot. The PDF renders this case by name instead.
           bankSnapshot: null,
           itemStatus: PaymentSheetItemStatus.PENDING,
@@ -282,6 +282,22 @@ export class PaymentSheetService {
         },
         em,
       );
+
+      // The amount comes from the recharge, never from the request body: the initiator picks what
+      // was raised, so a line cannot quietly ask for more than the wallet was ever promised.
+      const amount = await this.petroCardWalletService.claimForPaymentSheetItem(
+        { rechargeId: input.rechargeId, paymentSheetItemId: item.id, updatedBy: createdBy },
+        em,
+      );
+      await this.repo.updateItem(
+        { id: item.id },
+        { pendingSnapshot: amount, requestedAmount: amount, currentAmount: amount },
+        em,
+      );
+      item.pendingSnapshot = amount;
+      item.requestedAmount = amount;
+      item.currentAmount = amount;
+
       return { item, allocations: [] };
     }
 
@@ -1679,11 +1695,12 @@ export class PaymentSheetService {
       );
       if (!fresh) throw new NotFoundException(PAYMENT_SHEET_ERRORS.ITEM_NOT_FOUND);
 
-      // "Tumhara bhi plus hoga jab payment ho jayega" — the wallet is credited here, on payment,
-      // not when the line was raised. Same transaction as the PAID stamp, so the two can never
-      // disagree; the unique index on paymentSheetItemId makes a retry idempotent.
+      // "Tumhara bhi plus hoga jab payment ho jayega" — the recharge becomes PAID here, on
+      // payment, not when it was raised, and PAID is the only state the balance counts. Same
+      // transaction as the PAID stamp, so the wallet and the sheet can never disagree; flipping an
+      // already-PAID row is a no-op, which makes a retried pay step idempotent.
       if (fresh.sourceType === PaymentSourceType.PETRO_CARD_WALLET) {
-        await this.petroCardWalletService.creditFromPaymentSheetItem(
+        await this.petroCardWalletService.markPaidForPaymentSheetItem(
           {
             paymentSheetItemId: fresh.id,
             amount,
@@ -1692,7 +1709,7 @@ export class PaymentSheetService {
             paymentMode: dto.paymentMode ?? null,
             paidFromAccountId: dto.paidFromAccountId ?? null,
             remarks: dto.description ?? `Recharged via Payment Sheet ${sheet.sheetNumber}`,
-            createdBy: user.id,
+            updatedBy: user.id,
           },
           em,
         );
