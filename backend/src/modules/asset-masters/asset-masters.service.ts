@@ -91,17 +91,24 @@ export class AssetMastersService {
               av."calibrationFrom", av."calibrationStartDate", av."calibrationEndDate",
               av."purchaseDate", av."vendorName", av."warrantyStartDate", av."warrantyEndDate",
               av.status, av.remarks,
+              -- Matched on the asset, not on a version id.
+              --
+              -- Uploads did not always record which version a file belonged to, so plenty of rows
+              -- carry a null there — a certificate uploaded through the calibration action was one
+              -- of them. Joining on the version made every such file invisible, and the report said
+              -- "no certificate" for assets that plainly had one. The upload now fills the version
+              -- in, but rows written before that still have to be found.
               EXISTS (
                 SELECT 1 FROM assets_files af
-                WHERE af."assetVersionId" = av.id
+                WHERE af."assetMasterId" = am.id
                   AND af."fileType" = 'CALIBRATION_CERTIFICATE'
                   AND af."deletedAt" IS NULL
               ) AS "hasCalibrationCertificate",
-              -- The certificate itself, for the annexure. Latest wins, matching what the public
-              -- certificate endpoint resolves, so the report and that link never disagree.
+              -- The certificate itself, for the annexure. Latest wins, on the same condition the
+              -- public certificate link uses, so the two can never disagree.
               (
                 SELECT af."fileKey" FROM assets_files af
-                WHERE af."assetVersionId" = av.id
+                WHERE af."assetMasterId" = am.id
                   AND af."fileType" = 'CALIBRATION_CERTIFICATE'
                   AND af."deletedAt" IS NULL
                 ORDER BY af."createdAt" DESC
@@ -145,8 +152,6 @@ export class AssetMastersService {
     const [file] = await this.dataSource.query(
       `SELECT af."fileKey"
        FROM assets_files af
-       JOIN asset_versions av
-         ON av.id = af."assetVersionId" AND av."isActive" = true AND av."deletedAt" IS NULL
        WHERE af."assetMasterId" = $1
          AND af."fileType" = 'CALIBRATION_CERTIFICATE'
          AND af."deletedAt" IS NULL
