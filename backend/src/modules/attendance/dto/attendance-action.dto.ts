@@ -12,53 +12,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { Transform, Type } from 'class-transformer';
 
-class AssignmentSnapshotSiteDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  name: string;
-
-  @IsString()
-  @IsOptional()
-  fullAddress?: string;
-}
-
-class AssignmentSnapshotCompanyDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  name: string;
-
-  @IsString()
-  @IsOptional()
-  fullAddress?: string;
-}
-
-class AssignmentSnapshotContractorDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  name: string;
-
-  // Accepted but not trusted: the server re-reads all three from the contractors master before
-  // storing. They are declared here only so a client that sends them keeps validating, which lets
-  // the app and the API deploy independently — the same reasoning as `assignedEngineer`.
-  @IsString()
-  @IsOptional()
-  city?: string;
-
-  @IsString()
-  @IsOptional()
-  state?: string;
-
-  @IsString()
-  @IsOptional()
-  gstNumber?: string;
-}
-
 class AssignmentSnapshotVehicleDto {
   @IsString()
   id: string;
@@ -106,23 +59,29 @@ export class AssignmentSnapshotDto {
   @IsUUID('4', { each: true })
   assignedDrivers?: string[];
 
-  @ApiPropertyOptional({ type: AssignmentSnapshotSiteDto })
-  @ValidateNested()
-  @Type(() => AssignmentSnapshotSiteDto)
+  /**
+   * Accepted and ignored.
+   *
+   * The project is resolved from the employee's allocation for that date, and the company and
+   * contractors follow from the project — none of the three is read from the request any more, and
+   * the sanitiser drops them before anything is stored.
+   *
+   * They stay declared because validation runs with `forbidNonWhitelisted`: removing them would
+   * turn an older mobile build's check-in into a 400 the moment the API deployed. Typed loosely on
+   * purpose — nothing reads them, so there is nothing to validate. Same reasoning as
+   * `assignedEngineer`, which has been accepted-and-dropped here for the same reason.
+   */
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored. Resolved from the allocation.' })
   @IsOptional()
-  site?: AssignmentSnapshotSiteDto;
-  jmc;
-  @ApiPropertyOptional({ type: AssignmentSnapshotCompanyDto })
-  @ValidateNested()
-  @Type(() => AssignmentSnapshotCompanyDto)
-  @IsOptional()
-  company?: AssignmentSnapshotCompanyDto;
+  site?: unknown;
 
-  @ApiPropertyOptional({ type: [AssignmentSnapshotContractorDto] })
-  @ValidateNested({ each: true })
-  @Type(() => AssignmentSnapshotContractorDto)
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored. Follows from the project.' })
   @IsOptional()
-  contractors?: AssignmentSnapshotContractorDto[];
+  company?: unknown;
+
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored. Follows from the project.' })
+  @IsOptional()
+  contractors?: unknown;
 
   @ApiPropertyOptional({ type: AssignmentSnapshotVehicleDto })
   @ValidateNested()

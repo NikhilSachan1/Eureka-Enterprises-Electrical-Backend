@@ -1,4 +1,5 @@
 import { AttendanceQueryDto } from '../dto/attendance-query.dto';
+import { allocatedSiteLateral } from './attendance-site.queries';
 import { ATTENDANCE_SORTABLE_FIELDS } from '../constants/attendance.constants';
 import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
@@ -124,6 +125,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
       a."approvalComment",
       a."notes",
       a."assignmentSnapshot" as "assignmentSnapshot",
+      alloc_site.site as "allocatedSite",
       ${DRIVERS_FOR_ROW},
       a."createdAt",
       a."updatedAt",
@@ -135,6 +137,7 @@ export function buildAttendanceListQuery(query: AttendanceQueryDto) {
     INNER JOIN "users" u ON a."userId" = u."id" AND u."deletedAt" IS NULL
     LEFT JOIN "users" cb ON a."createdBy" = cb."id" AND cb."deletedAt" IS NULL
     LEFT JOIN "users" ab ON a."approvalBy" = ab."id" AND ab."deletedAt" IS NULL
+    ${allocatedSiteLateral('a."userId"', 'a."attendanceDate"')}
     WHERE ${whereClause}
     ORDER BY ${orderByField} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}

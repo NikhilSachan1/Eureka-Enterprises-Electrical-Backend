@@ -49,21 +49,18 @@ export class AttendanceEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
-  // Stores site, vehicle, contractors, and assigned engineer at the time of attendance
+  /**
+   * What the employee actually chose on the day: the vehicle, and the engineer the pairing
+   * resolved to.
+   *
+   * Site, company and contractors used to live here too. They do not any more — the project is
+   * resolved from the employee's allocation for the attendance date on every read, so a stored
+   * copy could only go stale the moment an allocation was corrected. Rows written before this
+   * still carry those keys in the JSON; nothing reads them, and the sanitiser strips them from
+   * anything written from now on.
+   */
   @Column({ type: 'jsonb', nullable: true })
   assignmentSnapshot: {
-    site?: { id: string; name: string; fullAddress?: string };
-    company?: { id: string; name: string; fullAddress?: string };
-    // city / state / gstNumber are read from the contractors master when the snapshot is written,
-    // never taken from the client. Optional because rows written before that existed have only
-    // id and name.
-    contractors?: Array<{
-      id: string;
-      name: string;
-      city?: string;
-      state?: string;
-      gstNumber?: string;
-    }>;
     vehicle?: { id: string; registrationNo: string };
     assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
   };

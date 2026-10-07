@@ -23,17 +23,15 @@ export interface AssignedEngineerSnapshot {
 }
 
 /**
- * The engineer a driver was with, plus the site context that engineer recorded for that day.
+ * The engineer a driver was with, plus the vehicle that engineer recorded for that day.
  *
- * A driver has no site context of his own to give — he is wherever his engineer was — so these
- * fields are inherited rather than asked for. Shapes mirror `attendances.assignmentSnapshot`
- * exactly, so a caller can spread them straight onto a snapshot.
+ * Site, company and contractors used to be inherited here, on the reasoning that a driver is
+ * wherever his engineer was. They are gone: the project is resolved from the driver's own
+ * allocation for the date, so a second inherited answer could only disagree with it — and
+ * engineers no longer store those fields, so there is nothing left to read.
  */
 export interface DriverAssignmentContext {
   engineer: AssignedEngineerSnapshot | null;
-  site?: { id: string; name: string; fullAddress?: string };
-  company?: { id: string; name: string; fullAddress?: string };
-  contractors?: Array<{ id: string; name: string }>;
   vehicle?: { id: string; registrationNo: string };
 }
 
@@ -151,9 +149,6 @@ export class DriverAssignmentService {
         lastName: row.lastName,
         employeeId: row.employeeId,
       },
-      site: engineerSnapshot.site,
-      company: engineerSnapshot.company,
-      contractors: engineerSnapshot.contractors,
       vehicle: engineerSnapshot.vehicle,
     };
   }

@@ -73,6 +73,25 @@ export class AttendanceRecordDto {
     type: AssignmentSnapshotDto,
     description: 'Site, company, contractors, vehicle, and assigned engineer at time of attendance',
   })
+  @ApiPropertyOptional({
+    description:
+      'The project this employee was allocated to on this date, with the details the attendance ' +
+      'screens show. Resolved from the allocation every time it is read, never stored on the ' +
+      'attendance row — so correcting an allocation shows up here immediately, on every day it ' +
+      'covers, without anyone re-editing attendance. Null when there is no allocation for the date.',
+  })
+  site?: {
+    id: string;
+    name: string;
+    fullAddress: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    status: string | null;
+    startDate: string | null;
+    managerName: string | null;
+  } | null;
+
   assignmentSnapshot?: AssignmentSnapshotDto;
 
   @ApiPropertyOptional({

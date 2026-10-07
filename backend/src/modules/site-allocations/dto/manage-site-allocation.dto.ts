@@ -39,6 +39,14 @@ export class AllocationItemDto {
   allocatedAt: string;
 
   @ApiPropertyOptional({
+    description: 'Date the allocation ends (inclusive). Omit for an open-ended allocation.',
+    example: '2024-01-20',
+  })
+  @IsOptional()
+  @IsDateString()
+  deallocatedAt?: string;
+
+  @ApiPropertyOptional({
     description: 'Type of allocation',
     default: SITE_ALLOCATION_DEFAULTS.ALLOCATION_TYPE,
   })
