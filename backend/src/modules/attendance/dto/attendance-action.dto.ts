@@ -12,14 +12,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { Transform, Type } from 'class-transformer';
 
-class AssignmentSnapshotVehicleDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  registrationNo: string;
-}
-
 // Validated more strictly than the rest of the snapshot: clients were sending an
 // uninitialised `{id:"", firstName:"", ...}`, which bare @IsString() accepts, and it
 // was then stored and served as a real engineer.
@@ -83,11 +75,14 @@ export class AssignmentSnapshotDto {
   @IsOptional()
   contractors?: unknown;
 
-  @ApiPropertyOptional({ type: AssignmentSnapshotVehicleDto })
-  @ValidateNested()
-  @Type(() => AssignmentSnapshotVehicleDto)
+  @ApiPropertyOptional({
+    deprecated: true,
+    description:
+      'Ignored. The vehicle is read from the handover the office recorded, for the day in ' +
+      'question, rather than chosen here. Still accepted so an older app keeps working.',
+  })
   @IsOptional()
-  vehicle?: AssignmentSnapshotVehicleDto;
+  vehicle?: unknown;
 
   @ApiPropertyOptional({ type: AssignmentSnapshotEngineerDto })
   @ValidateNested()
@@ -128,7 +123,9 @@ export class AttendanceActionDto {
 
   @ApiPropertyOptional({
     description:
-      'Assignment snapshot containing site, company, contractors, vehicle, and assigned engineer details',
+      'Only assignedEngineer is read, and only on a driver check-in. Site, company, contractors ' +
+      'and vehicle are accepted and ignored — they are resolved from the allocation and the ' +
+      'handover on every read.',
     type: AssignmentSnapshotDto,
   })
   @ValidateNested()

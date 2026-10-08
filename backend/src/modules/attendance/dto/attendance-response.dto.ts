@@ -71,7 +71,9 @@ export class AttendanceRecordDto {
 
   @ApiPropertyOptional({
     type: AssignmentSnapshotDto,
-    description: 'Site, company, contractors, vehicle, and assigned engineer at time of attendance',
+    description:
+      'What was stated at check-in. Site, company, contractors and vehicle are no longer part of ' +
+      'it — see the resolved site and vehicle fields instead.',
   })
   @ApiPropertyOptional({
     description:
@@ -90,6 +92,19 @@ export class AttendanceRecordDto {
     status: string | null;
     startDate: string | null;
     managerName: string | null;
+  } | null;
+
+  @ApiPropertyOptional({
+    description:
+      'The vehicle this employee was holding on this date. Resolved from the handover events ' +
+      'every time it is read, never chosen in the app and never stored on the attendance row, so ' +
+      'a corrected handover shows up here on every day it covers. Replayed to the day in ' +
+      'question, so an older record shows whoever actually had the vehicle then. Null for ' +
+      'anyone not holding one, which is most employees.',
+  })
+  vehicle?: {
+    id: string;
+    registrationNo: string;
   } | null;
 
   assignmentSnapshot?: AssignmentSnapshotDto;

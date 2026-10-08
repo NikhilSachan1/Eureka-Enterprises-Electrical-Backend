@@ -61,7 +61,6 @@ export class AttendanceEntity extends BaseEntity {
    */
   @Column({ type: 'jsonb', nullable: true })
   assignmentSnapshot: {
-    vehicle?: { id: string; registrationNo: string };
     assignedEngineer?: { id: string; firstName: string; lastName: string; employeeId: string };
   };
 

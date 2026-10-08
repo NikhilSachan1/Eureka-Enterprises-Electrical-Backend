@@ -32,7 +32,6 @@ export interface AssignedEngineerSnapshot {
  */
 export interface DriverAssignmentContext {
   engineer: AssignedEngineerSnapshot | null;
-  vehicle?: { id: string; registrationNo: string };
 }
 
 @Injectable()
@@ -99,11 +98,14 @@ export class DriverAssignmentService {
   }
 
   /**
-   * The engineer **and** his recorded site context for a driver's day.
+   * The engineer a driver's day resolves to.
    *
    * Same pairing conditions as `resolveAssignedEngineer` — including the worked-status filter — so
-   * the two can never disagree about whether a pairing resolves. The only addition is reading the
-   * engineer's own `assignmentSnapshot` off the row it already joins to.
+   * the two can never disagree about whether a pairing resolves.
+   *
+   * It used to carry the engineer's vehicle across to the driver as well. It no longer does: the
+   * vehicle is read from the handover the office recorded for that day, so a copy taken off
+   * someone else's attendance row could only be a second, staler answer.
    *
    * Returns null on exactly the same terms as `resolveAssignedEngineer`: not a driver, nobody
    * claimed them that day, or the paired engineer's day no longer counts as worked.
@@ -116,8 +118,7 @@ export class DriverAssignmentService {
     const dateStr = this.toDateString(workDate);
 
     const [row] = await (em ?? this.dataSource).query(
-      `SELECT u."id", u."firstName", u."lastName", u."employeeId",
-              a."assignmentSnapshot" AS "engineerSnapshot"
+      `SELECT u."id", u."firstName", u."lastName", u."employeeId"
        FROM "driver_day_assignments" da
        INNER JOIN "users" u ON u."id" = da."engineerId" AND u."deletedAt" IS NULL
        INNER JOIN "attendances" a
@@ -137,11 +138,6 @@ export class DriverAssignmentService {
       return null;
     }
 
-    // node-pg parses jsonb already. An engineer whose row was created by the midnight cron has a
-    // null snapshot — the context is then just the engineer, and the caller keeps whatever the
-    // driver already had rather than having it wiped.
-    const engineerSnapshot = (row.engineerSnapshot ?? {}) as DriverAssignmentContext;
-
     return {
       engineer: {
         id: row.id,
@@ -149,7 +145,6 @@ export class DriverAssignmentService {
         lastName: row.lastName,
         employeeId: row.employeeId,
       },
-      vehicle: engineerSnapshot.vehicle,
     };
   }
 
