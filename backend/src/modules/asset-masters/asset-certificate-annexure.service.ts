@@ -53,6 +53,14 @@ interface Plan {
   image: PDFImage | null;
   pageCount: number;
   missing: boolean;
+  /**
+   * True when a file *is* attached but could not be read.
+   *
+   * Worth telling apart from nothing being uploaded: one asks someone to go and upload a
+   * certificate, the other to re-upload a file that is already there in a form we can open. A
+   * page that says only "not on file" sends the reader looking for the wrong problem.
+   */
+  unreadable: boolean;
 }
 
 /**
@@ -112,8 +120,8 @@ export class AssetCertificateAnnexureService {
     for (const p of plans) {
       if (p.missing) {
         const page = doc.addPage([size.w, size.h]);
-        this.drawBand(page, p.source, bold, font, 1, 1, size, true);
-        this.drawMissingNotice(page, bold, font, size);
+        this.drawBand(page, p.source, bold, font, 1, 1, size, true, p.unreadable);
+        this.drawMissingNotice(page, bold, font, size, p.unreadable);
         continue;
       }
       if (p.image) {
@@ -140,7 +148,14 @@ export class AssetCertificateAnnexureService {
    * report, and a page that admits the gap is more useful in an audit than a silently skipped one.
    */
   private async plan(doc: PDFDocument, source: CertificateSource): Promise<Plan> {
-    const miss = (): Plan => ({ source, embedded: [], image: null, pageCount: 1, missing: true });
+    const miss = (reason?: string): Plan => ({
+      source,
+      embedded: [],
+      image: null,
+      pageCount: 1,
+      missing: true,
+      unreadable: Boolean(reason),
+    });
     if (!source.fileKey) return miss();
 
     let bytes: Buffer;
@@ -148,7 +163,7 @@ export class AssetCertificateAnnexureService {
       bytes = await this.filesService.getFileContent(source.fileKey);
     } catch (err) {
       this.logger.warn(`Certificate unreadable for asset ${source.assetId}: ${err}`);
-      return miss();
+      return miss('download');
     }
 
     if (bytes.subarray(0, 5).toString('latin1') === '%PDF-') {
@@ -156,22 +171,46 @@ export class AssetCertificateAnnexureService {
         // Ignoring encryption reads the certificates that carry only an owner password, which is
         // the common case for an issued document.
         const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+        if (!src.getPageIndices().length) return miss('empty');
+
+        // Decode once against a throwaway document before going near the real one.
+        //
+        // embedPdf does not decode anything — it registers the pages on the target document and
+        // the streams are decompressed later, inside doc.save(). So a certificate pdf-lib cannot
+        // read threw long after this method had returned, outside the catch below, and 500'd the
+        // whole export: one unreadable attachment cost every asset on the sheet. Catching it here
+        // is not enough on its own either, because the pages it already registered stay queued on
+        // the target and throw again at save. Probing on a document we discard keeps the real one
+        // clean, at the cost of decoding a valid certificate twice — cheap, and only on a report.
+        const probe = await PDFDocument.create();
+        await Promise.all((await probe.embedPdf(src, src.getPageIndices())).map((p) => p.embed()));
+
         const embedded = await doc.embedPdf(src, src.getPageIndices());
-        if (!embedded.length) return miss();
-        return { source, embedded, image: null, pageCount: embedded.length, missing: false };
+        if (!embedded.length) return miss('empty');
+        return {
+          source,
+          embedded,
+          image: null,
+          pageCount: embedded.length,
+          missing: false,
+          unreadable: false,
+        };
       } catch (err) {
         this.logger.warn(`Certificate PDF unreadable for asset ${source.assetId}: ${err}`);
-        return miss();
+        return miss('pdf');
       }
     }
 
     try {
       const isJpg = bytes.subarray(0, 2).toString('hex') === 'ffd8';
       const image = isJpg ? await doc.embedJpg(bytes) : await doc.embedPng(bytes);
-      return { source, embedded: [], image, pageCount: 1, missing: false };
+      // Same deferral as above — an image that only fails once it is written out would otherwise
+      // escape this catch and 500 the report.
+      await image.embed();
+      return { source, embedded: [], image, pageCount: 1, missing: false, unreadable: false };
     } catch (err) {
       this.logger.warn(`Certificate image unreadable for asset ${source.assetId}: ${err}`);
-      return miss();
+      return miss('image');
     }
   }
 
@@ -201,6 +240,8 @@ export class AssetCertificateAnnexureService {
     size: PageSize,
     /** A page standing in for a certificate that is not there — the band must not claim one. */
     missing = false,
+    /** Missing because the attached file could not be opened, rather than because none exists. */
+    unreadable = false,
   ) {
     page.drawRectangle({ x: 0, y: size.h - BAND_H, width: size.w, height: BAND_H, color: BRAND });
 
@@ -221,7 +262,9 @@ export class AssetCertificateAnnexureService {
     page.drawText(cal, { x: MARGIN, y: size.h - 37, size: 8.5, font, color: BAND_TEXT });
 
     const right = missing
-      ? 'Certificate not on file'
+      ? unreadable
+        ? 'Certificate attached but unreadable'
+        : 'Certificate not on file'
       : pageCount > 1
       ? `Certificate page ${pageNo} of ${pageCount}`
       : 'Calibration certificate';
@@ -234,8 +277,16 @@ export class AssetCertificateAnnexureService {
     });
   }
 
-  private drawMissingNotice(page: PDFPage, bold: PDFFont, font: PDFFont, size: PageSize) {
-    const title = 'No calibration certificate on file';
+  private drawMissingNotice(
+    page: PDFPage,
+    bold: PDFFont,
+    font: PDFFont,
+    size: PageSize,
+    unreadable = false,
+  ) {
+    const title = unreadable
+      ? 'Calibration certificate could not be read'
+      : 'No calibration certificate on file';
     page.drawText(title, {
       x: (size.w - bold.widthOfTextAtSize(title, 16)) / 2,
       y: size.h / 2,
@@ -243,7 +294,9 @@ export class AssetCertificateAnnexureService {
       font: bold,
       color: INK,
     });
-    const sub = 'No calibration certificate is uploaded against this asset.';
+    const sub = unreadable
+      ? 'A file is attached to this asset but could not be opened. Please re-upload it as a PDF or image.'
+      : 'No calibration certificate is uploaded against this asset.';
     page.drawText(sub, {
       x: (size.w - font.widthOfTextAtSize(sub, 10)) / 2,
       y: size.h / 2 - 20,
@@ -302,7 +355,9 @@ export class AssetCertificateAnnexureService {
       page.drawText(this.safe(p.source.name, 60), { x: cols.name, y, size: 9, font, color: INK });
       const last = starts[i] + p.pageCount - 1;
       const label = p.missing
-        ? 'Not on file'
+        ? p.unreadable
+          ? 'Unreadable file'
+          : 'Not on file'
         : `Page ${starts[i]}${p.pageCount > 1 ? ` to ${last}` : ''}`;
       page.drawText(label, { x: cols.status, y, size: 9, font, color: p.missing ? MUTED : INK });
       y -= 15;
