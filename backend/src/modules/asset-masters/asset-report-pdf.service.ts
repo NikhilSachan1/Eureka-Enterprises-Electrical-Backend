@@ -4,6 +4,10 @@ import * as http from 'http';
 import puppeteer from 'puppeteer';
 import { FilesService } from 'src/modules/common/file-upload/files.service';
 import { PAYMENT_ADVICE_COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
+import {
+  AssetCertificateAnnexureService,
+  CertificateSource,
+} from './asset-certificate-annexure.service';
 
 export interface AssetReportRow {
   assetMasterId?: string;
@@ -37,13 +41,24 @@ export class AssetReportPdfService {
   private readonly logger = new Logger(AssetReportPdfService.name);
   private static readonly EXPIRING_SOON_DAYS = 30;
 
-  constructor(private readonly filesService: FilesService) {}
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly annexureService: AssetCertificateAnnexureService,
+  ) {}
 
   async getDownloadUrl(key: string) {
     return await this.filesService.getDownloadFileUrl(key);
   }
 
-  async generate(assets: AssetReportRow[], certBaseUrl?: string): Promise<string> {
+  /**
+   * @param opts.certificates One entry per asset. Each one's calibration certificate is appended
+   *   to the report as an annexure, behind an index page. Omit to get the table alone.
+   */
+  async generate(
+    assets: AssetReportRow[],
+    certBaseUrl?: string,
+    opts?: { certificates?: CertificateSource[] },
+  ): Promise<string> {
     const logoBase64 = await this.fetchUrlAsBase64(PAYMENT_ADVICE_COMPANY_DETAILS.LOGO_URL).catch(
       () => null,
     );
@@ -75,8 +90,14 @@ export class AssetReportPdfService {
           margin: { top: '20px', bottom: '46px', left: '24px', right: '24px' },
         }),
       );
+      // The annexure is merged after rendering, not built into the HTML: a certificate may be a
+      // PDF, and a PDF cannot be inlined into a page puppeteer renders.
+      const finalPdf = opts?.certificates?.length
+        ? await this.annexureService.append(pdfBuffer, opts.certificates)
+        : pdfBuffer;
+
       const key = `asset-reports/asset-report-${this.timestampSlug()}.pdf`;
-      await this.filesService.uploadFile(pdfBuffer, key, 'application/pdf');
+      await this.filesService.uploadFile(finalPdf, key, 'application/pdf');
       return key;
     } catch (err) {
       this.logger.error(`Asset report PDF generation failed: ${err}`);

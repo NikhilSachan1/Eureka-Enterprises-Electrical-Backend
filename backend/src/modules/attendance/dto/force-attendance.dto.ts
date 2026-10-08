@@ -91,7 +91,8 @@ export class ForceAttendanceDto {
 
   @ApiPropertyOptional({
     description:
-      'Assignment snapshot containing site, company, contractors, vehicle, and assigned engineer details',
+      'Only assignedEngineer is read. Site, company, contractors and vehicle are accepted and ' +
+      'ignored — they are resolved from the allocation and the handover on every read.',
     type: AssignmentSnapshotDto,
   })
   @ValidateNested()

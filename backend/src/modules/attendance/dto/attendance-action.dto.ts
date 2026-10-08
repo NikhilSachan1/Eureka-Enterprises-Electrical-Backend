@@ -12,61 +12,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { Transform, Type } from 'class-transformer';
 
-class AssignmentSnapshotSiteDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  name: string;
-
-  @IsString()
-  @IsOptional()
-  fullAddress?: string;
-}
-
-class AssignmentSnapshotCompanyDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  name: string;
-
-  @IsString()
-  @IsOptional()
-  fullAddress?: string;
-}
-
-class AssignmentSnapshotContractorDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  name: string;
-
-  // Accepted but not trusted: the server re-reads all three from the contractors master before
-  // storing. They are declared here only so a client that sends them keeps validating, which lets
-  // the app and the API deploy independently — the same reasoning as `assignedEngineer`.
-  @IsString()
-  @IsOptional()
-  city?: string;
-
-  @IsString()
-  @IsOptional()
-  state?: string;
-
-  @IsString()
-  @IsOptional()
-  gstNumber?: string;
-}
-
-class AssignmentSnapshotVehicleDto {
-  @IsString()
-  id: string;
-
-  @IsString()
-  registrationNo: string;
-}
-
 // Validated more strictly than the rest of the snapshot: clients were sending an
 // uninitialised `{id:"", firstName:"", ...}`, which bare @IsString() accepts, and it
 // was then stored and served as a real engineer.
@@ -106,29 +51,38 @@ export class AssignmentSnapshotDto {
   @IsUUID('4', { each: true })
   assignedDrivers?: string[];
 
-  @ApiPropertyOptional({ type: AssignmentSnapshotSiteDto })
-  @ValidateNested()
-  @Type(() => AssignmentSnapshotSiteDto)
+  /**
+   * Accepted and ignored.
+   *
+   * The project is resolved from the employee's allocation for that date, and the company and
+   * contractors follow from the project — none of the three is read from the request any more, and
+   * the sanitiser drops them before anything is stored.
+   *
+   * They stay declared because validation runs with `forbidNonWhitelisted`: removing them would
+   * turn an older mobile build's check-in into a 400 the moment the API deployed. Typed loosely on
+   * purpose — nothing reads them, so there is nothing to validate. Same reasoning as
+   * `assignedEngineer`, which has been accepted-and-dropped here for the same reason.
+   */
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored. Resolved from the allocation.' })
   @IsOptional()
-  site?: AssignmentSnapshotSiteDto;
-  jmc;
-  @ApiPropertyOptional({ type: AssignmentSnapshotCompanyDto })
-  @ValidateNested()
-  @Type(() => AssignmentSnapshotCompanyDto)
-  @IsOptional()
-  company?: AssignmentSnapshotCompanyDto;
+  site?: unknown;
 
-  @ApiPropertyOptional({ type: [AssignmentSnapshotContractorDto] })
-  @ValidateNested({ each: true })
-  @Type(() => AssignmentSnapshotContractorDto)
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored. Follows from the project.' })
   @IsOptional()
-  contractors?: AssignmentSnapshotContractorDto[];
+  company?: unknown;
 
-  @ApiPropertyOptional({ type: AssignmentSnapshotVehicleDto })
-  @ValidateNested()
-  @Type(() => AssignmentSnapshotVehicleDto)
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored. Follows from the project.' })
   @IsOptional()
-  vehicle?: AssignmentSnapshotVehicleDto;
+  contractors?: unknown;
+
+  @ApiPropertyOptional({
+    deprecated: true,
+    description:
+      'Ignored. The vehicle is read from the handover the office recorded, for the day in ' +
+      'question, rather than chosen here. Still accepted so an older app keeps working.',
+  })
+  @IsOptional()
+  vehicle?: unknown;
 
   @ApiPropertyOptional({ type: AssignmentSnapshotEngineerDto })
   @ValidateNested()
@@ -169,7 +123,9 @@ export class AttendanceActionDto {
 
   @ApiPropertyOptional({
     description:
-      'Assignment snapshot containing site, company, contractors, vehicle, and assigned engineer details',
+      'Only assignedEngineer is read, and only on a driver check-in. Site, company, contractors ' +
+      'and vehicle are accepted and ignored — they are resolved from the allocation and the ' +
+      'handover on every read.',
     type: AssignmentSnapshotDto,
   })
   @ValidateNested()

@@ -3,6 +3,7 @@ import { AssetMastersService } from './asset-masters.service';
 import { AssetMastersController } from './asset-masters.controller';
 import { AssetMastersRepository } from './asset-masters.repository';
 import { AssetReportPdfService } from './asset-report-pdf.service';
+import { AssetCertificateAnnexureService } from './asset-certificate-annexure.service';
 import { FilesModule } from '../common/file-upload/files.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssetMasterEntity } from './entities/asset-master.entity';
@@ -29,7 +30,12 @@ import { UsersModule } from '../users/user.module';
     FilesModule,
   ],
   controllers: [AssetMastersController],
-  providers: [AssetMastersService, AssetMastersRepository, AssetReportPdfService],
+  providers: [
+    AssetMastersService,
+    AssetMastersRepository,
+    AssetReportPdfService,
+    AssetCertificateAnnexureService,
+  ],
   exports: [AssetMastersService],
 })
 export class AssetMastersModule {}

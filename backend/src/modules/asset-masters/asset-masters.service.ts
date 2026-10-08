@@ -57,6 +57,10 @@ import { UserService } from '../users/user.service';
 import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 import { AssetVersionEntity } from '../asset-versions/entities/asset-versions.entity';
 import { UserEntity } from '../users/entities/user.entity';
+import {
+  IS_CALIBRATION_CERTIFICATE,
+  latestCalibrationCertificate,
+} from './queries/calibration-certificate.query';
 
 @Injectable()
 export class AssetMastersService {
@@ -91,12 +95,28 @@ export class AssetMastersService {
               av."calibrationFrom", av."calibrationStartDate", av."calibrationEndDate",
               av."purchaseDate", av."vendorName", av."warrantyStartDate", av."warrantyEndDate",
               av.status, av.remarks,
+              -- Matched on the asset, not on a version id.
+              --
+              -- Uploads did not always record which version a file belonged to, so plenty of rows
+              -- carry a null there — a certificate uploaded through the calibration action was one
+              -- of them. Joining on the version made every such file invisible, and the report said
+              -- "no certificate" for assets that plainly had one. The upload now fills the version
+              -- in, but rows written before that still have to be found.
+              --
+              -- What counts as the certificate lives in one predicate, shared with the public
+              -- certificate link below — see its own file for why the label is read as well as the
+              -- type.
               EXISTS (
                 SELECT 1 FROM assets_files af
-                WHERE af."assetVersionId" = av.id
-                  AND af."fileType" = 'CALIBRATION_CERTIFICATE'
+                WHERE af."assetMasterId" = am.id
+                  AND ${IS_CALIBRATION_CERTIFICATE}
                   AND af."deletedAt" IS NULL
-              ) AS "hasCalibrationCertificate"
+              ) AS "hasCalibrationCertificate",
+              -- The certificate itself, for the annexure. Latest wins, on the same condition the
+              -- public certificate link uses, so the two can never disagree.
+              (
+                ${latestCalibrationCertificate('af."assetMasterId" = am.id')}
+              ) AS "calibrationCertificateKey"
        FROM asset_masters am
        JOIN asset_versions av
          ON av."assetMasterId" = am.id AND av."isActive" = true AND av."deletedAt" IS NULL
@@ -111,7 +131,18 @@ export class AssetMastersService {
 
     // Absolute base for the public "view calibration certificate" links embedded in the PDF.
     const certBaseUrl = Environments.API_BASE_URL;
-    const key = await this.assetReportPdfService.generate(rows, certBaseUrl);
+    const key = await this.assetReportPdfService.generate(rows, certBaseUrl, {
+      // Every selected asset appears in the annexure, including those with nothing on file —
+      // a page that admits the gap is more useful in an audit than a silent omission.
+      certificates: rows.map((r: any) => ({
+        assetMasterId: r.assetMasterId,
+        assetId: r.assetId,
+        name: r.name,
+        calibrationStartDate: r.calibrationStartDate,
+        calibrationEndDate: r.calibrationEndDate,
+        fileKey: r.calibrationCertificateKey ?? null,
+      })),
+    });
     return await this.assetReportPdfService.getDownloadUrl(key);
   }
 
@@ -122,15 +153,7 @@ export class AssetMastersService {
    */
   async getCalibrationCertificateUrl(assetMasterId: string) {
     const [file] = await this.dataSource.query(
-      `SELECT af."fileKey"
-       FROM assets_files af
-       JOIN asset_versions av
-         ON av.id = af."assetVersionId" AND av."isActive" = true AND av."deletedAt" IS NULL
-       WHERE af."assetMasterId" = $1
-         AND af."fileType" = 'CALIBRATION_CERTIFICATE'
-         AND af."deletedAt" IS NULL
-       ORDER BY af."createdAt" DESC
-       LIMIT 1`,
+      latestCalibrationCertificate('af."assetMasterId" = $1'),
       [assetMasterId],
     );
     if (!file) {

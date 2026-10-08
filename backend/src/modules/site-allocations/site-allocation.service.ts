@@ -16,6 +16,12 @@ import {
   ManageSiteAllocationDto,
 } from './dto';
 import {
+  overlappingAllocationsQuery,
+  openEndedAllocationsBeforeQuery,
+  attendanceDaysInRangeQuery,
+  generatedPayrollMonthsInRangeQuery,
+} from './queries/site-allocation.queries';
+import {
   SITE_ALLOCATION_ERRORS,
   SITE_ALLOCATION_RESPONSES,
   SiteAllocationEntityFields,
@@ -52,21 +58,105 @@ export class SiteAllocationService {
     private readonly utilityService: UtilityService,
   ) {}
 
+  /**
+   * A calendar day as a Date, anchored at local noon.
+   *
+   * These columns hold a day, not an instant. Parsing '2027-03-01' gives UTC midnight, which in
+   * IST is the evening of 28 February — so a stored date, or a date arrived at by subtracting a
+   * day, can land on the wrong one. Noon is far enough from both edges that no offset reaches it.
+   */
+  private dayOf(value: string | Date): Date {
+    const iso =
+      value instanceof Date
+        ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(
+            value.getDate(),
+          ).padStart(2, '0')}`
+        : String(value).slice(0, 10);
+    return new Date(`${iso}T12:00:00`);
+  }
+
+  /** A clash between the range being saved and one of the employee's other allocations. */
+  private async findClashes(
+    userId: string,
+    from: Date,
+    to: Date | null,
+    ignoreAllocationId: string | null,
+  ): Promise<Array<{ id: string; siteName: string; overlapDays: number }>> {
+    const rows = await this.siteAllocationRepository.raw(overlappingAllocationsQuery, [
+      userId,
+      from,
+      to,
+      ignoreAllocationId,
+    ]);
+    return rows.map((r: any) => ({
+      id: r.id,
+      siteName: r.siteName,
+      overlapDays: Number(r.overlapDays),
+    }));
+  }
+
+  private describeClashes(clashes: Array<{ siteName: string; overlapDays: number }>): string {
+    return clashes
+      .map((c) => `${c.siteName} (${c.overlapDays} day${c.overlapDays === 1 ? '' : 's'})`)
+      .join(', ');
+  }
+
+  private assertValidRange(from: Date, to: Date | null): void {
+    if (to && to < from) {
+      throw new BadRequestException(SITE_ALLOCATION_ERRORS.INVALID_DATE_RANGE);
+    }
+  }
+
+  /**
+   * Close any open-ended allocation that would otherwise swallow the new one.
+   *
+   * An open end means "until further notice"; a transfer is that notice. Without this, every
+   * transfer would be a two-step job, and the clash check would refuse the second step — which is
+   * exactly the trap the old flag-based check had.
+   */
+  private async closeOpenEndedBefore(
+    userId: string,
+    newStart: Date,
+    updatedBy: string,
+  ): Promise<{ siteName: string; closedOn: Date } | null> {
+    const rows = await this.siteAllocationRepository.raw(openEndedAllocationsBeforeQuery, [
+      userId,
+      newStart,
+    ]);
+    if (!rows.length) return null;
+
+    const closeOn = this.dayOf(newStart);
+    closeOn.setDate(closeOn.getDate() - 1);
+
+    for (const row of rows) {
+      await this.siteAllocationRepository.update(
+        { id: row.id },
+        { deallocatedAt: closeOn, isCurrentlyAllocated: false, updatedBy },
+      );
+    }
+    return { siteName: rows[0].siteName, closedOn: closeOn };
+  }
+
   async create(createDto: CreateSiteAllocationDto, createdBy: string) {
     // Validate site exists
     await this.siteService.findOneOrFail({ where: { id: createDto.siteId } });
 
-    // Check if employee is already allocated to another site
-    // Note: User existence is validated by FK constraint
-    const currentAllocation = await this.findOne({
-      where: { userId: createDto.userId, isCurrentlyAllocated: true, deletedAt: IsNull() },
-      relations: ['site'],
-    });
-    if (currentAllocation) {
-      if (currentAllocation.siteId === createDto.siteId) {
-        throw new ConflictException(SITE_ALLOCATION_ERRORS.EMPLOYEE_ALREADY_IN_SITE);
-      }
-      throw new ConflictException(SITE_ALLOCATION_ERRORS.EMPLOYEE_ALREADY_ALLOCATED);
+    // Dates, not a flag. The old check asked "is this employee allocated at all?", which refused a
+    // backfill for last August because they had a booking for next week. The question that matters
+    // is whether they are free **on these dates**.
+    const from = this.dayOf(createDto.allocatedAt);
+    const to = createDto.deallocatedAt ? this.dayOf(createDto.deallocatedAt) : null;
+    this.assertValidRange(from, to);
+
+    // Done before the clash check: an open end covers every future date, so it would clash with
+    // everything and no transfer could ever be recorded.
+    const closed = await this.closeOpenEndedBefore(createDto.userId, from, createdBy);
+
+    const clashes = await this.findClashes(createDto.userId, from, to, null);
+    if (clashes.length) {
+      throw new ConflictException(
+        SITE_ALLOCATION_ERRORS.DATE_CLASH.replace('{clashes}', this.describeClashes(clashes)),
+      );
     }
 
     // Validate allocation type if provided
@@ -84,16 +174,26 @@ export class SiteAllocationService {
       allocationType,
       role,
       dailyAllowance: createDto.dailyAllowance ?? SITE_ALLOCATION_DEFAULTS.DAILY_ALLOWANCE,
-      allocatedAt: new Date(createDto.allocatedAt),
-      isCurrentlyAllocated: true,
+      allocatedAt: from,
+      deallocatedAt: to,
+      // A closed range is history the moment it is written; only an open one is "current".
+      isCurrentlyAllocated: to === null,
       remarks: createDto.remarks,
       createdBy,
     });
 
-    return this.utilityService.getSuccessMessage(
+    const base = this.utilityService.getSuccessMessage(
       SiteAllocationEntityFields.SITE_ALLOCATION,
       DataSuccessOperationType.CREATE,
     );
+    if (!closed) return base;
+
+    // Say so rather than closing someone's allocation silently.
+    const note = SITE_ALLOCATION_RESPONSES.PREVIOUS_CLOSED.replace(
+      '{siteName}',
+      closed.siteName,
+    ).replace('{date}', closed.closedOn.toISOString().slice(0, 10));
+    return { ...base, message: `${(base as any).message ?? ''}${note}`.trim() };
   }
 
   async findAll(options: GetSiteAllocationDto) {
@@ -180,10 +280,10 @@ export class SiteAllocationService {
   async update(id: string, updateDto: UpdateSiteAllocationDto, updatedBy: string) {
     const existingAllocation = await this.findOneOrFail({ where: { id } });
 
-    // Cannot update deallocated records
-    if (!existingAllocation.isCurrentlyAllocated) {
-      throw new BadRequestException(SITE_ALLOCATION_ERRORS.CANNOT_UPDATE_DEALLOCATED);
-    }
+    // A closed allocation is still editable. It used to be refused outright, which was harmless
+    // while every allocation was open-ended — but a backfilled stint is closed the moment it is
+    // written, and fixing its dates is exactly what this module is being changed to allow. The
+    // clash check below is the real guard; refusing the edit only made wrong dates permanent.
 
     // Validate allocation type if changed
     if (
@@ -198,18 +298,131 @@ export class SiteAllocationService {
       await this.validateSiteRole(updateDto.role);
     }
 
-    await this.siteAllocationRepository.update(
-      { id },
-      {
-        ...updateDto,
-        updatedBy,
-      },
-    );
+    await this.assertDateChangeAllowed(existingAllocation, updateDto);
+
+    // Dates arrive as ISO strings and the column is a Date, so they are converted rather than
+    // spread straight through. Sending deallocatedAt as null reopens an allocation, which is why
+    // the check is on undefined and not on falsiness.
+    const { allocatedAt, deallocatedAt, ...rest } = updateDto;
+    const patch: Partial<SiteAllocationEntity> = { ...rest, updatedBy };
+    if (allocatedAt !== undefined) patch.allocatedAt = this.dayOf(allocatedAt);
+    if (deallocatedAt !== undefined) {
+      patch.deallocatedAt = deallocatedAt ? this.dayOf(deallocatedAt) : null;
+      // Only an open-ended allocation is "current"; giving it an end date makes it history.
+      patch.isCurrentlyAllocated = !deallocatedAt;
+    }
+
+    await this.siteAllocationRepository.update({ id }, patch);
 
     return this.utilityService.getSuccessMessage(
       SiteAllocationEntityFields.SITE_ALLOCATION,
       DataSuccessOperationType.UPDATE,
     );
+  }
+
+  /**
+   * Let a date change through only if it does not make clashes worse.
+   *
+   * A flat "no overlap" rule would be right for new allocations and a trap for old ones: there are
+   * already hundreds of overlapping rows in the data, and under a strict rule none of them could
+   * ever be edited — the rows most in need of fixing would be the first to lock. So the comparison
+   * is per clashing allocation, before versus after: a new clash or more shared days is refused,
+   * the same or fewer is allowed. Shrinking an existing mess is always possible.
+   */
+  private async assertDateChangeAllowed(
+    existing: SiteAllocationEntity,
+    updateDto: UpdateSiteAllocationDto,
+  ): Promise<void> {
+    const nextFrom =
+      updateDto.allocatedAt !== undefined
+        ? this.dayOf(updateDto.allocatedAt)
+        : this.dayOf(existing.allocatedAt);
+    const nextTo =
+      updateDto.deallocatedAt !== undefined
+        ? updateDto.deallocatedAt
+          ? this.dayOf(updateDto.deallocatedAt)
+          : null
+        : existing.deallocatedAt
+        ? this.dayOf(existing.deallocatedAt)
+        : null;
+
+    const unchanged =
+      nextFrom.getTime() === this.dayOf(existing.allocatedAt).getTime() &&
+      (nextTo?.getTime() ?? null) ===
+        (existing.deallocatedAt ? this.dayOf(existing.deallocatedAt).getTime() : null);
+    if (unchanged) return;
+
+    this.assertValidRange(nextFrom, nextTo);
+
+    const before = await this.findClashes(
+      existing.userId,
+      this.dayOf(existing.allocatedAt),
+      existing.deallocatedAt ? this.dayOf(existing.deallocatedAt) : null,
+      existing.id,
+    );
+    const after = await this.findClashes(existing.userId, nextFrom, nextTo, existing.id);
+    if (!after.length) return;
+
+    const beforeDays = new Map(before.map((c) => [c.id, c.overlapDays]));
+    const worsened = after.filter((c) => c.overlapDays > (beforeDays.get(c.id) ?? 0));
+    if (worsened.length) {
+      throw new ConflictException(
+        SITE_ALLOCATION_ERRORS.CLASH_WOULD_WORSEN.replace(
+          '{clashes}',
+          this.describeClashes(worsened),
+        ),
+      );
+    }
+  }
+
+  /**
+   * Delete an allocation outright — for one that should never have existed.
+   *
+   * De-allocating is the wrong tool for a mistake: it asks for an end date, and closing a wrong
+   * allocation on its own start date still records that the employee was on that site for that
+   * day. Delete leaves nothing.
+   *
+   * Two guards, because "leaves nothing" is exactly what makes it dangerous:
+   *  - payroll already generated for a month this allocation covers → refused outright, since the
+   *    allocation carries the daily allowance that payslip was built from
+   *  - attendance recorded inside the dates → refused once, with the count, until `confirm` is sent
+   */
+  async remove(id: string, deletedBy: string, confirm = false) {
+    const allocation = await this.findOneOrFail({ where: { id } });
+
+    const from = this.dayOf(allocation.allocatedAt);
+    const to = allocation.deallocatedAt ? this.dayOf(allocation.deallocatedAt) : null;
+
+    const months = await this.siteAllocationRepository.raw(generatedPayrollMonthsInRangeQuery, [
+      allocation.userId,
+      from,
+      to,
+    ]);
+    if (months.length) {
+      const label = months.map((m: any) => `${m.month}/${m.year}`).join(', ');
+      throw new ConflictException(
+        SITE_ALLOCATION_ERRORS.DELETE_PAYROLL_GENERATED.replace('{months}', label),
+      );
+    }
+
+    if (!confirm) {
+      const [row] = await this.siteAllocationRepository.raw(attendanceDaysInRangeQuery, [
+        allocation.userId,
+        from,
+        to,
+      ]);
+      const days = Number(row?.days ?? 0);
+      if (days > 0) {
+        throw new ConflictException(
+          SITE_ALLOCATION_ERRORS.DELETE_CONFIRM_ATTENDANCE.replace('{days}', String(days)),
+        );
+      }
+    }
+
+    await this.siteAllocationRepository.update({ id }, { deletedBy });
+    await this.siteAllocationRepository.softDelete({ id });
+
+    return { message: SITE_ALLOCATION_RESPONSES.DELETED };
   }
 
   async deallocate(id: string, deallocateDto: DeallocateSiteDto, updatedBy: string) {
@@ -506,9 +719,9 @@ export class SiteAllocationService {
 
     // Process deallocations FIRST, then allocations. This makes a "transfer" (release the
     // old site + allocate to the new site) work in a single request: releasing the current
-    // allocation clears `isCurrentlyAllocated`, so the subsequent create() no longer trips
-    // the "employee already allocated to another site" guard. Order matters because the two
-    // loops are independent (no shared transaction) and create() reads the live state.
+    // allocation gives it an end date, so the subsequent create() sees a free range. Order still
+    // matters because the two loops are independent (no shared transaction) and create() reads the
+    // live state — and the clash check is now about dates, not a flag.
     const deallocationResults: {
       allocationId: string;
       success: boolean;
@@ -554,6 +767,7 @@ export class SiteAllocationService {
           role: allocation.role,
           dailyAllowance: allocation.dailyAllowance,
           allocatedAt: allocation.allocatedAt,
+          deallocatedAt: allocation.deallocatedAt,
           remarks: allocation.remarks,
         };
 

@@ -98,6 +98,9 @@ export class PaymentSheetPdfService {
 
   /** Human beneficiary label — real name from the enriched user/vendor, falling back to the bank snapshot. */
   private beneficiaryName(it: any): string {
+    // A wallet top-up has no beneficiary at all. Naming it beats a row of dashes that reads like
+    // missing data.
+    if (it.beneficiaryType === 'WALLET') return 'PetroCard Wallet';
     if (it.beneficiaryType === 'VENDOR') {
       return this.esc(it.vendor?.name ?? it.bankSnapshot?.accountHolderName ?? '—');
     }
@@ -114,6 +117,8 @@ export class PaymentSheetPdfService {
         return 'Fuel Expense';
       case 'EXPENSE':
         return 'Expense';
+      case 'PETRO_CARD_WALLET':
+        return 'PetroCard Wallet Recharge';
       default:
         return this.esc(sourceType);
     }
@@ -238,7 +243,12 @@ export class PaymentSheetPdfService {
     const rows = items
       .map((it: any, idx) => {
         const bank = it.bankSnapshot;
-        const kind = it.beneficiaryType === 'VENDOR' ? 'Vendor' : 'Employee';
+        const kind =
+          it.beneficiaryType === 'VENDOR'
+            ? 'Vendor'
+            : it.beneficiaryType === 'WALLET'
+            ? 'Company wallet'
+            : 'Employee';
         return `
           <tr>
             <td class="c">${idx + 1}</td>

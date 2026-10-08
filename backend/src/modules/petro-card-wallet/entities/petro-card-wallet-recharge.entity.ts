@@ -1,6 +1,7 @@
 import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from 'src/utils/base-entity/base-entity';
 import { CompanyBankAccountEntity } from 'src/modules/company-bank-accounts/entities/company-bank-account.entity';
+import { WalletRechargeStatus } from '../constants/petro-card-wallet.constants';
 
 /**
  * One recharge into the single common PetroCard wallet.
@@ -37,4 +38,26 @@ export class PetroCardWalletRechargeEntity extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
+
+  /**
+   * PENDING until the money is actually paid.
+   *
+   * This is what keeps the balance honest. A recharge is raised on the wallet screen, where it is
+   * a *request* and nothing more; only the Payment Sheet pay step flips it to PAID, and only PAID
+   * rows count towards the balance. Without it the wallet showed money against a payment nobody
+   * had made.
+   */
+  @Column({ type: 'varchar', length: 16, default: WalletRechargeStatus.PENDING })
+  status: WalletRechargeStatus;
+
+  /**
+   * The Payment Sheet line this recharge was picked onto, or NULL while it is still outstanding.
+   *
+   * Set when the line is added to a sheet, not at payment — that is what stops one recharge being
+   * picked onto two sheets. Whether it is *still* claimed is derived rather than stored: if the
+   * line or its sheet is later rejected or removed, the recharge is outstanding again, with no
+   * release step for anyone to forget.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  paymentSheetItemId: string | null;
 }

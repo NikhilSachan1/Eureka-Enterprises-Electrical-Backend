@@ -43,11 +43,14 @@ All routes sit under `/api/v1/petro-card-wallet`.
   "totalRecharged": 5000,
   "totalConsumed": 1000,
   "pendingConsumed": 1000,
-  "approvedConsumed": 0
+  "approvedConsumed": 0,
+  "pendingRecharge": 7000
 }
 ```
 
 The breakdown is there so a low or negative balance can be explained on screen without a second call. `pendingConsumed` is money held by fuel entries still awaiting approval.
+
+`pendingRecharge` is money raised on a Payment Sheet that has **not been paid yet**, so it is *not* in `balance`. Show it under the balance as something like "₹7,000 awaiting payment" — otherwise someone who just raised a top-up sees an unchanged balance and assumes it was lost.
 
 ### GET /transactions
 
@@ -63,7 +66,16 @@ Query: `page`, `pageSize`, `type` (`RECHARGE` or `FUEL`, omit for both), `dateFr
     { "type": "RECHARGE", "id": "<rechargeId>", "date": "2026-09-27",
       "amount": 5000, "editable": true,
       "meta": { "referenceNumber": "UTR…", "paymentMode": "NEFT",
-                "paidFromAccount": "…", "remarks": "…", "recordedBy": "…" } }
+                "paidFromAccount": {
+                  "id": "<uuid>",
+                  "accountName": "ICICI Ops",
+                  "accountHolderName": "Eureka Enterprises",
+                  "bankName": "ICICI Bank",
+                  "accountNumber": "111222333444",
+                  "ifscCode": "ICIC0000999",
+                  "branchName": "Andheri"
+                },
+                "remarks": "…", "recordedBy": "…" } }
   ],
   "totalRecords": 2
 }
@@ -81,6 +93,8 @@ There is deliberately no running "balance after" column. The list is filtered an
   "paidFromAccountId": "<uuid>", "remarks": "…" }
 ```
 
+This is the **manual** route — it credits the wallet immediately. The normal route is now a Payment Sheet line (see below), which credits only once the payment is made. Both are supported.
+
 Only `amount` and `rechargeDate` are required. `amount` must be greater than zero — a negative or zero value is a 400. There is no manual debit API by design; a mistake is fixed by editing or deleting the recharge.
 
 Response: `{ "message": "…", "id": "<uuid>", "balance": 5000 }`.
@@ -93,6 +107,43 @@ Same fields, all optional. **Only the fields you send are changed** — sending 
 
 Soft delete. The balance reverses by itself. Returns the fresh `balance`.
 
+## Recharging through the Payment Sheet
+
+This is the normal route, and the main change in this round. A top-up goes through the same approval chain as every other payable, and **the wallet is credited only when the line is actually paid** — not when it is raised.
+
+| | Payment Sheet line | Manual recharge |
+| --- | --- | --- |
+| Raised with | `POST /payment-sheets/:id/items` | `POST /petro-card-wallet/recharges` |
+| Balance moves | when the line is paid | immediately |
+| Editable afterwards | never | yes, until deleted |
+| Use it for | the normal top-up | corrections, and anything recorded outside the chain |
+
+### Adding the line
+
+```json
+{ "items": [
+  { "beneficiaryType": "WALLET", "sourceType": "PETRO_CARD_WALLET", "requestedAmount": 7000 }
+] }
+```
+
+That is the entire input. **No beneficiary and no bank details** — there is no vendor to pick and none to register. `beneficiaryType` and `sourceType` each gain one new value; everything else about the sheet is unchanged.
+
+Several wallet lines may sit on one sheet. Each top-up is its own decision, so they are not treated as duplicates.
+
+### Paying it
+
+Nothing new on the FE: the existing `POST /payment-sheets/:id/items/:itemId/pay` is used, with `paymentMode` and `paidDate` required as for any other line. `transactionId`, `paidFromAccountId` and `description` are carried onto the wallet recharge record, so the top-up can be traced back to the instrument it was paid by.
+
+The wallet is credited in the same transaction that marks the line paid — the two can never disagree.
+
+### Once paid, it is final
+
+A paid line could already not be re-paid, held or rejected. The recharge it produced is now locked to match: the wallet's `PATCH` and `DELETE` refuse it with a 400, and it comes back from `/transactions` as `editable: false`. Hide the edit and delete buttons on those rows.
+
+### What does not happen
+
+**No payment advice is generated** for a wallet line, as asked. No bank transfer either — which is why the missing bank details break nothing downstream. On the sheet PDF the line prints as "PetroCard Wallet" / "PetroCard Wallet Recharge" rather than a row of dashes.
+
 ## Screens to build
 
 ### 1. Wallet page
@@ -104,6 +155,8 @@ Three parts, one page:
 - **Recharge grid** — from `GET /recharges`, with add, edit and delete. `search` matches reference number or remarks.
 
 Whether the summary and the grid are two tabs or one list with a filter is your call. The summary already covers the grid when `type=RECHARGE` is passed, so one list with a filter is enough if you prefer it.
+
+Two things the balance header now needs: `pendingRecharge` shown beside the balance, and the "Add recharge" button clearly marked as the manual route — the normal one is raised from the Payment Sheet screen.
 
 ### 2. Dashboard tile
 
@@ -153,9 +206,12 @@ Every row below is verified on dev. Refetch the balance after any action in the 
 | Payment mode changed off `petro_card` | ✓ restores in full | And onto it, deducts in full |
 | Fuel entry deleted | ✓ restores | |
 | Cash / UPI / credit entry, any action | no change | These never touch the wallet |
-| Recharge created | ✓ adds | Response carries the new balance |
-| Recharge amount edited | ✓ by the difference | |
-| Recharge deleted | ✓ reverses in full | |
+| **Wallet line added to a sheet** | **no change** | Shows under `pendingRecharge` instead |
+| **Wallet line paid** | **✓ adds** | This is the moment the money lands |
+| **Wallet line rejected or removed** | no change | It never counted, so nothing to reverse |
+| Manual recharge created | ✓ adds | Response carries the new balance |
+| Manual recharge amount edited | ✓ by the difference | |
+| Manual recharge deleted | ✓ reverses in full | |
 
 The practical consequence: the balance shown on one screen can go stale because of something someone did on another. Refetching `/balance` when the wallet page or dashboard regains focus is worth doing.
 
@@ -184,9 +240,15 @@ Granted to **SUPER_ADMIN, ADMIN and OPERATION_MANAGER**, matching who already ho
 
 **Exactly the balance is allowed.** A ₹6,000 entry against a ₹6,000 balance succeeds and leaves zero. Only ₹1 more is refused. Use `>` and not `>=` if you mirror the check client-side for a warning.
 
+## One thing to flag before this goes live
+
+A top-up now waits for approval and an actual bank transfer, which can take days. **Fuel entries stay blocked for that whole time** — where before, an operator could record a recharge and unblock a site in seconds.
+
+The manual recharge route is the release valve, which is part of why both entry points were kept. Worth agreeing who is allowed to use it, and when, before the first site hits a zero balance.
+
 ## Status, scope and open questions
 
-**Status.** Built and verified on the dev database — 61 assertions covering every row of the table above, all passing. Three migrations have run on **dev only**. UAT and production are untouched, so these APIs are not live there yet.
+**Status.** Built and verified on the dev database — 61 assertions on the wallet itself, plus 38 on the Payment Sheet route, all passing. Four migrations have run on **dev only**. UAT and production are untouched, so these APIs are not live there yet.
 
 **Out of scope, deliberately:**
 

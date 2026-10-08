@@ -78,15 +78,29 @@ export const getAssetStatsQuery = () => {
       COUNT(DISTINCT am."id") as "total",
       
       -- Status breakdown
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.AVAILABLE}' THEN am."id" END) as "available",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.ASSIGNED}' THEN am."id" END) as "assigned",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.UNDER_MAINTENANCE}' THEN am."id" END) as "underMaintenance",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.DAMAGED}' THEN am."id" END) as "damaged",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.RETIRED}' THEN am."id" END) as "retired",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.AVAILABLE
+      }' THEN am."id" END) as "available",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.ASSIGNED
+      }' THEN am."id" END) as "assigned",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.UNDER_MAINTENANCE
+      }' THEN am."id" END) as "underMaintenance",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.DAMAGED
+      }' THEN am."id" END) as "damaged",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.RETIRED
+      }' THEN am."id" END) as "retired",
       
       -- Asset type breakdown
-      COUNT(DISTINCT CASE WHEN av."assetType" = '${AssetType.CALIBRATED}' THEN am."id" END) as "calibrated",
-      COUNT(DISTINCT CASE WHEN av."assetType" = '${AssetType.NON_CALIBRATED}' THEN am."id" END) as "nonCalibrated",
+      COUNT(DISTINCT CASE WHEN av."assetType" = '${
+        AssetType.CALIBRATED
+      }' THEN am."id" END) as "calibrated",
+      COUNT(DISTINCT CASE WHEN av."assetType" = '${
+        AssetType.NON_CALIBRATED
+      }' THEN am."id" END) as "nonCalibrated",
       
       -- Calibration status breakdown (only for calibrated assets)
       COUNT(DISTINCT CASE 

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -114,5 +115,23 @@ export class SiteAllocationController {
     @Request() { user: { id: userId } }: { user: { id: string } },
   ) {
     return this.siteAllocationService.update(id, updateDto, userId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a site allocation that should never have existed',
+    description:
+      'For a mistake, not a transfer. De-allocating asks for an end date, and closing a wrong ' +
+      'allocation on its own start date still records the employee as having been on that site ' +
+      'that day; this leaves nothing behind. Refused outright when payroll has been generated for ' +
+      'a month it covers. Refused once, with the count, when attendance exists inside its dates — ' +
+      'send confirm=true to go ahead.',
+  })
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('confirm') confirm: string,
+    @Request() { user: { id: userId } }: { user: { id: string } },
+  ) {
+    return this.siteAllocationService.remove(id, userId, confirm === 'true');
   }
 }
