@@ -69,10 +69,16 @@ export const heldVehicleLateral = (userCol: string, dateCol: string) => `
   LEFT JOIN LATERAL (
     SELECT jsonb_build_object(
              'id', vm."id",
-             'registrationNo', vm."registrationNo"
+             'registrationNo', vm."registrationNo",
+             'brand', vv."brand",
+             'model', vv."model"
            ) AS vehicle
       FROM vehicle_masters vm
       JOIN LATERAL (${heldOn(dateCol)}) last ON TRUE
+      LEFT JOIN vehicle_versions vv
+        ON vv."vehicleMasterId" = vm."id"
+       AND vv."isActive" = true
+       AND vv."deletedAt" IS NULL
      WHERE vm."deletedAt" IS NULL
        AND last.holder = ${userCol}
      ORDER BY last."since" DESC
@@ -86,9 +92,13 @@ export const heldVehicleLateral = (userCol: string, dateCol: string) => `
  * `$1` userId, `$2` the date.
  */
 export const heldVehicleForDayQuery = `
-  SELECT vm."id", vm."registrationNo"
+  SELECT vm."id", vm."registrationNo", vv."brand", vv."model"
     FROM vehicle_masters vm
     JOIN LATERAL (${heldOn('$2')}) last ON TRUE
+    LEFT JOIN vehicle_versions vv
+      ON vv."vehicleMasterId" = vm."id"
+     AND vv."isActive" = true
+     AND vv."deletedAt" IS NULL
    WHERE vm."deletedAt" IS NULL
      AND last.holder = $1
    ORDER BY last."since" DESC

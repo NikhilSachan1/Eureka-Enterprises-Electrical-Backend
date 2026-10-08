@@ -100,11 +100,14 @@ export class AttendanceRecordDto {
       'every time it is read, never chosen in the app and never stored on the attendance row, so ' +
       'a corrected handover shows up here on every day it covers. Replayed to the day in ' +
       'question, so an older record shows whoever actually had the vehicle then. Null for ' +
-      'anyone not holding one, which is most employees.',
+      'anyone not holding one, which is most employees. Includes the active version brand (vehicle ' +
+      'name) and model.',
   })
   vehicle?: {
     id: string;
     registrationNo: string;
+    brand: string | null;
+    model: string | null;
   } | null;
 
   assignmentSnapshot?: AssignmentSnapshotDto;
