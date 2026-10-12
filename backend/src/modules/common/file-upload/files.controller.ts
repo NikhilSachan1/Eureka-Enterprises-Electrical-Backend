@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags, ApiConsumes, ApiBody } from '@nes
 import { FilesService } from './files.service';
 import { FILE_UPLOAD_FOLDER_NAMES, FIELD_NAMES } from './constants/files.constants';
 import { validateFileUploads } from './validators/files.validator';
+import { Public } from '../../auth/decorators/public.decorator';
 
 @ApiTags('Files')
 @Controller('files')
@@ -20,11 +21,12 @@ import { validateFileUploads } from './validators/files.validator';
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
+  @Public()
   @Get()
   @ApiOperation({
-    summary: 'Get file download URL',
+    summary: 'Get file download URL (public)',
     description:
-      'Retrieves a signed download URL for a file stored in the system using the file key.',
+      'Public (no auth) — retrieves a signed download URL for a file stored in the system using the file key.',
   })
   async getDownloadFileUrl(@Query('key') key: string) {
     return await this.filesService.getDownloadFileUrl(key);
