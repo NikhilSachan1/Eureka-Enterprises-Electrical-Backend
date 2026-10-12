@@ -2,13 +2,29 @@ import { AssetQueryDto } from '../dto/asset-query.dto';
 import {
   ASSET_SORT_FIELD_MAPPING,
   AssetEventTypes,
+  HANDOVER_EVENT_TYPES,
   AssetType,
   AssetStatus,
   AssetFileTypes,
   CalibrationStatus,
   WarrantyStatus,
   EXPIRING_SOON_DAYS,
+  HandoverStatus,
+  HANDOVER_STATUS_EVENT_TYPES,
 } from '../constants/asset-masters.constants';
+
+const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
+
+/** A column of the same row the list returns as `latestEvent`, for an outer alias `am`. */
+const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
+  SELECT ae."${column}"
+  FROM "assets_events" ae
+  WHERE ae."assetMasterId" = am."id"
+    AND ae."deletedAt" IS NULL
+    AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+  ORDER BY ae."createdAt" DESC, ae."id" DESC
+  LIMIT 1
+)`;
 
 export const getLostAssetsQuery = () => `
   SELECT
@@ -62,15 +78,29 @@ export const getAssetStatsQuery = () => {
       COUNT(DISTINCT am."id") as "total",
       
       -- Status breakdown
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.AVAILABLE}' THEN am."id" END) as "available",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.ASSIGNED}' THEN am."id" END) as "assigned",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.UNDER_MAINTENANCE}' THEN am."id" END) as "underMaintenance",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.DAMAGED}' THEN am."id" END) as "damaged",
-      COUNT(DISTINCT CASE WHEN av."status" = '${AssetStatus.RETIRED}' THEN am."id" END) as "retired",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.AVAILABLE
+      }' THEN am."id" END) as "available",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.ASSIGNED
+      }' THEN am."id" END) as "assigned",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.UNDER_MAINTENANCE
+      }' THEN am."id" END) as "underMaintenance",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.DAMAGED
+      }' THEN am."id" END) as "damaged",
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.RETIRED
+      }' THEN am."id" END) as "retired",
       
       -- Asset type breakdown
-      COUNT(DISTINCT CASE WHEN av."assetType" = '${AssetType.CALIBRATED}' THEN am."id" END) as "calibrated",
-      COUNT(DISTINCT CASE WHEN av."assetType" = '${AssetType.NON_CALIBRATED}' THEN am."id" END) as "nonCalibrated",
+      COUNT(DISTINCT CASE WHEN av."assetType" = '${
+        AssetType.CALIBRATED
+      }' THEN am."id" END) as "calibrated",
+      COUNT(DISTINCT CASE WHEN av."assetType" = '${
+        AssetType.NON_CALIBRATED
+      }' THEN am."id" END) as "nonCalibrated",
       
       -- Calibration status breakdown (only for calibrated assets)
       COUNT(DISTINCT CASE 
@@ -110,7 +140,17 @@ export const getAssetStatsQuery = () => {
       COUNT(DISTINCT CASE 
         WHEN av."warrantyEndDate" IS NULL 
         THEN am."id" 
-      END) as "warrantyNotApplicable"
+      END) as "warrantyNotApplicable",
+
+      -- Handover status breakdown (based on latestEvent)
+      COUNT(DISTINCT CASE
+        WHEN lh."eventType" IN (${toSqlList(HANDOVER_STATUS_EVENT_TYPES[HandoverStatus.INITIATED])})
+        THEN am."id"
+      END) as "handoverInitiated",
+      COUNT(DISTINCT CASE
+        WHEN lh."eventType" IN (${toSqlList(HANDOVER_STATUS_EVENT_TYPES[HandoverStatus.ACCEPTED])})
+        THEN am."id"
+      END) as "handoverAccepted"
       
     FROM "asset_masters" am
     INNER JOIN LATERAL (
@@ -121,6 +161,7 @@ export const getAssetStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) av ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
     WHERE am."deletedAt" IS NULL
   `;
 };
@@ -136,6 +177,8 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     status,
     calibrationStatus,
     warrantyStatus,
+    handoverStatus,
+    handoverToUser,
     assignedTo,
     search,
     includeLatestEventFiles,
@@ -282,6 +325,18 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     }
   }
 
+  if (handoverStatus && handoverStatus.length > 0) {
+    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
+    params.push(handoverStatus.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
+    paramIndex++;
+  }
+
+  if (handoverToUser && handoverToUser.length > 0) {
+    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    params.push(handoverToUser);
+    paramIndex++;
+  }
+
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const orderByColumn = ASSET_SORT_FIELD_MAPPING[sortField] || 'am."createdAt"';
 
@@ -354,7 +409,10 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         ),
         '[]'::json
       ) as "files",
-      CASE WHEN ale."id" IS NOT NULL THEN json_build_object(
+      -- The lateral below only looks at HANDOVER_EVENT_TYPES, so this is the asset's most recent
+      -- initiated / accepted handover even when other events happened after it.
+      CASE WHEN ale."id" IS NOT NULL
+      THEN json_build_object(
         'id', ale."id",
         'eventType', ale."eventType",
         'fromUser', ale."fromUser",
@@ -402,7 +460,9 @@ export const getAssetQuery = (query: AssetQueryDto) => {
       FROM "assets_events" ae
       LEFT JOIN "users" fu ON ae."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ae."toUser" = tu."id" AND tu."deletedAt" IS NULL
-      WHERE ae."assetMasterId" = am."id" AND ae."deletedAt" IS NULL
+      WHERE ae."assetMasterId" = am."id"
+        AND ae."deletedAt" IS NULL
+        AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
       ORDER BY ae."createdAt" DESC, ae."id" DESC
       LIMIT 1
     ) ale ON true

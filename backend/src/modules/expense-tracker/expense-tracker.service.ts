@@ -494,30 +494,42 @@ export class ExpenseTrackerService {
     expenseDate?: Date;
     approvalAt?: Date;
     transactionType?: string;
+    /** Defaults to FORCED. Pass PENALTY so the UI can render the row as a charge, not a payout. */
+    expenseEntryType?: string;
+    /**
+     * Join the caller's transaction. A penalty that is written while its asset assignment rolls
+     * back (or the other way round) is worse than neither happening, so the caller has to be able
+     * to make both atomic.
+     */
+    entityManager?: EntityManager;
   }): Promise<ExpenseTrackerEntity> {
     const referenceType = data.referenceType || SYSTEM_EXPENSE_DEFAULTS.DEFAULT_REFERENCE_TYPE;
     const approvalReason = `${SYSTEM_EXPENSE_DEFAULTS.APPROVAL_REASON_PREFIX}: ${referenceType}`;
     const expenseDate = data.expenseDate ?? new Date();
     const approvalAt = data.approvalAt ?? new Date();
     const transactionType = data.transactionType ?? TransactionType.CREDIT;
-    const expense = await this.expenseTrackerRepository.create({
-      userId: data.userId,
-      category: data.category,
-      amount: data.amount,
-      description: data.description,
-      paymentMode: SYSTEM_EXPENSE_DEFAULTS.PAYMENT_MODE,
-      expenseDate,
-      isActive: true,
-      approvalStatus: ApprovalStatus.APPROVED,
-      approvalAt,
-      approvalBy: SYSTEM_USER_ID,
-      approvalReason,
-      transactionType,
-      expenseEntryType: ExpenseEntryType.FORCED,
-      entrySourceType: EntrySourceType.WEB,
-      transactionId: data.referenceId,
-      createdBy: SYSTEM_USER_ID,
-    });
+    const expenseEntryType = data.expenseEntryType ?? ExpenseEntryType.FORCED;
+    const expense = await this.expenseTrackerRepository.create(
+      {
+        userId: data.userId,
+        category: data.category,
+        amount: data.amount,
+        description: data.description,
+        paymentMode: SYSTEM_EXPENSE_DEFAULTS.PAYMENT_MODE,
+        expenseDate,
+        isActive: true,
+        approvalStatus: ApprovalStatus.APPROVED,
+        approvalAt,
+        approvalBy: SYSTEM_USER_ID,
+        approvalReason,
+        transactionType,
+        expenseEntryType,
+        entrySourceType: EntrySourceType.WEB,
+        transactionId: data.referenceId,
+        createdBy: SYSTEM_USER_ID,
+      },
+      data.entityManager,
+    );
 
     return expense;
   }

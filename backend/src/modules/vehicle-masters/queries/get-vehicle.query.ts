@@ -3,10 +3,26 @@ import {
   VehicleStatus,
   VehicleFuelType,
   VehicleFileTypes,
+  HANDOVER_EVENT_TYPES,
   DEFAULT_EXPIRING_SOON_DAYS,
   DocumentStatus,
   ServiceDueStatus,
+  HandoverStatus,
+  HANDOVER_STATUS_EVENT_TYPES,
 } from '../constants/vehicle-masters.constants';
+
+const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
+
+/** A column of the same row the list returns as `latestEvent`, for an outer alias `vm`. */
+const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
+  SELECT ve."${column}"
+  FROM "vehicles_events" ve
+  WHERE ve."vehicleMasterId" = vm."id"
+    AND ve."deletedAt" IS NULL
+    AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+  ORDER BY ve."createdAt" DESC, ve."id" DESC
+  LIMIT 1
+)`;
 
 export const getVehicleStatsQuery = () => {
   return `
@@ -92,7 +108,17 @@ export const getVehicleStatsQuery = () => {
       COUNT(DISTINCT CASE 
         WHEN vv."fitnessEndDate" IS NULL 
         THEN vm."id" 
-      END) as "fitnessNotApplicable"
+      END) as "fitnessNotApplicable",
+
+      -- Handover status breakdown (based on latestEvent)
+      COUNT(DISTINCT CASE
+        WHEN lh."eventType" IN (${toSqlList(HANDOVER_STATUS_EVENT_TYPES[HandoverStatus.INITIATED])})
+        THEN vm."id"
+      END) as "handoverInitiated",
+      COUNT(DISTINCT CASE
+        WHEN lh."eventType" IN (${toSqlList(HANDOVER_STATUS_EVENT_TYPES[HandoverStatus.ACCEPTED])})
+        THEN vm."id"
+      END) as "handoverAccepted"
       
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
@@ -103,6 +129,7 @@ export const getVehicleStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) vv ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
     WHERE vm."deletedAt" IS NULL
   `;
 };
@@ -119,6 +146,8 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     pucStatuses,
     fitnessStatuses,
     serviceDueStatuses,
+    handoverStatuses,
+    handoverToUser,
     assignedTo,
     search,
     includeLatestEventFiles,
@@ -264,6 +293,18 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     if (serviceConditions.length > 0) {
       filters.push(`(${serviceConditions.join(' OR ')})`);
     }
+  }
+
+  if (handoverStatuses && handoverStatuses.length > 0) {
+    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
+    params.push(handoverStatuses.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
+    paramIndex++;
+  }
+
+  if (handoverToUser && handoverToUser.length > 0) {
+    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    params.push(handoverToUser);
+    paramIndex++;
   }
 
   if (assignedTo) {
@@ -412,7 +453,10 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         )
         ELSE NULL
       END as "associatedCard",
-      CASE WHEN vle."id" IS NOT NULL THEN json_build_object(
+      -- The lateral below only looks at HANDOVER_EVENT_TYPES, so this is the vehicle's most recent
+      -- initiated / accepted handover even when other events happened after it.
+      CASE WHEN vle."id" IS NOT NULL
+      THEN json_build_object(
         'id', vle."id",
         'eventType', vle."eventType",
         'fromUser', vle."fromUser",
@@ -461,7 +505,9 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
       FROM "vehicles_events" ve
       LEFT JOIN "users" fu ON ve."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ve."toUser" = tu."id" AND tu."deletedAt" IS NULL
-      WHERE ve."vehicleMasterId" = vm."id" AND ve."deletedAt" IS NULL
+      WHERE ve."vehicleMasterId" = vm."id"
+        AND ve."deletedAt" IS NULL
+        AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
       ORDER BY ve."createdAt" DESC, ve."id" DESC
       LIMIT 1
     ) vle ON true

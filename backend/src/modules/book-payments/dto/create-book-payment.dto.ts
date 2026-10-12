@@ -1,10 +1,43 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsUUID,
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateIf,
+} from 'class-validator';
+import { BookPaymentSourceType } from '../constants/book-payment.constants';
 
 export class CreateBookPaymentDto {
-  @ApiProperty({ description: 'Invoice ID (must be PURCHASE side, APPROVED)' })
+  /**
+   * Which document the payment is raised against. Defaults to INVOICE so every existing caller
+   * keeps working unchanged — they simply never send this field.
+   */
+  @ApiPropertyOptional({
+    description: 'What this payment is raised against. Defaults to INVOICE.',
+    enum: BookPaymentSourceType,
+  })
+  @IsEnum(BookPaymentSourceType)
+  @IsOptional()
+  sourceType?: BookPaymentSourceType;
+
+  @ApiPropertyOptional({
+    description:
+      'Invoice ID (must be PURCHASE side, APPROVED). Required unless sourceType=ADVANCE.',
+  })
+  @ValidateIf((o) => o.sourceType !== BookPaymentSourceType.ADVANCE)
   @IsUUID()
   invoiceId: string;
+
+  @ApiPropertyOptional({
+    description: 'Advance payment ID (must be APPROVED). Required when sourceType=ADVANCE.',
+  })
+  @ValidateIf((o) => o.sourceType === BookPaymentSourceType.ADVANCE)
+  @IsUUID()
+  advancePaymentId?: string;
 
   @ApiProperty({ description: 'Booking date' })
   @IsDateString()

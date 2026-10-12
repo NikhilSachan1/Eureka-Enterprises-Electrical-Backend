@@ -13,7 +13,12 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { SiteInvoiceService } from './site-invoice.service';
-import { CreateSiteInvoiceDto, UpdateSiteInvoiceDto, GetSiteInvoiceDto } from './dto';
+import {
+  CreateSiteInvoiceDto,
+  UpdateSiteInvoiceDto,
+  GetSiteInvoiceDto,
+  SettleAdvanceDto,
+} from './dto';
 import {
   ApproveDto,
   RejectDto,
@@ -104,6 +109,49 @@ export class SiteInvoiceController {
     @Body() dto: RejectDto,
   ) {
     return await this.invoiceService.reject(id, dto, rejectedBy);
+  }
+
+  @Post(':id/advance-settlements')
+  @RequiredPermission('financials.advance-payments.settle')
+  @ApiOperation({
+    summary: 'Settle a chosen advance against this invoice',
+    description:
+      'Manual and explicit — nothing settles on its own. Both documents must be APPROVED and share ' +
+      'the same PO. The amount may be partial; it must not exceed the advance balance or the ' +
+      "invoice's remaining due (net payable − already settled − already booked).",
+  })
+  async settleAdvance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: actor } }: { user: { id: string } },
+    @Body() dto: SettleAdvanceDto,
+  ) {
+    return await this.invoiceService.settleAdvance(id, dto, actor);
+  }
+
+  @Delete(':id/advance-settlements/:settlementId')
+  @RequiredPermission('financials.advance-payments.settle')
+  @ApiOperation({
+    summary: 'Reverse one advance settlement on this invoice',
+    description:
+      "Restores that advance's balance and reduces the invoice's settled amount. Allowed while the " +
+      'invoice is approved and locked — this is what a user does before requesting an unlock.',
+  })
+  async unsettleAdvance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('settlementId', ParseUUIDPipe) settlementId: string,
+    @Request() { user: { id: actor } }: { user: { id: string } },
+  ) {
+    return await this.invoiceService.unsettleAdvance(id, settlementId, actor);
+  }
+
+  @Delete(':id/advance-settlements')
+  @RequiredPermission('financials.advance-payments.settle')
+  @ApiOperation({ summary: 'Reverse every advance settlement on this invoice' })
+  async unsettleAllAdvances(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() { user: { id: actor } }: { user: { id: string } },
+  ) {
+    return await this.invoiceService.unsettleAdvance(id, null, actor);
   }
 
   @Post(':id/unlock-request')

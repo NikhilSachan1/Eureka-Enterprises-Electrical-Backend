@@ -147,7 +147,7 @@ export class JmcPdfService {
   <!-- Header: JMC title only (no logo / company name, per requirement) -->
   <div class="header">
     <div class="doc-title">JOINT MEASUREMENT CERTIFICATE</div>
-    <div class="doc-sub">${this.esc(jmc.jmcNumber)}</div>
+    <div class="doc-sub">${this.esc(jmc.jmcNumber ?? '')}</div>
   </div>
 
   <!-- Info band -->

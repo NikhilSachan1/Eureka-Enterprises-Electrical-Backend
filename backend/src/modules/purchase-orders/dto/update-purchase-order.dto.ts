@@ -10,9 +10,11 @@ import {
   ValidateNested,
   ArrayMaxSize,
   IsIn,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PoItemDto } from './po-item.dto';
+import { PoType } from '../constants/purchase-order.constants';
 
 /**
  * partyType / siteId / contractorId / vendorId cannot change after creation.
@@ -75,6 +77,14 @@ export class UpdatePurchaseOrderDto {
   @IsIn(['CGST_SGST', 'IGST'])
   @IsOptional()
   gstType?: 'CGST_SGST' | 'IGST';
+
+  @ApiPropertyOptional({
+    description: 'What the PO buys — only SUPPLY_ITEM allows the No-JMC invoice route.',
+    enum: PoType,
+  })
+  @IsEnum(PoType)
+  @IsOptional()
+  poType?: PoType;
 
   @ApiPropertyOptional({ description: 'Terms & Conditions' })
   @IsString()

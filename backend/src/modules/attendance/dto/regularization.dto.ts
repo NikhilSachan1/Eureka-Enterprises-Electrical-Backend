@@ -75,9 +75,11 @@ export class RegularizeAttendanceDto {
 
   @ApiPropertyOptional({
     description:
-      'Corrected assignment snapshot (site, company, contractors, vehicle, assigned engineer). ' +
-      'Omit to keep the existing one. `assignedEngineer` is only retained for drivers, and ' +
-      'changing it re-routes the food allowance for that day.',
+      'Corrected assignment snapshot. Only `assignedEngineer` is retained, and only for drivers, ' +
+      'where changing it re-routes the food allowance for that day. Site, company, contractors ' +
+      'and vehicle are accepted and ignored — a wrong project is corrected on the allocation and a ' +
+      'wrong vehicle on the handover, and both then show on every day they cover. Omit to keep ' +
+      'the existing snapshot.',
     type: AssignmentSnapshotDto,
   })
   @ValidateNested()

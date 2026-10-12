@@ -48,8 +48,9 @@ export class JmcEntity extends BaseEntity {
   @JoinColumn({ name: 'vendorId' })
   vendor: VendorEntity | null;
 
-  @Column({ type: 'varchar', length: 100 })
-  jmcNumber: string;
+  // Nullable only for `isNoJmc` placeholders — a CHECK keeps ordinary JMCs numbered.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  jmcNumber: string | null;
 
   @Column({ type: 'date' })
   jmcDate: Date;
@@ -64,6 +65,16 @@ export class JmcEntity extends BaseEntity {
   // True when created via the generate flow (has line items). Upload-only JMCs stay false.
   @Column({ type: 'boolean', default: false })
   isSystemGenerated: boolean;
+
+  /**
+   * A placeholder standing in for "this invoice has no JMC", allowed only on a SUPPLY_ITEM PO.
+   *
+   * It exists because the invoice needs a real `jmcId` — see migration `…072`. It carries no
+   * number and no document, is created already approved, and is kept out of the JMC lists and
+   * counts a user sees, because it is not a JMC anyone manages.
+   */
+  @Column({ type: 'boolean', default: false })
+  isNoJmc: boolean;
 
   @OneToMany(() => JmcItemEntity, (item) => item.jmc)
   items: JmcItemEntity[];

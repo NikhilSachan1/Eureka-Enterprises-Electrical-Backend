@@ -345,10 +345,68 @@ export const getPendingExpenseApprovalsQuery = (limit = 10) => ({
     JOIN users u ON u.id = e."userId"
     WHERE e."approvalStatus" = $1
       AND e."deletedAt" IS NULL
+      AND e."isActive" = true
     ORDER BY e."createdAt" ASC
     LIMIT $2
   `,
   params: ['pending', limit],
+});
+
+/**
+ * Real counts and aging spread for the pending-approval cards.
+ *
+ * The item queries above are previews — they carry a LIMIT, so deriving a count from how many rows
+ * they returned caps it at the limit (attendance read 20 when 688 were pending). These are
+ * aggregates over the whole set, so the number on the card is the number that exists.
+ *
+ * Every WHERE clause is kept identical to its item query, `isActive` included, so the count and
+ * the preview beneath it can never describe different populations.
+ */
+export const getPendingApprovalStatsQuery = () => ({
+  query: `
+    SELECT 'leave' AS type,
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - la."createdAt")::int <= 1)::int AS "days1",
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - la."createdAt")::int BETWEEN 2 AND 3)::int AS "days2_3",
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - la."createdAt")::int >= 4)::int AS "days4Plus"
+      FROM leave_applications la
+      JOIN users u ON u.id = la."userId"
+     WHERE la."approvalStatus" = $1 AND la."deletedAt" IS NULL
+
+    UNION ALL
+
+    SELECT 'attendance',
+           COUNT(*)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - a."createdAt")::int <= 1)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - a."createdAt")::int BETWEEN 2 AND 3)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - a."createdAt")::int >= 4)::int
+      FROM attendances a
+      JOIN users u ON u.id = a."userId"
+     WHERE a."approvalStatus" = $2 AND a."isActive" = true AND a."deletedAt" IS NULL
+
+    UNION ALL
+
+    SELECT 'expense',
+           COUNT(*)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - e."createdAt")::int <= 1)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - e."createdAt")::int BETWEEN 2 AND 3)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - e."createdAt")::int >= 4)::int
+      FROM expenses e
+      JOIN users u ON u.id = e."userId"
+     WHERE e."approvalStatus" = $3 AND e."deletedAt" IS NULL AND e."isActive" = true
+
+    UNION ALL
+
+    SELECT 'fuelExpense',
+           COUNT(*)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - fe."createdAt")::int <= 1)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - fe."createdAt")::int BETWEEN 2 AND 3)::int,
+           COUNT(*) FILTER (WHERE EXTRACT(DAY FROM NOW() - fe."createdAt")::int >= 4)::int
+      FROM fuel_expenses fe
+      JOIN users u ON u.id = fe."userId"
+     WHERE fe."approvalStatus" = $3 AND fe."deletedAt" IS NULL AND fe."isActive" = true
+  `,
+  params: [LeaveApprovalStatus.PENDING, ApprovalStatus.PENDING, 'pending'],
 });
 
 export const getPendingFuelExpenseApprovalsQuery = (limit = 10) => ({

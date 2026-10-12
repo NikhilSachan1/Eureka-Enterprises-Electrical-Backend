@@ -55,10 +55,7 @@ export class PurchaseOrderRepository {
     }
   }
 
-  async count(
-    options: FindManyOptions<PurchaseOrderEntity>,
-    em?: EntityManager,
-  ): Promise<number> {
+  async count(options: FindManyOptions<PurchaseOrderEntity>, em?: EntityManager): Promise<number> {
     try {
       return await this.repo(em).count(options);
     } catch (error) {
@@ -89,10 +86,7 @@ export class PurchaseOrderRepository {
     }
   }
 
-  async restore(
-    where: FindOptionsWhere<PurchaseOrderEntity>,
-    em?: EntityManager,
-  ): Promise<void> {
+  async restore(where: FindOptionsWhere<PurchaseOrderEntity>, em?: EntityManager): Promise<void> {
     try {
       await this.repo(em).restore(where);
     } catch (error) {
@@ -132,6 +126,7 @@ export class PurchaseOrderRepository {
       invoicedTotal?: number;
       bookedTotal?: number;
       paidTotal?: number;
+      advancePaidTotal?: number;
       lastInvoiceAt?: Date;
       lastPaymentAt?: Date;
     },
@@ -151,6 +146,10 @@ export class PurchaseOrderRepository {
     if (delta.paidTotal !== undefined) {
       params.push(delta.paidTotal);
       setClauses.push(`"paidTotal" = "paidTotal" + $${params.length}`);
+    }
+    if (delta.advancePaidTotal !== undefined) {
+      params.push(delta.advancePaidTotal);
+      setClauses.push(`"advancePaidTotal" = "advancePaidTotal" + $${params.length}`);
     }
     if (delta.lastInvoiceAt) {
       params.push(delta.lastInvoiceAt);

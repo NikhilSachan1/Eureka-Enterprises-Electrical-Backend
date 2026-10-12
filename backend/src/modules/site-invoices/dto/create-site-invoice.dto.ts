@@ -10,6 +10,11 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+/**
+ * An invoice always hangs off a JMC. For a Supply Item PO, where there is nothing to measure and
+ * certify, that parent is a No-JMC entry created through `POST /jmcs` with `noJmc: true` — from
+ * here it is an ordinary `jmcId` like any other.
+ */
 export class CreateSiteInvoiceDto {
   @ApiProperty({ description: 'Parent JMC ID' })
   @IsUUID('4')

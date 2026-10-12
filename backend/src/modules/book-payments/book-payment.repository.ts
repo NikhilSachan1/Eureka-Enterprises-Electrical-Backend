@@ -123,4 +123,21 @@ export class BookPaymentRepository {
       .getRawOne();
     return Number(result?.total ?? 0);
   }
+
+  /**
+   * The advance-backed equivalent of sumByInvoice — how much of an advance is already booked.
+   *
+   * Rejected bookings are excluded: rejecting reverses the rollup, so leaving them in the sum would
+   * hold back headroom that was given back.
+   */
+  async sumByAdvance(advancePaymentId: string, em?: EntityManager): Promise<number> {
+    const result = await this.repo(em)
+      .createQueryBuilder('bp')
+      .select('COALESCE(SUM(bp."paymentTotalAmount"), 0)', 'total')
+      .where('bp."advancePaymentId" = :advancePaymentId', { advancePaymentId })
+      .andWhere('bp."deletedAt" IS NULL')
+      .andWhere(`bp."approvalStatus" != 'REJECTED'`)
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
 }

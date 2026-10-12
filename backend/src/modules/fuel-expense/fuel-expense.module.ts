@@ -15,6 +15,7 @@ import { ConfigSettingsModule } from '../config-settings/config-setting.module';
 import { DateTimeModule } from 'src/utils/datetime';
 import { EmailModule } from '../common/email/email.module';
 import { CompanyBankAccountModule } from '../company-bank-accounts/company-bank-account.module';
+import { PetroCardWalletModule } from '../petro-card-wallet/petro-card-wallet.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { CompanyBankAccountModule } from '../company-bank-accounts/company-bank-
     DateTimeModule,
     EmailModule,
     CompanyBankAccountModule,
+    PetroCardWalletModule,
   ],
   controllers: [FuelExpenseController],
   providers: [FuelExpenseService, FuelExpenseRepository],

@@ -29,6 +29,8 @@ export const VEHICLE_DTO_ERRORS = {
     'Invalid fitness status(es). Please choose from the following: {documentStatuses}',
   INVALID_SERVICE_DUE_STATUS:
     'Invalid service due status(es). Please choose from the following: {serviceDueStatuses}',
+  INVALID_HANDOVER_STATUS:
+    'Invalid handover status(es). Please choose from the following: {handoverStatuses}',
   INVALID_SORT_FIELD: 'Invalid sort field. Please choose from the following: {sortFields}',
 };
 
@@ -78,7 +80,36 @@ export enum VehicleEventTypes {
   HANDOVER_ACCEPTED = 'HANDOVER_ACCEPTED',
   HANDOVER_REJECTED = 'HANDOVER_REJECTED',
   HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
+  /** Auto-penalty cron's counterpart to HANDOVER_ACCEPTED — see the asset enum for the reasoning. */
+  HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
 }
+
+/**
+ * Events shown as `latestEvent` on the vehicle list — the most recent one of these wins.
+ * Other events (service, status change, assign) are skipped.
+ */
+export const HANDOVER_EVENT_TYPES: VehicleEventTypes[] = [
+  VehicleEventTypes.HANDOVER_INITIATED,
+  VehicleEventTypes.HANDOVER_ACCEPTED,
+  VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
+  VehicleEventTypes.HANDOVER_REJECTED,
+  VehicleEventTypes.HANDOVER_CANCELLED,
+  VehicleEventTypes.DEALLOCATED,
+];
+
+/** Status of `latestEvent`, used by the `handoverStatuses` list filter and the handover stats. */
+export enum HandoverStatus {
+  INITIATED = 'INITIATED',
+  ACCEPTED = 'ACCEPTED',
+}
+
+export const HANDOVER_STATUS_EVENT_TYPES: Record<HandoverStatus, VehicleEventTypes[]> = {
+  [HandoverStatus.INITIATED]: [VehicleEventTypes.HANDOVER_INITIATED],
+  [HandoverStatus.ACCEPTED]: [
+    VehicleEventTypes.HANDOVER_ACCEPTED,
+    VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
+  ],
+};
 
 export enum DocumentStatus {
   ACTIVE = 'ACTIVE',

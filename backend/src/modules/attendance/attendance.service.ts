@@ -7,6 +7,8 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { allocatedSiteForDayQuery } from './queries/attendance-site.queries';
+import { heldVehicleForDayQuery } from './queries/attendance-vehicle.queries';
 import {
   DataSource,
   EntityManager,
@@ -1765,10 +1767,62 @@ export class AttendanceService {
       attendanceType: record.attendanceType,
       workDuration: this.calculateWorkDuration(record.checkInTime, record.checkOutTime),
       notes: record.notes,
-      assignmentSnapshot: record.assignmentSnapshot ?? undefined,
+      assignmentSnapshot: this.publicSnapshot(record.assignmentSnapshot),
+      // Resolved for this date, not read from the snapshot: correcting an allocation or a
+      // handover has to land on every day it covers without anyone re-editing attendance.
+      site: record.allocatedSite ?? null,
+      vehicle: record.heldVehicle ?? null,
       // Empty for anyone who is not an engineer holding drivers that day, which is most rows.
       assignedDrivers: record.assignedDrivers ?? [],
     };
+  }
+
+  /**
+   * The snapshot as callers should see it.
+   *
+   * `company` and `contractors` are dropped: they are no longer part of the request, and the site
+   * they belonged to is now resolved from the allocation instead. `site` is dropped for the same
+   * reason — a stored one would disagree with the resolved one the moment an allocation is fixed,
+   * and the whole point of resolving is that a correction lands everywhere at once.
+   *
+   * `vehicle` goes the same way. The driver used to pick a registration number in the app, so
+   * attendance recorded what somebody typed rather than what the office had handed them, and a
+   * wrong pick stayed wrong. The handover is already recorded; it is read from there instead.
+   *
+   * Old rows keep their stored values; nothing is rewritten. They are simply not read any more.
+   */
+  private publicSnapshot(
+    snapshot: AttendanceEntity['assignmentSnapshot'] | null | undefined,
+  ): AttendanceEntity['assignmentSnapshot'] | undefined {
+    if (!snapshot) return undefined;
+    const rest = { ...(snapshot as Record<string, unknown>) };
+    delete rest.site;
+    delete rest.company;
+    delete rest.contractors;
+    delete rest.vehicle;
+    return rest as AttendanceEntity['assignmentSnapshot'];
+  }
+
+  /**
+   * The site this employee was allocated to on this day, or null.
+   *
+   * Null is a real answer, not a failure: attendance may be marked on a day with no allocation,
+   * and that day simply has no project against it.
+   */
+  private async resolveSiteForDay(userId: string, date: Date | string) {
+    const [row] = await this.dataSource.query(allocatedSiteForDayQuery, [userId, date]);
+    return row ?? null;
+  }
+
+  /**
+   * The vehicle this employee was holding on this day, or null.
+   *
+   * Null is the normal answer — most employees never hold one. Replayed from the handover events,
+   * so a day before the vehicle changed hands still shows the driver who actually had it.
+   */
+  private async resolveVehicleForDay(userId: string, date: Date | string) {
+    const [row] = await this.dataSource.query(heldVehicleForDayQuery, [userId, date]);
+    return row ?? null;
   }
 
   private calculateWorkDuration(checkIn?: Date, checkOut?: Date): number {
@@ -1877,9 +1931,21 @@ export class AttendanceService {
         })),
       );
 
+      // Every row here is the same user on the same date, so both are looked up once.
+      const [site, vehicle] = attendance.records.length
+        ? await Promise.all([
+            this.resolveSiteForDay(userId, attendance.records[0].attendanceDate),
+            this.resolveVehicleForDay(userId, attendance.records[0].attendanceDate),
+          ])
+        : [null, null];
+
       return attendance.records.map((record) => {
         return {
           ...record,
+          site,
+          vehicle,
+          // Spreading the record would otherwise hand back the raw snapshot, stale site and all.
+          assignmentSnapshot: this.publicSnapshot(record.assignmentSnapshot),
           assignedDrivers:
             driverMap.get(
               this.driverAssignmentService.driverMapKey(record.userId, record.attendanceDate),
@@ -1973,10 +2039,11 @@ export class AttendanceService {
 
       // No attendance record for today - fetch current assignments and user info
       if (!attendance) {
-        const [siteData, vehicleData, userData] = await Promise.all([
-          this.getUserCurrentSiteWithDetails(userId),
-          this.getUserAssignedVehicle(userId),
+        const [site, vehicleData, userData, engineer] = await Promise.all([
+          this.resolveSiteForDay(userId, todayDateString),
+          this.resolveVehicleForDay(userId, todayDateString),
           this.getUserBasicInfo(userId),
+          this.siteEngineerForDay(userId, todayDateString),
         ]);
 
         return {
@@ -1988,11 +2055,11 @@ export class AttendanceService {
           approvalStatus: null,
           workDuration: 0,
           user: userData,
-          site: siteData?.site || null,
-          company: siteData?.company || null,
-          contractors: siteData?.contractors || [],
+          // From the allocation for this date. Null is a real answer: attendance may be marked on
+          // a day with no allocation, and that day simply has no project against it.
+          site,
           vehicle: vehicleData,
-          assignedEngineer: await this.resolveVisibleEngineer(userId, siteData?.assignedEngineer),
+          assignedEngineer: await this.resolveVisibleEngineer(userId, engineer),
           assignedDrivers: await this.loadDriversForDay(userId, todayDate),
           message: 'No attendance record found for today',
         };
@@ -2000,23 +2067,18 @@ export class AttendanceService {
 
       // Use stored snapshot if available, otherwise fetch current assignments
       const snapshot = attendance.assignmentSnapshot;
-      let site = snapshot?.site || null;
-      let company = snapshot?.company || null;
-      let contractors = snapshot?.contractors || [];
-      let vehicle = snapshot?.vehicle || null;
+      // Neither the site nor the vehicle is read off the snapshot — see publicSnapshot(). Both are
+      // resolved for the day, so a corrected allocation or handover lands here too.
+      const [site, vehicle] = await Promise.all([
+        this.resolveSiteForDay(userId, attendance.attendanceDate),
+        this.resolveVehicleForDay(userId, attendance.attendanceDate),
+      ]);
       let assignedEngineer = snapshot?.assignedEngineer || null;
 
-      // Fallback: if no snapshot stored, fetch current data
+      // No snapshot means the row was created by the midnight cron rather than by a check-in, so
+      // nothing was ever chosen.
       if (!snapshot) {
-        const [siteData, vehicleData] = await Promise.all([
-          this.getUserCurrentSiteWithDetails(userId),
-          this.getUserAssignedVehicle(userId),
-        ]);
-        site = siteData?.site || null;
-        company = siteData?.company || null;
-        contractors = siteData?.contractors || [];
-        vehicle = vehicleData;
-        assignedEngineer = siteData?.assignedEngineer || null;
+        assignedEngineer = await this.siteEngineerForDay(userId, attendance.attendanceDate);
       }
 
       assignedEngineer = await this.resolveVisibleEngineer(userId, assignedEngineer);
@@ -2037,8 +2099,6 @@ export class AttendanceService {
           employeeId: attendance.user.employeeId,
         },
         site,
-        company,
-        contractors,
         vehicle,
         assignedEngineer,
         assignedDrivers: await this.loadDriversForDay(userId, attendance.attendanceDate),
@@ -2048,148 +2108,34 @@ export class AttendanceService {
     }
   }
 
-  private async getUserCurrentSiteWithDetails(userId: string): Promise<{
-    site: { id: string; name: string; fullAddress: string } | null;
-    company: { id: string; name: string; fullAddress: string } | null;
-    contractors: Array<{
-      id: string;
-      name: string;
-      city?: string;
-      state?: string;
-      gstNumber?: string;
-    }>;
-    assignedEngineer: {
-      id: string;
-      firstName: string;
-      lastName: string;
-      employeeId: string;
-    } | null;
-  } | null> {
-    // Get user's current site allocation with site and company details
-    const siteQuery = `
-      SELECT 
-        s.id as "siteId",
-        s.name as "siteName",
-        s."fullAddress" as "siteFullAddress",
-        c.id as "companyId",
-        c.name as "companyName",
-        c."fullAddress" as "companyFullAddress"
-      FROM site_allocations sa
-      INNER JOIN sites s ON s.id = sa."siteId" AND s."deletedAt" IS NULL
-      LEFT JOIN companies c ON c.id = s."companyId" AND c."deletedAt" IS NULL
-      WHERE sa."userId" = $1 
-        AND sa."isCurrentlyAllocated" = true 
-        AND sa."deletedAt" IS NULL
-      LIMIT 1
-    `;
-
-    const siteResult = await this.dataSource.query(siteQuery, [userId]);
-
-    if (!siteResult || siteResult.length === 0) {
-      return null;
-    }
-
-    const siteRow = siteResult[0];
-
-    // Get contractors for this site. City / state / GST come along so the check-in screen can show
-    // them before any snapshot exists — the same three fields the stored snapshot carries.
-    const contractorsQuery = `
-      SELECT
-        con.id,
-        con.name,
-        con.city,
-        con.state,
-        con."gstNumber"
-      FROM site_contractors sc
-      INNER JOIN contractors con ON con.id = sc."contractorId" AND con."deletedAt" IS NULL
-      WHERE sc."siteId" = $1
-    `;
-
-    const contractors = await this.dataSource.query(contractorsQuery, [siteRow.siteId]);
-
-    // Get assigned engineer for this site (user with role 'Engineer' allocated to the same site)
-    const engineerQuery = `
-      SELECT 
-        u.id,
-        u."firstName",
-        u."lastName",
-        u."employeeId"
-      FROM site_allocations sa
-      INNER JOIN users u ON u.id = sa."userId" AND u."deletedAt" IS NULL
-      WHERE sa."siteId" = $1 
-        AND sa."isCurrentlyAllocated" = true 
-        AND sa."deletedAt" IS NULL
-        AND sa.role = 'Engineer'
-      LIMIT 1
-    `;
-
-    const engineerResult = await this.dataSource.query(engineerQuery, [siteRow.siteId]);
-    const engineer = engineerResult && engineerResult.length > 0 ? engineerResult[0] : null;
-
-    return {
-      site: {
-        id: siteRow.siteId,
-        name: siteRow.siteName,
-        fullAddress: siteRow.siteFullAddress,
-      },
-      company: siteRow.companyId
-        ? {
-            id: siteRow.companyId,
-            name: siteRow.companyName,
-            fullAddress: siteRow.companyFullAddress,
-          }
-        : null,
-      contractors: contractors.map(
-        (c: {
-          id: string;
-          name: string;
-          city: string | null;
-          state: string | null;
-          gstNumber: string | null;
-        }) => ({
-          id: c.id,
-          name: c.name,
-          city: c.city ?? undefined,
-          state: c.state ?? undefined,
-          gstNumber: c.gstNumber ?? undefined,
-        }),
-      ),
-      assignedEngineer: engineer
-        ? {
-            id: engineer.id,
-            firstName: engineer.firstName,
-            lastName: engineer.lastName,
-            employeeId: engineer.employeeId,
-          }
-        : null,
-    };
-  }
-
-  private async getUserAssignedVehicle(
+  /**
+   * The engineer holding this site on a given day.
+   *
+   * All that survives of the old getUserCurrentSiteWithDetails: the site now comes from the
+   * employee's own allocation, and company and contractors are no longer returned at all. Only the
+   * site's engineer is still needed, because a driver's food allowance is routed through him.
+   */
+  private async siteEngineerForDay(
     userId: string,
-  ): Promise<{ id: string; registrationNo: string } | null> {
-    const vehicleQuery = `
-      SELECT 
-        vm.id,
-        vm."registrationNo"
-      FROM vehicle_versions vv
-      INNER JOIN vehicle_masters vm ON vm.id = vv."vehicleMasterId" AND vm."deletedAt" IS NULL
-      WHERE vv."assignedTo" = $1 
-        AND vv."isActive" = true 
-        AND vv."deletedAt" IS NULL
-      LIMIT 1
-    `;
+    date: Date | string,
+  ): Promise<{ id: string; firstName: string; lastName: string; employeeId: string } | null> {
+    const site = await this.resolveSiteForDay(userId, date);
+    if (!site) return null;
 
-    const vehicleResult = await this.dataSource.query(vehicleQuery, [userId]);
-
-    if (!vehicleResult || vehicleResult.length === 0) {
-      return null;
-    }
-
-    return {
-      id: vehicleResult[0].id,
-      registrationNo: vehicleResult[0].registrationNo,
-    };
+    const [engineer] = await this.dataSource.query(
+      `SELECT u.id, u."firstName", u."lastName", u."employeeId"
+         FROM site_allocations sa
+         INNER JOIN users u ON u.id = sa."userId" AND u."deletedAt" IS NULL
+        WHERE sa."siteId" = $1
+          AND sa."deletedAt" IS NULL
+          AND sa.role = 'Engineer'
+          AND sa."allocatedAt" <= $2::date
+          AND (sa."deallocatedAt" IS NULL OR sa."deallocatedAt" >= $2::date)
+        ORDER BY sa."allocatedAt" DESC
+        LIMIT 1`,
+      [site.id, date],
+    );
+    return engineer ?? null;
   }
 
   private async getUserBasicInfo(userId: string): Promise<{
@@ -2971,9 +2917,12 @@ export class AttendanceService {
   }
 
   /**
-   * A snapshot records where the employee actually worked that day, so a non-working day must not
-   * carry one — otherwise an absent or holiday row keeps showing the site, vehicle and engineer
-   * from before it was regularized.
+   * A snapshot records what was stated about that day, so a non-working day must not carry one —
+   * otherwise an absent or holiday row keeps showing the engineer it was regularized with.
+   *
+   * The project and the vehicle are unaffected: both are resolved on read from the allocation and
+   * the handover, and an absent driver still has the van the office gave him. What is cleared here
+   * is only what someone asserted, not what the office recorded.
    *
    * Deliberately keyed on the non-working statuses rather than "anything except present": rows
    * sitting at CHECKED_OUT, HALF_DAY or APPROVAL_PENDING are still working days, and the
@@ -3322,6 +3271,17 @@ export class AttendanceService {
     // An instruction, not stored data: it has already been turned into pairing rows, and keeping a
     // copy on the attendance row would be a second version of the truth that can drift.
     delete base.assignedDrivers;
+    // The project is resolved from the allocation on every read, so a stored copy could only ever
+    // disagree with it. Company and contractors follow from the project and are no longer returned
+    // at all. Dropped here rather than rejected, so an older mobile build that still sends them
+    // keeps working — the app and the API can deploy separately.
+    delete base.site;
+    delete base.company;
+    delete base.contractors;
+    // Same for the vehicle: the office records the handover, so attendance reads it from there
+    // rather than from whatever the driver picked in the app. A wrong pick used to stay wrong on
+    // that day's record for ever.
+    delete base.vehicle;
 
     // `snapshot` is returned untouched rather than as an empty object so that "the client said
     // nothing" stays distinguishable from "the client sent an empty snapshot" downstream.
@@ -3331,7 +3291,7 @@ export class AttendanceService {
         : (base as AttendanceEntity['assignmentSnapshot']);
 
     if (!attendanceDate) {
-      return this.enrichSnapshotContractors(asStored());
+      return asStored();
     }
 
     const context = await this.driverAssignmentService.resolveAssignmentContext(
@@ -3342,80 +3302,24 @@ export class AttendanceService {
     // Null is the normal outcome for a non-driver, or a driver nobody claimed that day: the
     // allowance simply stays with them.
     if (!context?.engineer) {
-      return this.enrichSnapshotContractors(asStored());
+      return asStored();
     }
 
     // Enriched after the merge, not before: a driver inherits `contractors` from his engineer's
     // row, and rows written before enrichment existed carry only id and name. Doing it last means
-    // the driver still ends up with the full contractor details.
-    return this.enrichSnapshotContractors(this.applyEngineerContext(base, context));
-  }
-
-  /**
-   * Replaces the snapshot's contractor entries with authoritative rows from the contractors master,
-   * keyed on the ids the caller sent.
-   *
-   * City, state and GST number are master data with financial meaning, so they are read here rather
-   * than accepted from the client, which may have loaded its screen hours before posting.
-   *
-   * An id with no matching contractor is kept exactly as it arrived — dropping it would silently
-   * lose an entry the user can still see on their own screen.
-   */
-  private async enrichSnapshotContractors(
-    snapshot: AttendanceEntity['assignmentSnapshot'] | undefined,
-  ): Promise<AttendanceEntity['assignmentSnapshot'] | undefined> {
-    const contractors = snapshot?.contractors;
-    if (!Array.isArray(contractors) || contractors.length === 0) {
-      return snapshot;
-    }
-
-    const ids = [...new Set(contractors.map((contractor) => contractor?.id).filter(Boolean))];
-    if (ids.length === 0) {
-      return snapshot;
-    }
-
-    const rows: Array<{
-      id: string;
-      name: string;
-      city: string | null;
-      state: string | null;
-      gstNumber: string | null;
-    }> = await this.dataSource.query(
-      `SELECT id, name, city, state, "gstNumber"
-         FROM contractors
-        WHERE id = ANY($1::uuid[]) AND "deletedAt" IS NULL`,
-      [ids],
-    );
-
-    const byId = new Map(rows.map((row) => [row.id, row]));
-
-    return {
-      ...snapshot,
-      contractors: contractors.map((contractor) => {
-        const row = byId.get(contractor?.id);
-        if (!row) {
-          return contractor;
-        }
-        return {
-          id: row.id,
-          name: row.name,
-          city: row.city ?? undefined,
-          state: row.state ?? undefined,
-          gstNumber: row.gstNumber ?? undefined,
-        };
-      }),
-    };
+    return this.applyEngineerContext(base, context);
   }
 
   /**
    * Merges the engineer's day context onto a driver's snapshot.
    *
-   * A driver has no site context of his own to report — he is wherever his engineer was — so site,
-   * company, contractor and vehicle are inherited from the engineer's own snapshot.
+   * Only the engineer is inherited now. Site, company and contractors used to be inherited too,
+   * on the reasoning that a driver is wherever his engineer was — but the project is resolved from
+   * the driver's own allocation on every read, so copying the engineer's here would put a second,
+   * staler answer in the row and undo the strip that just happened.
    *
-   * `??` rather than plain assignment on each field: an engineer whose row was created by the
-   * midnight cron has a null snapshot, and overwriting with undefined would wipe whatever the
-   * driver legitimately had.
+   * The vehicle has just joined them: it is read from the handover events for the day, so a copy
+   * taken off the engineer's row could only disagree with it.
    */
   private applyEngineerContext(
     base: Record<string, unknown>,
@@ -3424,10 +3328,6 @@ export class AttendanceService {
     return {
       ...base,
       assignedEngineer: context.engineer ?? undefined,
-      site: context.site ?? (base.site as never),
-      company: context.company ?? (base.company as never),
-      contractors: context.contractors ?? (base.contractors as never),
-      vehicle: context.vehicle ?? (base.vehicle as never),
     } as AttendanceEntity['assignmentSnapshot'];
   }
 

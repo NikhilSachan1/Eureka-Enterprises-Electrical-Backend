@@ -17,6 +17,7 @@ import { LeaveBalanceEntity } from 'src/modules/leave-balances/entities/leave-ba
 import { ExpenseTrackerEntity } from 'src/modules/expense-tracker/entities/expense-tracker.entity';
 import { ExpenseFilesEntity } from 'src/modules/expense-files/entities/expense-files.entity';
 import { CardsEntity } from 'src/modules/cards/entities/card.entity';
+import { PetroCardWalletRechargeEntity } from 'src/modules/petro-card-wallet/entities/petro-card-wallet-recharge.entity';
 import { VehicleFileEntity } from 'src/modules/vehicle-files/entities/vehicle-file.entity';
 import { VehicleEventEntity } from 'src/modules/vehicle-events/entities/vehicle-event.entity';
 import { VehicleMasterEntity } from 'src/modules/vehicle-masters/entities/vehicle-master.entity';
@@ -71,6 +72,8 @@ import { JmcItemMasterEntity } from 'src/modules/jmc/entities/jmc-item-master.en
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
+import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
+import { AdvanceSettlementEntity } from 'src/modules/advance-payments/entities/advance-settlement.entity';
 import { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
 import { PaymentSheetEntity } from 'src/modules/payment-sheets/entities/payment-sheet.entity';
 import { PaymentSheetItemEntity } from 'src/modules/payment-sheets/entities/payment-sheet-item.entity';
@@ -141,7 +144,9 @@ export class ConfigService {
       username: Environments.DATABASE_USERNAME,
       password: Environments.DATABASE_PASSWORD,
       database: Environments.DATABASE_NAME,
-      logging: true,
+      // Every SQL statement was being printed on every environment — by far the largest share of
+      // the log volume on UAT and production. Locally it stays on because that is where it helps.
+      logging: this.isLocal() ? true : ['error', 'warn', 'migration'],
       migrationsRun,
       // Connection pool settings for remote database stability
       extra: {
@@ -167,6 +172,7 @@ export class ConfigService {
         ExpenseTrackerEntity,
         ExpenseFilesEntity,
         CardsEntity,
+        PetroCardWalletRechargeEntity,
         VehicleMasterEntity,
         VehicleVersionEntity,
         VehicleFileEntity,
@@ -221,6 +227,8 @@ export class ConfigService {
         SiteReportEntity,
         SiteInvoiceEntity,
         BookPaymentEntity,
+        AdvancePaymentEntity,
+        AdvanceSettlementEntity,
         BankTransferEntity,
         PaymentSheetEntity,
         PaymentSheetItemEntity,

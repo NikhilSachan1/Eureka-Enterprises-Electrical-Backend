@@ -126,6 +126,8 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogEndOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogOther: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
+  // The org file manager ("My Files") is a general document store, not a document-type-specific
+  // attachment slot, so Word documents belong here alongside PDFs and images.
   orgFiles: [
     ALLOWED_FILE_CATEGORY.IMAGE,
     ALLOWED_FILE_CATEGORY.PDF,
@@ -133,6 +135,7 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
     ALLOWED_FILE_CATEGORY.CSV,
     ALLOWED_FILE_CATEGORY.JSON,
     ALLOWED_FILE_CATEGORY.HTML,
+    ALLOWED_FILE_CATEGORY.WORD,
   ],
 };
 

@@ -101,6 +101,7 @@ export class PurchaseOrderService {
             gstAmount,
             gstPercentage: dto.gstPercentage ?? null,
             gstType: dto.gstType ?? 'CGST_SGST',
+            poType: dto.poType ?? null,
             totalAmount,
             termsAndConditions: dto.termsAndConditions ?? null,
             fileKey: null,
@@ -152,6 +153,7 @@ export class PurchaseOrderService {
       taxableAmount: dto.taxableAmount,
       gstAmount: dto.gstAmount ?? 0,
       gstPercentage: dto.gstPercentage ?? null,
+      poType: dto.poType ?? null,
       totalAmount: dto.totalAmount,
       fileKey: dto.fileKey,
       fileName: dto.fileName,
@@ -841,12 +843,16 @@ export class PurchaseOrderService {
         po.id,
         po."poNumber",
         po."partyType",
+        po."poType",
         po."totalAmount",
         po."invoicedTotal",
         po."approvalStatus",
         po."isLocked",
         COALESCE(c.name, v.name)   AS "partyName",
         COALESCE(c.id, v.id)       AS "partyId",
+        COALESCE(adv."advancePaid", 0)      AS "advancePaid",
+        COALESCE(adv."advanceSettled", 0)   AS "advanceSettled",
+        COALESCE(adv."advanceRemaining", 0) AS "advanceRemaining",
         -- eligibility: NOT REJECTED and invoice ceiling not fully used
         -- (PENDING POs are now allowed for JMC creation; approval chain enforced at approval time)
         CASE
@@ -865,6 +871,16 @@ export class PurchaseOrderService {
       FROM purchase_orders po
       LEFT JOIN contractors c ON c.id = po."contractorId" AND c."deletedAt" IS NULL
       LEFT JOIN vendors     v ON v.id = po."vendorId"     AND v."deletedAt" IS NULL
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(ap.amount), 0) AS "advancePaid",
+          COALESCE(SUM(ap."settledAmount"), 0) AS "advanceSettled",
+          COALESCE(SUM(ap.amount - ap."settledAmount"), 0) AS "advanceRemaining"
+        FROM advance_payments ap
+        WHERE ap."poId" = po.id
+          AND ap."deletedAt" IS NULL
+          AND ap."approvalStatus" = 'APPROVED'
+      ) adv ON true
       WHERE po."siteId"    = $1
         AND po."partyType" = $2
         AND po."deletedAt" IS NULL
@@ -887,11 +903,18 @@ export class PurchaseOrderService {
           meta: {
             poNumber: r.poNumber,
             partyType: r.partyType,
+            // Drives whether the FE may offer the No-JMC route for this PO.
+            poType: r.poType ?? null,
             partyName: r.partyName,
             totalAmount,
             invoicedTotal,
             remaining,
             approvalStatus: r.approvalStatus,
+            advancePayment: {
+              amount: Number(r.advancePaid) || 0,
+              settled: Number(r.advanceSettled) || 0,
+              remaining: Number(r.advanceRemaining) || 0,
+            },
           },
         };
       }),

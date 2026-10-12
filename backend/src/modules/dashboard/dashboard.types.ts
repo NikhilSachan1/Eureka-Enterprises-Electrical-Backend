@@ -52,6 +52,10 @@ export interface OverviewData {
     cancelled: number;
     totalAmount: number;
   };
+  /** The one common wallet every PetroCard spends from. Web only — the mobile dashboard is out of scope. */
+  petroCardWallet: {
+    balance: number;
+  };
 }
 
 // ==================== Birthdays & Anniversaries ====================

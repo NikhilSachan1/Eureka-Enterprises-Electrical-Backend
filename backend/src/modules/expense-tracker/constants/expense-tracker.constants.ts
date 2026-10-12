@@ -4,10 +4,19 @@ export enum TransactionType {
   CREDIT_CARD = 'credit_card',
 }
 
+/**
+ * The flavour of an entry, on top of its accounting direction.
+ *
+ * `transactionType` says which way the money moves; this says *why*, which is what the UI renders.
+ * `CREDIT_BONUS` is a DEBIT row shown as a bonus, and `PENALTY` is its mirror: a CREDIT row (it
+ * reduces what the company owes the employee) that must read as a charge, not as money received.
+ * Without the tag a penalty is indistinguishable from a settlement.
+ */
 export enum ExpenseEntryType {
   SELF = 'self',
   FORCED = 'forced',
   CREDIT_BONUS = 'credit_bonus',
+  PENALTY = 'penalty',
 }
 
 export enum ApprovalStatus {

@@ -1,5 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DataSource, IsNull, ILike, In, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  IsNull,
+  ILike,
+  In,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { BookPaymentRepository } from './book-payment.repository';
 import { BookPaymentEntity } from './entities/book-payment.entity';
 import {
@@ -13,6 +22,7 @@ import { buildVendorListQuery } from './queries/book-payment.queries';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
+import { BookPaymentSourceType } from './constants/book-payment.constants';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
 import {
   PartyType,
@@ -22,6 +32,36 @@ import {
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
+import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
+
+/**
+ * A book payment rolls up onto an invoice only when it is invoice-backed. Advance-backed bookings
+ * carry a null `invoiceId`, and `strictNullChecks` is off in this project, so the compiler will not
+ * flag a null dereference — the guard has to be explicit rather than relying on types.
+ */
+function isInvoiceBacked(bp: Pick<BookPaymentEntity, 'sourceType' | 'invoiceId'>): boolean {
+  return bp.sourceType !== BookPaymentSourceType.ADVANCE && !!bp.invoiceId;
+}
+
+/**
+ * Parent chain the list and detail screens render as a breadcrumb.
+ * Invoice bookings: invoice → JMC → PO. Advance bookings have no JMC, so the chain is
+ * advance payment → PO. Site and company sit on the booking itself for both.
+ */
+const BOOK_PAYMENT_READ_RELATIONS = [
+  'invoice',
+  'invoice.jmc',
+  'invoice.jmc.po',
+  'advancePayment',
+  'advancePayment.po',
+  'site',
+  'site.company',
+  'vendor',
+  'createdByUser',
+  'updatedByUser',
+  'approvalByUser',
+  'unlockRequestedByUser',
+];
 
 @Injectable()
 export class BookPaymentService {
@@ -36,6 +76,10 @@ export class BookPaymentService {
    * to enforce the ceiling check (Σ booked ≤ invoice net payable).
    */
   async create(dto: CreateBookPaymentDto, createdBy: string) {
+    if (dto.sourceType === BookPaymentSourceType.ADVANCE) {
+      return await this.createFromAdvance(dto, createdBy);
+    }
+
     return await this.dataSource.transaction(async (em) => {
       // Lock invoice + validate
       const invoice = await em
@@ -64,15 +108,20 @@ export class BookPaymentService {
         ? invoiceTaxable - Number(invoice.tdsAmount ?? 0)
         : invoiceTaxable + gstAmount - Number(invoice.tdsAmount ?? 0);
 
-      // Ceiling: sum of existing book payments must not exceed invoiceNetPayable
+      // Ceiling: advances already paid to the vendor plus existing bookings must not exceed
+      // invoiceNetPayable. Subtracting the advance is what stops the same work being paid twice —
+      // once when the advance went out, and again as a booking against the full invoice.
+      const advanceSettled = Number(invoice.advanceSettledAmount ?? 0);
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      const remaining = invoiceNetPayable - existingBooked;
+      const remaining = invoiceNetPayable - advanceSettled - existingBooked;
       if (remaining <= 0) {
         throw new BadRequestException(
           BOOK_PAYMENT_ERRORS.INVOICE_FULLY_BOOKED.replace(
             '{netPayable}',
             formatInr(invoiceNetPayable),
-          ).replace('{booked}', formatInr(existingBooked)),
+          )
+            .replace('{advance}', formatInr(advanceSettled))
+            .replace('{booked}', formatInr(existingBooked)),
         );
       }
 
@@ -83,6 +132,7 @@ export class BookPaymentService {
             '{netPayable}',
             formatInr(invoiceNetPayable),
           )
+            .replace('{advance}', formatInr(advanceSettled))
             .replace('{booked}', formatInr(existingBooked))
             .replace('{remaining}', formatInr(remaining))
             .replace('{requested}', formatInr(transferAmount)),
@@ -132,6 +182,162 @@ export class BookPaymentService {
     });
   }
 
+  /**
+   * Book a payment against an **advance** rather than an invoice.
+   *
+   * An advance is money owed to the vendor with no bill behind it, so there is no invoice to lock,
+   * no net-payable to derive and no tax breakup — the booked figure is simply part of the advance.
+   * `taxableAmount` carries the transferred amount so the payment-advice PDF, which reads that
+   * column, still prints a sensible number.
+   *
+   * The ceiling is the advance's own amount less whatever is already booked against it.
+   * `settledAmount` deliberately plays no part: settlement is invoices consuming the advance, while
+   * booking is releasing the cash — two independent axes over the same money.
+   *
+   * Only `bookedTotal` on the PO moves. There is no invoice rollup to touch, and `paidTotal` stays
+   * where it is until a bank transfer actually goes out, exactly as on the invoice path.
+   */
+  private async createFromAdvance(dto: CreateBookPaymentDto, createdBy: string) {
+    return await this.dataSource.transaction(async (em) =>
+      this.bookAdvanceWithin(em, {
+        advancePaymentId: dto.advancePaymentId,
+        transferAmount: Number(dto.transferAmount),
+        bookingDate: new Date(dto.bookingDate),
+        paymentHoldReason: dto.paymentHoldReason ?? null,
+        remarks: dto.remarks ?? null,
+        createdBy,
+      }),
+    );
+  }
+
+  /** Total already booked against an advance, ignoring rejected rows. */
+  async sumBookedForAdvance(advancePaymentId: string, em?: EntityManager): Promise<number> {
+    return await this.bookPaymentRepository.sumByAdvance(advancePaymentId, em);
+  }
+
+  /**
+   * Books an advance inside a transaction the caller already owns.
+   *
+   * Split out of `createFromAdvance` so advance *approval* can create the booking in the very same
+   * transaction it approves in. An approval that marks money payable but fails to create the
+   * payable row — or a booking that survives a rolled-back approval — is worse than neither.
+   */
+  async bookAdvanceWithin(
+    em: EntityManager,
+    params: {
+      advancePaymentId: string;
+      transferAmount: number;
+      bookingDate: Date;
+      paymentHoldReason?: string | null;
+      remarks?: string | null;
+      createdBy: string;
+    },
+  ) {
+    const dto = {
+      advancePaymentId: params.advancePaymentId,
+      transferAmount: params.transferAmount,
+      bookingDate: params.bookingDate,
+      paymentHoldReason: params.paymentHoldReason ?? null,
+      remarks: params.remarks ?? null,
+    };
+    const createdBy = params.createdBy;
+
+    {
+      const advance = await em
+        .getRepository(AdvancePaymentEntity)
+        .createQueryBuilder('ap')
+        .setLock('pessimistic_write')
+        .where('ap.id = :id', { id: dto.advancePaymentId })
+        .andWhere('ap."deletedAt" IS NULL')
+        .getOne();
+
+      if (!advance) throw new NotFoundException(BOOK_PAYMENT_ERRORS.ADVANCE_NOT_FOUND);
+      if (advance.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+        throw new BadRequestException(BOOK_PAYMENT_ERRORS.ADVANCE_NOT_APPROVED);
+      }
+
+      const advanceAmount = Number(advance.amount);
+      const existingBooked = await this.bookPaymentRepository.sumByAdvance(advance.id, em);
+      const remaining = advanceAmount - existingBooked;
+      if (remaining <= 0) {
+        throw new BadRequestException(
+          BOOK_PAYMENT_ERRORS.ADVANCE_FULLY_BOOKED.replace('{advanceNumber}', advance.advanceNumber)
+            .replace('{amount}', formatInr(advanceAmount))
+            .replace('{booked}', formatInr(existingBooked)),
+        );
+      }
+
+      const transferAmount = Number(dto.transferAmount);
+      if (transferAmount > remaining) {
+        throw new BadRequestException(
+          BOOK_PAYMENT_ERRORS.ADVANCE_CEILING_EXCEEDED.replace(
+            '{advanceNumber}',
+            advance.advanceNumber,
+          )
+            .replace('{amount}', formatInr(advanceAmount))
+            .replace('{booked}', formatInr(existingBooked))
+            .replace('{remaining}', formatInr(remaining))
+            .replace('{requested}', formatInr(transferAmount)),
+        );
+      }
+
+      const created = await this.bookPaymentRepository.create(
+        {
+          sourceType: BookPaymentSourceType.ADVANCE,
+          advancePaymentId: advance.id,
+          invoiceId: null,
+          siteId: advance.siteId,
+          vendorId: advance.vendorId,
+          poId: advance.poId,
+          bookingDate: new Date(dto.bookingDate),
+          taxableAmount: transferAmount,
+          gstAmount: 0,
+          gstPercentage: null,
+          paymentTotalAmount: transferAmount,
+          paymentHoldAmount: 0,
+          paymentHoldReason: dto.paymentHoldReason ?? null,
+          remarks: dto.remarks ?? null,
+          approvalStatus: FinancialApprovalStatus.APPROVED,
+          approvalBy: createdBy,
+          approvalAt: new Date(),
+          isLocked: true,
+          hasTransfer: false,
+          createdBy,
+        } as Partial<BookPaymentEntity>,
+        em,
+      );
+
+      // Freezes the advance against edit and delete — the money has started moving.
+      await em
+        .getRepository(AdvancePaymentEntity)
+        .update({ id: advance.id }, { hasBookPayment: true });
+
+      await this.purchaseOrderService.adjustRollups(
+        advance.poId,
+        { bookedTotal: transferAmount },
+        em,
+      );
+
+      return { message: BOOK_PAYMENT_RESPONSES.CREATED, id: created.id };
+    }
+  }
+
+  /**
+   * Clears `hasBookPayment` once the last booking against an advance is gone, so an advance booked
+   * by mistake becomes editable again instead of being frozen forever.
+   */
+  private async refreshAdvanceBookedFlag(
+    advancePaymentId: string,
+    em: EntityManager,
+  ): Promise<void> {
+    const remainingBookings = await this.bookPaymentRepository.sumByAdvance(advancePaymentId, em);
+    if (remainingBookings <= 0) {
+      await em
+        .getRepository(AdvancePaymentEntity)
+        .update({ id: advancePaymentId }, { hasBookPayment: false });
+    }
+  }
+
   async findAll(query: GetBookPaymentDto) {
     const {
       invoiceId,
@@ -173,18 +379,7 @@ export class BookPaymentService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: [
-          'invoice',
-          'invoice.jmc',
-          'invoice.jmc.po',
-          'site',
-          'site.company',
-          'vendor',
-          'createdByUser',
-          'updatedByUser',
-          'approvalByUser',
-          'unlockRequestedByUser',
-        ],
+        relations: BOOK_PAYMENT_READ_RELATIONS,
       }),
       this.bookPaymentRepository.count({ where }),
     ]);
@@ -204,18 +399,7 @@ export class BookPaymentService {
   async findById(id: string) {
     const bp = await this.bookPaymentRepository.findOne({
       where: { id, deletedAt: IsNull() },
-      relations: [
-        'invoice',
-        'invoice.jmc',
-        'invoice.jmc.po',
-        'site',
-        'site.company',
-        'vendor',
-        'createdByUser',
-        'updatedByUser',
-        'approvalByUser',
-        'unlockRequestedByUser',
-      ],
+      relations: BOOK_PAYMENT_READ_RELATIONS,
     });
     if (!bp) throw new NotFoundException(BOOK_PAYMENT_ERRORS.NOT_FOUND);
     return {
@@ -244,6 +428,13 @@ export class BookPaymentService {
         const newTransferAmount = Number(dto.transferAmount);
         const oldTransferAmount = Number(bp.paymentTotalAmount);
 
+        // The ceiling re-check below reads the source invoice, so it only applies to invoice-backed
+        // bookings. An advance-backed one is capped by its advance, not an invoice, and reaching
+        // here with a null invoiceId would fetch nothing and then dereference null.
+        if (!isInvoiceBacked(bp)) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.ADVANCE_BACKED_AMOUNT_NOT_EDITABLE);
+        }
+
         // Re-check ceiling: remove old amount, add new amount
         const invoice = await em
           .getRepository(SiteInvoiceEntity)
@@ -259,9 +450,12 @@ export class BookPaymentService {
           ? invoiceTaxable - Number(invoice.tdsAmount ?? 0)
           : invoiceTaxable + Number(invoice.gstAmount ?? 0) - Number(invoice.tdsAmount ?? 0);
 
+        // Same advance subtraction as create() — an edit must not be able to reach a total the
+        // original booking was refused for.
+        const advanceSettled = Number(invoice.advanceSettledAmount ?? 0);
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - oldTransferAmount + newTransferAmount;
-        if (adjustedBooked > invoiceNetPayable) {
+        if (adjustedBooked + advanceSettled > invoiceNetPayable) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 
@@ -327,13 +521,25 @@ export class BookPaymentService {
 
       // Reverse the booked amount that was added at create time
       const effectiveAmount = Number(bp.paymentTotalAmount);
-      await em
-        .getRepository(SiteInvoiceEntity)
-        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      // Only invoice-backed bookings roll up onto an invoice — an advance-backed one has no
+      // invoiceId, and updating by a null id would silently match nothing.
+      if (isInvoiceBacked(bp)) {
+        await em
+          .getRepository(SiteInvoiceEntity)
+          .update(
+            { id: bp.invoiceId },
+            { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` },
+          );
+      }
       await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
 
       await this.bookPaymentRepository.update({ id }, { deletedBy }, em);
       await this.bookPaymentRepository.softDelete({ id }, em);
+
+      // Deleted last booking on an advance → the advance is editable again.
+      if (bp.advancePaymentId) {
+        await this.refreshAdvanceBookedFlag(bp.advancePaymentId, em);
+      }
 
       return { message: BOOK_PAYMENT_RESPONSES.DELETED };
     });
@@ -369,11 +575,17 @@ export class BookPaymentService {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_REJECT_APPROVED);
       }
 
-      // Reverse bookedTotal that was incremented on create
+      // Reverse bookedTotal that was incremented on create. Advance-backed bookings have no
+      // invoice to reverse against — only the PO rollup applies to them.
       const effectiveAmount = Number(bp.paymentTotalAmount);
-      await em
-        .getRepository(SiteInvoiceEntity)
-        .update({ id: bp.invoiceId }, { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` });
+      if (isInvoiceBacked(bp)) {
+        await em
+          .getRepository(SiteInvoiceEntity)
+          .update(
+            { id: bp.invoiceId },
+            { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` },
+          );
+      }
       await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
 
       await this.bookPaymentRepository.update(
@@ -387,6 +599,13 @@ export class BookPaymentService {
         } as Partial<BookPaymentEntity>,
         em,
       );
+
+      // Rejected after the status update, so sumByAdvance (which skips REJECTED) sees the new
+      // state and can clear the flag when this was the only booking.
+      if (bp.advancePaymentId) {
+        await this.refreshAdvanceBookedFlag(bp.advancePaymentId, em);
+      }
+
       return { message: BOOK_PAYMENT_RESPONSES.REJECTED };
     });
   }
@@ -625,10 +844,11 @@ export class BookPaymentService {
 
         const bookPayments = bpVendorRows.map((r) => {
           const tdsAmount = r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : 0;
-          const isGstHold: boolean = r.invoiceIsGstHold;
+          const isGstHold = r.invoiceIsGstHold === true;
           const netPayableAmount = isGstHold
             ? Number(r.taxableAmount) - tdsAmount
             : Number(r.taxableAmount) + Number(r.gstAmount) - tdsAmount;
+          const isAdvance = r.sourceType === BookPaymentSourceType.ADVANCE;
           return {
             id: r.bpId,
             bookingDate: r.bookingDate,
@@ -644,27 +864,44 @@ export class BookPaymentService {
             remarks: r.remarks ?? null,
             approvalStatus: r.approvalStatus,
             hasTransfer: r.hasTransfer,
+            sourceType: r.sourceType ?? BookPaymentSourceType.INVOICE,
             displayName: displayNameOf(r),
-            invoice: {
-              id: r.invoiceId,
-              invoiceNumber: r.invoiceNumber ?? null,
-              invoiceDate: r.invoiceDate ?? null,
-              totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
-              taxableAmount:
-                r.invoiceTaxableAmount !== null ? Number(r.invoiceTaxableAmount) : null,
-              gstAmount: r.invoiceGstAmount !== null ? Number(r.invoiceGstAmount) : null,
-              gstPercentage:
-                r.invoiceGstPercentage !== null ? Number(r.invoiceGstPercentage) : null,
-              tdsAmount: r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : null,
-              isGstHold: r.invoiceIsGstHold,
-              netPayableAmount:
-                r.invoiceNetPayableAmount !== null ? Number(r.invoiceNetPayableAmount) : null,
-              bookedTotal: r.invoiceBookedTotal !== null ? Number(r.invoiceBookedTotal) : null,
-              pendingToBook:
-                r.invoicePendingToBook !== null ? Number(r.invoicePendingToBook) : null,
-              approvalStatus: r.invoiceApprovalStatus,
-            },
-            jmc: r.jmcId ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate } : null,
+            // Invoice chain stops at the invoice; advance chain starts at the advance. The other
+            // block stays null so the UI reads exactly one parent.
+            invoice: isAdvance
+              ? null
+              : {
+                  id: r.invoiceId,
+                  invoiceNumber: r.invoiceNumber ?? null,
+                  invoiceDate: r.invoiceDate ?? null,
+                  totalAmount: r.invoiceTotalAmount !== null ? Number(r.invoiceTotalAmount) : null,
+                  taxableAmount:
+                    r.invoiceTaxableAmount !== null ? Number(r.invoiceTaxableAmount) : null,
+                  gstAmount: r.invoiceGstAmount !== null ? Number(r.invoiceGstAmount) : null,
+                  gstPercentage:
+                    r.invoiceGstPercentage !== null ? Number(r.invoiceGstPercentage) : null,
+                  tdsAmount: r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : null,
+                  isGstHold: r.invoiceIsGstHold,
+                  netPayableAmount:
+                    r.invoiceNetPayableAmount !== null ? Number(r.invoiceNetPayableAmount) : null,
+                  bookedTotal: r.invoiceBookedTotal !== null ? Number(r.invoiceBookedTotal) : null,
+                  pendingToBook:
+                    r.invoicePendingToBook !== null ? Number(r.invoicePendingToBook) : null,
+                  approvalStatus: r.invoiceApprovalStatus,
+                },
+            advance: isAdvance
+              ? {
+                  id: r.advancePaymentId,
+                  advanceNumber: r.advanceNumber ?? null,
+                  advanceDate: r.advanceDate ?? null,
+                  amount: r.advanceAmount !== null ? Number(r.advanceAmount) : null,
+                  settledAmount:
+                    r.advanceSettledAmount !== null ? Number(r.advanceSettledAmount) : 0,
+                }
+              : null,
+            jmc: !isAdvance && r.jmcId
+              ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate }
+              : null,
             po: r.poId
               ? {
                   id: r.poId,

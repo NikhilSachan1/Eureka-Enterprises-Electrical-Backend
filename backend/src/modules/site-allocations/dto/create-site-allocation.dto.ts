@@ -59,6 +59,16 @@ export class CreateSiteAllocationDto {
   @IsDateString()
   allocatedAt: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Date the allocation ends (inclusive). Omit for an open-ended allocation. Sending it lets a ' +
+      'past stint be recorded in one go, which is what a backfill needs.',
+    example: '2024-01-20',
+  })
+  @IsOptional()
+  @IsDateString()
+  deallocatedAt?: string;
+
   @ApiPropertyOptional({ description: 'Additional remarks' })
   @IsOptional()
   @IsString()

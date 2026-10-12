@@ -54,7 +54,7 @@ export class BookPaymentController {
   @ApiOperation({
     summary: 'Vendor book payments list',
     description:
-      'Returns all vendors with their approved book payments, each enriched with invoice, JMC, PO, site and company details. Paginated on vendor level.',
+      'Returns all vendors with their approved book payments. Invoice bookings carry invoice → JMC → PO → site → company. Advance bookings carry advance → PO → site → company. Paginated on vendor level.',
   })
   getVendorList(@Query() query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
     return this.bookPaymentService.getVendorList(query);
@@ -118,14 +118,14 @@ export class BookPaymentController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.book-payments.unlock-grant')
+  @RequiredPermission('financials.book-payments.unlock')
   @ApiOperation({ summary: 'Grant unlock request — admin (book payment becomes editable)' })
   grantUnlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bookPaymentService.grantUnlock(id, userId);
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.book-payments.unlock-request-reject')
+  @RequiredPermission('financials.book-payments.unlock')
   @ApiOperation({ summary: 'Reject unlock request — admin (book payment stays locked)' })
   rejectUnlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bookPaymentService.rejectUnlock(id, userId);

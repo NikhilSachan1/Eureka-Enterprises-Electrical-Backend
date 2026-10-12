@@ -62,6 +62,14 @@ export class PoInfoDto {
   @ApiProperty() totalAmount: number;
 }
 
+export class AdvanceInfoDto {
+  @ApiProperty() id: string;
+  @ApiProperty({ nullable: true }) advanceNumber: string | null;
+  @ApiProperty({ nullable: true }) advanceDate: string | null;
+  @ApiProperty({ nullable: true }) amount: number | null;
+  @ApiProperty() settledAmount: number;
+}
+
 export class VendorBookPaymentItemDto {
   @ApiProperty() id: string;
   @ApiProperty() bookingDate: string;
@@ -78,9 +86,22 @@ export class VendorBookPaymentItemDto {
   @ApiProperty({ nullable: true }) remarks: string | null;
   @ApiProperty() approvalStatus: string;
   @ApiProperty() hasTransfer: boolean;
+  @ApiProperty({ enum: ['INVOICE', 'ADVANCE'], description: 'Which parent chain to read' })
+  sourceType: string;
   @ApiProperty({ description: 'vendor name | site name | company name | city | state' })
   displayName: string;
-  @ApiProperty({ type: InvoiceInfoDto }) invoice: InvoiceInfoDto;
+  @ApiProperty({
+    type: InvoiceInfoDto,
+    nullable: true,
+    description: 'Set for INVOICE bookings. Null for ADVANCE.',
+  })
+  invoice: InvoiceInfoDto | null;
+  @ApiProperty({
+    type: AdvanceInfoDto,
+    nullable: true,
+    description: 'Set for ADVANCE bookings. Chain is advance → PO → site → company (no JMC).',
+  })
+  advance: AdvanceInfoDto | null;
   @ApiProperty({ type: JmcInfoDto, nullable: true }) jmc: JmcInfoDto | null;
   @ApiProperty({ type: PoInfoDto, nullable: true }) po: PoInfoDto | null;
   @ApiProperty({ type: SiteInfoDto }) site: SiteInfoDto;
