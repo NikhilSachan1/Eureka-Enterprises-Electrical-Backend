@@ -34,7 +34,7 @@ type StatusKind = 'ok' | 'warn' | 'bad' | 'na';
 /**
  * Client-ready Asset Report PDF (landscape). Always regenerated fresh from the selected assets.
  * Branding matches the JMC / payment-sheet PDFs. Calibration is emphasised (report is shared
- * with clients), plus warranty, make/model, serial, and category.
+ * with clients), plus make/model, serial, and category.
  */
 @Injectable()
 export class AssetReportPdfService {
@@ -173,7 +173,6 @@ export class AssetReportPdfService {
     const rows = assets
       .map((a, idx) => {
         const cal = this.validity(a.calibrationEndDate);
-        const war = this.validity(a.warrantyEndDate);
         const calRange =
           a.calibrationStartDate || a.calibrationEndDate
             ? `${this.fmtDate(a.calibrationStartDate)} → ${this.fmtDate(a.calibrationEndDate)}`
@@ -204,10 +203,6 @@ export class AssetReportPdfService {
                   : ''
               }
               ${certLink}
-            </td>
-            <td>
-              <div>${this.fmtDate(a.warrantyEndDate)}</div>
-              <div>${this.badge(war.label, war.kind)}</div>
             </td>
           </tr>`;
       })
@@ -278,10 +273,9 @@ export class AssetReportPdfService {
         <th>Name / Model</th>
         <th style="width:140px">Category</th>
         <th style="width:200px">Calibration (Valid From → Till)</th>
-        <th style="width:120px">Warranty Till</th>
       </tr>
     </thead>
-    <tbody>${rows || `<tr><td colspan="7" class="empty">No assets selected</td></tr>`}</tbody>
+    <tbody>${rows || `<tr><td colspan="6" class="empty">No assets selected</td></tr>`}</tbody>
   </table>
 
 </div>

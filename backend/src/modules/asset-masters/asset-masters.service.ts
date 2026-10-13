@@ -85,7 +85,7 @@ export class AssetMastersService {
 
   /**
    * Generate a client-ready Asset Report PDF for the selected assets. Fetches each asset's
-   * active version, renders a branded landscape table (calibration/warranty emphasised), and
+   * active version, renders a branded landscape table (calibration emphasised), and
    * returns a presigned download URL. Always regenerated fresh (never cached).
    */
   async generateAssetReport(dto: GenerateAssetReportDto) {
