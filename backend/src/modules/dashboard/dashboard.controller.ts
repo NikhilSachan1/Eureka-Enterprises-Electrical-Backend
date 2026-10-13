@@ -1,14 +1,18 @@
-import { Controller, Get, Query, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Param, Query, Request, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { DashboardService } from './dashboard.service';
+import { WorkBoardService } from './work-board.service';
 import { GetDashboardDto } from './dto/dashboard.dto';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('JWT-auth')
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly workBoardService: WorkBoardService,
+  ) {}
 
   @Get('mobile')
   @ApiOperation({
@@ -215,6 +219,52 @@ export class DashboardController {
       fromDate,
       toDate,
     });
+  }
+
+  // ==================== Work board ====================
+
+  @Get('pending-approvals')
+  @ApiOperation({
+    summary: 'Every approval queue — what is waiting, and on whom',
+    description:
+      'One row per queue (POs, JMCs, invoices, book payments, advances, site reports, leave, ' +
+      'attendance, expenses, fuel) with how many exist, how many are waiting, how long the ' +
+      'oldest has waited, and whether this reader is the one who clears it. `onMe` comes from ' +
+      'the role-permission table rather than a list in the code, so it cannot disagree with ' +
+      'what the API will actually allow. Payment sheets are reported separately, by the stage ' +
+      'they are sitting on: a sheet the Operation Manager has processed shows against ' +
+      'HR_REVIEW, which is what makes it appear as pending on HR. Scoped like the rest of the ' +
+      'dashboard — an admin reads the company, anyone else reads what they raised.',
+  })
+  async getPendingApprovals(@Request() req: any) {
+    return await this.workBoardService.getPendingApprovals(this.scopeOf(req), req?.user?.id);
+  }
+
+  @Get('document-gaps')
+  @ApiOperation({
+    summary: 'Where the document chain has stopped',
+    description:
+      'A PO approved with no JMC behind it, a JMC with no invoice, an invoice never booked, a ' +
+      'booking never transferred, an advance never settled, and documents with no file ' +
+      "uploaded. These are not pending approvals — a pending approval is on somebody's desk " +
+      'and appears in the queues above. A gap is something already approved whose next step ' +
+      'was never taken, so nobody is holding it and today nobody sees it. `info` is returned ' +
+      'apart from `gaps`: part-billing a PO is ordinary, and mixing it in would ' +
+      'leave a list nobody reads.',
+  })
+  async getDocumentGaps(@Request() req: any) {
+    return await this.workBoardService.getDocumentGaps(this.scopeOf(req));
+  }
+
+  @Get('document-gaps/:key')
+  @ApiOperation({
+    summary: 'The documents behind one gap',
+    description:
+      'Document number, site, amount and how many days it has been stuck. Capped; `truncated` ' +
+      'says when there are more and the real screen should be used.',
+  })
+  async getDocumentGapList(@Param() params: { key: string }, @Request() req: any) {
+    return await this.workBoardService.getDocumentGapList(params.key, this.scopeOf(req));
   }
 
   // ==================== Helpers ====================
