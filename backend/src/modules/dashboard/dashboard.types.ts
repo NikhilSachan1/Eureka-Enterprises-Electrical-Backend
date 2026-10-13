@@ -20,6 +20,8 @@ export interface DistributionChartData {
 // ==================== Overview Section ====================
 
 export interface OverviewData {
+  /** `all` = the whole company, `mine` = just the caller. Blocks that cannot be narrowed are null. */
+  scope: 'all' | 'mine';
   employees: {
     total: number;
     active: number;
@@ -27,7 +29,7 @@ export interface OverviewData {
     newThisMonth: number;
     exitingThisMonth: number;
     onProbation: number;
-  };
+  } | null;
   todayAttendance: {
     present: number;
     absent: number;
@@ -51,11 +53,11 @@ export interface OverviewData {
     paid: number;
     cancelled: number;
     totalAmount: number;
-  };
+  } | null;
   /** The one common wallet every PetroCard spends from. Web only — the mobile dashboard is out of scope. */
   petroCardWallet: {
     balance: number;
-  };
+  } | null;
 }
 
 // ==================== Birthdays & Anniversaries ====================

@@ -1,14 +1,18 @@
-import { Controller, Get, Query, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Param, Query, Request, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { DashboardService } from './dashboard.service';
+import { WorkBoardService } from './work-board.service';
 import { GetDashboardDto } from './dto/dashboard.dto';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('JWT-auth')
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly workBoardService: WorkBoardService,
+  ) {}
 
   @Get('mobile')
   @ApiOperation({
@@ -34,8 +38,7 @@ export class DashboardController {
   @Get('overview')
   @ApiOperation({ summary: 'Get overview stats (employees, attendance, approvals, payroll)' })
   async getOverview(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getOverview();
+    return await this.dashboardService.getOverview(this.scopeOf(req));
   }
 
   @Get('alerts')
@@ -43,22 +46,19 @@ export class DashboardController {
     summary: 'Get top alerts (cards, vehicle docs, vehicle service, asset calibration/warranty)',
   })
   async getAlerts(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getAlerts();
+    return await this.dashboardService.getAlerts(this.scopeOf(req));
   }
 
   @Get('approvals')
   @ApiOperation({ summary: 'Get pending approvals (leave, attendance, expense, fuel)' })
   async getApprovals(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getApprovals();
+    return await this.dashboardService.getApprovals(this.scopeOf(req));
   }
 
   @Get('attendance-summary')
   @ApiOperation({ summary: "Get today's attendance summary (present, absent, leave, etc.)" })
   async getAttendanceSummary(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getAttendance();
+    return await this.dashboardService.getAttendance(this.scopeOf(req));
   }
 
   @Get('leave-summary')
@@ -66,17 +66,15 @@ export class DashboardController {
     summary: 'Get leave summary (pending approvals, current month leaves, upcoming)',
   })
   async getLeaveSummary(@Query() query: GetDashboardDto, @Request() req: any) {
-    this.assertAdminAccess(req);
     const dateRange = this.dashboardService.getDateRange(query);
-    return await this.dashboardService.getLeave(dateRange);
+    return await this.dashboardService.getLeave(dateRange, this.scopeOf(req));
   }
 
   @Get('expense-summary')
   @ApiOperation({ summary: 'Get expense summary (totals, categories, top spenders)' })
   async getExpenseSummary(@Query() query: GetDashboardDto, @Request() req: any) {
-    this.assertAdminAccess(req);
     const dateRange = this.dashboardService.getDateRange(query);
-    return await this.dashboardService.getExpenses(dateRange);
+    return await this.dashboardService.getExpenses(dateRange, this.scopeOf(req));
   }
 
   @Get('employees-summary')
@@ -118,8 +116,7 @@ export class DashboardController {
     summary: 'Get asset stock counts by status (total, available, assigned, lost, retired)',
   })
   async getAssetSummary(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getAssetSummary();
+    return await this.dashboardService.getAssetSummary(this.scopeOf(req));
   }
 
   @Get('vehicle-summary')
@@ -127,8 +124,7 @@ export class DashboardController {
     summary: 'Get vehicle fleet counts by status (total, available, assigned, retired)',
   })
   async getVehicleSummary(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getVehicleSummary();
+    return await this.dashboardService.getVehicleSummary(this.scopeOf(req));
   }
 
   @Get('vehicle-readings')
@@ -153,10 +149,11 @@ export class DashboardController {
   @Get('ledger-balances')
   @ApiOperation({
     summary: 'Get expense + fuel ledger (approvals, opening/closing, employee-wise pay/collect)',
+    description:
+      'Admin roles see the company ledger. Employee, Driver, and every other non-admin role see only their own expense and fuel records.',
   })
   async getLedgerBalances(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getLedgerBalances();
+    return await this.dashboardService.getLedgerBalances(this.scopeOf(req));
   }
 
   @Get('cron-health')
@@ -225,12 +222,73 @@ export class DashboardController {
     });
   }
 
+  // ==================== Work board ====================
+
+  @Get('pending-approvals')
+  @ApiOperation({
+    summary: 'Every approval queue — what is waiting, and on whom',
+    description:
+      'One row per queue (POs, JMCs, invoices, book payments, advances, site reports, leave, ' +
+      'attendance, expenses, fuel) with how many exist, how many are waiting, how long the ' +
+      'oldest has waited, and whether this reader is the one who clears it. `onMe` comes from ' +
+      'the role-permission table rather than a list in the code, so it cannot disagree with ' +
+      'what the API will actually allow. Payment sheets are reported separately, by the stage ' +
+      'they are sitting on: a sheet the Operation Manager has processed shows against ' +
+      'HR_REVIEW, which is what makes it appear as pending on HR. Scoped like the rest of the ' +
+      'dashboard — an admin reads the company, anyone else reads what they raised.',
+  })
+  async getPendingApprovals(@Request() req: any) {
+    return await this.workBoardService.getPendingApprovals(this.scopeOf(req), req?.user?.id);
+  }
+
+  @Get('document-gaps')
+  @ApiOperation({
+    summary: 'Where the document chain has stopped',
+    description:
+      'A PO approved with no JMC behind it, a JMC with no invoice, an invoice never booked, a ' +
+      'booking never transferred, an advance never settled, and documents with no file ' +
+      "uploaded. These are not pending approvals — a pending approval is on somebody's desk " +
+      'and appears in the queues above. A gap is something already approved whose next step ' +
+      'was never taken, so nobody is holding it and today nobody sees it. `info` is returned ' +
+      'apart from `gaps`: part-billing a PO is ordinary, and mixing it in would ' +
+      'leave a list nobody reads.',
+  })
+  async getDocumentGaps(@Request() req: any) {
+    return await this.workBoardService.getDocumentGaps(this.scopeOf(req));
+  }
+
+  @Get('document-gaps/:key')
+  @ApiOperation({
+    summary: 'The documents behind one gap',
+    description:
+      'Document number, site, amount and how many days it has been stuck. Capped; `truncated` ' +
+      'says when there are more and the real screen should be used.',
+  })
+  async getDocumentGapList(@Param() params: { key: string }, @Request() req: any) {
+    return await this.workBoardService.getDocumentGapList(params.key, this.scopeOf(req));
+  }
+
   // ==================== Helpers ====================
 
   private assertAdminAccess(req: any): void {
     const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
     if (!this.dashboardService.isAdminRole(userRole)) {
-      throw new ForbiddenException('Access denied. Admin/Manager/HR/Operation Manager role required.');
+      throw new ForbiddenException(
+        'Access denied. Admin/Manager/HR/Operation Manager role required.',
+      );
     }
+  }
+
+  /**
+   * Who is this dashboard being read for.
+   *
+   * `null` for a role that is allowed to see the company; the caller's own id for everyone else.
+   * There is no way to ask for somebody else's — the id comes from the token and no endpoint takes
+   * one — so the same URL is safe for every role, and the front end builds one screen rather than
+   * branching on who is logged in.
+   */
+  private scopeOf(req: any): string | null {
+    const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
+    return this.dashboardService.isAdminRole(userRole) ? null : req?.user?.id;
   }
 }

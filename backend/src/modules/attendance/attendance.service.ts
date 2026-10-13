@@ -2986,9 +2986,8 @@ export class AttendanceService {
     if (context?.engineer) {
       snapshot = this.applyEngineerContext(snapshot, context) as Record<string, unknown>;
     } else {
-      // Only the engineer is cleared. The inherited site/company/contractor/vehicle are left in
-      // place: the pairing going away does not mean the day's context was wrong, and clearing them
-      // would erase the only record of where the driver actually was.
+      // The engineer is all the snapshot holds now — the project and the vehicle are resolved
+      // from the allocation and the handover on every read, so there is nothing else here to clear.
       delete snapshot.assignedEngineer;
     }
 
