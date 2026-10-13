@@ -282,18 +282,31 @@ export class DashboardService {
 
   // ==================== Section Implementations ====================
 
-  async getOverview(): Promise<OverviewData> {
+  /**
+   * The top summary row.
+   *
+   * Scoped (`userId` set), `todayAttendance` becomes one person's day — the same counts, each a 1
+   * or a 0 — and `pendingApprovals` becomes what that person has sent and is still waiting on.
+   *
+   * `employees` and `petroCardWallet` have no one-person meaning: a headcount of the company and
+   * the balance of the company's own wallet. They come back null rather than zero, because zero
+   * would read as a fact and null reads as "not yours to see".
+   */
+  async getOverview(userId: string | null = null): Promise<OverviewData> {
     const today = this.formatDate(new Date());
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
+    const companyWide = userId === null;
 
     const [employeeSummary, todayAttendance, pendingApprovals, payrollSummary, walletBalance] =
       await Promise.all([
-        this.executeQuery(queries.getEmployeeSummaryQuery()),
-        this.executeQuery(queries.getTodayAttendanceSummaryQuery(today)),
-        this.executeQuery(queries.getPendingApprovalsCountQuery()),
-        this.executeQuery(queries.getCurrentMonthPayrollSummaryQuery(currentMonth, currentYear)),
-        this.executeQuery({ query: walletBalanceQuery, params: [] }),
+        companyWide ? this.executeQuery(queries.getEmployeeSummaryQuery()) : [],
+        this.executeQuery(queries.getTodayAttendanceSummaryQuery(today, userId)),
+        this.executeQuery(queries.getPendingApprovalsCountQuery(userId)),
+        companyWide
+          ? this.executeQuery(queries.getCurrentMonthPayrollSummaryQuery(currentMonth, currentYear))
+          : [],
+        companyWide ? this.executeQuery({ query: walletBalanceQuery, params: [] }) : [],
       ]);
 
     const empData = employeeSummary[0] || {};
@@ -302,14 +315,17 @@ export class DashboardService {
     const payData = payrollSummary[0] || {};
 
     return {
-      employees: {
-        total: empData.total || 0,
-        active: empData.active || 0,
-        inactive: empData.inactive || 0,
-        newThisMonth: empData.newThisMonth || 0,
-        exitingThisMonth: empData.exitingThisMonth || 0,
-        onProbation: empData.onProbation || 0,
-      },
+      scope: companyWide ? 'all' : 'mine',
+      employees: companyWide
+        ? {
+            total: empData.total || 0,
+            active: empData.active || 0,
+            inactive: empData.inactive || 0,
+            newThisMonth: empData.newThisMonth || 0,
+            exitingThisMonth: empData.exitingThisMonth || 0,
+            onProbation: empData.onProbation || 0,
+          }
+        : null,
       todayAttendance: {
         present: attData.present || 0,
         absent: attData.absent || 0,
@@ -327,19 +343,19 @@ export class DashboardService {
         total:
           (approvalData.leave || 0) + (approvalData.attendance || 0) + (approvalData.expense || 0),
       },
-      currentMonthPayroll: {
-        draft: payData.draft || 0,
-        generated: payData.generated || 0,
-        approved: payData.approved || 0,
-        paid: payData.paid || 0,
-        cancelled: payData.cancelled || 0,
-        totalAmount: parseFloat(payData.totalAmount) || 0,
-      },
+      currentMonthPayroll: companyWide
+        ? {
+            draft: payData.draft || 0,
+            generated: payData.generated || 0,
+            approved: payData.approved || 0,
+            paid: payData.paid || 0,
+            cancelled: payData.cancelled || 0,
+            totalAmount: parseFloat(payData.totalAmount) || 0,
+          }
+        : null,
       // Can legitimately be negative — a recharge may be corrected after the money was spent — so
       // this is not clamped at zero. A negative figure is the signal that a top-up is overdue.
-      petroCardWallet: {
-        balance: Number(walletBalance[0]?.balance ?? 0),
-      },
+      petroCardWallet: companyWide ? { balance: Number(walletBalance[0]?.balance ?? 0) } : null,
     };
   }
 
@@ -510,14 +526,20 @@ export class DashboardService {
     };
   }
 
-  async getAttendance(): Promise<AttendanceData> {
+  /**
+   * Scoped, every count is the caller's own day — present 1 or 0 rather than present 24 — and the
+   * trend is their own month. Same shape, one reader.
+   */
+  async getAttendance(userId: string | null = null): Promise<AttendanceData> {
     const today = this.formatDate(new Date());
     const trendStartDate = new Date();
     trendStartDate.setDate(trendStartDate.getDate() - DASHBOARD_CONSTANTS.DEFAULT_TREND_DAYS);
 
     const [todayData, trendData] = await Promise.all([
-      this.executeQuery(queries.getTodayAttendanceSummaryQuery(today)),
-      this.executeQuery(queries.getAttendanceTrendQuery(this.formatDate(trendStartDate), today)),
+      this.executeQuery(queries.getTodayAttendanceSummaryQuery(today, userId)),
+      this.executeQuery(
+        queries.getAttendanceTrendQuery(this.formatDate(trendStartDate), today, userId),
+      ),
     ]);
 
     const att = todayData[0] || {};
@@ -566,19 +588,28 @@ export class DashboardService {
     };
   }
 
-  async getLeave(dateRange: { startDate: string; endDate: string }): Promise<LeaveData> {
+  async getLeave(
+    dateRange: { startDate: string; endDate: string },
+    userId: string | null = null,
+  ): Promise<LeaveData> {
     const today = new Date();
     const upcomingEndDate = new Date();
     upcomingEndDate.setDate(today.getDate() + DASHBOARD_CONSTANTS.DEFAULT_UPCOMING_DAYS);
     const financialYear = this.utilityService.getFinancialYear(today);
 
     const [leaveSummary, upcomingLeaves, pendingApprovals, balanceOverview] = await Promise.all([
-      this.executeQuery(queries.getLeaveSummaryQuery(dateRange.startDate, dateRange.endDate)),
       this.executeQuery(
-        queries.getUpcomingLeavesQuery(this.formatDate(today), this.formatDate(upcomingEndDate)),
+        queries.getLeaveSummaryQuery(dateRange.startDate, dateRange.endDate, userId),
       ),
-      this.executeQuery(queries.getPendingLeaveApprovalsQuery(PREVIEW_LIMIT_SMALL)),
-      this.executeQuery(queries.getLeaveBalanceOverviewQuery(financialYear)),
+      this.executeQuery(
+        queries.getUpcomingLeavesQuery(
+          this.formatDate(today),
+          this.formatDate(upcomingEndDate),
+          userId,
+        ),
+      ),
+      this.executeQuery(queries.getPendingLeaveApprovalsQuery(PREVIEW_LIMIT_SMALL, userId)),
+      this.executeQuery(queries.getLeaveBalanceOverviewQuery(financialYear, userId)),
     ]);
 
     // `pendingApprovals` is a capped preview, so its count comes from the aggregate.
@@ -698,20 +729,31 @@ export class DashboardService {
     };
   }
 
-  async getExpenses(dateRange: { startDate: string; endDate: string }): Promise<ExpenseData> {
+  /**
+   * Scoped, `topSpenders` is skipped: a league table of one person is not a league table, and it
+   * would be the only place on this screen where someone could read another employee's figure.
+   */
+  async getExpenses(
+    dateRange: { startDate: string; endDate: string },
+    userId: string | null = null,
+  ): Promise<ExpenseData> {
     const [summary, categoryData, topSpenders, pendingApprovals] = await Promise.all([
-      this.executeQuery(queries.getExpenseSummaryQuery(dateRange.startDate, dateRange.endDate)),
       this.executeQuery(
-        queries.getExpenseCategoryDistributionQuery(dateRange.startDate, dateRange.endDate),
+        queries.getExpenseSummaryQuery(dateRange.startDate, dateRange.endDate, userId),
       ),
       this.executeQuery(
-        queries.getTopSpendersQuery(
-          dateRange.startDate,
-          dateRange.endDate,
-          DASHBOARD_CONSTANTS.TOP_SPENDERS_LIMIT,
-        ),
+        queries.getExpenseCategoryDistributionQuery(dateRange.startDate, dateRange.endDate, userId),
       ),
-      this.executeQuery(queries.getPendingExpenseApprovalsQuery(PREVIEW_LIMIT_SMALL)),
+      userId
+        ? Promise.resolve([])
+        : this.executeQuery(
+            queries.getTopSpendersQuery(
+              dateRange.startDate,
+              dateRange.endDate,
+              DASHBOARD_CONSTANTS.TOP_SPENDERS_LIMIT,
+            ),
+          ),
+      this.executeQuery(queries.getPendingExpenseApprovalsQuery(PREVIEW_LIMIT_SMALL, userId)),
     ]);
 
     // Capped preview above; the card's number is the real backlog.
@@ -744,7 +786,14 @@ export class DashboardService {
     };
   }
 
-  async getAlerts(): Promise<AlertsData> {
+  /**
+   * Scoped, these become the alerts about the things in the caller's own hands — the papers on the
+   * vehicle they drive, the calibration on the instrument they hold.
+   *
+   * Cards are the exception and are left out when scoped: a fuel card belongs to a vehicle rather
+   * than a person, so there is no honest way to say whose expiry it is.
+   */
+  async getAlerts(userId: string | null = null): Promise<AlertsData> {
     const today = new Date();
     const warningDate = new Date(today);
     warningDate.setDate(today.getDate() + DASHBOARD_CONSTANTS.ALERT_WARNING_DAYS);
@@ -753,16 +802,22 @@ export class DashboardService {
 
     const [cards, vehicleDocs, vehicleService, assetCalibration, assetWarranty] = await Promise.all(
       [
-        this.executeQuery(
-          queries.getExpiringCardsQuery(this.formatDate(warningDate), this.formatDate(infoDate)),
-        ),
+        userId
+          ? Promise.resolve([])
+          : this.executeQuery(
+              queries.getExpiringCardsQuery(
+                this.formatDate(warningDate),
+                this.formatDate(infoDate),
+              ),
+            ),
         this.executeQuery(
           queries.getExpiringVehicleDocsQuery(
             this.formatDate(warningDate),
             this.formatDate(infoDate),
+            userId,
           ),
         ),
-        this.executeQuery(queries.getVehicleServiceDueQuery(1000)),
+        this.executeQuery(queries.getVehicleServiceDueQuery(1000, userId)),
         this.executeQuery(
           queries.getAssetCalibrationDueQuery(
             this.formatDate(warningDate),
@@ -969,20 +1024,26 @@ export class DashboardService {
    */
   private async pendingApprovalCount(
     type: 'leave' | 'attendance' | 'expense' | 'fuelExpense',
+    userId: string | null = null,
   ): Promise<number> {
-    const rows = await this.executeQuery(queries.getPendingApprovalStatsQuery());
+    const rows = await this.executeQuery(queries.getPendingApprovalStatsQuery(userId));
     const row = (rows as any[]).find((r) => r.type === type);
     return Number(row?.total ?? 0);
   }
 
-  async getApprovals(): Promise<ApprovalsData> {
+  /**
+   * Unscoped this is "what is waiting on me to approve"; scoped it is "what I have sent that is
+   * still waiting on somebody". Same rows, read from the other end — which is the one an employee
+   * actually needs, and the reason this endpoint is worth scoping rather than hiding.
+   */
+  async getApprovals(userId: string | null = null): Promise<ApprovalsData> {
     const [leaveApprovals, attendanceApprovals, expenseApprovals, fuelExpenseApprovals, statRows] =
       await Promise.all([
-        this.executeQuery(queries.getPendingLeaveApprovalsQuery(ITEM_PREVIEW_LIMIT)),
-        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(ITEM_PREVIEW_LIMIT)),
-        this.executeQuery(queries.getPendingExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT)),
-        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT)),
-        this.executeQuery(queries.getPendingApprovalStatsQuery()),
+        this.executeQuery(queries.getPendingLeaveApprovalsQuery(ITEM_PREVIEW_LIMIT, userId)),
+        this.executeQuery(queries.getPendingAttendanceApprovalsQuery(ITEM_PREVIEW_LIMIT, userId)),
+        this.executeQuery(queries.getPendingExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT, userId)),
+        this.executeQuery(queries.getPendingFuelExpenseApprovalsQuery(ITEM_PREVIEW_LIMIT, userId)),
+        this.executeQuery(queries.getPendingApprovalStatsQuery(userId)),
       ]);
 
     //TODO: temporary for now
@@ -1239,7 +1300,7 @@ export class DashboardService {
 
   // ==================== NEW: Asset Summary ====================
 
-  async getAssetSummary(): Promise<{
+  async getAssetSummary(userId: string | null = null): Promise<{
     total: number;
     available: number;
     assigned: number;
@@ -1247,13 +1308,17 @@ export class DashboardService {
     retired: number;
     underMaintenance: number;
   }> {
-    const rows = await this.dataSource.query(`
+    const rows = await this.dataSource.query(
+      `
       SELECT av.status, COUNT(*)::int as count
       FROM asset_masters am
       JOIN asset_versions av ON av."assetMasterId" = am.id AND av."isActive" = true
       WHERE am."deletedAt" IS NULL AND av."deletedAt" IS NULL
+        AND ($1::uuid IS NULL OR av."assignedTo" = $1::uuid)
       GROUP BY av.status
-    `);
+    `,
+      [userId],
+    );
     const map: Record<string, number> = {};
     for (const r of rows) map[r.status] = Number(r.count);
     const total = Object.values(map).reduce((s: number, v: number) => s + v, 0);
@@ -1269,19 +1334,23 @@ export class DashboardService {
 
   // ==================== NEW: Vehicle Summary ====================
 
-  async getVehicleSummary(): Promise<{
+  async getVehicleSummary(userId: string | null = null): Promise<{
     total: number;
     available: number;
     assigned: number;
     retired: number;
   }> {
-    const rows = await this.dataSource.query(`
+    const rows = await this.dataSource.query(
+      `
       SELECT vv.status, COUNT(*)::int as count
       FROM vehicle_masters vm
       JOIN vehicle_versions vv ON vv."vehicleMasterId" = vm.id AND vv."isActive" = true
       WHERE vm."deletedAt" IS NULL AND vv."deletedAt" IS NULL
+        AND ($1::uuid IS NULL OR vv."assignedTo" = $1::uuid)
       GROUP BY vv.status
-    `);
+    `,
+      [userId],
+    );
     const map: Record<string, number> = {};
     for (const r of rows) map[r.status] = Number(r.count);
     const total = Object.values(map).reduce((s: number, v: number) => s + v, 0);

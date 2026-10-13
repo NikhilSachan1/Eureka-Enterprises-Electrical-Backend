@@ -15,9 +15,9 @@ export const getEmployeeSummaryQuery = () => ({
       COUNT(*)::int as "total",
       COUNT(CASE WHEN status = $1 THEN 1 END)::int as "active",
       COUNT(CASE WHEN status != $1 THEN 1 END)::int as "inactive",
-      COUNT(CASE WHEN "dateOfJoining" >= DATE_TRUNC('month', CURRENT_DATE) 
+      COUNT(CASE WHEN "dateOfJoining" >= DATE_TRUNC('month', CURRENT_DATE)
                  AND "dateOfJoining" <= CURRENT_DATE THEN 1 END)::int as "newThisMonth",
-      COUNT(CASE WHEN "lastWorkingDate" >= DATE_TRUNC('month', CURRENT_DATE) 
+      COUNT(CASE WHEN "lastWorkingDate" >= DATE_TRUNC('month', CURRENT_DATE)
                  AND "lastWorkingDate" <= (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month - 1 day') THEN 1 END)::int as "exitingThisMonth",
       COUNT(CASE WHEN "employeeType" = 'PROBATION' AND status = $1 THEN 1 END)::int as "onProbation"
     FROM users
@@ -26,7 +26,7 @@ export const getEmployeeSummaryQuery = () => ({
   params: [UserStatus.ACTIVE],
 });
 
-export const getTodayAttendanceSummaryQuery = (today: string) => ({
+export const getTodayAttendanceSummaryQuery = (today: string, userId: string | null = null) => ({
   query: `
     SELECT
       COUNT(CASE WHEN status = $1 THEN 1 END)::int as "present",
@@ -42,6 +42,7 @@ export const getTodayAttendanceSummaryQuery = (today: string) => ({
     WHERE "attendanceDate" = $11::date
       AND "isActive" = true
       AND "deletedAt" IS NULL
+      AND ($12::uuid IS NULL OR "userId" = $12::uuid)
   `,
   params: [
     AttendanceStatus.PRESENT,
@@ -55,20 +56,28 @@ export const getTodayAttendanceSummaryQuery = (today: string) => ({
     AttendanceStatus.CHECKED_OUT,
     AttendanceStatus.HALF_DAY,
     today,
+    userId,
   ],
 });
 
-export const getPendingApprovalsCountQuery = () => ({
+/**
+ * Scoped, this reads as "what I have sent that is still waiting on somebody" rather than "what is
+ * waiting on me" — the rows are the same rows, the reader is different.
+ */
+export const getPendingApprovalsCountQuery = (userId: string | null = null) => ({
   query: `
     SELECT
-      (SELECT COUNT(*)::int FROM leave_applications 
-       WHERE "approvalStatus" = $1 AND "deletedAt" IS NULL) as "leave",
-      (SELECT COUNT(*)::int FROM attendances 
-       WHERE "approvalStatus" = $2 AND "isActive" = true AND "deletedAt" IS NULL) as "attendance",
-      (SELECT COUNT(*)::int FROM expenses 
-       WHERE "approvalStatus" = $3 AND "deletedAt" IS NULL) as "expense"
+      (SELECT COUNT(*)::int FROM leave_applications
+       WHERE "approvalStatus" = $1 AND "deletedAt" IS NULL
+         AND ($4::uuid IS NULL OR "userId" = $4::uuid)) as "leave",
+      (SELECT COUNT(*)::int FROM attendances
+       WHERE "approvalStatus" = $2 AND "isActive" = true AND "deletedAt" IS NULL
+         AND ($4::uuid IS NULL OR "userId" = $4::uuid)) as "attendance",
+      (SELECT COUNT(*)::int FROM expenses
+       WHERE "approvalStatus" = $3 AND "deletedAt" IS NULL
+         AND ($4::uuid IS NULL OR "userId" = $4::uuid)) as "expense"
   `,
-  params: [LeaveApprovalStatus.PENDING, ApprovalStatus.PENDING, 'pending'],
+  params: [LeaveApprovalStatus.PENDING, ApprovalStatus.PENDING, 'pending', userId],
 });
 
 export const getCurrentMonthPayrollSummaryQuery = (month: number, year: number) => ({
@@ -98,28 +107,28 @@ export const getCurrentMonthPayrollSummaryQuery = (month: number, year: number) 
 
 export const getBirthdaysQuery = (today: string, weekEnd: string, monthEnd: string) => ({
   query: `
-    SELECT 
+    SELECT
       id as "userId",
       CONCAT("firstName", ' ', "lastName") as "name",
       email,
       "dateOfBirth" as "date",
       "profilePicture",
-      CASE 
+      CASE
         WHEN TO_CHAR("dateOfBirth", 'MM-DD') = TO_CHAR($1::date, 'MM-DD') THEN 'today'
-        WHEN TO_CHAR("dateOfBirth", 'MM-DD') <= TO_CHAR($2::date, 'MM-DD') 
+        WHEN TO_CHAR("dateOfBirth", 'MM-DD') <= TO_CHAR($2::date, 'MM-DD')
              AND TO_CHAR("dateOfBirth", 'MM-DD') > TO_CHAR($1::date, 'MM-DD') THEN 'week'
         ELSE 'month'
       END as "period",
-      CASE 
+      CASE
         WHEN TO_CHAR("dateOfBirth", 'MM-DD') >= TO_CHAR($1::date, 'MM-DD')
         THEN (
-          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int, 
-                    EXTRACT(MONTH FROM "dateOfBirth")::int, 
+          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int,
+                    EXTRACT(MONTH FROM "dateOfBirth")::int,
                     EXTRACT(DAY FROM "dateOfBirth")::int) - $1::date
         )
         ELSE (
-          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int + 1, 
-                    EXTRACT(MONTH FROM "dateOfBirth")::int, 
+          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int + 1,
+                    EXTRACT(MONTH FROM "dateOfBirth")::int,
                     EXTRACT(DAY FROM "dateOfBirth")::int) - $1::date
         )
       END as "daysUntil"
@@ -138,29 +147,29 @@ export const getBirthdaysQuery = (today: string, weekEnd: string, monthEnd: stri
 
 export const getAnniversariesQuery = (today: string, weekEnd: string, monthEnd: string) => ({
   query: `
-    SELECT 
+    SELECT
       id as "userId",
       CONCAT("firstName", ' ', "lastName") as "name",
       email,
       "dateOfJoining" as "date",
       "profilePicture",
       EXTRACT(YEAR FROM AGE($1::date, "dateOfJoining"))::int as "yearsCompleted",
-      CASE 
+      CASE
         WHEN TO_CHAR("dateOfJoining", 'MM-DD') = TO_CHAR($1::date, 'MM-DD') THEN 'today'
-        WHEN TO_CHAR("dateOfJoining", 'MM-DD') <= TO_CHAR($2::date, 'MM-DD') 
+        WHEN TO_CHAR("dateOfJoining", 'MM-DD') <= TO_CHAR($2::date, 'MM-DD')
              AND TO_CHAR("dateOfJoining", 'MM-DD') > TO_CHAR($1::date, 'MM-DD') THEN 'week'
         ELSE 'month'
       END as "period",
-      CASE 
+      CASE
         WHEN TO_CHAR("dateOfJoining", 'MM-DD') >= TO_CHAR($1::date, 'MM-DD')
         THEN (
-          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int, 
-                    EXTRACT(MONTH FROM "dateOfJoining")::int, 
+          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int,
+                    EXTRACT(MONTH FROM "dateOfJoining")::int,
                     EXTRACT(DAY FROM "dateOfJoining")::int) - $1::date
         )
         ELSE (
-          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int + 1, 
-                    EXTRACT(MONTH FROM "dateOfJoining")::int, 
+          MAKE_DATE(EXTRACT(YEAR FROM $1::date)::int + 1,
+                    EXTRACT(MONTH FROM "dateOfJoining")::int,
                     EXTRACT(DAY FROM "dateOfJoining")::int) - $1::date
         )
       END as "daysUntil"
@@ -198,9 +207,13 @@ export const getHolidaysQuery = () => ({
 
 // ==================== Attendance Trend Query ====================
 
-export const getAttendanceTrendQuery = (startDate: string, endDate: string) => ({
+export const getAttendanceTrendQuery = (
+  startDate: string,
+  endDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       TO_CHAR("attendanceDate", 'YYYY-MM-DD') as "date",
       COUNT(CASE WHEN status = $1 THEN 1 END)::int as "present",
       COUNT(CASE WHEN status = $2 THEN 1 END)::int as "absent",
@@ -211,6 +224,7 @@ export const getAttendanceTrendQuery = (startDate: string, endDate: string) => (
       AND "attendanceDate" <= $7::date
       AND "isActive" = true
       AND "deletedAt" IS NULL
+      AND ($8::uuid IS NULL OR "userId" = $8::uuid)
     GROUP BY "attendanceDate"
     ORDER BY "attendanceDate"
   `,
@@ -222,14 +236,19 @@ export const getAttendanceTrendQuery = (startDate: string, endDate: string) => (
     AttendanceStatus.HOLIDAY,
     startDate,
     endDate,
+    userId,
   ],
 });
 
 // ==================== Leave Summary Query ====================
 
-export const getLeaveSummaryQuery = (startDate: string, endDate: string) => ({
+export const getLeaveSummaryQuery = (
+  startDate: string,
+  endDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       "leaveCategory",
       COUNT(*)::int as "count"
     FROM leave_applications
@@ -237,14 +256,19 @@ export const getLeaveSummaryQuery = (startDate: string, endDate: string) => ({
       AND "fromDate" <= $2::date
       AND "approvalStatus" = $3
       AND "deletedAt" IS NULL
+      AND ($4::uuid IS NULL OR "userId" = $4::uuid)
     GROUP BY "leaveCategory"
   `,
-  params: [startDate, endDate, LeaveApprovalStatus.APPROVED],
+  params: [startDate, endDate, LeaveApprovalStatus.APPROVED, userId],
 });
 
-export const getUpcomingLeavesQuery = (startDate: string, endDate: string) => ({
+export const getUpcomingLeavesQuery = (
+  startDate: string,
+  endDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       la.id,
       la."userId",
       CONCAT(u."firstName", ' ', u."lastName") as "userName",
@@ -258,31 +282,43 @@ export const getUpcomingLeavesQuery = (startDate: string, endDate: string) => ({
       AND la."fromDate" <= $2::date
       AND la."approvalStatus" = $3
       AND la."deletedAt" IS NULL
+      AND ($4::uuid IS NULL OR la."userId" = $4::uuid)
     ORDER BY la."fromDate"
   `,
-  params: [startDate, endDate, LeaveApprovalStatus.APPROVED],
+  params: [startDate, endDate, LeaveApprovalStatus.APPROVED, userId],
 });
 
-export const getLeaveBalanceOverviewQuery = (financialYear: string) => ({
+/**
+ * Leave allocated against consumed, per category.
+ *
+ * The column is `totalAllocated`; this asked for `allocated`, which does not exist. Query errors
+ * on this dashboard are logged and swallowed, so the card has been quietly empty rather than
+ * visibly broken. The numbers are varchar in this schema, hence the casts.
+ */
+export const getLeaveBalanceOverviewQuery = (
+  financialYear: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       "leaveCategory",
-      SUM("allocated"::int)::int as "allocated",
-      SUM("consumed"::int)::int as "consumed",
-      SUM(("allocated"::int - "consumed"::int))::int as "balance"
+      SUM("totalAllocated"::numeric)::int as "allocated",
+      SUM("consumed"::numeric)::int as "consumed",
+      SUM("totalAllocated"::numeric - "consumed"::numeric)::int as "balance"
     FROM leave_balances
     WHERE "financialYear" = $1
       AND "deletedAt" IS NULL
+      AND ($2::uuid IS NULL OR "userId" = $2::uuid)
     GROUP BY "leaveCategory"
   `,
-  params: [financialYear],
+  params: [financialYear, userId],
 });
 
 // ==================== Pending Approvals Queries ====================
 
-export const getPendingLeaveApprovalsQuery = (limit = 10) => ({
+export const getPendingLeaveApprovalsQuery = (limit = 10, userId: string | null = null) => ({
   query: `
-    SELECT 
+    SELECT
       la.id,
       la."userId",
       CONCAT(u."firstName", ' ', u."lastName") as "userName",
@@ -298,15 +334,16 @@ export const getPendingLeaveApprovalsQuery = (limit = 10) => ({
     JOIN users u ON u.id = la."userId"
     WHERE la."approvalStatus" = $1
       AND la."deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR la."userId" = $3::uuid)
     ORDER BY la."createdAt" ASC
     LIMIT $2
   `,
-  params: [LeaveApprovalStatus.PENDING, limit],
+  params: [LeaveApprovalStatus.PENDING, limit, userId],
 });
 
-export const getPendingAttendanceApprovalsQuery = (limit = 10) => ({
+export const getPendingAttendanceApprovalsQuery = (limit = 10, userId: string | null = null) => ({
   query: `
-    SELECT 
+    SELECT
       a.id,
       a."userId",
       CONCAT(u."firstName", ' ', u."lastName") as "userName",
@@ -323,15 +360,16 @@ export const getPendingAttendanceApprovalsQuery = (limit = 10) => ({
     WHERE a."approvalStatus" = $1
       AND a."isActive" = true
       AND a."deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR a."userId" = $3::uuid)
     ORDER BY a."createdAt" ASC
     LIMIT $2
   `,
-  params: [ApprovalStatus.PENDING, limit],
+  params: [ApprovalStatus.PENDING, limit, userId],
 });
 
-export const getPendingExpenseApprovalsQuery = (limit = 10) => ({
+export const getPendingExpenseApprovalsQuery = (limit = 10, userId: string | null = null) => ({
   query: `
-    SELECT 
+    SELECT
       e.id,
       e."userId",
       CONCAT(u."firstName", ' ', u."lastName") as "userName",
@@ -346,10 +384,11 @@ export const getPendingExpenseApprovalsQuery = (limit = 10) => ({
     WHERE e."approvalStatus" = $1
       AND e."deletedAt" IS NULL
       AND e."isActive" = true
+      AND ($3::uuid IS NULL OR e."userId" = $3::uuid)
     ORDER BY e."createdAt" ASC
     LIMIT $2
   `,
-  params: ['pending', limit],
+  params: ['pending', limit, userId],
 });
 
 /**
@@ -362,7 +401,7 @@ export const getPendingExpenseApprovalsQuery = (limit = 10) => ({
  * Every WHERE clause is kept identical to its item query, `isActive` included, so the count and
  * the preview beneath it can never describe different populations.
  */
-export const getPendingApprovalStatsQuery = () => ({
+export const getPendingApprovalStatsQuery = (userId: string | null = null) => ({
   query: `
     SELECT 'leave' AS type,
            COUNT(*)::int AS total,
@@ -372,6 +411,7 @@ export const getPendingApprovalStatsQuery = () => ({
       FROM leave_applications la
       JOIN users u ON u.id = la."userId"
      WHERE la."approvalStatus" = $1 AND la."deletedAt" IS NULL
+       AND ($4::uuid IS NULL OR la."userId" = $4::uuid)
 
     UNION ALL
 
@@ -383,6 +423,7 @@ export const getPendingApprovalStatsQuery = () => ({
       FROM attendances a
       JOIN users u ON u.id = a."userId"
      WHERE a."approvalStatus" = $2 AND a."isActive" = true AND a."deletedAt" IS NULL
+       AND ($4::uuid IS NULL OR a."userId" = $4::uuid)
 
     UNION ALL
 
@@ -394,6 +435,7 @@ export const getPendingApprovalStatsQuery = () => ({
       FROM expenses e
       JOIN users u ON u.id = e."userId"
      WHERE e."approvalStatus" = $3 AND e."deletedAt" IS NULL AND e."isActive" = true
+       AND ($4::uuid IS NULL OR e."userId" = $4::uuid)
 
     UNION ALL
 
@@ -405,11 +447,12 @@ export const getPendingApprovalStatsQuery = () => ({
       FROM fuel_expenses fe
       JOIN users u ON u.id = fe."userId"
      WHERE fe."approvalStatus" = $3 AND fe."deletedAt" IS NULL AND fe."isActive" = true
+       AND ($4::uuid IS NULL OR fe."userId" = $4::uuid)
   `,
-  params: [LeaveApprovalStatus.PENDING, ApprovalStatus.PENDING, 'pending'],
+  params: [LeaveApprovalStatus.PENDING, ApprovalStatus.PENDING, 'pending', userId],
 });
 
-export const getPendingFuelExpenseApprovalsQuery = (limit = 10) => ({
+export const getPendingFuelExpenseApprovalsQuery = (limit = 10, userId: string | null = null) => ({
   query: `
     SELECT
       fe.id,
@@ -426,17 +469,18 @@ export const getPendingFuelExpenseApprovalsQuery = (limit = 10) => ({
     WHERE fe."approvalStatus" = $1
       AND fe."deletedAt" IS NULL
       AND fe."isActive" = true
+      AND ($3::uuid IS NULL OR fe."userId" = $3::uuid)
     ORDER BY fe."createdAt" ASC
     LIMIT $2
   `,
-  params: ['pending', limit],
+  params: ['pending', limit, userId],
 });
 
 // ==================== Employees Queries ====================
 
 export const getNewJoinersQuery = (startDate: string, endDate: string) => ({
   query: `
-    SELECT 
+    SELECT
       id as "userId",
       CONCAT("firstName", ' ', "lastName") as "name",
       email,
@@ -454,7 +498,7 @@ export const getNewJoinersQuery = (startDate: string, endDate: string) => ({
 
 export const getExitingEmployeesQuery = (startDate: string, endDate: string) => ({
   query: `
-    SELECT 
+    SELECT
       id as "userId",
       CONCAT("firstName", ' ', "lastName") as "name",
       email,
@@ -472,7 +516,7 @@ export const getExitingEmployeesQuery = (startDate: string, endDate: string) => 
 
 export const getProbationEmployeesQuery = () => ({
   query: `
-    SELECT 
+    SELECT
       id as "userId",
       CONCAT("firstName", ' ', "lastName") as "name",
       email,
@@ -493,7 +537,7 @@ export const getProbationEmployeesQuery = () => ({
 export const getExpiringCardsQuery = (warningDate: string, infoDate: string) => ({
   query: `
     WITH parsed_cards AS (
-      SELECT 
+      SELECT
         id,
         "cardNumber",
         "cardType",
@@ -501,10 +545,10 @@ export const getExpiringCardsQuery = (warningDate: string, infoDate: string) => 
         "holderName",
         "expiryDate",
         "expiryStatus",
-        CASE 
-          WHEN "expiryDate" ~ '^\\d{2}/\\d{4}$' THEN 
+        CASE
+          WHEN "expiryDate" ~ '^\\d{2}/\\d{4}$' THEN
             TO_DATE('01/' || "expiryDate", 'DD/MM/YYYY') + INTERVAL '1 month' - INTERVAL '1 day'
-          WHEN "expiryDate" ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN 
+          WHEN "expiryDate" ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN
             "expiryDate"::date
           ELSE NULL
         END as "parsedExpiryDate"
@@ -512,7 +556,7 @@ export const getExpiringCardsQuery = (warningDate: string, infoDate: string) => 
       WHERE "expiryDate" IS NOT NULL
         AND "deletedAt" IS NULL
     )
-    SELECT 
+    SELECT
       id,
       "cardNumber",
       "cardType",
@@ -520,7 +564,7 @@ export const getExpiringCardsQuery = (warningDate: string, infoDate: string) => 
       "holderName",
       "expiryDate",
       "parsedExpiryDate",
-      CASE 
+      CASE
         WHEN "parsedExpiryDate" < CURRENT_DATE THEN 'expired'
         WHEN "parsedExpiryDate" <= $1::date THEN 'warning'
         ELSE 'info'
@@ -533,15 +577,23 @@ export const getExpiringCardsQuery = (warningDate: string, infoDate: string) => 
   params: [warningDate, infoDate],
 });
 
-export const getExpiringVehicleDocsQuery = (warningDate: string, infoDate: string) => ({
+/**
+ * Scoped, this is "the papers on the vehicle I am holding" — matched on `assignedTo`, because an
+ * expiring PUC is the problem of whoever is driving it, not of whoever entered the record.
+ */
+export const getExpiringVehicleDocsQuery = (
+  warningDate: string,
+  infoDate: string,
+  userId: string | null = null,
+) => ({
   query: `
     WITH expiring_docs AS (
-      SELECT 
+      SELECT
         vv.id,
         vm."registrationNo" as "vehicleNumber",
         'Insurance' as "documentType",
         vv."insuranceEndDate" as "expiryDate",
-        CASE 
+        CASE
           WHEN vv."insuranceEndDate" < CURRENT_DATE THEN 'expired'
           WHEN vv."insuranceEndDate" <= $1::date THEN 'warning'
           ELSE 'info'
@@ -552,15 +604,16 @@ export const getExpiringVehicleDocsQuery = (warningDate: string, infoDate: strin
         AND vv."insuranceEndDate" <= $2::date
         AND vv."isActive" = true
         AND vv."deletedAt" IS NULL
-      
+        AND ($3::uuid IS NULL OR vv."assignedTo" = $3::uuid)
+
       UNION ALL
-      
-      SELECT 
+
+      SELECT
         vv.id,
         vm."registrationNo" as "vehicleNumber",
         'PUC' as "documentType",
         vv."pucEndDate" as "expiryDate",
-        CASE 
+        CASE
           WHEN vv."pucEndDate" < CURRENT_DATE THEN 'expired'
           WHEN vv."pucEndDate" <= $1::date THEN 'warning'
           ELSE 'info'
@@ -571,15 +624,16 @@ export const getExpiringVehicleDocsQuery = (warningDate: string, infoDate: strin
         AND vv."pucEndDate" <= $2::date
         AND vv."isActive" = true
         AND vv."deletedAt" IS NULL
-      
+        AND ($3::uuid IS NULL OR vv."assignedTo" = $3::uuid)
+
       UNION ALL
-      
-      SELECT 
+
+      SELECT
         vv.id,
         vm."registrationNo" as "vehicleNumber",
         'Fitness' as "documentType",
         vv."fitnessEndDate" as "expiryDate",
-        CASE 
+        CASE
           WHEN vv."fitnessEndDate" < CURRENT_DATE THEN 'expired'
           WHEN vv."fitnessEndDate" <= $1::date THEN 'warning'
           ELSE 'info'
@@ -590,27 +644,28 @@ export const getExpiringVehicleDocsQuery = (warningDate: string, infoDate: strin
         AND vv."fitnessEndDate" <= $2::date
         AND vv."isActive" = true
         AND vv."deletedAt" IS NULL
+        AND ($3::uuid IS NULL OR vv."assignedTo" = $3::uuid)
     )
     SELECT * FROM expiring_docs
     ORDER BY "expiryDate" ASC
   `,
-  params: [warningDate, infoDate],
+  params: [warningDate, infoDate, userId],
 });
 
-export const getVehicleServiceDueQuery = (warningKm: number) => ({
+export const getVehicleServiceDueQuery = (warningKm: number, userId: string | null = null) => ({
   query: `
-    SELECT 
+    SELECT
       vm.id,
       vm."registrationNo" as "vehicleNumber",
       vv."lastServiceKm",
       vv."lastServiceDate",
       vs."odometerReading" as "lastServiceOdometer",
-      CASE 
+      CASE
         WHEN vs."odometerReading" IS NOT NULL AND vv."lastServiceKm" IS NOT NULL
           THEN (vv."lastServiceKm" - vs."odometerReading")
         ELSE NULL
       END as "kmSinceLastService",
-      CASE 
+      CASE
         WHEN vs."odometerReading" IS NULL THEN 'info'
         WHEN vv."lastServiceKm" IS NULL THEN 'info'
         WHEN (vv."lastServiceKm" - vs."odometerReading") >= $1 THEN 'overdue'
@@ -621,31 +676,40 @@ export const getVehicleServiceDueQuery = (warningKm: number) => ({
     JOIN vehicle_versions vv ON vv."vehicleMasterId" = vm.id AND vv."isActive" = true
     LEFT JOIN LATERAL (
       SELECT "odometerReading", "serviceDate"
-      FROM vehicle_services 
+      FROM vehicle_services
       WHERE "vehicleMasterId" = vm.id
         AND "resetsServiceInterval" = true
-      ORDER BY "serviceDate" DESC 
+      ORDER BY "serviceDate" DESC
       LIMIT 1
     ) vs ON true
     WHERE vm."deletedAt" IS NULL
       AND vv."deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR vv."assignedTo" = $3::uuid)
       AND (
         vs."odometerReading" IS NULL
-        OR vv."lastServiceKm" IS NULL  
+        OR vv."lastServiceKm" IS NULL
         OR (vv."lastServiceKm" - COALESCE(vs."odometerReading", 0)) >= ($1 - $2)
       )
   `,
-  params: [10000, warningKm], // Default service interval 10000km
+  params: [10000, warningKm, userId], // Default service interval 10000km
 });
 
-export const getAssetCalibrationDueQuery = (warningDate: string, infoDate: string) => ({
+/**
+ * Scoped on `assignedTo`: a calibration falling due is the problem of whoever is holding the
+ * instrument, not of whoever first entered it.
+ */
+export const getAssetCalibrationDueQuery = (
+  warningDate: string,
+  infoDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       av.id,
       av."name" as "assetName",
       am."assetId" as "assetCode",
       av."calibrationEndDate" as "calibrationDueDate",
-      CASE 
+      CASE
         WHEN av."calibrationEndDate" < CURRENT_DATE THEN 'overdue'
         WHEN av."calibrationEndDate" <= $1::date THEN 'warning'
         ELSE 'info'
@@ -656,19 +720,24 @@ export const getAssetCalibrationDueQuery = (warningDate: string, infoDate: strin
       AND av."calibrationEndDate" <= $2::date
       AND av."isActive" = true
       AND av."deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR av."assignedTo" = $3::uuid)
     ORDER BY av."calibrationEndDate" ASC
   `,
-  params: [warningDate, infoDate],
+  params: [warningDate, infoDate, userId],
 });
 
-export const getAssetWarrantyExpiryQuery = (warningDate: string, infoDate: string) => ({
+export const getAssetWarrantyExpiryQuery = (
+  warningDate: string,
+  infoDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       av.id,
       av."name" as "assetName",
       am."assetId" as "assetCode",
       av."warrantyEndDate" as "warrantyExpiryDate",
-      CASE 
+      CASE
         WHEN av."warrantyEndDate" < CURRENT_DATE THEN 'expired'
         WHEN av."warrantyEndDate" <= $1::date THEN 'warning'
         ELSE 'info'
@@ -679,16 +748,17 @@ export const getAssetWarrantyExpiryQuery = (warningDate: string, infoDate: strin
       AND av."warrantyEndDate" <= $2::date
       AND av."isActive" = true
       AND av."deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR av."assignedTo" = $3::uuid)
     ORDER BY av."warrantyEndDate" ASC
   `,
-  params: [warningDate, infoDate],
+  params: [warningDate, infoDate, userId],
 });
 
 // ==================== Payroll Queries ====================
 
 export const getPayrollTrendQuery = (months = 6) => ({
   query: `
-    SELECT 
+    SELECT
       month,
       year,
       SUM("grossEarnings")::decimal as "grossEarnings",
@@ -706,7 +776,7 @@ export const getPayrollTrendQuery = (months = 6) => ({
 
 export const getPayrollDeductionBreakdownQuery = (month: number, year: number) => ({
   query: `
-    SELECT 
+    SELECT
       SUM("employeePf")::decimal as "employeePf",
       SUM("employerPf")::decimal as "employerPf",
       SUM("tds")::decimal as "tds",
@@ -720,9 +790,13 @@ export const getPayrollDeductionBreakdownQuery = (month: number, year: number) =
 
 // ==================== Expense Queries ====================
 
-export const getExpenseSummaryQuery = (startDate: string, endDate: string) => ({
+export const getExpenseSummaryQuery = (
+  startDate: string,
+  endDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END)::decimal as "totalExpenses",
       SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END)::decimal as "totalCredits",
       SUM(CASE WHEN "approvalStatus" = 'pending' THEN amount ELSE 0 END)::decimal as "pendingClaims",
@@ -732,13 +806,18 @@ export const getExpenseSummaryQuery = (startDate: string, endDate: string) => ({
     WHERE "createdAt" >= $1::date
       AND "createdAt" <= $2::date
       AND "deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR "userId" = $3::uuid)
   `,
-  params: [startDate, endDate],
+  params: [startDate, endDate, userId],
 });
 
-export const getExpenseCategoryDistributionQuery = (startDate: string, endDate: string) => ({
+export const getExpenseCategoryDistributionQuery = (
+  startDate: string,
+  endDate: string,
+  userId: string | null = null,
+) => ({
   query: `
-    SELECT 
+    SELECT
       category,
       SUM(amount)::decimal as "total"
     FROM expenses
@@ -746,15 +825,16 @@ export const getExpenseCategoryDistributionQuery = (startDate: string, endDate: 
       AND "createdAt" <= $2::date
       AND amount > 0
       AND "deletedAt" IS NULL
+      AND ($3::uuid IS NULL OR "userId" = $3::uuid)
     GROUP BY category
     ORDER BY "total" DESC
   `,
-  params: [startDate, endDate],
+  params: [startDate, endDate, userId],
 });
 
 export const getTopSpendersQuery = (startDate: string, endDate: string, limit = 5) => ({
   query: `
-    SELECT 
+    SELECT
       e."userId",
       CONCAT(u."firstName", ' ', u."lastName") as "userName",
       SUM(e.amount)::decimal as "totalExpense"

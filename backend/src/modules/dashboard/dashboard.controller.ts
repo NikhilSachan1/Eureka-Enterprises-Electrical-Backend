@@ -34,8 +34,7 @@ export class DashboardController {
   @Get('overview')
   @ApiOperation({ summary: 'Get overview stats (employees, attendance, approvals, payroll)' })
   async getOverview(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getOverview();
+    return await this.dashboardService.getOverview(this.scopeOf(req));
   }
 
   @Get('alerts')
@@ -43,22 +42,19 @@ export class DashboardController {
     summary: 'Get top alerts (cards, vehicle docs, vehicle service, asset calibration/warranty)',
   })
   async getAlerts(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getAlerts();
+    return await this.dashboardService.getAlerts(this.scopeOf(req));
   }
 
   @Get('approvals')
   @ApiOperation({ summary: 'Get pending approvals (leave, attendance, expense, fuel)' })
   async getApprovals(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getApprovals();
+    return await this.dashboardService.getApprovals(this.scopeOf(req));
   }
 
   @Get('attendance-summary')
   @ApiOperation({ summary: "Get today's attendance summary (present, absent, leave, etc.)" })
   async getAttendanceSummary(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getAttendance();
+    return await this.dashboardService.getAttendance(this.scopeOf(req));
   }
 
   @Get('leave-summary')
@@ -66,17 +62,15 @@ export class DashboardController {
     summary: 'Get leave summary (pending approvals, current month leaves, upcoming)',
   })
   async getLeaveSummary(@Query() query: GetDashboardDto, @Request() req: any) {
-    this.assertAdminAccess(req);
     const dateRange = this.dashboardService.getDateRange(query);
-    return await this.dashboardService.getLeave(dateRange);
+    return await this.dashboardService.getLeave(dateRange, this.scopeOf(req));
   }
 
   @Get('expense-summary')
   @ApiOperation({ summary: 'Get expense summary (totals, categories, top spenders)' })
   async getExpenseSummary(@Query() query: GetDashboardDto, @Request() req: any) {
-    this.assertAdminAccess(req);
     const dateRange = this.dashboardService.getDateRange(query);
-    return await this.dashboardService.getExpenses(dateRange);
+    return await this.dashboardService.getExpenses(dateRange, this.scopeOf(req));
   }
 
   @Get('employees-summary')
@@ -118,8 +112,7 @@ export class DashboardController {
     summary: 'Get asset stock counts by status (total, available, assigned, lost, retired)',
   })
   async getAssetSummary(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getAssetSummary();
+    return await this.dashboardService.getAssetSummary(this.scopeOf(req));
   }
 
   @Get('vehicle-summary')
@@ -127,8 +120,7 @@ export class DashboardController {
     summary: 'Get vehicle fleet counts by status (total, available, assigned, retired)',
   })
   async getVehicleSummary(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getVehicleSummary();
+    return await this.dashboardService.getVehicleSummary(this.scopeOf(req));
   }
 
   @Get('vehicle-readings')
@@ -230,7 +222,22 @@ export class DashboardController {
   private assertAdminAccess(req: any): void {
     const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
     if (!this.dashboardService.isAdminRole(userRole)) {
-      throw new ForbiddenException('Access denied. Admin/Manager/HR/Operation Manager role required.');
+      throw new ForbiddenException(
+        'Access denied. Admin/Manager/HR/Operation Manager role required.',
+      );
     }
+  }
+
+  /**
+   * Who is this dashboard being read for.
+   *
+   * `null` for a role that is allowed to see the company; the caller's own id for everyone else.
+   * There is no way to ask for somebody else's — the id comes from the token and no endpoint takes
+   * one — so the same URL is safe for every role, and the front end builds one screen rather than
+   * branching on who is logged in.
+   */
+  private scopeOf(req: any): string | null {
+    const userRole = req?.user?.activeRole || req?.user?.roles?.[0];
+    return this.dashboardService.isAdminRole(userRole) ? null : req?.user?.id;
   }
 }
