@@ -149,10 +149,11 @@ export class DashboardController {
   @Get('ledger-balances')
   @ApiOperation({
     summary: 'Get expense + fuel ledger (approvals, opening/closing, employee-wise pay/collect)',
+    description:
+      'Admin roles see the company ledger. Employee, Driver, and every other non-admin role see only their own expense and fuel records.',
   })
   async getLedgerBalances(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getLedgerBalances();
+    return await this.dashboardService.getLedgerBalances(this.scopeOf(req));
   }
 
   @Get('cron-health')

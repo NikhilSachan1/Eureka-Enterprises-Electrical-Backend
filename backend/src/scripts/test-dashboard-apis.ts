@@ -129,7 +129,6 @@ async function main() {
   const adminOnly = [
     '/dashboard/overview',
     '/dashboard/cron-health',
-    '/dashboard/ledger-balances',
     '/dashboard/leave-exhaustion',
     '/dashboard/payroll-status',
   ];
@@ -143,7 +142,13 @@ async function main() {
 
   // Public (employee accessible)
   console.log('\n\nEmployee should access these:\n');
-  const publicEndpoints = ['/dashboard/birthdays', '/dashboard/anniversaries', '/dashboard/festivals', '/dashboard/mobile'];
+  const publicEndpoints = [
+    '/dashboard/birthdays',
+    '/dashboard/anniversaries',
+    '/dashboard/festivals',
+    '/dashboard/mobile',
+    '/dashboard/ledger-balances',
+  ];
   for (const endpoint of publicEndpoints) {
     const result = await get(endpoint, EMPLOYEE_HEADERS);
     console.log(
