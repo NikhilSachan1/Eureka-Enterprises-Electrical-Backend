@@ -261,8 +261,9 @@ export class DashboardController {
   @ApiOperation({
     summary: 'The documents behind one gap',
     description:
-      'Document number, site, amount and how many days it has been stuck. Capped; `truncated` ' +
-      'says when there are more and the real screen should be used.',
+      'Document number, site, amount, how many days it has been stuck, and `partyType` ' +
+      '(`CONTRACTOR` or `VENDOR`). Capped; `truncated` says when there are more and the real ' +
+      'screen should be used.',
   })
   async getDocumentGapList(@Param() params: { key: string }, @Request() req: any) {
     return await this.workBoardService.getDocumentGapList(params.key, this.scopeOf(req));
