@@ -30,6 +30,13 @@ export interface DocumentGapDef {
 const scopeOn = (alias: string, col = 'createdBy') =>
   `($1::uuid IS NULL OR ${alias}."${col}" = $1::uuid)`;
 
+/**
+ * SALE documents belong to a contractor; PURCHASE documents belong to a vendor.
+ * Book payments and advances exist only on the purchase side, so they are always VENDOR.
+ */
+const partyTypeOf = (alias: string) =>
+  `CASE ${alias}."partyType" WHEN 'SALE' THEN 'CONTRACTOR' WHEN 'PURCHASE' THEN 'VENDOR' ELSE NULL END AS "partyType"`;
+
 export const DOCUMENT_GAPS: DocumentGapDef[] = [
   {
     key: 'po-without-jmc',
@@ -48,7 +55,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     listSql: `
       SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              po."totalAmount" AS amount, po."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - po."approvalAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - po."approvalAt")::int AS "ageDays",
+             ${partyTypeOf('po')}
         FROM purchase_orders po
         LEFT JOIN sites s ON s."id" = po."siteId"
        WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'APPROVED'
@@ -76,7 +84,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     listSql: `
       SELECT j."id", COALESCE(NULLIF(j."jmcNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              NULL::numeric AS amount, j."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - j."approvalAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - j."approvalAt")::int AS "ageDays",
+             ${partyTypeOf('j')}
         FROM jmcs j
         LEFT JOIN sites s ON s."id" = j."siteId"
        WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'APPROVED'
@@ -104,7 +113,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     listSql: `
       SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              i."totalAmount" AS amount, i."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - i."approvalAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - i."approvalAt")::int AS "ageDays",
+             ${partyTypeOf('i')}
         FROM site_invoices i
         LEFT JOIN sites s ON s."id" = i."siteId"
        WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
@@ -131,7 +141,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
       SELECT b."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber",
              s."name" AS "siteName", b."paymentTotalAmount" AS amount,
              b."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - b."approvalAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - b."approvalAt")::int AS "ageDays",
+             'VENDOR' AS "partyType"
         FROM book_payments b
         LEFT JOIN sites s ON s."id" = b."siteId"
         LEFT JOIN site_invoices i ON i."id" = b."invoiceId"
@@ -157,7 +168,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
       SELECT a."id", COALESCE(NULLIF(a."advanceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              (a."amount" - COALESCE(a."settledAmount", 0)) AS amount,
              a."advanceDate" AS "since",
-             EXTRACT(DAY FROM NOW() - a."advanceDate")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - a."advanceDate")::int AS "ageDays",
+             'VENDOR' AS "partyType"
         FROM advance_payments a
         LEFT JOIN sites s ON s."id" = a."siteId"
        WHERE a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
@@ -188,7 +200,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     listSql: `
       SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              po."totalAmount" AS amount, po."createdAt" AS "since",
-             EXTRACT(DAY FROM NOW() - po."createdAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - po."createdAt")::int AS "ageDays",
+             ${partyTypeOf('po')}
         FROM purchase_orders po
         LEFT JOIN sites s ON s."id" = po."siteId"
        WHERE po."deletedAt" IS NULL
@@ -215,7 +228,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     listSql: `
       SELECT j."id", COALESCE(NULLIF(j."jmcNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              NULL::numeric AS amount, j."createdAt" AS "since",
-             EXTRACT(DAY FROM NOW() - j."createdAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - j."createdAt")::int AS "ageDays",
+             ${partyTypeOf('j')}
         FROM jmcs j
         LEFT JOIN sites s ON s."id" = j."siteId"
        WHERE j."deletedAt" IS NULL
@@ -241,7 +255,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     listSql: `
       SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              i."totalAmount" AS amount, i."createdAt" AS "since",
-             EXTRACT(DAY FROM NOW() - i."createdAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - i."createdAt")::int AS "ageDays",
+             ${partyTypeOf('i')}
         FROM site_invoices i
         LEFT JOIN sites s ON s."id" = i."siteId"
        WHERE i."deletedAt" IS NULL
@@ -272,7 +287,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
       SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              (po."totalAmount" - COALESCE(po."invoicedTotal", 0)) AS amount,
              po."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - po."approvalAt")::int AS "ageDays"
+             EXTRACT(DAY FROM NOW() - po."approvalAt")::int AS "ageDays",
+             ${partyTypeOf('po')}
         FROM purchase_orders po
         LEFT JOIN sites s ON s."id" = po."siteId"
        WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'APPROVED'
