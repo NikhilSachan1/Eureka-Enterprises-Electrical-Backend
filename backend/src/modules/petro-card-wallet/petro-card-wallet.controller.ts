@@ -27,7 +27,6 @@ export class PetroCardWalletController {
   constructor(private readonly walletService: PetroCardWalletService) {}
 
   @Get('balance')
-  @RequiredPermission('petro-card.wallet-view')
   @ApiOperation({
     summary: 'Current PetroCard wallet balance',
     description:
