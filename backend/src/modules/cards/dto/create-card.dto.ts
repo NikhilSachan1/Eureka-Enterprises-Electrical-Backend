@@ -1,24 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsNumberString,
-  IsOptional,
-  IsString,
-  Length,
-  MaxLength,
-} from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateCardDto {
   @ApiProperty({
     description: 'The card number',
-    example: '1234567890123456',
-    minLength: 16,
-    maxLength: 16,
+    example: 'HP1234AB5678',
     required: true,
   })
   @IsNotEmpty()
-  @IsNumberString()
-  @Length(16, 16)
+  @IsString()
   cardNumber: string;
 
   @ApiProperty({
