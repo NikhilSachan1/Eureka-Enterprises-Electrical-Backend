@@ -52,7 +52,7 @@ export class SiteAllocationController {
   @ApiOperation({
     summary: 'Employee allocation overview (Free/Allocated) with stats',
     description:
-      'All active employees with their current project (site → company → parent company), ' +
+      'All active employees with their designation, current project (site → company → parent company), ' +
       'Free/Allocated status and since-date. Includes global stats (total/allocated/free). ' +
       'Filters: allocatedStatus, search (name/code), siteId/siteName; paginated.',
   })
