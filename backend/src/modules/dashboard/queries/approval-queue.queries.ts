@@ -79,7 +79,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
     key: 'leave',
     label: 'Leave Applications',
     table: 'leave_applications',
-    pendingValue: 'PENDING',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  pendingValue: 'pending',
     raisedByColumn: 'userId',
     permission: 'leave.approve',
   },
