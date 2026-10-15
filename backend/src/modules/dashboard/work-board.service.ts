@@ -9,6 +9,12 @@ import {
   paymentSheetStageCountsQuery,
 } from './queries/approval-queue.queries';
 import { DOCUMENT_GAPS, findGap } from './queries/document-gap.queries';
+import {
+  outstandingByPartyQuery,
+  partyInvoiceListQuery,
+  receivablePayableTotalsQuery,
+  unapprovedInvoiceTotalsQuery,
+} from './queries/receivable-payable.queries';
 
 /** How many rows a gap's drill-down returns before the reader should go to the real screen. */
 const GAP_LIST_LIMIT = 50;
@@ -217,6 +223,87 @@ export class WorkBoardService {
       gaps: results.filter((r) => r.severity === 'problem'),
       info: results.filter((r) => r.severity === 'info'),
     };
+  }
+
+  /**
+   * What contractors still owe us, and what we still owe vendors.
+   *
+   * Both come off the invoices: an invoice raised on a contractor is money coming in, one a vendor
+   * raised on us is money going out. See the query file for why TDS and settled advances are taken
+   * out of the figure, and why the invoice's own rollup is used rather than the bank transfers.
+   *
+   * Company money, so there is no personal version of this — the endpoint is gated instead of
+   * scoped.
+   */
+  async getReceivablesPayables(filters: { siteId?: string; companyId?: string } = {}) {
+    const site = filters.siteId ?? null;
+    const company = filters.companyId ?? null;
+
+    const [totals, unapproved, contractors, vendors] = await Promise.all([
+      this.rows<any>(receivablePayableTotalsQuery, [site, company]),
+      this.rows<any>(unapprovedInvoiceTotalsQuery, [site, company]),
+      this.rows<any>(outstandingByPartyQuery, [site, company, 'SALE']),
+      this.rows<any>(outstandingByPartyQuery, [site, company, 'PURCHASE']),
+    ]);
+
+    const side = (partyType: 'SALE' | 'PURCHASE', parties: any[]) => {
+      const t = totals.find((r) => r.partyType === partyType) ?? {};
+      const p = unapproved.find((r) => r.partyType === partyType) ?? {};
+      return {
+        invoiced: Number(t.invoiced ?? 0),
+        tds: Number(t.tds ?? 0),
+        advanceSettled: Number(t.advanceSettled ?? 0),
+        settled: Number(t.settled ?? 0),
+        outstanding: Number(t.outstanding ?? 0),
+        invoiceCount: Number(t.invoiceCount ?? 0),
+        /** Invoices with something still on them — the ones worth chasing. */
+        openCount: Number(t.openCount ?? 0),
+        oldestDays: Number(t.oldestDays ?? 0),
+        /** Raised but not approved yet, so not counted above. */
+        awaitingApproval: {
+          invoiceCount: Number(p.invoiceCount ?? 0),
+          amount: Number(p.amount ?? 0),
+        },
+        parties: parties.map((r) => ({
+          partyId: r.partyId,
+          partyName: r.partyName,
+          invoiceCount: Number(r.invoiceCount ?? 0),
+          invoiced: Number(r.invoiced ?? 0),
+          settled: Number(r.settled ?? 0),
+          outstanding: Number(r.outstanding ?? 0),
+          oldestDays: Number(r.oldestDays ?? 0),
+        })),
+      };
+    };
+
+    const receivable = side('SALE', contractors);
+    const payable = side('PURCHASE', vendors);
+
+    return {
+      receivable,
+      payable,
+      /**
+       * Positive means more is owed to us than by us. Not a cash position — it says nothing about
+       * when either side will actually move.
+       */
+      net: Number((receivable.outstanding - payable.outstanding).toFixed(2)),
+    };
+  }
+
+  /** The invoices behind one party's balance. */
+  async getPartyInvoices(
+    partyType: 'SALE' | 'PURCHASE',
+    partyId: string,
+    filters: { siteId?: string; companyId?: string } = {},
+  ) {
+    const items = await this.rows<any>(partyInvoiceListQuery, [
+      filters.siteId ?? null,
+      filters.companyId ?? null,
+      partyType,
+      partyId,
+      GAP_LIST_LIMIT,
+    ]);
+    return { partyType, partyId, items, truncated: items.length === GAP_LIST_LIMIT };
   }
 
   /** The rows behind one gap, so a count can be acted on rather than just read. */

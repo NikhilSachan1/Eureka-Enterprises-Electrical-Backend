@@ -16,7 +16,19 @@ export interface ApprovalQueueDef {
   key: string;
   label: string;
   table: string;
-  /** How this table spells "waiting for approval". */
+  /**
+   * The column holding the approval state.
+   *
+   * Most tables call it `approvalStatus`; payment requests call it `status`. Named here rather
+   * than assumed, because assuming it is what made the leave count read zero.
+   */
+  statusColumn?: string;
+  /**
+   * How this table spells "waiting for approval".
+   *
+   * Case matters and is not consistent across the schema: the financial documents use `PENDING`
+   * and the HR ones use `pending`. Each value below was read off the table rather than guessed.
+   */
   pendingValue: string;
   /** Column naming the person who raised the row. */
   raisedByColumn: string;
@@ -79,7 +91,9 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
     key: 'leave',
     label: 'Leave Applications',
     table: 'leave_applications',
-    pendingValue: 'PENDING',
+    // Lower case — `LeaveApprovalStatus.PENDING` is 'pending'. This read 'PENDING' and so counted
+    // nothing at all while five applications were sitting there waiting.
+    pendingValue: 'pending',
     raisedByColumn: 'userId',
     permission: 'leave.approve',
   },
@@ -110,6 +124,30 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
     permission: 'fuel.approve',
     liveCondition: '"isActive" = true',
   },
+  {
+    key: 'payment-requests',
+    label: 'Payment Requests',
+    table: 'payment_requests',
+    statusColumn: 'status',
+    pendingValue: 'PENDING',
+    raisedByColumn: 'createdBy',
+    permission: 'financials.payment-requests.approve',
+  },
+  {
+    key: 'bank-transfers',
+    label: 'Bank Transfers',
+    table: 'bank_transfers',
+    pendingValue: 'PENDING',
+    raisedByColumn: 'createdBy',
+    /**
+     * No permission guards this one, and that is not an oversight here — there is no
+     * `financials.bank-transfers.approve` in the system at all. A transfer is written already
+     * approved at the moment it is recorded, so it never waits on anybody and `pending` will read
+     * zero. It is listed so the totals are visible; the transfer work that *is* outstanding shows
+     * up as the "book payment approved, money not transferred" gap instead.
+     */
+    permission: null,
+  },
 ];
 
 /**
@@ -124,7 +162,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
  */
 export const approvalQueueCountsQuery = APPROVAL_QUEUES.map((q) => {
   const live = ['"deletedAt" IS NULL', q.liveCondition].filter(Boolean).join(' AND ');
-  const pending = `"approvalStatus" = '${q.pendingValue}'`;
+  const pending = `"${q.statusColumn ?? 'approvalStatus'}" = '${q.pendingValue}'`;
   const inScope = `($1::uuid IS NULL OR "${q.raisedByColumn}" = $1::uuid)`;
   return `
   SELECT
