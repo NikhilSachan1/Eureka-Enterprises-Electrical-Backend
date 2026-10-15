@@ -149,10 +149,11 @@ export class DashboardController {
   @Get('ledger-balances')
   @ApiOperation({
     summary: 'Get expense + fuel ledger (approvals, opening/closing, employee-wise pay/collect)',
+    description:
+      'Admin roles see the company ledger. Employee, Driver, and every other non-admin role see only their own expense and fuel records.',
   })
   async getLedgerBalances(@Request() req: any) {
-    this.assertAdminAccess(req);
-    return await this.dashboardService.getLedgerBalances();
+    return await this.dashboardService.getLedgerBalances(this.scopeOf(req));
   }
 
   @Get('cron-health')
@@ -260,8 +261,9 @@ export class DashboardController {
   @ApiOperation({
     summary: 'The documents behind one gap',
     description:
-      'Document number, site, amount and how many days it has been stuck. Capped; `truncated` ' +
-      'says when there are more and the real screen should be used.',
+      'Document number, site, amount, how many days it has been stuck, and `partyType` ' +
+      '(`CONTRACTOR` or `VENDOR`). Capped; `truncated` says when there are more and the real ' +
+      'screen should be used.',
   })
   async getDocumentGapList(@Param() params: { key: string }, @Request() req: any) {
     return await this.workBoardService.getDocumentGapList(params.key, this.scopeOf(req));

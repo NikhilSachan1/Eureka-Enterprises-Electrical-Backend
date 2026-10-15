@@ -454,8 +454,8 @@ export class SiteAllocationService {
   }
 
   /**
-   * Employee allocation overview: all active employees with their current project (site →
-   * company → parent company), Free/Allocated status, and "since". Stats are global
+   * Employee allocation overview: all active employees with their designation, current project
+   * (site → company → parent company), Free/Allocated status, and "since". Stats are global
    * (independent of table filters). Filters: allocatedStatus, search (name/code), site.
    */
   async getEmployeeOverview(query: GetEmployeeOverviewDto) {
@@ -530,6 +530,7 @@ export class SiteAllocationService {
       SELECT u.id AS "userId",
         TRIM(CONCAT(u."firstName", ' ', COALESCE(u."lastName", ''))) AS "employeeName",
         u."employeeId" AS "employeeCode",
+        u."designation" AS "designation",
         CASE WHEN sa.id IS NOT NULL THEN 'ALLOCATED' ELSE 'FREE' END AS "status",
         sa.id AS "allocationId", sa."role" AS "projectRole",
         sa."siteId", s."name" AS "siteName",
@@ -587,6 +588,7 @@ export class SiteAllocationService {
         userId: r.userId,
         employeeName: r.employeeName,
         employeeCode: r.employeeCode ?? null,
+        designation: r.designation ?? null,
         status: r.status,
         currentProject: r.siteId
           ? {

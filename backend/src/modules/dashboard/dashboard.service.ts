@@ -1470,7 +1470,11 @@ export class DashboardService {
 
   // ==================== NEW: Ledger Balances ====================
 
-  async getLedgerBalances() {
+  /**
+   * `userId` null means the company ledger (admin roles).
+   * Any other caller, including Employee and Driver, sees only their own rows.
+   */
+  async getLedgerBalances(userId: string | null = null) {
     const today = new Date();
     const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
 
@@ -1481,14 +1485,19 @@ export class DashboardService {
     const [expApprovals, expBalances, expByUser, fuelApprovals, fuelBalances, fuelByUser] =
       await Promise.all([
         // Expense approval counts
-        this.dataSource.query(`
+        this.dataSource.query(
+          `
           SELECT
             COUNT(CASE WHEN "approvalStatus" = 'pending'  THEN 1 END)::int AS pending,
             COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int AS approved,
             COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int AS rejected,
             COUNT(*)::int AS total
-          FROM expenses WHERE "deletedAt" IS NULL AND "isActive" = true
-        `),
+          FROM expenses
+          WHERE "deletedAt" IS NULL AND "isActive" = true
+            AND ($1::uuid IS NULL OR "userId" = $1::uuid)
+        `,
+          [userId],
+        ),
 
         // Expense balances (approved only)
         this.dataSource.query(
@@ -1502,12 +1511,14 @@ export class DashboardService {
             ), 0) AS closing
           FROM expenses
           WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+            AND ($2::uuid IS NULL OR "userId" = $2::uuid)
         `,
-          [monthStart],
+          [monthStart, userId],
         ),
 
         // Expense employee-wise net (approved only)
-        this.dataSource.query(`
+        this.dataSource.query(
+          `
           SELECT
             u.id AS "userId", u."firstName", u."lastName", u."employeeId",
             COALESCE(SUM(${EXP_NET}), 0) AS net
@@ -1515,21 +1526,29 @@ export class DashboardService {
           LEFT JOIN expenses e ON e."userId" = u.id
             AND e."deletedAt" IS NULL AND e."isActive" = true AND e."approvalStatus" = 'approved'
           WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+            AND ($1::uuid IS NULL OR u.id = $1::uuid)
           GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
           HAVING COALESCE(SUM(${EXP_NET}), 0) != 0
           ORDER BY ABS(COALESCE(SUM(${EXP_NET}), 0)) DESC
           LIMIT 50
-        `),
+        `,
+          [userId],
+        ),
 
         // Fuel approval counts
-        this.dataSource.query(`
+        this.dataSource.query(
+          `
           SELECT
             COUNT(CASE WHEN "approvalStatus" = 'pending'  THEN 1 END)::int AS pending,
             COUNT(CASE WHEN "approvalStatus" = 'approved' THEN 1 END)::int AS approved,
             COUNT(CASE WHEN "approvalStatus" = 'rejected' THEN 1 END)::int AS rejected,
             COUNT(*)::int AS total
-          FROM fuel_expenses WHERE "deletedAt" IS NULL AND "isActive" = true
-        `),
+          FROM fuel_expenses
+          WHERE "deletedAt" IS NULL AND "isActive" = true
+            AND ($1::uuid IS NULL OR "userId" = $1::uuid)
+        `,
+          [userId],
+        ),
 
         // Fuel balances (approved only)
         this.dataSource.query(
@@ -1543,12 +1562,14 @@ export class DashboardService {
             ), 0) AS closing
           FROM fuel_expenses
           WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+            AND ($2::uuid IS NULL OR "userId" = $2::uuid)
         `,
-          [monthStart],
+          [monthStart, userId],
         ),
 
         // Fuel employee-wise net (approved only)
-        this.dataSource.query(`
+        this.dataSource.query(
+          `
           SELECT
             u.id AS "userId", u."firstName", u."lastName", u."employeeId",
             COALESCE(SUM(${FUEL_NET}), 0) AS net
@@ -1556,11 +1577,14 @@ export class DashboardService {
           LEFT JOIN fuel_expenses fe ON fe."userId" = u.id
             AND fe."deletedAt" IS NULL AND fe."isActive" = true AND fe."approvalStatus" = 'approved'
           WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
+            AND ($1::uuid IS NULL OR u.id = $1::uuid)
           GROUP BY u.id, u."firstName", u."lastName", u."employeeId"
           HAVING COALESCE(SUM(${FUEL_NET}), 0) != 0
           ORDER BY ABS(COALESCE(SUM(${FUEL_NET}), 0)) DESC
           LIMIT 50
-        `),
+        `,
+          [userId],
+        ),
       ]);
 
     // net > 0 = company owes employee (PAYABLE)
