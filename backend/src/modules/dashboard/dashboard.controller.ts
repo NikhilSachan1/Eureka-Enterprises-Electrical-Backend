@@ -269,6 +269,47 @@ export class DashboardController {
     return await this.workBoardService.getDocumentGapList(params.key, this.scopeOf(req));
   }
 
+  @Get('receivables-payables')
+  @RequiredPermission('financials.universal-view')
+  @ApiOperation({
+    summary: 'What contractors owe us, and what we owe vendors',
+    description:
+      'Both read off the invoices: one raised on a contractor is money coming in, one a vendor ' +
+      'raised on us is money going out. Outstanding is `totalAmount − tdsAmount − advanceSettledAmount − paidTotal`, ' +
+      'clamped at zero per invoice — TDS never changes hands, a settled advance was already ' +
+      'paid, and clamping on the total instead would let one over-paid invoice cancel out real ' +
+      'debt elsewhere. Only approved invoices count; the ones still awaiting approval are ' +
+      'reported beside them rather than dropped. Broken down per contractor and per vendor, ' +
+      'biggest first. Optional `siteId` and `companyId` filters.',
+  })
+  async getReceivablesPayables(
+    @Query('siteId') siteId?: string,
+    @Query('companyId') companyId?: string,
+  ) {
+    return await this.workBoardService.getReceivablesPayables({ siteId, companyId });
+  }
+
+  @Get('receivables-payables/:partyType/:partyId')
+  @RequiredPermission('financials.universal-view')
+  @ApiOperation({
+    summary: 'The invoices behind one party’s balance',
+    description:
+      'partyType is SALE for a contractor or PURCHASE for a vendor. Each row shows the invoice ' +
+      'total, the TDS and advance taken out of it, what has been settled, what is left, and how ' +
+      'many days old it is. Capped; `truncated` says when there are more.',
+  })
+  async getPartyInvoices(
+    @Param('partyType') partyType: 'SALE' | 'PURCHASE',
+    @Param('partyId') partyId: string,
+    @Query('siteId') siteId?: string,
+    @Query('companyId') companyId?: string,
+  ) {
+    return await this.workBoardService.getPartyInvoices(partyType, partyId, {
+      siteId,
+      companyId,
+    });
+  }
+
   // ==================== Helpers ====================
 
   private assertAdminAccess(req: any): void {
