@@ -1,9 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
 import { VehicleMastersService } from './vehicle-masters.service';
 import { VehicleMastersController } from './vehicle-masters.controller';
 import { VehicleMastersRepository } from './vehicle-masters.repository';
-import { VehicleUserInterceptor } from './interceptors/vehicle-user.interceptor';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VehicleMasterEntity } from './entities/vehicle-master.entity';
 import { VehicleFilesModule } from '../vehicle-files/vehicle-files.module';
@@ -24,10 +22,9 @@ import { UsersModule } from '../users/user.module';
     ConfigurationsModule,
     forwardRef(() => CardsModule),
     UsersModule,
-    AuthModule,
   ],
   controllers: [VehicleMastersController],
-  providers: [VehicleMastersService, VehicleMastersRepository, VehicleUserInterceptor],
+  providers: [VehicleMastersService, VehicleMastersRepository],
   exports: [VehicleMastersService],
 })
 export class VehicleMastersModule {}
