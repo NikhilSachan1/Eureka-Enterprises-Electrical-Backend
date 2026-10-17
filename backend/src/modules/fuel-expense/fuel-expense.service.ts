@@ -74,6 +74,8 @@ import {
   EMAIL_TEMPLATE,
   EMAIL_REDIRECT_ROUTES,
 } from '../common/email/constants/email.constants';
+import { ManagedUsersService } from 'src/modules/user-delegations/managed-users.service';
+import { DELEGATABLE_MODULES } from 'src/modules/user-delegations/constants/user-delegation.constants';
 
 @Injectable()
 export class FuelExpenseService {
@@ -94,6 +96,7 @@ export class FuelExpenseService {
     private readonly whatsAppService: WhatsAppService,
     private readonly companyBankAccountService: CompanyBankAccountService,
     private readonly petroCardWalletService: PetroCardWalletService,
+    private readonly managedUsers: ManagedUsersService,
   ) {}
 
   /**
@@ -125,10 +128,15 @@ export class FuelExpenseService {
     return account.id;
   }
 
+  /**
+   * `userId` is whose entry it is; `createdBy` is who recorded it. They differ only when somebody
+   * has been delegated that person's fuel entries.
+   */
   async create(
     createFuelExpenseDto: CreateFuelExpenseDto & {
       userId: string;
       createdBy: string;
+      activeRole?: string;
       fileKeys: string[];
       entrySourceType: string;
       timezone?: string;
@@ -142,12 +150,22 @@ export class FuelExpenseService {
         odometerKm,
         userId,
         createdBy,
+        activeRole,
         fileKeys,
         paymentMode,
         transactionType = TransactionType.DEBIT,
         expenseEntryType = ExpenseEntryType.SELF,
         timezone,
       } = createFuelExpenseDto;
+
+      if (createdBy !== userId) {
+        await this.managedUsers.assertCanActFor(
+          createdBy,
+          activeRole ?? '',
+          DELEGATABLE_MODULES.FUEL,
+          userId,
+        );
+      }
 
       await this.validateFillDate(fillDate, timezone);
       await this.validatePaymentMode(paymentMode);
@@ -238,6 +256,7 @@ export class FuelExpenseService {
     createFuelExpenseDto: CreateFuelExpenseDto & {
       userId: string;
       createdBy: string;
+      activeRole?: string;
       fileKeys: string[];
       entrySourceType: string;
       timezone?: string;
@@ -251,12 +270,28 @@ export class FuelExpenseService {
         odometerKm,
         userId,
         createdBy,
+        activeRole,
         fileKeys,
         paymentMode,
         expenseEntryType = ExpenseEntryType.FORCED,
         transactionType = TransactionType.DEBIT,
         timezone,
       } = createFuelExpenseDto;
+
+      if (createdBy !== userId) {
+        await this.managedUsers.assertCanActFor(
+          createdBy,
+          activeRole ?? '',
+          DELEGATABLE_MODULES.FUEL,
+          userId,
+        );
+      }
+
+      const preApproved = await this.managedUsers.forcedEntryIsPreApproved(
+        createdBy,
+        activeRole ?? '',
+        DELEGATABLE_MODULES.FUEL,
+      );
 
       // Validate fill date - use timezone-aware comparison
       const fillDateStr = this.dateTimeService.toDateString(new Date(fillDate));
@@ -304,10 +339,14 @@ export class FuelExpenseService {
           {
             ...createFuelExpenseDto,
             cardId,
-            approvalStatus: ApprovalStatus.APPROVED,
-            approvalAt: new Date(),
-            approvalBy: createdBy,
-            approvalReason: DEFAULT_FUEL_EXPENSE.FORCE_APPROVAL_REASON,
+            // Pre-approved only for someone who could have approved it anyway. Every role
+            // holding `fuel.force` also holds `fuel.approve`, so this changes nothing for them;
+            // it closes the case where force arrives through a per-user override and the entry
+            // would otherwise be filed and signed off in one step by the same person.
+            approvalStatus: preApproved ? ApprovalStatus.APPROVED : ApprovalStatus.PENDING,
+            approvalAt: preApproved ? new Date() : null,
+            approvalBy: preApproved ? createdBy : null,
+            approvalReason: preApproved ? DEFAULT_FUEL_EXPENSE.FORCE_APPROVAL_REASON : null,
             isActive: true,
             versionNumber: 1,
             createdBy,

@@ -57,6 +57,11 @@ import {
 } from '../common/email/constants/email.constants';
 import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 import { CompanyBankAccountService } from '../company-bank-accounts/company-bank-account.service';
+import { ManagedUsersService } from 'src/modules/user-delegations/managed-users.service';
+import {
+  DELEGATABLE_MODULES,
+  USER_DELEGATION_ERRORS,
+} from 'src/modules/user-delegations/constants/user-delegation.constants';
 
 @Injectable()
 export class ExpenseTrackerService {
@@ -72,6 +77,7 @@ export class ExpenseTrackerService {
     private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
     private readonly companyBankAccountService: CompanyBankAccountService,
+    private readonly managedUsers: ManagedUsersService,
   ) {}
 
   /** Validates the paying company bank account, if one was supplied (throws if invalid). */
@@ -81,9 +87,16 @@ export class ExpenseTrackerService {
     return account.id;
   }
 
+  /**
+   * `userId` is whose expense it is; `actingUserId` is who is entering it. They differ only when
+   * somebody has been delegated that person's entries — and the money stays with `userId` while
+   * `createdBy` keeps the person who typed it, which is also what decides who may edit it later.
+   */
   async createDebitExpense(
     createExpenseDto: CreateDebitExpenseDto & {
       userId: string;
+      actingUserId?: string;
+      activeRole?: string;
       userRole?: string;
       sourceType: EntrySourceType;
       fileKeys: string[];
@@ -97,11 +110,25 @@ export class ExpenseTrackerService {
         amount,
         expenseDate,
         userId,
+        actingUserId,
+        activeRole,
         userRole,
         sourceType,
         fileKeys,
         timezone,
       } = createExpenseDto;
+
+      const actor = actingUserId ?? userId;
+      if (actor !== userId) {
+        await this.managedUsers.assertCanActFor(
+          actor,
+          activeRole ?? userRole ?? '',
+          DELEGATABLE_MODULES.EXPENSE,
+          userId,
+        );
+        await this.assertMemberIsActive(userId);
+      }
+
       await this.validateExpenseCategory(category, userRole);
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate, timezone);
@@ -118,7 +145,10 @@ export class ExpenseTrackerService {
             transactionType: TransactionType.DEBIT,
             expenseEntryType: ExpenseEntryType.SELF,
             entrySourceType: sourceType,
-            createdBy: userId,
+            // Whose claim it is stays `userId`; who typed it is `createdBy`. The same person
+            // except when somebody has been delegated this member's entries — and it is
+            // `createdBy` that later decides who may edit it.
+            createdBy: actor,
           },
           entityManager,
         );
@@ -128,7 +158,7 @@ export class ExpenseTrackerService {
             {
               expenseId: expense.id,
               fileKeys,
-              createdBy: userId,
+              createdBy: actor,
             },
             entityManager,
           );
@@ -158,6 +188,22 @@ export class ExpenseTrackerService {
       return { message: result.message };
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * An entry may not be filed against somebody who has left.
+   *
+   * Checked on the delegated paths only: a person filing their own expense is active by
+   * definition, since they just authenticated.
+   */
+  private async assertMemberIsActive(userId: string): Promise<void> {
+    const [row] = await this.dataSource.query(
+      `SELECT "status" FROM users WHERE "id" = $1 AND "deletedAt" IS NULL`,
+      [userId],
+    );
+    if (!row || row.status !== 'ACTIVE') {
+      throw new BadRequestException(USER_DELEGATION_ERRORS.MEMBER_INACTIVE_FOR_ENTRY);
     }
   }
 
@@ -252,6 +298,7 @@ export class ExpenseTrackerService {
   async forceExpense(
     forceExpenseDto: ForceExpenseDto & {
       createdBy: string;
+      activeRole?: string;
       sourceType: EntrySourceType;
       fileKeys: string[];
       timezone?: string;
@@ -263,6 +310,7 @@ export class ExpenseTrackerService {
         paymentMode,
         amount,
         createdBy,
+        activeRole,
         sourceType,
         expenseDate,
         fileKeys,
@@ -281,15 +329,39 @@ export class ExpenseTrackerService {
       const employee = await this.userService.findOneOrFail({ where: { id: userId } });
       const admin = await this.userService.findOne({ id: createdBy });
 
+      if (createdBy !== userId) {
+        await this.managedUsers.assertCanActFor(
+          createdBy,
+          activeRole ?? '',
+          DELEGATABLE_MODULES.EXPENSE,
+          userId,
+        );
+        await this.assertMemberIsActive(userId);
+      }
+
+      // Forcing an entry and approving one are different authorities, and this used to collapse
+      // them: anything forced was written APPROVED, by whoever forced it. That is correct for the
+      // office roles — all three that hold `expense.force` also hold `expense.approve` — but it
+      // meant anyone given force through a per-user override could file their colleagues' money
+      // and sign it off in the same request, with nobody else ever seeing it.
+      //
+      // So pre-approval follows the ability to *approve*. Nothing changes for the roles; what it
+      // closes is the override.
+      const preApproved = await this.managedUsers.forcedEntryIsPreApproved(
+        createdBy,
+        activeRole ?? '',
+        DELEGATABLE_MODULES.EXPENSE,
+      );
+
       const result = await this.dataSource.transaction(async (entityManager) => {
         const expense = await this.expenseTrackerRepository.create({
           ...forceExpenseDto,
           isActive: true,
           amount: Number(amount),
-          approvalStatus: ApprovalStatus.APPROVED,
-          approvalAt: new Date(),
-          approvalBy: createdBy,
-          approvalReason: DEFAULT_EXPENSE.FORCE_APPROVAL_REASON,
+          approvalStatus: preApproved ? ApprovalStatus.APPROVED : ApprovalStatus.PENDING,
+          approvalAt: preApproved ? new Date() : null,
+          approvalBy: preApproved ? createdBy : null,
+          approvalReason: preApproved ? DEFAULT_EXPENSE.FORCE_APPROVAL_REASON : null,
           transactionType: TransactionType.DEBIT,
           expenseEntryType: ExpenseEntryType.FORCED,
           entrySourceType: sourceType,

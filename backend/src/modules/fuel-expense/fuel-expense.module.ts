@@ -17,8 +17,11 @@ import { EmailModule } from '../common/email/email.module';
 import { CompanyBankAccountModule } from '../company-bank-accounts/company-bank-account.module';
 import { PetroCardWalletModule } from '../petro-card-wallet/petro-card-wallet.module';
 
+import { UserDelegationModule } from '../user-delegations/user-delegation.module';
+
 @Module({
   imports: [
+    UserDelegationModule,
     TypeOrmModule.forFeature([FuelExpenseEntity]),
     SharedModule,
     FuelExpenseFilesModule,

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { FUEL_EXPENSE_ERRORS } from '../constants/fuel-expense.constants';
@@ -8,6 +8,20 @@ import { FUEL_EXPENSE_ERRORS } from '../constants/fuel-expense.constants';
  * Used for creating new fuel expense records (userId is taken from logged-in user)
  */
 export class CreateFuelExpenseDto {
+  /**
+   * Whose fuel entry this is. Omit for your own.
+   *
+   * Only accepted for somebody you have been delegated — `GET /user-delegations/managed-users`
+   * lists who that is. The entry stays theirs; you stay the person who recorded it, which is what
+   * decides who may edit it afterwards.
+   */
+  @ApiPropertyOptional({
+    description: 'Whose fuel entry this is. Omit for your own. Must be someone you manage.',
+  })
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
   @ApiProperty({
     description: 'Vehicle ID',
     example: '123e4567-e89b-12d3-a456-426614174000',

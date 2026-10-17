@@ -39,7 +39,8 @@ import {
 } from './dto';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { DetectSource } from './decorators/source-detector.decorator';
-import { FuelExpenseUserInterceptor } from './interceptors/fuel-expense-user.interceptor';
+import { FuelManagedScopeInterceptor } from 'src/modules/user-delegations/interceptors/managed-scope.interceptor';
+import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { RequestWithTimezone } from './fuel-expense.types';
 
 @ApiTags('Fuel Expense')
@@ -67,11 +68,16 @@ export class FuelExpenseController {
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.FUEL_EXPENSE_FILES)
     { fileKeys }: { fileKeys: string[] } = { fileKeys: [] },
   ) {
-    const userId = req.user.id;
+    // Whose entry this is. Defaults to the caller, so an app that knows nothing about
+    // delegation behaves exactly as before.
+    const userId = createFuelExpenseDto.userId ?? req.user.id;
     return this.fuelExpenseService.create({
       ...createFuelExpenseDto,
       userId,
-      createdBy: userId,
+      // The person who typed it, which is not always whose entry it is — and is what decides
+      // who may edit it later.
+      createdBy: req.user.id,
+      activeRole: req.user.activeRole ?? req.user.role,
       fileKeys,
       entrySourceType: sourceType,
       timezone: req.timezone,
@@ -102,6 +108,7 @@ export class FuelExpenseController {
       ...forceFuelExpenseDto,
       userId: forceFuelExpenseDto.userId || loggedInUserId,
       createdBy: loggedInUserId,
+      activeRole: req.user.activeRole ?? req.user.role,
       fileKeys,
       entrySourceType: sourceType,
       timezone: req.timezone,
@@ -174,7 +181,7 @@ export class FuelExpenseController {
     description:
       'Retrieves a list of fuel expense records based on the provided query parameters and filters.',
   })
-  @UseInterceptors(FuelExpenseUserInterceptor)
+  @UseInterceptors(FuelManagedScopeInterceptor)
   @ApiResponse({ status: 200, type: FuelExpenseListResponseDto })
   async getFuelExpenseRecords(
     @Request() req: RequestWithTimezone,
@@ -215,6 +222,7 @@ export class FuelExpenseController {
   }
 
   @Post('approval')
+  @RequiredPermission('fuel.approve')
   @ApiOperation({
     summary: 'Bulk approve fuel expense entries',
     description:

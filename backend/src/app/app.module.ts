@@ -55,6 +55,7 @@ import { FnfModule } from 'src/modules/fnf/fnf.module';
 import { CommunicationLogModule } from 'src/modules/common/communication-logs/communication-log.module';
 import { WhatsAppModule } from 'src/modules/common/whatsapp/whatsapp.module';
 import { DashboardModule } from 'src/modules/dashboard/dashboard.module';
+import { UserDelegationModule } from 'src/modules/user-delegations/user-delegation.module';
 import { CompanyModule } from 'src/modules/companies/company.module';
 import { ContractorModule } from 'src/modules/contractors/contractor.module';
 import { SiteModule } from 'src/modules/sites/site.module';
@@ -139,6 +140,7 @@ import { PublicInfoModule } from 'src/modules/public-info/public-info.module';
     CommunicationLogModule,
     WhatsAppModule,
     DashboardModule,
+    UserDelegationModule,
     CompanyModule,
     ContractorModule,
     SiteModule,
