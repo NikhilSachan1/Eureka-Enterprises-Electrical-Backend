@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { DELEGATABLE_MODULES } from '../constants/user-delegation.constants';
 
 const MODULES = Object.values(DELEGATABLE_MODULES);
@@ -9,9 +20,19 @@ export class CreateDelegationDto {
   @IsUUID()
   managerId: string;
 
-  @ApiProperty({ description: 'The employee whose entries those will be' })
-  @IsUUID()
-  memberId: string;
+  @ApiProperty({
+    description:
+      'The employees whose entries those will be — one grant is made per person. Anyone already ' +
+      'held by this manager for this module is skipped and listed in the response, not an error.',
+    type: [String],
+    example: ['3f0c…', '9a21…'],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  memberIds: string[];
 
   @ApiProperty({
     enum: MODULES,

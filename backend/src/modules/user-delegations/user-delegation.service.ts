@@ -29,40 +29,94 @@ export class UserDelegationService {
     return row;
   }
 
+  /**
+   * One manager, one module, any number of members — one row per member.
+   *
+   * Input mistakes fail the whole request, so nothing is half-applied: the manager listed as
+   * their own member, an id that is not an employee, someone who has left. People this manager
+   * already holds for the module are not a mistake — adding five people when one is already
+   * there should not need a retry — so they are skipped and reported. Only when *every* member
+   * was already held does it refuse, which keeps the single-member case answering as it did.
+   */
   async create(dto: CreateDelegationDto, createdBy: string) {
-    if (dto.managerId === dto.memberId) {
+    const memberIds = [...new Set(dto.memberIds)];
+    if (memberIds.includes(dto.managerId)) {
       throw new BadRequestException(USER_DELEGATION_ERRORS.SELF_DELEGATION);
     }
 
     // Both ends must be live people. A grant over someone who has left would be a door nobody
     // ever closes, and a grant to someone who has left is simply dead weight.
     await this.activeUser(dto.managerId, USER_DELEGATION_ERRORS.MANAGER_NOT_ACTIVE);
-    await this.activeUser(dto.memberId, USER_DELEGATION_ERRORS.MEMBER_NOT_ACTIVE);
 
-    const [clash] = await this.dataSource.query(
-      `SELECT "id" FROM user_module_delegations
-        WHERE "managerId" = $1 AND "memberId" = $2 AND "module" = $3
+    const people: Array<{ id: string; status: string; name: string }> = await this.dataSource.query(
+      `SELECT "id", "status", TRIM(CONCAT_WS(' ', "firstName", "lastName")) AS name
+         FROM users WHERE "id" = ANY($1::uuid[]) AND "deletedAt" IS NULL`,
+      [memberIds],
+    );
+    const missing = memberIds.filter((id) => !people.some((p) => p.id === id));
+    if (missing.length) {
+      throw new NotFoundException(
+        USER_DELEGATION_ERRORS.MEMBERS_NOT_FOUND.replace('{ids}', missing.join(', ')),
+      );
+    }
+    const inactive = people.filter((p) => p.status !== 'ACTIVE');
+    if (inactive.length) {
+      throw new BadRequestException(
+        USER_DELEGATION_ERRORS.MEMBERS_NOT_ACTIVE.replace(
+          '{names}',
+          inactive.map((p) => p.name).join(', '),
+        ),
+      );
+    }
+
+    const held: Array<{ memberId: string }> = await this.dataSource.query(
+      `SELECT "memberId" FROM user_module_delegations
+        WHERE "managerId" = $1 AND "memberId" = ANY($2::uuid[]) AND "module" = $3
           AND "deletedAt" IS NULL AND "effectiveTo" IS NULL`,
-      [dto.managerId, dto.memberId, dto.module],
+      [dto.managerId, memberIds, dto.module],
     );
-    if (clash) throw new BadRequestException(USER_DELEGATION_ERRORS.ALREADY_DELEGATED);
+    const alreadyHeld = new Set(held.map((h) => h.memberId));
+    const toGrant = memberIds.filter((id) => !alreadyHeld.has(id));
+    if (!toGrant.length) throw new BadRequestException(USER_DELEGATION_ERRORS.ALREADY_DELEGATED);
 
-    const [row] = await this.dataSource.query(
-      `INSERT INTO user_module_delegations
-         ("managerId","memberId","module","effectiveFrom","effectiveTo",remarks,"createdBy")
-       VALUES ($1,$2,$3,COALESCE($4::date, CURRENT_DATE),$5::date,$6,$7)
-       RETURNING "id"`,
-      [
-        dto.managerId,
-        dto.memberId,
-        dto.module,
-        dto.effectiveFrom ?? null,
-        dto.effectiveTo ?? null,
-        dto.remarks ?? null,
-        createdBy,
-      ],
+    // ON CONFLICT covers two admins granting the same pair at the same moment: the second
+    // simply finds it already there, instead of a 500 from the unique index.
+    const inserted: Array<{ id: string; memberId: string }> = await this.dataSource.transaction(
+      (em) =>
+        em.query(
+          `INSERT INTO user_module_delegations
+             ("managerId","memberId","module","effectiveFrom","effectiveTo",remarks,"createdBy")
+           SELECT $1, m, $3, COALESCE($4::date, CURRENT_DATE), $5::date, $6, $7
+             FROM unnest($2::uuid[]) AS m
+           ON CONFLICT ("managerId","memberId","module")
+             WHERE "deletedAt" IS NULL AND "effectiveTo" IS NULL
+           DO NOTHING
+           RETURNING "id", "memberId"`,
+          [
+            dto.managerId,
+            toGrant,
+            dto.module,
+            dto.effectiveFrom ?? null,
+            dto.effectiveTo ?? null,
+            dto.remarks ?? null,
+            createdBy,
+          ],
+        ),
     );
-    return { message: USER_DELEGATION_RESPONSES.CREATED, id: row.id };
+
+    const name = (id: string) => people.find((p) => p.id === id)?.name ?? null;
+    const createdIds = new Set(inserted.map((r) => r.memberId));
+    return {
+      message: USER_DELEGATION_RESPONSES.CREATED.replace('{count}', String(inserted.length)),
+      created: inserted.map((r) => ({
+        id: r.id,
+        memberId: r.memberId,
+        memberName: name(r.memberId),
+      })),
+      skipped: memberIds
+        .filter((id) => !createdIds.has(id))
+        .map((id) => ({ memberId: id, memberName: name(id), reason: 'already delegated' })),
+    };
   }
 
   async findAll(query: GetDelegationsDto) {

@@ -51,7 +51,9 @@ export const USER_DELEGATION_ERRORS = {
   NOT_FOUND: 'Delegation not found',
   SELF_DELEGATION: 'A person cannot be delegated to manage their own entries',
   UNKNOWN_MODULE: 'Unknown module "{module}". Delegation is supported for: {supported}',
-  MEMBER_NOT_ACTIVE: 'This employee is not active, so nobody can be given their entries to manage',
+  MEMBERS_NOT_FOUND: 'Employees not found: {ids}',
+  MEMBERS_NOT_ACTIVE:
+    'These employees are not active, so nobody can be given their entries to manage: {names}',
   MANAGER_NOT_ACTIVE: 'This employee is not active and cannot be made a manager',
   ALREADY_DELEGATED:
     'An open delegation already exists for this pair and module. Withdraw it first, or set an end date on it',
@@ -61,6 +63,6 @@ export const USER_DELEGATION_ERRORS = {
 };
 
 export const USER_DELEGATION_RESPONSES = {
-  CREATED: 'Delegation granted',
+  CREATED: 'Delegation granted for {count} employee(s)',
   WITHDRAWN: 'Delegation withdrawn',
 };
