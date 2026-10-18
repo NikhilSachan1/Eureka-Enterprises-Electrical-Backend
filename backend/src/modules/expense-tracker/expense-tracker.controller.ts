@@ -41,7 +41,8 @@ import {
   PendingSettlementQueryDto,
   PendingSettlementResponseDto,
 } from './dto';
-import { ExpenseUserInterceptor } from './interceptors/expense-user.interceptor';
+import { ExpenseManagedScopeInterceptor } from 'src/modules/user-delegations/interceptors/managed-scope.interceptor';
+import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { RequestWithTimezone } from './expense-tracker.types';
 
 @ApiTags('Expense Tracker')
@@ -72,7 +73,11 @@ export class ExpenseTrackerController {
     return this.expenseTrackerService.createDebitExpense({
       ...createExpenseDto,
       fileKeys,
-      userId: req.user.id,
+      // Whose expense this is. Defaults to the caller, so an app that does not know about
+      // delegation keeps working exactly as before.
+      userId: createExpenseDto.userId ?? req.user.id,
+      actingUserId: req.user.id,
+      activeRole: req.user.activeRole ?? req.user.role,
       userRole: req.user.role,
       sourceType,
       timezone: req.timezone,
@@ -101,6 +106,7 @@ export class ExpenseTrackerController {
     return this.expenseTrackerService.forceExpense({
       ...forceExpenseDto,
       createdBy: req.user.id,
+      activeRole: req.user.activeRole ?? req.user.role,
       sourceType,
       fileKeys,
       timezone: req.timezone,
@@ -195,6 +201,7 @@ export class ExpenseTrackerController {
   }
 
   @Post('approval')
+  @RequiredPermission('expense.approve')
   @ApiOperation({
     summary: 'Bulk approve expense entries',
     description: 'Approves multiple expense entries in bulk based on the provided expense IDs.',
@@ -217,7 +224,7 @@ export class ExpenseTrackerController {
     description:
       'Retrieves a list of expense records based on the provided query parameters and filters.',
   })
-  @UseInterceptors(ExpenseUserInterceptor)
+  @UseInterceptors(ExpenseManagedScopeInterceptor)
   @ApiResponse({ status: 200, type: ExpenseListResponseDto })
   async getExpenseRecords(
     @Request() req: RequestWithTimezone,

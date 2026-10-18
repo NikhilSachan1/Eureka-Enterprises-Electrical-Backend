@@ -102,13 +102,15 @@ export class VehicleMastersController {
   @ApiOperation({
     summary: 'Get assigned vehicle',
     description:
-      'Retrieves the vehicle assigned to a user along with the associated card details. DRIVER/EMPLOYEE without manual fuel or manual vehicle-reading permission receive their own vehicle. Those permissions may pass another userId. Other roles may specify userId.',
+      'Retrieves the vehicle assigned to a user along with the associated card details. Omit userId for your own. ' +
+      'Office roles may pass anybody; everyone else may pass themselves or someone they manage for fuel ' +
+      '(GET /user-delegations/managed-users?module=fuel), otherwise 403.',
   })
   @ApiQuery({
     name: 'userId',
     required: false,
     description:
-      'User ID. Optional for ADMIN/HR. DRIVER/EMPLOYEE may pass another user only with fuel.force or vehicle-reading.force.',
+      'Whose vehicle. Omit for your own. Must be yourself or someone you manage for fuel.',
   })
   async getAssignedVehicle(@Query('userId') userId: string) {
     return await this.vehicleMastersService.getAssignedVehicle(userId);

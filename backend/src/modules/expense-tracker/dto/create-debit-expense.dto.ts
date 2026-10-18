@@ -1,9 +1,23 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { EXPENSE_TRACKER_ERRORS } from '../constants/expense-tracker.constants';
 
 export class CreateDebitExpenseDto {
+  /**
+   * Whose expense this is. Omit for your own.
+   *
+   * Only accepted for somebody you have been delegated — see `GET /user-delegations/managed-users`
+   * for who that is. The money stays theirs; the record keeps you as the person who entered it,
+   * which is also what decides who may edit it afterwards.
+   */
+  @ApiPropertyOptional({
+    description: 'Whose expense this is. Omit for your own. Must be someone you manage.',
+  })
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
   @ApiProperty({
     description: 'Expense Category',
     example: 'Travel',

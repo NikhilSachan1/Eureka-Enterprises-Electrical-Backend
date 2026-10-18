@@ -3,53 +3,63 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
-  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Observable, from, switchMap } from 'rxjs';
-import { PermissionsGuard } from 'src/modules/auth/guards/permissions.guard';
-import { UserFromRequest } from 'src/modules/auth/auth.types';
-import { Roles } from 'src/modules/roles/constants/role.constants';
-import { VEHICLE_MASTERS_ERRORS } from '../constants/vehicle-masters.constants';
+import { ManagedUsersService } from 'src/modules/user-delegations/managed-users.service';
+import {
+  DELEGATABLE_MODULES,
+  USER_DELEGATION_ERRORS,
+} from 'src/modules/user-delegations/constants/user-delegation.constants';
 
 /**
- * On-behalf-of lookups (manual fuel, manual vehicle reading) need another
- * employee's assigned vehicle. Add-fuel omits userId and still resolves to self.
+ * Whose assigned vehicle (and petro card) may the caller look up.
+ *
+ * The add-fuel screen calls this for whoever the fuel is being filed for, so it answers with
+ * exactly the same set the fuel module does — `ManagedUsersService` for `fuel`. Anything else and
+ * the two could disagree: a manager allowed to file B's fuel but refused B's vehicle, or the
+ * reverse.
+ *
+ * Behaviour:
+ *   no `userId`                → the caller's own vehicle
+ *   `userId` is the caller     → allowed (it used to be a flat 400 for EMPLOYEE/DRIVER even here)
+ *   `userId` someone they manage for fuel → allowed
+ *   anyone else                → 403
+ *
+ * Office roles resolve to "no restriction" and keep reaching anybody, as before.
  */
-const ASSIGNED_VEHICLE_LOOKUP_PERMISSIONS = ['fuel.force', 'vehicle-reading.force'];
-
 @Injectable()
 export class VehicleUserInterceptor implements NestInterceptor {
-  constructor(private readonly permissionsGuard: PermissionsGuard) {}
+  constructor(private readonly managedUsers: ManagedUsersService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    return from(this.applyUserScope(context)).pipe(switchMap(() => next.handle()));
-  }
-
-  private async applyUserScope(context: ExecutionContext): Promise<void> {
     const request = context.switchToHttp().getRequest();
-    const user = request.user as UserFromRequest;
-    const requestedUserId = request.query.userId as string | undefined;
+    const user = request.user;
+    const asked = request.query.userId as string | undefined;
 
-    if (user.role === Roles.EMPLOYEE || user.role === Roles.DRIVER) {
-      const isAnotherUser = !!requestedUserId && requestedUserId !== user.id;
-      if (isAnotherUser) {
-        const canLookupSelectedEmployee = await this.permissionsGuard.hasAnyPermission(
-          user,
-          ASSIGNED_VEHICLE_LOOKUP_PERMISSIONS,
-        );
-        if (!canLookupSelectedEmployee) {
-          throw new BadRequestException(VEHICLE_MASTERS_ERRORS.EMPLOYEE_CANNOT_SPECIFY_USER_ID);
-        }
-      }
-
-      if (!requestedUserId) {
-        request.query.userId = user.id;
-      }
-      return;
-    }
-
-    if (!requestedUserId) {
+    if (!asked || asked === user.id) {
       request.query.userId = user.id;
+      return next.handle();
     }
+
+    return from(
+      this.managedUsers.resolveManagedUserIds(
+        user.id,
+        user.activeRole ?? user.role,
+        DELEGATABLE_MODULES.FUEL,
+      ),
+    ).pipe(
+      switchMap((allowed) => {
+        if (allowed !== null && !allowed.includes(asked)) {
+          throw new ForbiddenException(
+            USER_DELEGATION_ERRORS.NOT_ALLOWED_FOR_USER.replace(
+              '{module}',
+              DELEGATABLE_MODULES.FUEL,
+            ),
+          );
+        }
+        return next.handle();
+      }),
+    );
   }
 }
