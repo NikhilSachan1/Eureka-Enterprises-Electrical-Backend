@@ -11,6 +11,7 @@ import { SharedModule } from '../shared/shared.module';
 import { ConfigurationsModule } from '../configurations/configuration.module';
 import { CardsModule } from '../cards/cards.module';
 import { UsersModule } from '../users/user.module';
+import { UserDelegationModule } from '../user-delegations/user-delegation.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from '../users/user.module';
     ConfigurationsModule,
     forwardRef(() => CardsModule),
     UsersModule,
+    UserDelegationModule,
   ],
   controllers: [VehicleMastersController],
   providers: [VehicleMastersService, VehicleMastersRepository],
