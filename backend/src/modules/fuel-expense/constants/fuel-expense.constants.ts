@@ -5,6 +5,18 @@ export enum TransactionType {
   PETRO_CARD = 'petro_card',
 }
 
+/**
+ * Fuel amount that belongs on the employee's own ledger.
+ * Petro-card fills are paid from the company wallet, so they must not move
+ * outstanding balance, overpaid, or dashboard payable. NULL payment mode still counts
+ * (`<>` would drop those rows because NULL compared with a string is unknown).
+ */
+export const fuelEmployeeLedgerAmountSql = (alias?: string): string => {
+  const mode = alias ? `${alias}."paymentMode"` : `"paymentMode"`;
+  const amount = alias ? `${alias}."fuelAmount"` : `"fuelAmount"`;
+  return `CASE WHEN ${mode} IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN ${amount}::numeric ELSE 0 END`;
+};
+
 export enum ExpenseEntryType {
   SELF = 'self',
   FORCED = 'forced',
