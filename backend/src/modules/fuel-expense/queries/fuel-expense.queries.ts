@@ -1,6 +1,6 @@
 import { FuelExpenseQueryDto } from '../dto/fuel-expense-query.dto';
 import { FuelPendingSettlementQueryDto } from '../dto/pending-settlement-query.dto';
-import { TransactionType } from '../constants/fuel-expense.constants';
+import { fuelEmployeeLedgerAmountSql, TransactionType } from '../constants/fuel-expense.constants';
 import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
 export const buildFuelExpenseListQuery = (filters: FuelExpenseQueryDto) => {
@@ -280,8 +280,8 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
   if (date) {
     openingBalanceQuery = `
       SELECT
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
       FROM "fuel_expenses" fe
       LEFT JOIN "users" u ON fe."userId" = u."id"
       LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
@@ -291,8 +291,8 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
   } else if (startDate) {
     openingBalanceQuery = `
       SELECT
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
       FROM "fuel_expenses" fe
       LEFT JOIN "users" u ON fe."userId" = u."id"
       LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
@@ -332,8 +332,8 @@ export const buildFuelExpenseBalanceQuery = (filters: FuelExpenseQueryDto) => {
 
   const periodTotalsQuery = `
     SELECT
-      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodCredit",
-      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodDebit"
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodCredit",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodDebit"
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
@@ -413,8 +413,8 @@ export const buildProjectedFuelBalanceQuery = (filters: FuelExpenseQueryDto) => 
   if (date) {
     openingBalanceQuery = `
       SELECT
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
       FROM "fuel_expenses" fe
       LEFT JOIN "users" u ON fe."userId" = u."id"
       LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
@@ -424,8 +424,8 @@ export const buildProjectedFuelBalanceQuery = (filters: FuelExpenseQueryDto) => 
   } else if (startDate) {
     openingBalanceQuery = `
       SELECT
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
-        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+        COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit"
       FROM "fuel_expenses" fe
       LEFT JOIN "users" u ON fe."userId" = u."id"
       LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
@@ -462,8 +462,8 @@ export const buildProjectedFuelBalanceQuery = (filters: FuelExpenseQueryDto) => 
 
   const periodTotalsQuery = `
     SELECT
-      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodCredit",
-      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodDebit"
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodCredit",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "periodDebit"
     FROM "fuel_expenses" fe
     LEFT JOIN "users" u ON fe."userId" = u."id"
     LEFT JOIN "vehicle_masters" v ON fe."vehicleId" = v."id"
@@ -581,8 +581,8 @@ export const buildFuelExpenseSummaryQuery = (filters: FuelExpenseQueryDto) => {
 
   const summaryQuery = `
     SELECT
-      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
-      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" <> '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalCredit",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."paymentMode" IS DISTINCT FROM '${TransactionType.PETRO_CARD}' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalDebit",
       COALESCE(SUM(CASE WHEN fe."paymentMode" = '${TransactionType.PETRO_CARD}' AND fe."approvalStatus" <> 'rejected' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalPetroCardExpense",
       COALESCE(SUM(CASE WHEN fe."paymentMode" = '${TransactionType.PETRO_CARD}' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount" ELSE 0 END), 0) as "totalPetroCardDebitApproved",
       COUNT(*) as "totalRecords",
@@ -646,8 +646,9 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
 
   const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
 
-  const approvedDebitExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)`;
-  const settledExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)`;
+  const employeeAmount = fuelEmployeeLedgerAmountSql('fe');
+  const approvedDebitExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.DEBIT}' AND fe."approvalStatus" = 'approved' THEN ${employeeAmount} ELSE 0 END), 0)`;
+  const settledExpr = `COALESCE(SUM(CASE WHEN fe."transactionType" = '${TransactionType.CREDIT}' THEN ${employeeAmount} ELSE 0 END), 0)`;
 
   const baseSelectQuery = `
     SELECT

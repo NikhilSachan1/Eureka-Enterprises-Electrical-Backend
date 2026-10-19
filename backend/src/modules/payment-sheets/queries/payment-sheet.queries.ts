@@ -1,7 +1,11 @@
+import { fuelEmployeeLedgerAmountSql } from 'src/modules/fuel-expense/constants/fuel-expense.constants';
+
 /**
  * Live-pending recompute helpers — mirror the pending-settlement logic so the sheet
  * can reconcile against current data (§8 of the spec).
  */
+
+const FUEL_EMPLOYEE_AMOUNT = fuelEmployeeLedgerAmountSql('fe');
 
 /** Expense pending for a single user = Σ(approved debit) − Σ(credit), active rows only. */
 export const userExpensePendingQuery = (userId: string) => ({
@@ -20,8 +24,8 @@ export const userExpensePendingQuery = (userId: string) => ({
 export const userFuelPendingQuery = (userId: string) => ({
   query: `
     SELECT (
-      COALESCE(SUM(CASE WHEN fe."transactionType" = 'debit' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)
-      - COALESCE(SUM(CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)
+      COALESCE(SUM(CASE WHEN fe."transactionType" = 'debit' AND fe."approvalStatus" = 'approved' THEN ${FUEL_EMPLOYEE_AMOUNT} ELSE 0 END), 0)
+      - COALESCE(SUM(CASE WHEN fe."transactionType" = 'credit' THEN ${FUEL_EMPLOYEE_AMOUNT} ELSE 0 END), 0)
     ) AS "pending"
     FROM "fuel_expenses" fe
     WHERE fe."isActive" = true AND fe."userId" = $1
@@ -69,8 +73,8 @@ export const usersFuelPendingQuery = (userIds: string[]) => ({
     SELECT
       fe."userId",
       (
-        COALESCE(SUM(CASE WHEN fe."transactionType" = 'debit' AND fe."approvalStatus" = 'approved' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)
-        - COALESCE(SUM(CASE WHEN fe."transactionType" = 'credit' THEN fe."fuelAmount"::numeric ELSE 0 END), 0)
+        COALESCE(SUM(CASE WHEN fe."transactionType" = 'debit' AND fe."approvalStatus" = 'approved' THEN ${FUEL_EMPLOYEE_AMOUNT} ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN fe."transactionType" = 'credit' THEN ${FUEL_EMPLOYEE_AMOUNT} ELSE 0 END), 0)
       ) AS "pending"
     FROM "fuel_expenses" fe
     WHERE fe."isActive" = true AND fe."userId" = ANY($1)
