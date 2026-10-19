@@ -7,6 +7,7 @@ import {
   FindOneOptions,
   FindOptionsWhere,
   ILike,
+  In,
   Repository,
 } from 'typeorm';
 import { CreateConfigurationDto, GetConfigurationDto } from './dto/configuration.dto';
@@ -40,7 +41,7 @@ export class ConfigurationRepository {
     totalRecords: number;
   }> {
     try {
-      const { page, pageSize, sortField, sortOrder, search, ...rest } = options as any;
+      const { page, pageSize, sortField, sortOrder, search, key, ...rest } = options as any;
       const where: FindOptionsWhere<ConfigurationEntity> = { deletedAt: null };
       if (search) {
         where.key = ILike(`%${search}%`);
@@ -51,6 +52,9 @@ export class ConfigurationRepository {
       }
       //pass rest to where as well
       Object.assign(where, rest);
+      if (Array.isArray(key) && key.length) {
+        where.key = In(key);
+      }
       const [configurations, total] = await this.repository.findAndCount({
         skip: page ? (page - 1) * pageSize : undefined,
         take: pageSize ? pageSize : undefined,
@@ -120,9 +124,9 @@ export class ConfigurationRepository {
         query.andWhere('config.module = :module', { module });
       }
 
-      // Key filter (exact match)
-      if (key) {
-        query.andWhere('config.key = :key', { key });
+      // Key filter (one or more exact matches)
+      if (key?.length) {
+        query.andWhere('config.key IN (:...keys)', { keys: key });
       }
 
       // Search in key OR label (case-insensitive)
