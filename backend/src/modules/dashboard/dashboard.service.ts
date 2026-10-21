@@ -41,7 +41,6 @@ import * as mobileQueries from './queries/mobile-dashboard.queries';
 // Reused rather than restated: the wallet balance must be defined in exactly one place, or the
 // dashboard and the wallet screen can disagree about how much money there is.
 import { walletBalanceQuery } from '../petro-card-wallet/queries/petro-card-wallet.queries';
-import { fuelEmployeeLedgerAmountSql } from '../fuel-expense/constants/fuel-expense.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { Roles } from '../roles/constants/role.constants';
@@ -1480,12 +1479,8 @@ export class DashboardService {
     const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
 
     // debit = company owes employee (+), credit = company paid employee (-)
-    // Petro-card fuel is company-wallet spend and is left out of the employee net, same as the fuel ledger.
     const EXP_NET = `CASE WHEN e."transactionType" = 'debit' THEN e.amount::numeric ELSE -e.amount::numeric END`;
-    const FUEL_AMT = fuelEmployeeLedgerAmountSql('fe');
-    const FUEL_AMT_BARE = fuelEmployeeLedgerAmountSql();
-    const FUEL_NET = `CASE WHEN fe."transactionType" = 'debit' THEN ${FUEL_AMT} ELSE -${FUEL_AMT} END`;
-    const FUEL_SIGNED = `CASE WHEN "transactionType" = 'debit' THEN ${FUEL_AMT_BARE} ELSE -${FUEL_AMT_BARE} END`;
+    const FUEL_NET = `CASE WHEN fe."transactionType" = 'debit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END`;
 
     const [expApprovals, expBalances, expByUser, fuelApprovals, fuelBalances, fuelByUser] =
       await Promise.all([
@@ -1559,8 +1554,12 @@ export class DashboardService {
         this.dataSource.query(
           `
           SELECT
-            COALESCE(SUM(CASE WHEN "fillDate" < $1 THEN ${FUEL_SIGNED} END), 0) AS opening,
-            COALESCE(SUM(${FUEL_SIGNED}), 0) AS closing
+            COALESCE(SUM(CASE WHEN "fillDate" < $1
+              THEN CASE WHEN "transactionType" = 'debit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
+            END), 0) AS opening,
+            COALESCE(SUM(
+              CASE WHEN "transactionType" = 'debit' THEN "fuelAmount"::numeric ELSE -"fuelAmount"::numeric END
+            ), 0) AS closing
           FROM fuel_expenses
           WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
             AND ($2::uuid IS NULL OR "userId" = $2::uuid)

@@ -54,14 +54,14 @@ export const buildPendingExpenseReimbursementQuery = (userId: string) => {
 export const buildPendingFuelReimbursementQuery = (userId: string) => {
   const query = `
     SELECT 
-      COALESCE(SUM(CASE WHEN fe."transactionType" = 'debit' AND fe."paymentMode" IS DISTINCT FROM 'petro_card' THEN fe."fuelAmount" ELSE 0 END), 0) as "pendingDebits",
-      COALESCE(SUM(CASE WHEN fe."transactionType" = 'credit' AND fe."paymentMode" IS DISTINCT FROM 'petro_card' THEN fe."fuelAmount" ELSE 0 END), 0) as "unsettledCredits",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = 'DEBIT' THEN fe."fuelAmount" ELSE 0 END), 0) as "pendingDebits",
+      COALESCE(SUM(CASE WHEN fe."transactionType" = 'CREDIT' THEN fe."fuelAmount" ELSE 0 END), 0) as "unsettledCredits",
       COUNT(*) as count
     FROM fuel_expenses fe
     WHERE fe."userId" = $1 
       AND fe."isActive" = true
       AND fe."deletedAt" IS NULL
-      AND fe."approvalStatus" = 'approved'
+      AND fe."approvalStatus" = 'APPROVED'
   `;
   return { query, params: [userId] };
 };
