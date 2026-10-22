@@ -15,7 +15,10 @@ export class GetNotificationsDto extends BaseGetDto {
 }
 
 export class RegisterDeviceDto {
-  @ApiProperty({ description: 'The FCM registration token from firebase_messaging' })
+  @ApiProperty({
+    description:
+      'The FCM registration token — from firebase_messaging (Flutter) or getToken() in the Firebase JS SDK (web)',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(4096)
@@ -23,7 +26,7 @@ export class RegisterDeviceDto {
 
   @ApiProperty({
     enum: DevicePlatform,
-    description: 'Only android receives pushes for now; ios and web may register early',
+    description: 'android and web receive pushes; ios may register early but is not sent to yet',
   })
   @IsEnum(DevicePlatform)
   platform: DevicePlatform;

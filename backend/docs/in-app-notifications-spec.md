@@ -261,7 +261,7 @@ bell ka code chhuna nahi padega, sirf push jud jaayega.
 |---|---|
 | Mobile app | **Flutter** — `firebase_messaging` se FCM token |
 | Push provider | **AWS SNS** (Mumbai, `ap-south-1`) — SNS ke andar FCM HTTP v1. Firebase project phir bhi chahiye (Android ke liye) |
-| Platform | **Sirf Android** abhi. iOS / web device register ho sakte hain, push nahi jaata (`PUSH_PLATFORMS_ENABLED`) |
+| Platform | **Android + browser (web)**. Web usi SNS platform application se (same Firebase project); alag ARN chahiye to `AWS_SNS_WEB_PLATFORM_APPLICATION_ARN`. Browser click → `FE_BASE_URL` + route (sirf https). iOS abhi nahi |
 | Admin digest kisko | (a) — `notification_emails` ke address jo active users se match karein (`notifyEmails()`) |
 | Retention | 90 din, phir soft delete — `NOTIFICATION_RETENTION_DAYS`, kam se kam 30 |
 | Birthday / anniversary | Haan, bell me — saal me ek baar (dedupe) |

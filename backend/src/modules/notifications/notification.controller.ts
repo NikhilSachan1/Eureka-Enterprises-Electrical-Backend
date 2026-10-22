@@ -73,7 +73,7 @@ export class NotificationController {
     description:
       'Call after login, on every app start, and whenever firebase_messaging reports a new ' +
       'token. Safe to repeat. `pushEnabled` says whether pushes are currently sent to this ' +
-      'platform (Android only for now).',
+      'platform (Android and web; not iOS yet).',
   })
   async registerDevice(@Body() dto: RegisterDeviceDto, @Request() req: any) {
     return this.notificationService.registerDevice(req.user.id, dto);

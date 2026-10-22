@@ -29,22 +29,26 @@ export class EmailService {
 
     // Log each email separately for accurate tracking
     for (const email of emails) {
-      await this.sendSingleEmail(
-        {
-          ...emailContext,
-          receiverEmails: email,
-        },
-        category,
-        startTime,
-      );
+      const single = { ...emailContext, receiverEmails: email };
+      const sent = await this.sendSingleEmail(single, category, startTime, 0);
+      if (!sent) this.scheduleRetry(single, 1, category);
     }
   }
 
+  /**
+   * One attempt. Returns whether it went; never schedules anything itself.
+   *
+   * It used to start a fresh retry chain at count 0 on every failure — including failures of the
+   * retries — so the retry limit was never reached and each failed email retried about once a
+   * minute until the process restarted (one alert reached 8,885 attempts in 7 days). Retrying is
+   * now `scheduleRetry`'s job alone, and it carries the count.
+   */
   private async sendSingleEmail(
     emailContext: IMailOptions & { receiverEmails: string },
     category: CommunicationCategory,
     startTime: number,
-  ) {
+    attempt: number,
+  ): Promise<boolean> {
     const { receiverEmails: email, subject, template, emailData, attachments } = emailContext;
 
     try {
@@ -94,68 +98,75 @@ export class EmailService {
     } catch (error) {
       const responseTimeMs = Date.now() - startTime;
 
-      // Log failed email
-      await this.communicationLogService.logEmail(
-        {
-          recipientEmail: email,
-          recipientName: emailData?.employeeName,
-          subject,
-          templateName: template,
-          templateData: emailData,
-          category,
-          referenceId: emailData?.referenceId,
-          referenceType: emailData?.referenceType,
-        },
-        CommunicationStatus.FAILED,
-        {
-          message: error.message,
-          code: error.code || 'UNKNOWN',
-          details: {
-            stack: error.stack,
-            responseTimeMs,
+      // Log failed email. A logging failure must not turn a failed send into a thrown error.
+      await this.communicationLogService
+        .logEmail(
+          {
+            recipientEmail: email,
+            recipientName: emailData?.employeeName,
+            subject,
+            templateName: template,
+            templateData: emailData,
+            category,
+            referenceId: emailData?.referenceId,
+            referenceType: emailData?.referenceType,
           },
-        },
-      );
+          CommunicationStatus.FAILED,
+          {
+            message: error.message,
+            code: error.code || 'UNKNOWN',
+            details: {
+              stack: error.stack,
+              responseTimeMs,
+              attempt: attempt + 1,
+              maxAttempts: EMAIL_RETRY_CONFIG.MAX_RETRIES + 1,
+            },
+          },
+        )
+        .catch((logError) => Logger.error(`Failed to log email failure: ${logError?.message}`));
 
       Logger.error(`Failed to send email to ${email}: ${error.message}`, error.stack);
-
-      // Schedule retry for failed emails
-      this.scheduleRetry(emailContext, 0, category);
       return false;
     }
   }
 
+  /**
+   * Retry `retry` of `MAX_RETRIES` after an exponential delay: 1 min, 5 min, 25 min.
+   *
+   * With the defaults an email is tried four times in all — once, then three retries — and then
+   * given up on. The chain lives in memory, so a restart drops any retry still waiting.
+   */
   private scheduleRetry(
     emailContext: IMailOptions & { receiverEmails: string },
-    retryCount: number,
+    retry: number,
     category: CommunicationCategory,
   ) {
     const { MAX_RETRIES, BASE_DELAY_MINUTES, DELAY_MULTIPLIER } = EMAIL_RETRY_CONFIG;
 
-    if (retryCount >= MAX_RETRIES) {
+    if (retry > MAX_RETRIES) {
       Logger.error(
         `Failed to send email after ${MAX_RETRIES} retries to: ${emailContext.receiverEmails}`,
       );
       return;
     }
 
-    // Exponential backoff: 1min, 5min, 25min (multiplier^retryCount * base)
-    const delayMs = Math.pow(DELAY_MULTIPLIER, retryCount) * BASE_DELAY_MINUTES * 60 * 1000;
+    const delayMs = Math.pow(DELAY_MULTIPLIER, retry - 1) * BASE_DELAY_MINUTES * 60 * 1000;
     const nextRetryAt = new Date(Date.now() + delayMs);
 
     Logger.log(
-      `Scheduling retry ${retryCount + 1}/${MAX_RETRIES} for ${
+      `Scheduling retry ${retry}/${MAX_RETRIES} for ${
         emailContext.receiverEmails
       } at ${nextRetryAt.toISOString()}`,
     );
 
     setTimeout(async () => {
-      try {
-        const startTime = Date.now();
-        await this.sendSingleEmail(emailContext, category, startTime);
-        Logger.log(`Retry successful for email to: ${emailContext.receiverEmails}`);
-      } catch (error) {
-        this.scheduleRetry(emailContext, retryCount + 1, category);
+      const sent = await this.sendSingleEmail(emailContext, category, Date.now(), retry).catch(
+        () => false,
+      );
+      if (sent) {
+        Logger.log(`Retry ${retry} successful for email to: ${emailContext.receiverEmails}`);
+      } else {
+        this.scheduleRetry(emailContext, retry + 1, category);
       }
     }, delayMs);
   }

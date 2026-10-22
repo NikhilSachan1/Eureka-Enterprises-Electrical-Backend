@@ -7,6 +7,7 @@ import {
   SNSClient,
 } from '@aws-sdk/client-sns';
 import { Environments } from 'env-configs';
+import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 import {
   DevicePlatform,
   PUSH_PLATFORMS_ENABLED,
@@ -29,12 +30,21 @@ export interface PushResult {
   error?: string;
 }
 
+/** A configured ARN, or undefined if it is missing or still the shipped placeholder. */
+const realArn = (arn?: string) => (arn && !/DUMMY/i.test(arn) ? arn : undefined);
+
+/** FCM only accepts an https click link, so anything else is left out rather than rejected. */
+const httpsOnly = (url?: string) => (url && /^https:\/\//i.test(url) ? url : undefined);
+
 /**
- * Pushes through AWS SNS, which hands Android messages to FCM.
+ * Pushes through AWS SNS, which hands them to FCM — Android phones and web browsers alike.
  *
- * SNS does not replace Firebase: the app still gets its token from `firebase_messaging`, and the
+ * SNS does not replace Firebase: the app and the browser get their tokens from Firebase, and the
  * Firebase service-account key is uploaded to the SNS platform application once. The backend only
  * ever talks to SNS, and only needs permission to publish.
+ *
+ * Android and web tokens come from the same Firebase project, so one SNS platform application
+ * serves both. A separate web ARN can be configured, but is optional and falls back to Android's.
  *
  * Off unless `PUSH_ENABLED=true` **and** a real platform application ARN is configured — so the
  * placeholder values shipped in `.env` can never produce a call.
@@ -43,14 +53,16 @@ export interface PushResult {
 export class SnsPushService {
   private readonly logger = new Logger(SnsPushService.name);
   private readonly client: SNSClient | null;
-  private readonly androidArn: string | undefined;
+  private readonly arns: Partial<Record<DevicePlatform, string>>;
 
   constructor() {
-    this.androidArn = Environments.AWS_SNS_ANDROID_PLATFORM_APPLICATION_ARN;
-    const configured =
-      Environments.PUSH_ENABLED && !!this.androidArn && !/DUMMY/i.test(this.androidArn);
+    const android = realArn(Environments.AWS_SNS_ANDROID_PLATFORM_APPLICATION_ARN);
+    this.arns = {
+      [DevicePlatform.ANDROID]: android,
+      [DevicePlatform.WEB]: realArn(Environments.AWS_SNS_WEB_PLATFORM_APPLICATION_ARN) ?? android,
+    };
 
-    if (!configured) {
+    if (!Environments.PUSH_ENABLED || !Object.values(this.arns).some(Boolean)) {
       if (Environments.PUSH_ENABLED) {
         this.logger.warn(
           'PUSH_ENABLED is true but the SNS platform ARN is missing or a placeholder — push stays off',
@@ -72,11 +84,7 @@ export class SnsPushService {
 
   /** Whether a push to this platform would actually be attempted. */
   isActiveFor(platform: DevicePlatform): boolean {
-    return !!this.client && PUSH_PLATFORMS_ENABLED.includes(platform);
-  }
-
-  private platformArn(platform: DevicePlatform): string | undefined {
-    return platform === DevicePlatform.ANDROID ? this.androidArn : undefined;
+    return !!this.client && PUSH_PLATFORMS_ENABLED.includes(platform) && !!this.arns[platform];
   }
 
   /**
@@ -93,7 +101,7 @@ export class SnsPushService {
     userId: string,
     knownArn?: string | null,
   ): Promise<string | null> {
-    const appArn = this.platformArn(platform);
+    const appArn = this.isActiveFor(platform) ? this.arns[platform] : undefined;
     if (!this.client || !appArn) return null;
 
     if (knownArn) {
@@ -141,21 +149,54 @@ export class SnsPushService {
     }
   }
 
+  /**
+   * Where a browser notification opens when clicked: `FE_BASE_URL` + the route, joined without a
+   * doubled slash. Undefined unless the result is https — FCM refuses anything else.
+   */
+  webLink(route?: string): string | undefined {
+    const base = (Environments.FE_BASE_URL ?? '').replace(/\/+$/, '');
+    if (!base) return undefined;
+    const path = (route ?? '').replace(/^\/+/, '');
+    return httpsOnly(path ? `${base}/${path}` : base);
+  }
+
+  /**
+   * The FCM HTTP v1 message, shaped for the device it is going to.
+   *
+   * Android gets high priority and a sound. A browser gets the click link and the company icon;
+   * without the link the click still reaches the site's service worker, which can read `route`
+   * from `data` and navigate itself.
+   */
+  buildFcmMessage(platform: DevicePlatform, message: PushMessage) {
+    const base = {
+      notification: { title: message.title, body: message.body },
+      data: message.data,
+    };
+    if (platform === DevicePlatform.WEB) {
+      const link = this.webLink(message.data.route);
+      const icon = httpsOnly(COMPANY_DETAILS.LOGO_URL);
+      return {
+        ...base,
+        webpush: {
+          ...(icon ? { notification: { icon } } : {}),
+          ...(link ? { fcm_options: { link } } : {}),
+        },
+      };
+    }
+    return { ...base, android: { priority: 'high', notification: { sound: 'default' } } };
+  }
+
   /** One push to one endpoint. Never throws — the caller logs the result. */
-  async send(endpointArn: string, message: PushMessage): Promise<PushResult> {
+  async send(
+    endpointArn: string,
+    message: PushMessage,
+    platform: DevicePlatform = DevicePlatform.ANDROID,
+  ): Promise<PushResult> {
     if (!this.client)
       return { ok: false, dead: false, code: 'DISABLED', error: 'Push is disabled' };
 
-    // FCM HTTP v1 through SNS: the GCM key carries `fcmV1Message`.
-    const fcm = {
-      fcmV1Message: {
-        message: {
-          notification: { title: message.title, body: message.body },
-          data: message.data,
-          android: { priority: 'high', notification: { sound: 'default' } },
-        },
-      },
-    };
+    // FCM HTTP v1 through SNS: the GCM key carries `fcmV1Message`, for Android and web alike.
+    const fcm = { fcmV1Message: { message: this.buildFcmMessage(platform, message) } };
 
     try {
       const out = await this.client.send(

@@ -1,4 +1,4 @@
-/** Where a device receives pushes. Only Android is sent to today — see `PUSH_PLATFORMS_ENABLED`. */
+/** Where a device receives pushes. Android and web are sent to today — see `PUSH_PLATFORMS_ENABLED`. */
 export enum DevicePlatform {
   ANDROID = 'android',
   IOS = 'ios',
@@ -8,10 +8,13 @@ export enum DevicePlatform {
 /**
  * Platforms that actually receive pushes right now.
  *
- * iOS and web devices may still register — the app can ship that code early — but nothing is sent
- * to them until they are added here and an SNS platform application exists for them.
+ * iOS devices may still register — the app can ship that code early — but nothing is sent to them
+ * until iOS is added here and an SNS platform application (or an APNs setup in Firebase) exists.
  */
-export const PUSH_PLATFORMS_ENABLED: DevicePlatform[] = [DevicePlatform.ANDROID];
+export const PUSH_PLATFORMS_ENABLED: DevicePlatform[] = [
+  DevicePlatform.ANDROID,
+  DevicePlatform.WEB,
+];
 
 export enum NotificationReadFilter {
   ALL = 'all',

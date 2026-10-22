@@ -183,7 +183,7 @@ export class NotificationService {
         }
       }
       result = endpointArn
-        ? await this.push.send(endpointArn, message)
+        ? await this.push.send(endpointArn, message, device.platform)
         : { ok: false, dead: false, code: 'NO_ENDPOINT', error: 'SNS returned no endpoint' };
     } catch (error) {
       result = {
