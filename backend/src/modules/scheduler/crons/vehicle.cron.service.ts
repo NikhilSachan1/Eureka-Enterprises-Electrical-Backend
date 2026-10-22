@@ -41,6 +41,8 @@ import {
   DEFAULT_SERVICE_INTERVAL_KM,
   DEFAULT_SERVICE_WARNING_KM,
 } from '../constants/scheduler.constants';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class VehicleCronService {
@@ -53,6 +55,7 @@ export class VehicleCronService {
     private readonly configSettingService: ConfigSettingService,
     private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -380,6 +383,16 @@ export class VehicleCronService {
       hasDueSoon: dueSoonVehicles.length > 0,
     };
 
+    void this.notificationService.notifyEmails(
+      recipientEmails,
+      NotificationEvents.expiryDigest({
+        kind: 'vehicleService',
+        expired: overdueVehicles.length,
+        expiringSoon: dueSoonVehicles.length,
+        scope: 'company',
+      }),
+    );
+
     for (const email of recipientEmails) {
       try {
         await this.emailService.sendMail({
@@ -428,6 +441,16 @@ export class VehicleCronService {
           hasOverdue: userOverdueVehicles.length > 0,
           hasDueSoon: userDueSoonVehicles.length > 0,
         };
+
+        void this.notificationService.notifyEmails(
+          [vehicle.assignedUserEmail],
+          NotificationEvents.expiryDigest({
+            kind: 'vehicleService',
+            expired: userOverdueVehicles.length,
+            expiringSoon: userDueSoonVehicles.length,
+            scope: 'mine',
+          }),
+        );
 
         try {
           await this.emailService.sendMail({
@@ -653,6 +676,16 @@ export class VehicleCronService {
       hasExpiringSoon: expiringSoonCount.total > 0,
     };
 
+    void this.notificationService.notifyEmails(
+      recipientEmails,
+      NotificationEvents.expiryDigest({
+        kind: 'vehicleDocument',
+        expired: expiredCount.total,
+        expiringSoon: expiringSoonCount.total,
+        scope: 'company',
+      }),
+    );
+
     // Send to fleet managers
     for (const email of recipientEmails) {
       try {
@@ -734,6 +767,16 @@ export class VehicleCronService {
           hasExpired: userExpiredCount > 0,
           hasExpiringSoon: userExpiringSoonCount > 0,
         };
+
+        void this.notificationService.notifyEmails(
+          [vehicle.assignedUserEmail],
+          NotificationEvents.expiryDigest({
+            kind: 'vehicleDocument',
+            expired: userExpiredCount,
+            expiringSoon: userExpiringSoonCount,
+            scope: 'mine',
+          }),
+        );
 
         try {
           await this.emailService.sendMail({

@@ -27,6 +27,8 @@ import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { VehicleMasterEntity } from '../vehicle-masters/entities/vehicle-master.entity';
 import { UserEntity } from '../users/entities/user.entity';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class VehicleEventsService {
@@ -37,6 +39,7 @@ export class VehicleEventsService {
     private readonly vehicleVersionsService: VehicleVersionsService,
     private readonly dateTimeService: DateTimeService,
     private readonly whatsAppService: WhatsAppService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async create(
@@ -174,6 +177,18 @@ export class VehicleEventsService {
       ]);
 
       if (!recipient || !actor) return;
+
+      // Bell + push — independent of WhatsApp opt-in.
+      void this.notificationService.notify({
+        userIds: [recipient.id],
+        createdBy: actor.id,
+        ...NotificationEvents.vehicleTransaction({
+          vehicleMasterId: input.vehicleMasterId,
+          vehicleNo: vehicleMaster?.registrationNo || input.vehicleMasterId,
+          action: input.action,
+          byName: this.getUserFullName(actor),
+        }),
+      });
 
       const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
       if (!recipient.whatsappOptIn || !whatsappNumber) return;

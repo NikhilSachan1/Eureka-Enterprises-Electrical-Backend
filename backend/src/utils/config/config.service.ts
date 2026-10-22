@@ -92,6 +92,9 @@ import { GstPaymentAdviceSequenceEntity } from 'src/modules/gst/entities/gst-pay
 import { GstPaymentEntity } from 'src/modules/gst/entities/gst-payment.entity';
 import { TdsRegisterEntryEntity } from 'src/modules/tds/entities/tds-register-entry.entity';
 import { TdsPaymentEntity } from 'src/modules/tds/entities/tds-payment.entity';
+import { UserModuleDelegationEntity } from 'src/modules/user-delegations/entities/user-module-delegation.entity';
+import { NotificationEntity } from 'src/modules/notifications/entities/notification.entity';
+import { UserDeviceEntity } from 'src/modules/notifications/entities/user-device.entity';
 
 export class ConfigService {
   static getValue(key: string) {
@@ -247,6 +250,9 @@ export class ConfigService {
         GstPaymentEntity,
         TdsRegisterEntryEntity,
         TdsPaymentEntity,
+        UserModuleDelegationEntity,
+        NotificationEntity,
+        UserDeviceEntity,
       ],
       migrations: [migrationDir],
       synchronize: false,

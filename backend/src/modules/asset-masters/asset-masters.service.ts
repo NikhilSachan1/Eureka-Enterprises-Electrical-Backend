@@ -61,6 +61,8 @@ import {
   IS_CALIBRATION_CERTIFICATE,
   latestCalibrationCertificate,
 } from './queries/calibration-certificate.query';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class AssetMastersService {
@@ -81,6 +83,7 @@ export class AssetMastersService {
     private readonly userService: UserService,
     private readonly assetReportPdfService: AssetReportPdfService,
     private readonly filesService: FilesService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -1150,6 +1153,18 @@ export class AssetMastersService {
     const employeeName = `${recipient.firstName || ''} ${recipient.lastName || ''}`.trim();
     const actorName = `${actor.firstName || ''} ${actor.lastName || ''}`.trim();
 
+    void this.notificationService.notify({
+      userIds: [recipient.id],
+      createdBy: actor.id,
+      ...NotificationEvents.assetLost({
+        assetMasterId: input.asset.id,
+        assetId: input.asset.assetId,
+        assetName: input.assetVersion.name,
+        byName: actorName,
+        recoveryAmount: input.recoveryAmount,
+      }),
+    });
+
     // Email
     if (recipient.email) {
       try {
@@ -1222,6 +1237,18 @@ export class AssetMastersService {
 
     const employeeName = `${recipient.firstName || ''} ${recipient.lastName || ''}`.trim();
     const actorName = `${actor.firstName || ''} ${actor.lastName || ''}`.trim();
+
+    void this.notificationService.notify({
+      userIds: [recipient.id],
+      createdBy: actor.id,
+      ...NotificationEvents.assetRecovered({
+        assetMasterId: input.asset.id,
+        assetId: input.asset.assetId,
+        assetName: input.assetVersion.name,
+        byName: actorName,
+        refundedAmount: input.refundedAmount,
+      }),
+    });
 
     if (recipient.email) {
       try {

@@ -23,6 +23,8 @@ import { FnfRepository } from '../fnf.repository';
 import { FnfStatus } from '../constants/fnf.constants';
 import { ExperienceLetterData, FnfStatementData, RelievingLetterData } from '../fnf.types';
 import { UtilityService } from 'src/utils/utility/utility.service';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class FnfDocumentService {
@@ -33,6 +35,7 @@ export class FnfDocumentService {
     private readonly filesService: FilesService,
     private readonly emailService: EmailService,
     private readonly utilityService: UtilityService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async generateAllDocuments(
@@ -339,6 +342,11 @@ export class FnfDocumentService {
     attachments.push({
       filename: `${FNF_DOCUMENT_EMAIL_FILE_NAMES.PAYSLIP}_${userIdentifier}.pdf`,
       content: payslipPdf,
+    });
+
+    void this.notificationService.notify({
+      userIds: [user.id],
+      ...NotificationEvents.fnfDocumentsSent(),
     });
 
     // Send email with attachments

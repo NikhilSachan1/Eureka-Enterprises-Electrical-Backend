@@ -38,6 +38,8 @@ import {
   EXPIRING_SOON_DAYS,
 } from '../../asset-masters/constants/asset-masters.constants';
 import { Environments } from '../../../../env-configs';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class AssetCronService {
@@ -50,6 +52,7 @@ export class AssetCronService {
     private readonly configSettingService: ConfigSettingService,
     private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -331,6 +334,16 @@ export class AssetCronService {
     };
 
     // Send to asset managers/admins
+    void this.notificationService.notifyEmails(
+      recipientEmails,
+      NotificationEvents.expiryDigest({
+        kind: 'calibration',
+        expired: expiredCount.total,
+        expiringSoon: expiringSoonCount.total,
+        scope: 'company',
+      }),
+    );
+
     for (const email of recipientEmails) {
       try {
         await this.emailService.sendMail({
@@ -357,7 +370,9 @@ export class AssetCronService {
         assignedUserEmails.add(asset.assignedUserEmail);
 
         const userAssets = allAssets.filter(
-          (asset) => asset.assignedUserEmail === asset.assignedUserEmail,
+          // Was `(asset) => asset.assignedUserEmail === asset.assignedUserEmail` — the inner
+          // name shadowed the outer one, so every assigned user got the whole company list.
+          (a) => a.assignedUserEmail === asset.assignedUserEmail,
         );
 
         const userExpiredAssets = userAssets.filter(
@@ -383,6 +398,16 @@ export class AssetCronService {
           hasExpired: userExpiredCount > 0,
           hasExpiringSoon: userExpiringSoonCount > 0,
         };
+
+        void this.notificationService.notifyEmails(
+          [asset.assignedUserEmail],
+          NotificationEvents.expiryDigest({
+            kind: 'calibration',
+            expired: userExpiredCount,
+            expiringSoon: userExpiringSoonCount,
+            scope: 'mine',
+          }),
+        );
 
         try {
           await this.emailService.sendMail({
@@ -555,6 +580,16 @@ export class AssetCronService {
     };
 
     // Send to asset managers/admins
+    void this.notificationService.notifyEmails(
+      recipientEmails,
+      NotificationEvents.expiryDigest({
+        kind: 'warranty',
+        expired: expiredCount.total,
+        expiringSoon: expiringSoonCount.total,
+        scope: 'company',
+      }),
+    );
+
     for (const email of recipientEmails) {
       try {
         await this.emailService.sendMail({
@@ -582,7 +617,9 @@ export class AssetCronService {
         assignedUserEmails.add(asset.assignedUserEmail);
 
         const userAssets = allAssets.filter(
-          (asset) => asset.assignedUserEmail === asset.assignedUserEmail,
+          // Was `(asset) => asset.assignedUserEmail === asset.assignedUserEmail` — the inner
+          // name shadowed the outer one, so every assigned user got the whole company list.
+          (a) => a.assignedUserEmail === asset.assignedUserEmail,
         );
 
         const userExpiredAssets = userAssets.filter(
@@ -611,6 +648,16 @@ export class AssetCronService {
           hasExpired: userExpiredCount > 0,
           hasExpiringSoon: userExpiringSoonCount > 0,
         };
+
+        void this.notificationService.notifyEmails(
+          [asset.assignedUserEmail],
+          NotificationEvents.expiryDigest({
+            kind: 'warranty',
+            expired: userExpiredCount,
+            expiringSoon: userExpiringSoonCount,
+            scope: 'mine',
+          }),
+        );
 
         try {
           await this.emailService.sendMail({

@@ -9,6 +9,8 @@ import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from 'src/modules/common/email/constant
 import { PAYSLIP_CONSTANTS } from './payslip.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class PayslipService {
@@ -17,6 +19,7 @@ export class PayslipService {
     private readonly leaveBalancesService: LeaveBalancesService,
     private readonly emailService: EmailService,
     private readonly utilityService: UtilityService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async generatePayslipPDF(payrollId: string): Promise<Buffer> {
@@ -88,6 +91,14 @@ export class PayslipService {
     const pdfBuffer = await this.generatePayslipPDF(payrollId);
     const monthName = this.utilityService.getMonthName(payroll.month);
     const monthYear = `${monthName} ${payroll.year}`;
+
+    // Only when the payslip is actually being issued. No amount — it sits on a lock screen.
+    if (sendEmail && payroll.user?.id) {
+      void this.notificationService.notify({
+        userIds: [payroll.user.id],
+        ...NotificationEvents.payslipReady({ payrollId, monthYear }),
+      });
+    }
 
     if (sendEmail && payroll.user?.email) {
       const netPayableFormatted = new Intl.NumberFormat('en-IN', {

@@ -50,6 +50,8 @@ import {
   StaleHandoverRow,
   emptyModuleResult,
 } from '../types/handover-penalty.types';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 /**
  * Everything that differs between the asset and the vehicle flow. The logic below is written once
@@ -87,6 +89,7 @@ export class HandoverPenaltyCronService {
     private readonly expenseTrackerService: ExpenseTrackerService,
     private readonly whatsAppService: WhatsAppService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -288,6 +291,16 @@ export class HandoverPenaltyCronService {
     amount: number,
     category: string,
   ): Promise<void> {
+    // Bell + push — independent of WhatsApp opt-in. Keyed on the event, so once per penalty.
+    void this.notificationService.notify({
+      userIds: [row.receiverId],
+      ...NotificationEvents.handoverPenalty({
+        eventId: row.eventId,
+        amount,
+        itemLabel: row.itemLabel,
+      }),
+    });
+
     try {
       if (!row.receiverWhatsappOptIn || !row.receiverPhone) return;
       await this.whatsAppService.sendExpenseForceCreated(

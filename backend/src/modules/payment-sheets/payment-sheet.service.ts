@@ -52,6 +52,8 @@ import { PaymentSheetPdfService } from './payment-sheet-pdf.service';
 import { PartyType, getFinancialYear } from 'src/modules/common/financials/financial.constants';
 import { EntrySourceType } from 'src/utils/master-constants/master-constants';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 export interface ActingUser {
   id: string;
@@ -73,6 +75,7 @@ export class PaymentSheetService {
     private readonly petroCardWalletService: PetroCardWalletService,
     private readonly emailService: EmailService,
     private readonly pdfService: PaymentSheetPdfService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   // ─────────────────────────── config / stage helpers ───────────────────────────
@@ -2195,6 +2198,18 @@ export class PaymentSheetService {
     action: StageAction,
     audience: string,
   ) {
+    // Bell first — the next approver should see it even while email is down.
+    void this.notificationService.notifyEmails(
+      recipients,
+      NotificationEvents.paymentSheetStage({
+        sheetId: sheet.id,
+        sheetNumber: sheet.sheetNumber,
+        title: sheet.title,
+        action,
+        audience,
+      }),
+    );
+
     await this.emailService.sendMail({
       receiverEmails: recipients,
       subject: `Payment Sheet ${sheet.sheetNumber} — ${action}`,

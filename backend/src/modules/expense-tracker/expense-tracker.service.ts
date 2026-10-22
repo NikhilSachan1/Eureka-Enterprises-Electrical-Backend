@@ -58,6 +58,8 @@ import {
 import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 import { CompanyBankAccountService } from '../company-bank-accounts/company-bank-account.service';
 import { ManagedUsersService } from 'src/modules/user-delegations/managed-users.service';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 import {
   DELEGATABLE_MODULES,
   USER_DELEGATION_ERRORS,
@@ -78,6 +80,7 @@ export class ExpenseTrackerService {
     private readonly userService: UserService,
     private readonly companyBankAccountService: CompanyBankAccountService,
     private readonly managedUsers: ManagedUsersService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /** Validates the paying company bank account, if one was supplied (throws if invalid). */
@@ -165,6 +168,13 @@ export class ExpenseTrackerService {
         }
 
         return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_CREATED, id: expense.id };
+      });
+
+      // Bell + push — independent of WhatsApp opt-in, so everyone gets it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: actor,
+        ...NotificationEvents.expenseSubmitted({ expenseId: result.id, amount, category }),
       });
 
       // Send WhatsApp notification to employee (non-blocking)
@@ -379,6 +389,20 @@ export class ExpenseTrackerService {
           );
         }
         return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_FORCE_CREATED, id: expense.id };
+      });
+
+      // Bell + push — independent of WhatsApp opt-in.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy,
+        ...NotificationEvents.expenseForceCreated({
+          expenseId: result.id,
+          amount,
+          category,
+          byName: admin
+            ? `${admin.firstName} ${admin.lastName}`
+            : EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
+        }),
       });
 
       // Send WhatsApp force-created notification to employee (non-blocking)
@@ -1498,6 +1522,20 @@ export class ExpenseTrackerService {
       const employeeName = `${employee.firstName} ${employee.lastName}`;
       const amount = `₹${Number(expense.amount).toLocaleString('en-IN')}`;
       const categoryLabel = await this.getCategoryLabel(expense.category);
+
+      // Bell + push first: an email failure must not take it down with it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: approvalById,
+        ...NotificationEvents.expenseDecided({
+          expenseId: expense.id,
+          amount,
+          category: categoryLabel,
+          approved: isApproved,
+          byName: approverName,
+          remarks: approvalComment,
+        }),
+      });
 
       // Send Email notification
       if (employee.email) {
