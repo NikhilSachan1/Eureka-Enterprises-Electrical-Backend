@@ -613,6 +613,10 @@ export const buildFuelPendingSettlementQuery = (filters: FuelPendingSettlementQu
   params.push(true);
   paramIndex++;
 
+  // A petro-card fill was paid by the company card, so it is not owed to the employee — and
+  // like every other balance in this module it is left out of the outstanding figure entirely.
+  whereConditions.push(`fe."paymentMode" <> '${TransactionType.PETRO_CARD}'`);
+
   // Outstanding list must not include inactive employees — only ACTIVE users.
   whereConditions.push(`u."status" = 'ACTIVE'`);
 
