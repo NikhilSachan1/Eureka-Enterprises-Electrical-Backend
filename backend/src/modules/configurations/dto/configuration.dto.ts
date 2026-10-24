@@ -9,7 +9,7 @@ import {
   IsDateString,
   Allow,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ConfigurationValueType } from '../constants/configuration.constant';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
@@ -177,16 +177,23 @@ export class UpdateConfigurationDto {
   description?: string;
 }
 
+function toArray(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  return Array.isArray(value) ? value : [value as string];
+}
+
 export class GetConfigurationDto extends BaseGetDto {
   @ApiProperty({ description: 'Module name', example: 'leave', required: false })
   @IsOptional()
   @IsString()
   module?: string;
 
-  @ApiProperty({ description: 'Configuration key', example: 'leave_types', required: false })
+  @ApiPropertyOptional({ type: [String], description: 'Filter by one or more configuration keys' })
+  @Transform(({ value }) => toArray(value))
   @IsOptional()
-  @IsString()
-  key?: string;
+  @IsArray()
+  @IsString({ each: true })
+  key?: string[];
 
   @ApiProperty({ description: 'Search by key or label', example: 'leave', required: false })
   @IsOptional()

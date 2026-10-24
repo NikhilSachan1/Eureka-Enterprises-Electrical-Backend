@@ -46,7 +46,7 @@ export class ConfigurationController {
   @ApiOperation({
     summary: 'Get configurations with active config settings only',
     description:
-      'List configurations with filtering (module, key/label search, pagination, sorting). Only includes configSettings where isActive = true.',
+      'List configurations with filtering (module, one or more keys, key/label search, pagination, sorting). Only includes configSettings where isActive = true.',
   })
   async findAllWithActiveConfigSettings(@Query() getConfigurationDto: GetConfigurationDto) {
     return await this.configurationService.findAllWithActiveConfigSettings(getConfigurationDto);
