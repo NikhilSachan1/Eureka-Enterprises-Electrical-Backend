@@ -952,12 +952,13 @@ export class SiteInvoiceService {
         i."totalAmount",
         i."bookedTotal",
         i."paidTotal",
+        i."advanceSettledAmount",
         i."isGstHold",
         i."approvalStatus",
         COALESCE(c.name, v.name) AS "partyName",
         CASE
           WHEN i."approvalStatus" != 'APPROVED'                                                                                           THEN false
-          WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
+          WHEN $3 = 'book-payment' AND i."bookedTotal" + COALESCE(i."advanceSettledAmount", 0) >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."bookedTotal" = 0                                                         THEN false
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE'  AND i."paidTotal"   >= i."bookedTotal"                                          THEN false
           WHEN $3 = 'bank-transfer' AND $4 != 'PURCHASE' AND i."paidTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END THEN false
@@ -966,8 +967,8 @@ export class SiteInvoiceService {
         CASE
           WHEN i."approvalStatus" = 'PENDING'  THEN 'Invoice is pending admin approval'
           WHEN i."approvalStatus" = 'REJECTED' THEN 'Invoice was rejected'
-          WHEN $3 = 'book-payment' AND i."bookedTotal" >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END
-            THEN 'Invoice fully booked — no remaining net payable amount'
+          WHEN $3 = 'book-payment' AND i."bookedTotal" + COALESCE(i."advanceSettledAmount", 0) >= CASE WHEN i."isGstHold" THEN i."taxableAmount" - COALESCE(i."tdsAmount", 0) ELSE i."taxableAmount" + COALESCE(i."gstAmount", 0) - COALESCE(i."tdsAmount", 0) END
+            THEN 'Invoice fully covered — booked and settled advances already equal the net payable'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."bookedTotal" = 0
             THEN 'Invoice not yet booked — do a Book Payment first'
           WHEN $3 = 'bank-transfer' AND $4 = 'PURCHASE' AND i."paidTotal" >= i."bookedTotal"
@@ -1004,13 +1005,17 @@ export class SiteInvoiceService {
           totalAmount: Number(r.totalAmount),
           bookedTotal: Number(r.bookedTotal),
           paidTotal: Number(r.paidTotal),
+          advanceSettledAmount: Number(r.advanceSettledAmount ?? 0),
           isGstHold: r.isGstHold ?? false,
           remaining: isPurchaseBankTransfer
             ? Number(r.bookedTotal) - Number(r.paidTotal)
             : forDocument === 'book-payment'
-            ? (r.isGstHold
+            ? // Same arithmetic as BookPaymentService.create's ceiling: an advance settled against
+              // this invoice has already paid that part, so it is not left to book.
+              (r.isGstHold
                 ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
                 : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+              Number(r.advanceSettledAmount ?? 0) -
               Number(r.bookedTotal)
             : (r.isGstHold
                 ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)

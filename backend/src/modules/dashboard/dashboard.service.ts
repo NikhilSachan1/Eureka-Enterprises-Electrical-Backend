@@ -41,6 +41,7 @@ import * as mobileQueries from './queries/mobile-dashboard.queries';
 // Reused rather than restated: the wallet balance must be defined in exactly one place, or the
 // dashboard and the wallet screen can disagree about how much money there is.
 import { walletBalanceQuery } from '../petro-card-wallet/queries/petro-card-wallet.queries';
+import { TransactionType as FuelPaymentMode } from '../fuel-expense/constants/fuel-expense.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { DateTimeService } from 'src/utils/datetime/datetime.service';
 import { Roles } from '../roles/constants/role.constants';
@@ -1481,6 +1482,11 @@ export class DashboardService {
     // debit = company owes employee (+), credit = company paid employee (-)
     const EXP_NET = `CASE WHEN e."transactionType" = 'debit' THEN e.amount::numeric ELSE -e.amount::numeric END`;
     const FUEL_NET = `CASE WHEN fe."transactionType" = 'debit' THEN fe."fuelAmount"::numeric ELSE -fe."fuelAmount"::numeric END`;
+    // A petro-card fill was paid from the company card: the employee spent nothing, so it is
+    // neither owed to them nor recovered from them. The ledger leaves it out on both sides, as
+    // every balance in the fuel module already does. Approval counts still include it — those
+    // fills still have to be approved.
+    const NOT_PETRO = FuelPaymentMode.PETRO_CARD;
 
     const [expApprovals, expBalances, expByUser, fuelApprovals, fuelBalances, fuelByUser] =
       await Promise.all([
@@ -1562,6 +1568,7 @@ export class DashboardService {
             ), 0) AS closing
           FROM fuel_expenses
           WHERE "deletedAt" IS NULL AND "isActive" = true AND "approvalStatus" = 'approved'
+            AND "paymentMode" <> '${NOT_PETRO}'
             AND ($2::uuid IS NULL OR "userId" = $2::uuid)
         `,
           [monthStart, userId],
@@ -1576,6 +1583,7 @@ export class DashboardService {
           FROM users u
           LEFT JOIN fuel_expenses fe ON fe."userId" = u.id
             AND fe."deletedAt" IS NULL AND fe."isActive" = true AND fe."approvalStatus" = 'approved'
+            AND fe."paymentMode" <> '${NOT_PETRO}'
           WHERE u."deletedAt" IS NULL AND u.status = 'ACTIVE'
             AND ($1::uuid IS NULL OR u.id = $1::uuid)
           GROUP BY u.id, u."firstName", u."lastName", u."employeeId"

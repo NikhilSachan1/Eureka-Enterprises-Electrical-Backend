@@ -45,6 +45,8 @@ import { Environments } from '../../../../env-configs';
 import { DEFAULT_LEAVE_APPROVAL_REMINDER_THRESHOLD } from '../constants/scheduler.constants';
 import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class LeaveCronService {
@@ -60,6 +62,7 @@ export class LeaveCronService {
     private readonly whatsAppService: WhatsAppService,
     private readonly userService: UserService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -109,6 +112,14 @@ export class LeaveCronService {
         adminPortalUrl: Environments.FE_BASE_URL || '#',
         currentYear: currentDate.getFullYear(),
       };
+
+      void this.notificationService.notifyEmails(
+        hrEmails,
+        NotificationEvents.fyLeaveConfigReminder({
+          daysRemaining,
+          nextFinancialYear: emailData.nextFinancialYear,
+        }),
+      );
 
       for (const email of hrEmails) {
         try {
@@ -868,6 +879,10 @@ export class LeaveCronService {
     try {
       const employee = await this.userService.findOne({ id: userId });
       if (!employee) return;
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        ...NotificationEvents.leaveBalanceCredited({ leaveCategory, credited, total, month }),
+      });
       const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
       if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendLeaveBalanceCredited(
@@ -978,6 +993,16 @@ export class LeaveCronService {
       };
 
       const subject = this.getLeaveReminderSubject(urgencyLevel, daysUntilAutoApproval);
+
+      void this.notificationService.notifyEmails(
+        hrEmails,
+        NotificationEvents.pendingReminder({
+          kind: 'leave',
+          pending: pendingLeaves.length,
+          urgent: urgentLeaves.length,
+          autoApprovalDate,
+        }),
+      );
 
       for (const email of hrEmails) {
         try {

@@ -59,6 +59,8 @@ import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants
 import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationEvents } from '../notifications/notification.events';
 import { UserService } from '../users/user.service';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
 import { ExpenseTrackerService } from '../expense-tracker/expense-tracker.service';
@@ -113,6 +115,7 @@ export class AttendanceService {
     private readonly leaveBalancesService: LeaveBalancesService,
     private readonly auditLogService: AuditLogService,
     private readonly driverAssignmentService: DriverAssignmentService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -2389,6 +2392,19 @@ export class AttendanceService {
         : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER;
       const employeeName = `${employee.firstName} ${employee.lastName}`;
 
+      // Bell + push first: an email failure must not take it down with it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: approvalById,
+        ...NotificationEvents.attendanceDecided({
+          attendanceId: attendance.id,
+          date: dateStr,
+          approved: isApproved,
+          byName: approverName,
+          remarks: approvalComment,
+        }),
+      });
+
       // Send Email notification
       if (employee.email) {
         const subjectKey = isApproved
@@ -2478,6 +2494,18 @@ export class AttendanceService {
       const checkInTimeStr = checkInTime ? this.formatTime(checkInTime) : null;
       const checkOutTimeStr = checkOutTime ? this.formatTime(checkOutTime) : null;
 
+      // Bell + push first: an email failure must not take it down with it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: regularizedById,
+        ...NotificationEvents.attendanceRegularized({
+          date: dateStr,
+          from: originalStatus,
+          to: newStatus,
+          byName: regularizedByName,
+        }),
+      });
+
       // Calculate total hours
       let totalHours: string | null = null;
       if (checkInTime && checkOutTime) {
@@ -2537,6 +2565,14 @@ export class AttendanceService {
     try {
       const employee = await this.userService.findOne({ id: userId });
       if (!employee) return;
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: userId,
+        ...NotificationEvents.attendanceCheckedIn({
+          date: this.formatDateForEmail(attendanceDate),
+          time: this.formatTime(checkInTime),
+        }),
+      });
       const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
       if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendAttendanceSubmission(
@@ -2562,14 +2598,23 @@ export class AttendanceService {
     try {
       const employee = await this.userService.findOne({ id: userId });
       if (!employee) return;
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
       let totalHours: string | undefined;
       if (workDurationSeconds) {
         const hours = Math.floor(workDurationSeconds / 3600);
         const minutes = Math.floor((workDurationSeconds % 3600) / 60);
         totalHours = `${hours}h ${minutes}m`;
       }
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: userId,
+        ...NotificationEvents.attendanceCheckedOut({
+          date: this.formatDateForEmail(attendanceDate),
+          time: this.formatTime(checkOutTime),
+          totalHours,
+        }),
+      });
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendAttendanceCheckOut(
         whatsappNumber,
         {
@@ -2597,11 +2642,20 @@ export class AttendanceService {
         this.userService.findOne({ id: createdById }),
       ]);
       if (!employee) return;
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
       const createdByName = createdBy
         ? `${createdBy.firstName} ${createdBy.lastName}`
         : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER;
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: createdById,
+        ...NotificationEvents.attendanceForceCreated({
+          date: this.formatDateForEmail(attendanceDate),
+          status,
+          byName: createdByName,
+        }),
+      });
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendAttendanceForceCreated(
         whatsappNumber,
         {
@@ -2621,6 +2675,11 @@ export class AttendanceService {
     try {
       const employee = await this.userService.findOne({ id: userId });
       if (!employee) return;
+      const absentDate = this.formatDateForEmail(attendanceDate);
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        ...NotificationEvents.attendanceAbsent({ date: absentDate, dateKey: absentDate }),
+      });
       const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
       if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendAttendanceAbsentMarked(
@@ -3481,8 +3540,6 @@ export class AttendanceService {
     try {
       const recipient = await this.userService.findOne({ id: recipientUserId });
       if (!recipient) return;
-      const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
-      if (!recipient.whatsappOptIn || !whatsappNumber) return;
 
       let creditedFor: string | undefined;
       if (onBehalfOfUserId) {
@@ -3492,6 +3549,17 @@ export class AttendanceService {
           creditedFor = `${driver.firstName} ${driver.lastName}`;
         }
       }
+      void this.notificationService.notify({
+        userIds: [recipient.id],
+        ...NotificationEvents.foodAllowanceCredited({
+          amount,
+          date: this.formatDateForEmail(new Date(dateStr)),
+          forName: creditedFor,
+        }),
+      });
+
+      const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
+      if (!recipient.whatsappOptIn || !whatsappNumber) return;
 
       await this.whatsAppService.sendFoodExpenseCredited(
         whatsappNumber,
@@ -3521,13 +3589,22 @@ export class AttendanceService {
     try {
       const driver = await this.userService.findOne({ id: driverUserId });
       if (!driver) return;
-      const whatsappNumber = driver.whatsappNumber || driver.contactNumber;
-      if (!driver.whatsappOptIn || !whatsappNumber) return;
 
       const engineer = await this.userService.findOne({ id: engineerUserId });
       const engineerName = engineer
         ? `${engineer.firstName} ${engineer.lastName}`
         : 'your assigned engineer';
+      void this.notificationService.notify({
+        userIds: [driver.id],
+        ...NotificationEvents.driverFoodRedirected({
+          amount,
+          date: this.formatDateForEmail(new Date(dateStr)),
+          engineerName,
+        }),
+      });
+
+      const whatsappNumber = driver.whatsappNumber || driver.contactNumber;
+      if (!driver.whatsappOptIn || !whatsappNumber) return;
 
       await this.whatsAppService.sendDriverFoodCreditedToEngineer(
         whatsappNumber,

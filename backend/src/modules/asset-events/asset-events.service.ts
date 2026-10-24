@@ -24,6 +24,8 @@ import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
 import { AssetMasterEntity } from '../asset-masters/entities/asset-master.entity';
 import { UserEntity } from '../users/entities/user.entity';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class AssetEventsService {
@@ -34,6 +36,7 @@ export class AssetEventsService {
     private readonly assetVersionsService: AssetVersionsService,
     private readonly dateTimeService: DateTimeService,
     private readonly whatsAppService: WhatsAppService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async create(
@@ -195,6 +198,18 @@ export class AssetEventsService {
       ]);
 
       if (!recipient || !actor) return;
+
+      // Bell + push — independent of WhatsApp opt-in.
+      void this.notificationService.notify({
+        userIds: [recipient.id],
+        createdBy: actor.id,
+        ...NotificationEvents.assetTransaction({
+          assetMasterId: input.assetMasterId,
+          assetId: assetMaster?.assetId || input.assetMasterId,
+          action: input.action,
+          byName: this.getUserFullName(actor),
+        }),
+      });
 
       const whatsappNumber = recipient.whatsappNumber || recipient.contactNumber;
       if (!recipient.whatsappOptIn || !whatsappNumber) return;

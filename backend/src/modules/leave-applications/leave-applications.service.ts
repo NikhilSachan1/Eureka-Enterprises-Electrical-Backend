@@ -60,6 +60,8 @@ import { AttendanceStatus, AttendanceType } from '../attendance/constants/attend
 import { DateTimeService } from 'src/utils/datetime';
 import { EmailService } from '../common/email/email.service';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationEvents } from '../notifications/notification.events';
 import { Environments } from 'env-configs';
 import {
   EMAIL_SUBJECT,
@@ -82,6 +84,7 @@ export class LeaveApplicationsService {
     private readonly dateTimeService: DateTimeService,
     private readonly emailService: EmailService,
     private readonly whatsAppService: WhatsAppService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async create(
@@ -1623,6 +1626,21 @@ export class LeaveApplicationsService {
       const formattedFromDate = this.formatDateForEmail(leaveApplication.fromDate);
       const formattedToDate = this.formatDateForEmail(leaveApplication.toDate);
 
+      // Bell + push first: an email failure must not take it down with it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: approvalById,
+        ...NotificationEvents.leaveDecided({
+          leaveId: leaveApplication.id,
+          leaveType: leaveApplication.leaveCategory,
+          from: formattedFromDate,
+          to: formattedToDate,
+          approved: isApproved,
+          byName: approverName,
+          remarks: approvalComment,
+        }),
+      });
+
       // Send Email notification
       if (employee.email) {
         const subjectKey = isApproved ? EMAIL_SUBJECT.LEAVE_APPROVED : EMAIL_SUBJECT.LEAVE_REJECTED;
@@ -1689,6 +1707,16 @@ export class LeaveApplicationsService {
     try {
       const employee = await this.userService.findOne({ id: userId });
       if (!employee) return;
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: userId,
+        ...NotificationEvents.leaveSubmitted({
+          leaveType: leaveCategory,
+          from: this.formatDateForEmail(fromDate),
+          to: this.formatDateForEmail(toDate),
+          days: numberOfDays,
+        }),
+      });
       const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
       if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendLeaveSubmission(
@@ -1721,11 +1749,22 @@ export class LeaveApplicationsService {
         this.userService.findOne({ id: appliedById }),
       ]);
       if (!employee) return;
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
       const appliedByName = appliedBy
         ? `${appliedBy.firstName} ${appliedBy.lastName}`
         : LEAVE_EMAIL_CONSTANTS.SYSTEM_USER;
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: appliedById,
+        ...NotificationEvents.leaveForceApplied({
+          leaveType: leaveCategory,
+          from: this.formatDateForEmail(fromDate),
+          to: this.formatDateForEmail(toDate),
+          days: numberOfDays,
+          byName: appliedByName,
+        }),
+      });
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendLeaveForceApplied(
         whatsappNumber,
         {
@@ -1756,11 +1795,23 @@ export class LeaveApplicationsService {
           : this.userService.findOne({ id: leaveApplication.userId }),
       ]);
       if (!employee) return;
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
       const cancelledByName = cancelledBy
         ? `${cancelledBy.firstName} ${cancelledBy.lastName}`
         : LEAVE_EMAIL_CONSTANTS.SYSTEM_USER;
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: cancelledById,
+        ...NotificationEvents.leaveCancelled({
+          leaveId: leaveApplication.id,
+          leaveType: leaveApplication.leaveCategory,
+          from: this.formatDateForEmail(leaveApplication.fromDate),
+          to: this.formatDateForEmail(leaveApplication.toDate),
+          byName: cancelledByName,
+          remarks: approvalComment,
+        }),
+      });
+      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
+      if (!employee.whatsappOptIn || !whatsappNumber) return;
       await this.whatsAppService.sendLeaveCancellation(
         whatsappNumber,
         {

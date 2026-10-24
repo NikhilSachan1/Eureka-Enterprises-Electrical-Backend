@@ -33,6 +33,8 @@ import {
   DEFAULT_CARD_EXPIRY_WARNING_DAYS,
 } from '../../cards/constants/card.constants';
 import { Environments } from '../../../../env-configs';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class CardCronService {
@@ -45,6 +47,7 @@ export class CardCronService {
     private readonly configSettingService: ConfigSettingService,
     private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -243,6 +246,16 @@ export class CardCronService {
       hasExpired: expiredCount.total > 0,
       hasExpiringSoon: expiringSoonCount.total > 0,
     };
+
+    void this.notificationService.notifyEmails(
+      recipientEmails,
+      NotificationEvents.expiryDigest({
+        kind: 'card',
+        expired: expiredCount.total,
+        expiringSoon: expiringSoonCount.total,
+        scope: 'company',
+      }),
+    );
 
     for (const email of recipientEmails) {
       try {

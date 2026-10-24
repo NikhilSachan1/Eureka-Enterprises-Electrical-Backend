@@ -75,6 +75,8 @@ import {
   EMAIL_REDIRECT_ROUTES,
 } from '../common/email/constants/email.constants';
 import { ManagedUsersService } from 'src/modules/user-delegations/managed-users.service';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 import { DELEGATABLE_MODULES } from 'src/modules/user-delegations/constants/user-delegation.constants';
 
 @Injectable()
@@ -97,6 +99,7 @@ export class FuelExpenseService {
     private readonly companyBankAccountService: CompanyBankAccountService,
     private readonly petroCardWalletService: PetroCardWalletService,
     private readonly managedUsers: ManagedUsersService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -226,6 +229,17 @@ export class FuelExpenseService {
         }
 
         return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREATED, id: fuelExpense.id };
+      });
+
+      // Bell + push — independent of WhatsApp opt-in, so everyone gets it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy,
+        ...NotificationEvents.fuelSubmitted({
+          fuelExpenseId: result.id,
+          amount: createFuelExpenseDto.fuelAmount,
+          vehicleNo: vehicle.registrationNo,
+        }),
       });
 
       // Send WhatsApp notification to employee (non-blocking)
@@ -373,6 +387,20 @@ export class FuelExpenseService {
         };
       });
 
+      // Bell + push — independent of WhatsApp opt-in.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy,
+        ...NotificationEvents.fuelForceCreated({
+          fuelExpenseId: result.id,
+          amount: createFuelExpenseDto.fuelAmount,
+          vehicleNo: vehicle.registrationNo,
+          byName: admin
+            ? `${admin.firstName} ${admin.lastName}`
+            : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
+        }),
+      });
+
       // Send WhatsApp force-created notification to employee (non-blocking)
       try {
         const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
@@ -465,6 +493,19 @@ export class FuelExpenseService {
           message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREDIT_SETTLED,
           id: fuelExpense.id,
         };
+      });
+
+      // Bell + push — independent of WhatsApp opt-in.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy,
+        ...NotificationEvents.fuelReimbursed({
+          fuelExpenseId: result.id,
+          amount: createCreditFuelExpenseDto.fuelAmount,
+          byName: admin
+            ? `${admin.firstName} ${admin.lastName}`
+            : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER,
+        }),
       });
 
       // Send WhatsApp reimbursement notification to employee (non-blocking)
@@ -1755,6 +1796,20 @@ export class FuelExpenseService {
         : FUEL_EXPENSE_EMAIL_CONSTANTS.SYSTEM_USER;
       const employeeName = `${employee.firstName} ${employee.lastName}`;
       const amount = `₹${Number(fuelExpense.fuelAmount).toLocaleString('en-IN')}`;
+
+      // Bell + push first: an email failure must not take it down with it.
+      void this.notificationService.notify({
+        userIds: [employee.id],
+        createdBy: approvalById,
+        ...NotificationEvents.fuelDecided({
+          fuelExpenseId: fuelExpense.id,
+          amount,
+          vehicleNo,
+          approved: isApproved,
+          byName: approverName,
+          remarks: approvalReason,
+        }),
+      });
 
       // Send Email notification
       if (employee.email) {

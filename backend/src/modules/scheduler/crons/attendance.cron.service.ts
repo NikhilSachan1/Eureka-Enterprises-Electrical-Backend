@@ -54,6 +54,8 @@ import {
   markApprovalPendingQuery,
 } from '../queries';
 import { DEFAULT_ATTENDANCE_APPROVAL_REMINDER_THRESHOLD } from '../constants/scheduler.constants';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class AttendanceCronService {
@@ -68,6 +70,7 @@ export class AttendanceCronService {
     private readonly emailService: EmailService,
     private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -932,6 +935,16 @@ export class AttendanceCronService {
       };
 
       const subject = this.getAttendanceReminderSubject(urgencyLevel, daysUntilAutoApproval);
+
+      void this.notificationService.notifyEmails(
+        hrEmails,
+        NotificationEvents.pendingReminder({
+          kind: 'attendance',
+          pending: pendingAttendance.length,
+          urgent: urgentAttendance.length,
+          autoApprovalDate,
+        }),
+      );
 
       for (const email of hrEmails) {
         try {

@@ -36,6 +36,7 @@
     "@aws-sdk/client-location": "^3.782.0",
     "@aws-sdk/client-s3": "^3.744.0",
     "@aws-sdk/client-ses": "^3.577.0",
+    "@aws-sdk/client-sns": "^3.758.0",
     "@aws-sdk/client-transcribe": "^3.782.0",
     "@aws-sdk/s3-request-presigner": "^3.744.0",
     "@nestjs-modules/mailer": "2.0.2",

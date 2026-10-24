@@ -22,6 +22,13 @@ const OPTIONAL_ENV_KEYS = new Set([
   'DATABASE_SSH_PRIVATE_KEY',
   'DATABASE_SSH_PRIVATE_KEY_PATH',
   'DATABASE_SSH_PASSPHRASE',
+  // Push credentials. Push is off unless PUSH_ENABLED=true and a real ARN is set, and it says so in
+  // the log — so a missing value must never stop the app booting. The keys are empty on purpose when
+  // the server uses an IAM role, and the web ARN falls back to the Android one.
+  'AWS_SNS_ACCESS_KEY',
+  'AWS_SNS_SECRET_KEY',
+  'AWS_SNS_ANDROID_PLATFORM_APPLICATION_ARN',
+  'AWS_SNS_WEB_PLATFORM_APPLICATION_ARN',
 ]);
 
 async function bootstrap() {

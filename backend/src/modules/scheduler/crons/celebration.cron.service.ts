@@ -24,6 +24,8 @@ import {
   getYearsText,
 } from '../queries/celebration.queries';
 import { Environments } from '../../../../env-configs';
+import { NotificationService } from 'src/modules/notifications/notification.service';
+import { NotificationEvents } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class CelebrationCronService {
@@ -34,6 +36,7 @@ export class CelebrationCronService {
     private readonly emailService: EmailService,
     private readonly cronLogService: CronLogService,
     @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -123,6 +126,10 @@ export class CelebrationCronService {
             adminPortalUrl: Environments.FE_BASE_URL || '#',
           };
 
+          void this.notificationService.notify({
+            userIds: [employee.id],
+            ...NotificationEvents.birthday({ firstName: employee.firstName }),
+          });
           await this.emailService.sendMail({
             receiverEmails: employee.email,
             subject: EMAIL_SUBJECT.BIRTHDAY_WISH,
@@ -190,6 +197,13 @@ export class CelebrationCronService {
             ? EMAIL_SUBJECT.WORK_ANNIVERSARY_MILESTONE
             : EMAIL_SUBJECT.WORK_ANNIVERSARY;
 
+          void this.notificationService.notify({
+            userIds: [employee.id],
+            ...NotificationEvents.workAnniversary({
+              firstName: employee.firstName,
+              years: yearsOfService,
+            }),
+          });
           await this.emailService.sendMail({
             receiverEmails: employee.email,
             subject: subject.replace('{years}', getYearsText(yearsOfService)),
@@ -297,6 +311,10 @@ export class CelebrationCronService {
             adminPortalUrl: Environments.FE_BASE_URL || '#',
           };
 
+          void this.notificationService.notify({
+            userIds: [employee.id],
+            ...NotificationEvents.birthday({ firstName: employee.firstName }),
+          });
           await this.emailService.sendMail({
             receiverEmails: employee.email,
             subject: EMAIL_SUBJECT.BIRTHDAY_WISH,
@@ -365,6 +383,13 @@ export class CelebrationCronService {
             ? EMAIL_SUBJECT.WORK_ANNIVERSARY_MILESTONE
             : EMAIL_SUBJECT.WORK_ANNIVERSARY;
 
+          void this.notificationService.notify({
+            userIds: [employee.id],
+            ...NotificationEvents.workAnniversary({
+              firstName: employee.firstName,
+              years: yearsOfService,
+            }),
+          });
           await this.emailService.sendMail({
             receiverEmails: employee.email,
             subject: subject.replace('{years}', getYearsText(yearsOfService)),
