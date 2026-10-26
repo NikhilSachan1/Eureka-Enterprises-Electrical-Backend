@@ -475,7 +475,7 @@ export class AttendanceService {
 
   async regularizeAttendance(
     attendanceId: string,
-    regularizeAttendanceDto: RegularizeAttendanceDto & { timezone: string },
+    regularizeAttendanceDto: RegularizeAttendanceDto & { timezone: string; actorId?: string },
   ) {
     //TODO: Remove redunant code and make it more readable
     const {
@@ -489,6 +489,9 @@ export class AttendanceService {
       attendanceType,
       leaveCategory,
     } = regularizeAttendanceDto;
+    // Who did the regularizing — the admin/HR calling the API, not the employee whose day it is.
+    // Falls back to the employee only for a caller that does not pass one.
+    const actorId = regularizeAttendanceDto.actorId ?? userId;
     const existingAttendance = await this.findOneOrFail({
       where: {
         userId,
@@ -583,14 +586,14 @@ export class AttendanceService {
 
       affectedDrivers = [...new Set([...changed, ...freed])];
 
-      const checkInTimeUTC = this.utilityService.convertLocalTimeToUTC(
-        checkInTime,
-        timezone || shiftConfigs.timezone,
-      );
-      const checkOutTimeUTC = this.utilityService.convertLocalTimeToUTC(
-        checkOutTime,
-        timezone || shiftConfigs.timezone,
-      );
+      // Times are only required for present; absent / leave / holiday may come without them, and
+      // converting an undefined time threw (500) before any of those branches could run.
+      const checkInTimeUTC = checkInTime
+        ? this.utilityService.convertLocalTimeToUTC(checkInTime, timezone || shiftConfigs.timezone)
+        : null;
+      const checkOutTimeUTC = checkOutTime
+        ? this.utilityService.convertLocalTimeToUTC(checkOutTime, timezone || shiftConfigs.timezone)
+        : null;
       switch (status) {
         case AttendanceStatus.PRESENT:
           if (existingAttendance.status === AttendanceStatus.ABSENT) {
@@ -599,7 +602,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
               entityManager,
             );
@@ -614,15 +617,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
@@ -631,7 +634,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
               entityManager,
             );
@@ -646,15 +649,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.LEAVE) {
@@ -670,6 +673,7 @@ export class AttendanceService {
               entrySourceType,
               existingAttendance.shiftConfigId,
               entityManager,
+              actorId,
             );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
@@ -678,7 +682,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -692,15 +696,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
@@ -709,7 +713,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -722,15 +726,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
-              regularizedBy: userId,
+              regularizedBy: actorId,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           break;
@@ -741,7 +745,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -753,15 +757,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
@@ -770,7 +774,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -782,15 +786,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.LEAVE) {
@@ -804,6 +808,7 @@ export class AttendanceService {
               entrySourceType,
               existingAttendance.shiftConfigId,
               entityManager,
+              actorId,
             );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
@@ -818,7 +823,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -830,15 +835,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           break;
@@ -863,6 +868,7 @@ export class AttendanceService {
               entrySourceType,
               existingAttendance.shiftConfigId,
               entityManager,
+              actorId,
             );
           }
           if (existingAttendance.status === AttendanceStatus.HOLIDAY) {
@@ -887,7 +893,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -899,15 +905,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.ABSENT) {
@@ -916,7 +922,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
 
@@ -928,15 +934,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.LEAVE) {
@@ -950,6 +956,7 @@ export class AttendanceService {
               entrySourceType,
               existingAttendance.shiftConfigId,
               entityManager,
+              actorId,
             );
           }
           if (existingAttendance.status === AttendanceStatus.APPROVAL_PENDING) {
@@ -958,7 +965,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
             await this.attendanceRepository.create({
@@ -969,15 +976,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           if (existingAttendance.status === AttendanceStatus.CHECKED_IN) {
@@ -986,7 +993,7 @@ export class AttendanceService {
               { id: attendanceId },
               {
                 isActive: false,
-                updatedBy: userId,
+                updatedBy: actorId,
               },
             );
             await this.attendanceRepository.create({
@@ -997,15 +1004,15 @@ export class AttendanceService {
               attendanceType,
               entrySourceType,
               approvalStatus: ApprovalStatus.APPROVED,
-              approvalBy: userId,
+              approvalBy: actorId,
               approvalAt: new Date(),
               approvalComment: DEFAULT_APPROVAL_COMMENT[status.toUpperCase()],
-              regularizedBy: userId,
+              regularizedBy: actorId,
               shiftConfigId: existingAttendance.shiftConfigId,
               assignmentSnapshot: snapshotToApply,
               isActive: true,
-              createdBy: userId,
-              updatedBy: userId,
+              createdBy: actorId,
+              updatedBy: actorId,
             });
           }
           break;
@@ -1019,7 +1026,7 @@ export class AttendanceService {
       if (isSnapshotCorrection && existingAttendance.status === status) {
         await this.attendanceRepository.update(
           { id: existingAttendance.id },
-          { assignmentSnapshot: snapshotToApply, notes, updatedBy: userId },
+          { assignmentSnapshot: snapshotToApply, notes, updatedBy: actorId },
           entityManager,
         );
       }
@@ -1030,7 +1037,7 @@ export class AttendanceService {
         attendanceDate: existingAttendance.attendanceDate,
         previousStatus: existingAttendance.status as AttendanceStatus,
         newStatus: status as AttendanceStatus,
-        actionBy: userId,
+        actionBy: actorId,
         previousSnapshot,
         newSnapshot: snapshotToApply,
       });
@@ -1038,7 +1045,7 @@ export class AttendanceService {
       // Send regularization notification to the employee
       await this.sendRegularizationNotification(
         userId,
-        userId, // regularizedBy is the same as userId in current implementation
+        actorId,
         existingAttendance.attendanceDate,
         existingAttendance.status,
         status,
@@ -3771,6 +3778,7 @@ export class AttendanceService {
     entrySourceType: string,
     shiftConfigId: string,
     entityManager: EntityManager,
+    actorId: string = userId,
   ): Promise<void> {
     // Find the leave application for this date
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
@@ -3811,9 +3819,9 @@ export class AttendanceService {
               '{date}',
               dateStr,
             ),
-            approvalBy: userId,
+            approvalBy: actorId,
             approvalAt: new Date(),
-            updatedBy: userId,
+            updatedBy: actorId,
           },
           entityManager,
         );
@@ -3837,7 +3845,7 @@ export class AttendanceService {
       { id: attendanceId },
       {
         isActive: false,
-        updatedBy: userId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -3857,14 +3865,14 @@ export class AttendanceService {
         attendanceType,
         entrySourceType,
         approvalStatus: ApprovalStatus.APPROVED,
-        approvalBy: userId,
+        approvalBy: actorId,
         approvalAt: new Date(),
         approvalComment: DEFAULT_APPROVAL_COMMENT.PRESENT,
-        regularizedBy: userId,
+        regularizedBy: actorId,
         shiftConfigId,
         isActive: true,
-        createdBy: userId,
-        updatedBy: userId,
+        createdBy: actorId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -3883,6 +3891,7 @@ export class AttendanceService {
     entrySourceType: string,
     shiftConfigId: string,
     entityManager: EntityManager,
+    actorId: string = userId,
   ): Promise<void> {
     // Find the leave application for this date
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
@@ -3921,9 +3930,9 @@ export class AttendanceService {
               '{date}',
               dateStr,
             ),
-            approvalBy: userId,
+            approvalBy: actorId,
             approvalAt: new Date(),
-            updatedBy: userId,
+            updatedBy: actorId,
           },
           entityManager,
         );
@@ -3946,7 +3955,7 @@ export class AttendanceService {
       { id: attendanceId },
       {
         isActive: false,
-        updatedBy: userId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -3964,14 +3973,14 @@ export class AttendanceService {
         attendanceType,
         entrySourceType,
         approvalStatus: ApprovalStatus.APPROVED,
-        approvalBy: userId,
+        approvalBy: actorId,
         approvalAt: new Date(),
         approvalComment: DEFAULT_APPROVAL_COMMENT.ABSENT,
-        regularizedBy: userId,
+        regularizedBy: actorId,
         shiftConfigId,
         isActive: true,
-        createdBy: userId,
-        updatedBy: userId,
+        createdBy: actorId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -3990,6 +3999,7 @@ export class AttendanceService {
     entrySourceType: string,
     shiftConfigId: string,
     entityManager: EntityManager,
+    actorId: string = userId,
   ): Promise<void> {
     // Find the leave application for this date
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
@@ -4028,9 +4038,9 @@ export class AttendanceService {
               '{date}',
               dateStr,
             ),
-            approvalBy: userId,
+            approvalBy: actorId,
             approvalAt: new Date(),
-            updatedBy: userId,
+            updatedBy: actorId,
           },
           entityManager,
         );
@@ -4053,7 +4063,7 @@ export class AttendanceService {
       { id: attendanceId },
       {
         isActive: false,
-        updatedBy: userId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -4071,14 +4081,14 @@ export class AttendanceService {
         attendanceType,
         entrySourceType,
         approvalStatus: ApprovalStatus.APPROVED,
-        approvalBy: userId,
+        approvalBy: actorId,
         approvalAt: new Date(),
         approvalComment: DEFAULT_APPROVAL_COMMENT.HOLIDAY,
-        regularizedBy: userId,
+        regularizedBy: actorId,
         shiftConfigId,
         isActive: true,
-        createdBy: userId,
-        updatedBy: userId,
+        createdBy: actorId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -4099,12 +4109,31 @@ export class AttendanceService {
     entrySourceType: string,
     shiftConfigId: string,
     entityManager: EntityManager,
+    actorId: string = userId,
   ): Promise<void> {
     const dateStr = this.dateTimeService.toDateString(attendanceDate);
     const financialYear = this.utilityService.getFinancialYear(attendanceDate);
 
-    // If an approved leave application already exists for this date, balance is already debited
+    // If a leave application already exists for this date, its balance was debited when it was
+    // applied — pending or approved. A pending one is approved here, since the admin has just
+    // decided the day is leave; creating a second application would debit the day twice.
     const existingLeaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
+    if (existingLeaveApplication?.approvalStatus === LeaveApprovalStatus.PENDING) {
+      await this.leaveApplicationsService.update(
+        { id: existingLeaveApplication.id },
+        {
+          approvalStatus: LeaveApprovalStatus.APPROVED,
+          approvalReason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace(
+            '{date}',
+            dateStr,
+          ),
+          approvalBy: actorId,
+          approvalAt: new Date(),
+          updatedBy: actorId,
+        },
+        entityManager,
+      );
+    }
     if (existingLeaveApplication) {
       this.logger.log(
         `Leave application already exists for user ${userId} on ${dateStr} — skipping balance debit and application creation`,
@@ -4161,13 +4190,13 @@ export class AttendanceService {
           toDate: attendanceDate,
           reason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace('{date}', dateStr),
           approvalStatus: LeaveApprovalStatus.APPROVED,
-          approvalBy: userId,
+          approvalBy: actorId,
           approvalAt: new Date(),
           approvalReason: LEAVE_REGULARIZATION_CONSTANTS.FORCE_LEAVE_REASON.replace(
             '{date}',
             dateStr,
           ),
-          createdBy: userId,
+          createdBy: actorId,
         },
         entityManager,
       );
@@ -4178,7 +4207,7 @@ export class AttendanceService {
       { id: attendanceId },
       {
         isActive: false,
-        updatedBy: userId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -4193,14 +4222,14 @@ export class AttendanceService {
         attendanceType,
         entrySourceType,
         approvalStatus: ApprovalStatus.APPROVED,
-        approvalBy: userId,
+        approvalBy: actorId,
         approvalAt: new Date(),
         approvalComment: DEFAULT_APPROVAL_COMMENT.LEAVE,
-        regularizedBy: userId,
+        regularizedBy: actorId,
         shiftConfigId,
         isActive: true,
-        createdBy: userId,
-        updatedBy: userId,
+        createdBy: actorId,
+        updatedBy: actorId,
       },
       entityManager,
     );
@@ -4706,14 +4735,19 @@ export class AttendanceService {
 
   private async findLeaveApplicationForDate(userId: string, date: Date): Promise<any | null> {
     try {
-      // Find approved leave application where the date falls between fromDate and toDate
+      // The leave covering this date, approved or still pending. Pending counts: its balance was
+      // debited at apply time and the cron marks the day as leave, so regularizing the day must
+      // cancel and refund it exactly like an approved one. Only matching approved left a pending
+      // leave pending (and the day still debited) after the day was regularized to present.
+      // Approved wins if both exist ('approved' sorts before 'pending').
       const leaveApplication = await this.leaveApplicationsService.findOne({
         where: {
           userId,
-          approvalStatus: LeaveApprovalStatus.APPROVED,
+          approvalStatus: In([LeaveApprovalStatus.APPROVED, LeaveApprovalStatus.PENDING]),
           fromDate: LessThanOrEqual(date),
           toDate: MoreThanOrEqual(date),
         },
+        order: { approvalStatus: 'ASC' },
       });
 
       return leaveApplication;

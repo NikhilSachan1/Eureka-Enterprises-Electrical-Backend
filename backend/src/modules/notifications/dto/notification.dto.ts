@@ -17,7 +17,8 @@ export class GetNotificationsDto extends BaseGetDto {
 export class RegisterDeviceDto {
   @ApiProperty({
     description:
-      'The FCM registration token — from firebase_messaging (Flutter) or getToken() in the Firebase JS SDK (web)',
+      'Firebase Installation ID from the app (firebase_messaging register()/onRegistered), ' +
+      'or the FCM token from getToken() in the Firebase JS SDK on web',
   })
   @IsString()
   @IsNotEmpty()

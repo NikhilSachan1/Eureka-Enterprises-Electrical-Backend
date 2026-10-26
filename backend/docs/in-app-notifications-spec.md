@@ -81,7 +81,7 @@ Index:
 | `userId` | uuid FK → users | |
 | `token` | text **unique** | FCM token |
 | `platform` | `android` \| `ios` \| `web` | |
-| `endpointArn` | text null | SNS platform endpoint — pehle push par (ya register par, agar SNS chalu ho) banta hai |
+| `endpointArn` | text null | **Ab use nahi hota** — SNS ke zamane ka; direct FCM me per-device registration nahi chahiye |
 | `deviceName`, `appVersion` | varchar null | debugging ke liye |
 | `lastSeenAt` | timestamp | har login/app open par update |
 | `isActive` | boolean | logout ya Firebase "token invalid" bole to false |
@@ -140,10 +140,14 @@ Kisi aur ki notification id bheji → **404** (403 nahi — ye bhi na pata chale
 
 ## 6. Push
 
-- **Provider: AWS SNS → FCM** (section 12). Backend sirf SNS se baat karta hai (`@aws-sdk/client-sns`);
-  Firebase service-account key SNS platform application me upload hoti hai, server ke `.env` me nahi.
-  Har device token ke liye SNS ek endpoint banata hai — wo `user_devices.endpointArn` me.
-  SNS endpoint disable kare (token mar gaya) → device `isActive = false`.
+- **Provider: Firebase Cloud Messaging, seedha** (`firebase-admin` 14.5) — 2026-10-26 ko AWS SNS se
+  badla. Wajah: Firebase ne device ki pehchaan **Installation ID (`fid`)** par shift kar di, `token`
+  deprecated hai, aur SNS sirf `token` bhejna jaanta hai.
+- **Target:** 22 character ki ID (app, `firebase_messaging` 17 ka `register()` / `onRegistered`) →
+  `fid`; lamba registration token (web SDK ka `getToken`) → `token`. Dono chalte hain.
+- **Credential:** Firebase service account JSON, base64 me `FIREBASE_SERVICE_ACCOUNT_BASE64`.
+- FCM bole device mar gaya (`installation-id-not-registered`, `registration-token-not-registered`,
+  `invalid-registration-token`) → device `isActive = false`.
 - Payload:
   ```json
   { "notification": { "title": "…", "body": "…" },
@@ -260,8 +264,8 @@ bell ka code chhuna nahi padega, sirf push jud jaayega.
 | Sawaal | Faisla |
 |---|---|
 | Mobile app | **Flutter** — `firebase_messaging` se FCM token |
-| Push provider | **AWS SNS** (Mumbai, `ap-south-1`) — SNS ke andar FCM HTTP v1. Firebase project phir bhi chahiye (Android ke liye) |
-| Platform | **Android + browser (web)**. Web usi SNS platform application se (same Firebase project); alag ARN chahiye to `AWS_SNS_WEB_PLATFORM_APPLICATION_ARN`. Browser click → `FE_BASE_URL` + route (sirf https). iOS abhi nahi |
+| Push provider | **Firebase Cloud Messaging, seedha** (pehle AWS SNS tha — 2026-10-26 ko badla, FID ki wajah se) |
+| Platform | **Android + browser (web)** — ek hi Firebase project. Browser click → `FE_BASE_URL` + route (sirf https). iOS abhi nahi |
 | Admin digest kisko | (a) — `notification_emails` ke address jo active users se match karein (`notifyEmails()`) |
 | Retention | 90 din, phir soft delete — `NOTIFICATION_RETENTION_DAYS`, kam se kam 30 |
 | Birthday / anniversary | Haan, bell me — saal me ek baar (dedupe) |
@@ -269,7 +273,7 @@ bell ka code chhuna nahi padega, sirf push jud jaayega.
 ## 13. Jo bana
 
 - Migration `1860000000082` — `notifications`, `user_devices` (dev par chal chuka)
-- `src/modules/notifications/` — service, controller, SNS push, `notification.events.ts` (saare
+- `src/modules/notifications/` — service, controller, FCM push, `notification.events.ts` (saare
   title/message ek jagah)
 - 7 APIs (section 5), sab sirf apne data par
 - ~35 events hooked across expense, fuel, attendance, leave, asset, vehicle, payroll, FnF, payment

@@ -120,6 +120,9 @@ export const CRON_SCHEDULES = {
   // 2:30 AM IST — bell retention. After log retention, so the two never run at once.
   DAILY_2_30AM_IST: '0 21 * * *',
 
+  // 2:45 AM IST — stale push-device cleanup, after the bell retention run.
+  DAILY_2_45AM_IST: '15 21 * * *',
+
   // 10:00 AM and 6:00 PM IST — the handover auto-penalty cron.
   // Twice a day rather than daily so a window closing just after the morning run is not left until
   // the next day, and both runs sit inside working hours because each one can send the employee a
@@ -183,6 +186,7 @@ export const CRON_NAMES = {
   // Housekeeping
   LOG_RETENTION_CLEANUP: 'LogRetentionCleanup',
   NOTIFICATION_RETENTION_CLEANUP: 'NotificationRetentionCleanup',
+  NOTIFICATION_DEVICE_CLEANUP: 'NotificationDeviceCleanup',
 
   // User/HR
   BIRTHDAY_ANNIVERSARY_WISHES: 'BirthdayAnniversaryWishes',

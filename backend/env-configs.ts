@@ -70,14 +70,10 @@ export const Environments = {
   WHATSAPP_ENABLED: process.env.WHATSAPP_ENABLED === 'true',
   WHATSAPP_MODE: process.env.WHATSAPP_MODE || 'sandbox', // 'sandbox' or 'production'
 
-  // Push notifications through AWS SNS (Android and web). Off unless explicitly enabled, so
-  // placeholder credentials are never used. Keys may be left empty on AWS to use the instance role.
+  // Push notifications, sent straight to Firebase Cloud Messaging (Android and web). Off unless
+  // explicitly enabled, so a placeholder key is never used.
   PUSH_ENABLED: process.env.PUSH_ENABLED === 'true',
-  AWS_SNS_REGION: process.env.AWS_SNS_REGION || 'ap-south-1',
-  AWS_SNS_ACCESS_KEY: process.env.AWS_SNS_ACCESS_KEY,
-  AWS_SNS_SECRET_KEY: process.env.AWS_SNS_SECRET_KEY,
-  AWS_SNS_ANDROID_PLATFORM_APPLICATION_ARN: process.env.AWS_SNS_ANDROID_PLATFORM_APPLICATION_ARN,
-  // Optional. Android and web tokens share a Firebase project, so this falls back to the Android ARN.
-  AWS_SNS_WEB_PLATFORM_APPLICATION_ARN: process.env.AWS_SNS_WEB_PLATFORM_APPLICATION_ARN,
+  // The Firebase service account JSON, base64-encoded onto one line.
+  FIREBASE_SERVICE_ACCOUNT_BASE64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
   NOTIFICATION_RETENTION_DAYS: parseInt(process.env.NOTIFICATION_RETENTION_DAYS || '90'),
 };

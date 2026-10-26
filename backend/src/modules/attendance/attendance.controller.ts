@@ -71,6 +71,7 @@ export class AttendanceController {
       entrySourceType: sourceType,
       attendanceType: AttendanceType.REGULARIZED,
       timezone: req.timezone,
+      actorId: req.user.id,
     });
   }
 

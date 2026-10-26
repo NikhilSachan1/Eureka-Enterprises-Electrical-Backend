@@ -16,7 +16,7 @@ import {
   NotificationReadFilter,
   PUSH_PROVIDER,
 } from './constants/notification.constants';
-import { PushMessage, SnsPushService } from './push/sns-push.service';
+import { FcmPushService, PushMessage, PushResult } from './push/fcm-push.service';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -28,7 +28,6 @@ interface DeviceRow {
   userId: string;
   token: string;
   platform: DevicePlatform;
-  endpointArn: string | null;
 }
 
 /**
@@ -48,7 +47,7 @@ export class NotificationService {
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
-    private readonly push: SnsPushService,
+    private readonly push: FcmPushService,
     private readonly communicationLogService: CommunicationLogService,
   ) {}
 
@@ -140,7 +139,7 @@ export class NotificationService {
     content: NotifyInput & { referenceId: string | null },
   ): Promise<void> {
     const devices: DeviceRow[] = await this.dataSource.query(
-      `SELECT "id", "userId", "token", "platform", "endpointArn"
+      `SELECT "id", "userId", "token", "platform"
          FROM user_devices
         WHERE "userId" = ANY($1::uuid[]) AND "isActive" = true AND "deletedAt" IS NULL`,
       [rows.map((r) => r.userId)],
@@ -169,30 +168,7 @@ export class NotificationService {
 
   private async pushToDevice(device: DeviceRow, message: PushMessage, content: NotifyInput) {
     const startedAt = Date.now();
-    let endpointArn = device.endpointArn;
-    let result: Awaited<ReturnType<SnsPushService['send']>>;
-
-    try {
-      if (!endpointArn) {
-        endpointArn = await this.push.ensureEndpoint(device.platform, device.token, device.userId);
-        if (endpointArn) {
-          await this.dataSource.query(
-            `UPDATE user_devices SET "endpointArn" = $2, "updatedAt" = now() WHERE "id" = $1`,
-            [device.id, endpointArn],
-          );
-        }
-      }
-      result = endpointArn
-        ? await this.push.send(endpointArn, message, device.platform)
-        : { ok: false, dead: false, code: 'NO_ENDPOINT', error: 'SNS returned no endpoint' };
-    } catch (error) {
-      result = {
-        ok: false,
-        dead: false,
-        code: error?.name ?? 'UNKNOWN',
-        error: String(error?.message ?? error).slice(0, 500),
-      };
-    }
+    const result: PushResult = await this.push.send(device.platform, device.token, message);
 
     if (!result.ok && result.dead) {
       await this.dataSource.query(
@@ -332,32 +308,9 @@ export class NotificationService {
              "deletedAt" = NULL,
              "updatedAt" = now(),
              "updatedBy" = EXCLUDED."userId"
-       RETURNING "id", "userId", "token", "platform", "endpointArn"`,
+       RETURNING "id", "userId", "token", "platform"`,
       [userId, dto.token, dto.platform, dto.deviceName ?? null, dto.appVersion ?? null],
     );
-
-    // Best effort: if SNS is reachable, link the endpoint now so the first push is immediate. If
-    // not, the first push links it instead. Registration itself never fails on SNS.
-    if (this.push.isActiveFor(device.platform)) {
-      try {
-        const arn = await this.push.ensureEndpoint(
-          device.platform,
-          device.token,
-          userId,
-          device.endpointArn,
-        );
-        if (arn && arn !== device.endpointArn) {
-          await this.dataSource.query(
-            `UPDATE user_devices SET "endpointArn" = $2, "updatedAt" = now() WHERE "id" = $1`,
-            [device.id, arn],
-          );
-        }
-      } catch (error) {
-        this.logger.warn(
-          `SNS endpoint not linked for device ${device.id}: ${error?.message ?? error}`,
-        );
-      }
-    }
 
     return {
       message: NOTIFICATION_RESPONSES.DEVICE_REGISTERED,
@@ -385,6 +338,36 @@ export class NotificationService {
     const [, removed] = await this.dataSource.query(
       `UPDATE notifications SET "deletedAt" = now()
         WHERE "deletedAt" IS NULL AND "createdAt" < now() - ($1 || ' days')::interval`,
+      [String(days)],
+    );
+    return Number(removed) || 0;
+  }
+
+  /**
+   * Switches off devices not seen for `days`, keeping each user's most recently seen device.
+   *
+   * Several rows for one user are normal — a reinstall or cleared app data gives the phone a new
+   * token, and registering it never retires the old one, because one person may also really have
+   * a phone and a tablet. Those old rows are what this clears. The newest is always kept: a user
+   * who simply hasn't opened the app in a while should still get pushes.
+   *
+   * Soft delete, so a token that turns up again (the same install, logging back in) is revived by
+   * the upsert in `registerDevice` rather than refused by the unique index.
+   */
+  async deactivateStaleDevices(days: number): Promise<number> {
+    const [, removed] = await this.dataSource.query(
+      `WITH ranked AS (
+         SELECT "id", "lastSeenAt",
+                ROW_NUMBER() OVER (PARTITION BY "userId" ORDER BY "lastSeenAt" DESC, "createdAt" DESC) AS rn
+           FROM user_devices
+          WHERE "isActive" = true AND "deletedAt" IS NULL
+       )
+       UPDATE user_devices d
+          SET "isActive" = false, "deletedAt" = now(), "updatedAt" = now()
+         FROM ranked r
+        WHERE d."id" = r."id"
+          AND r.rn > 1
+          AND r."lastSeenAt" < now() - ($1 || ' days')::interval`,
       [String(days)],
     );
     return Number(removed) || 0;
