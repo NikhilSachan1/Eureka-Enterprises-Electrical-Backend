@@ -9,7 +9,7 @@ export enum DevicePlatform {
  * Platforms that actually receive pushes right now.
  *
  * iOS devices may still register — the app can ship that code early — but nothing is sent to them
- * until iOS is added here and an SNS platform application (or an APNs setup in Firebase) exists.
+ * until iOS is added here and an APNs key is uploaded to the Firebase project.
  */
 export const PUSH_PLATFORMS_ENABLED: DevicePlatform[] = [
   DevicePlatform.ANDROID,
@@ -43,7 +43,21 @@ export const NOTIFICATION_RESPONSES = {
   DEVICE_REMOVED: 'Device removed',
 };
 
-/** SNS error codes meaning the token is dead and will never work again. */
-export const SNS_DEAD_ENDPOINT_ERRORS = ['EndpointDisabledException', 'EndpointDisabled'];
+/**
+ * FCM error codes meaning the device will never receive anything again — the app was uninstalled,
+ * its data cleared, or the value was never a valid target. Such a device is switched off.
+ */
+export const FCM_DEAD_TARGET_ERRORS = [
+  'messaging/installation-id-not-registered',
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+];
 
-export const PUSH_PROVIDER = 'AWS_SNS';
+export const PUSH_PROVIDER = 'FIREBASE_FCM';
+
+/**
+ * A device not seen for this many days is switched off — unless it is its user's most recently
+ * seen one. The app re-registers on every start, so `lastSeenAt` is fresh for anything in use;
+ * what goes stale is old installs (reinstalls, cleared data, a phone that changed hands).
+ */
+export const DEVICE_STALE_DAYS = 45;

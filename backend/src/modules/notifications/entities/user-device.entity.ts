@@ -18,14 +18,21 @@ export class UserDeviceEntity extends BaseEntity {
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  /** The FCM registration token the app got from `firebase_messaging`. */
+  /**
+   * Where Firebase delivers this device's pushes: a 22-character Firebase Installation ID from the
+   * app (`firebase_messaging` 17+, `register()` / `onRegistered`), or a longer registration token
+   * from the web SDK. The push sender tells them apart.
+   */
   @Column({ type: 'text', unique: true })
   token: string;
 
   @Column({ type: 'varchar', length: 16 })
   platform: DevicePlatform;
 
-  /** The SNS platform endpoint for this token. Null until SNS has accepted it. */
+  /**
+   * Unused since push moved from AWS SNS to direct FCM (2026-10-26) — FCM needs no per-device
+   * registration. Left in place rather than dropped with a migration; safe to remove later.
+   */
   @Column({ type: 'text', nullable: true })
   endpointArn: string | null;
 

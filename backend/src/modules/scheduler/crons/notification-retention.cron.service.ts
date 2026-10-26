@@ -5,6 +5,7 @@ import { CRON_NAMES, CRON_SCHEDULES } from '../constants/scheduler.constants';
 import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import { NotificationService } from '../../notifications/notification.service';
+import { DEVICE_STALE_DAYS } from '../../notifications/constants/notification.constants';
 
 /** Never keep less than a month, whatever the setting says. */
 const MIN_NOTIFICATION_RETENTION_DAYS = 30;
@@ -40,6 +41,26 @@ export class NotificationRetentionCronService {
         );
         const removed = await this.notificationService.purgeOlderThan(days);
         return { retentionDays: days, removed };
+      },
+    );
+  }
+
+  /**
+   * CRON: stale push devices
+   *
+   * Switches off devices not seen for `DEVICE_STALE_DAYS` (45) days, keeping each user's most
+   * recently seen one — see `NotificationService.deactivateStaleDevices`. Runs at 2:45 AM IST.
+   */
+  @Cron(CRON_SCHEDULES.DAILY_2_45AM_IST)
+  async handleStaleDeviceCleanup() {
+    return this.cronLogService.execute(
+      CRON_NAMES.NOTIFICATION_DEVICE_CLEANUP,
+      CronJobType.NOTIFICATION,
+      async () => {
+        const deactivated = await this.notificationService.deactivateStaleDevices(
+          DEVICE_STALE_DAYS,
+        );
+        return { staleAfterDays: DEVICE_STALE_DAYS, deactivated };
       },
     );
   }

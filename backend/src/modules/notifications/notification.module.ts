@@ -4,7 +4,7 @@ import { NotificationEntity } from './entities/notification.entity';
 import { UserDeviceEntity } from './entities/user-device.entity';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
-import { SnsPushService } from './push/sns-push.service';
+import { FcmPushService } from './push/fcm-push.service';
 
 /**
  * Global for the same reason the WhatsApp and communication-log modules are: some twenty services
@@ -14,7 +14,7 @@ import { SnsPushService } from './push/sns-push.service';
 @Module({
   imports: [TypeOrmModule.forFeature([NotificationEntity, UserDeviceEntity])],
   controllers: [NotificationController],
-  providers: [NotificationService, SnsPushService],
+  providers: [NotificationService, FcmPushService],
   exports: [NotificationService],
 })
 export class NotificationModule {}
