@@ -15,7 +15,7 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
     pageSize = 10,
     sortField,
     sortOrder,
-    grouped = true,
+    grouped,
   } = filters;
 
   // Base query with joins
@@ -121,8 +121,10 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
 
   query += ` ORDER BY ${validSortField} ${sortOrder}`;
 
-  // Pagination - Skip when grouped=true to ensure complete groups
-  if (!grouped) {
+  // Pagination - Skip when grouped=true to ensure complete groups. `grouped` arrives as the query
+  // string "true" / "false", and "false" is truthy — read it exactly as the service does
+  // (grouped only when "true"), or a flat list is never paginated.
+  if (String(grouped) !== 'true') {
     const offset = (page - 1) * pageSize;
     query += ` LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
     params.push(pageSize, offset);
