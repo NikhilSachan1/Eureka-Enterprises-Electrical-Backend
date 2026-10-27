@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { SiteReportService } from './site-report.service';
+import { DocumentNotifierService } from 'src/modules/notifications/document-notifier.service';
 import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dto';
 import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 
@@ -20,7 +21,10 @@ import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
 @ApiBearerAuth('JWT-auth')
 @Controller('site-reports')
 export class SiteReportController {
-  constructor(private readonly reportService: SiteReportService) {}
+  constructor(
+    private readonly reportService: SiteReportService,
+    private readonly docs: DocumentNotifierService,
+  ) {}
 
   @Patch(':id/approve')
   @RequiredPermission('financials.site-reports.approve')
@@ -29,7 +33,9 @@ export class SiteReportController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: approvedBy } }: { user: { id: string } },
   ) {
-    return await this.reportService.approve(id, approvedBy);
+    const result = await this.reportService.approve(id, approvedBy);
+    this.docs.notify('REPORT', 'APPROVED', id, approvedBy);
+    return result;
   }
 
   @Patch(':id/reject')
@@ -39,7 +45,9 @@ export class SiteReportController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
   ) {
-    return await this.reportService.reject(id, rejectedBy);
+    const result = await this.reportService.reject(id, rejectedBy);
+    this.docs.notify('REPORT', 'REJECTED', id, rejectedBy);
+    return result;
   }
 
   @Post()
@@ -49,7 +57,9 @@ export class SiteReportController {
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() dto: CreateSiteReportDto,
   ) {
-    return await this.reportService.create(dto, createdBy);
+    const result = await this.reportService.create(dto, createdBy);
+    this.docs.notify('REPORT', 'ADDED', result?.id, createdBy);
+    return result;
   }
 
   @Get()
@@ -71,7 +81,9 @@ export class SiteReportController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() dto: UpdateSiteReportDto,
   ) {
-    return await this.reportService.update(id, dto, updatedBy);
+    const result = await this.reportService.update(id, dto, updatedBy);
+    this.docs.notify('REPORT', 'EDITED', id, updatedBy);
+    return result;
   }
 
   @Delete(':id')
@@ -80,7 +92,10 @@ export class SiteReportController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
   ) {
-    return await this.reportService.remove(id, deletedBy);
+    const before = await this.docs.snapshot('REPORT', id);
+    const result = await this.reportService.remove(id, deletedBy);
+    this.docs.notify('REPORT', 'DELETED', before, deletedBy);
+    return result;
   }
 
   @Post(':id/unlock-request')
@@ -91,7 +106,9 @@ export class SiteReportController {
     @Request() { user: { id: requestedBy } }: { user: { id: string } },
     @Body() dto: UnlockRequestDto,
   ) {
-    return await this.reportService.requestUnlock(id, dto, requestedBy);
+    const result = await this.reportService.requestUnlock(id, dto, requestedBy);
+    this.docs.notify('REPORT', 'UNLOCK_REQUESTED', id, requestedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/unlock-grant')
@@ -101,7 +118,10 @@ export class SiteReportController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: grantedBy } }: { user: { id: string } },
   ) {
-    return await this.reportService.grantUnlock(id, grantedBy);
+    const before = await this.docs.snapshot('REPORT', id);
+    const result = await this.reportService.grantUnlock(id, grantedBy);
+    this.docs.notify('REPORT', 'UNLOCK_GRANTED', before, grantedBy);
+    return result;
   }
 
   @Post(':id/unlock-reject')
@@ -111,6 +131,9 @@ export class SiteReportController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
   ) {
-    return await this.reportService.rejectUnlock(id, rejectedBy);
+    const before = await this.docs.snapshot('REPORT', id);
+    const result = await this.reportService.rejectUnlock(id, rejectedBy);
+    this.docs.notify('REPORT', 'UNLOCK_REJECTED', before, rejectedBy);
+    return result;
   }
 }

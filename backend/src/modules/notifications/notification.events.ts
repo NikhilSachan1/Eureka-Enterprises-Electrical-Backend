@@ -182,19 +182,11 @@ const ROUTES = {
   CARDS: '/cards',
   PAYROLL: '/payroll',
   DASHBOARD: '/dashboard',
+  PROFILE: '/profile',
 };
 
 export const NotificationEvents = {
   // ─── expense ───────────────────────────────────────────────────────────
-  expenseSubmitted: (p: { expenseId: string; amount: string | number; category: string }) => ({
-    title: 'Expense submitted',
-    message: `Your ${rupees(p.amount)} ${humanize(p.category)} expense was submitted for approval`,
-    category: C.EXPENSE_SUBMISSION,
-    referenceType: 'expense',
-    referenceId: p.expenseId,
-    route: ROUTES.EXPENSES,
-  }),
-
   expenseForceCreated: (p: {
     expenseId: string;
     amount: string | number;
@@ -232,15 +224,6 @@ export const NotificationEvents = {
   }),
 
   // ─── fuel ──────────────────────────────────────────────────────────────
-  fuelSubmitted: (p: { fuelExpenseId: string; amount: string | number; vehicleNo: string }) => ({
-    title: 'Fuel entry submitted',
-    message: `Your ${rupees(p.amount)} fuel entry for ${p.vehicleNo} was submitted for approval`,
-    category: C.FUEL_EXPENSE_SUBMISSION,
-    referenceType: 'fuel_expense',
-    referenceId: p.fuelExpenseId,
-    route: ROUTES.FUEL,
-  }),
-
   fuelForceCreated: (p: {
     fuelExpenseId: string;
     amount: string | number;
@@ -287,24 +270,6 @@ export const NotificationEvents = {
   }),
 
   // ─── attendance ────────────────────────────────────────────────────────
-  attendanceCheckedIn: (p: { date: string; time: string }) => ({
-    title: 'Checked in',
-    message: `You checked in at ${p.time} on ${p.date}`,
-    category: C.ATTENDANCE_SUBMISSION,
-    referenceType: 'attendance',
-    route: ROUTES.ATTENDANCE,
-  }),
-
-  attendanceCheckedOut: (p: { date: string; time: string; totalHours?: string }) => ({
-    title: 'Checked out',
-    message: `You checked out at ${p.time} on ${p.date}${
-      p.totalHours ? ` — ${p.totalHours} worked` : ''
-    }`,
-    category: C.ATTENDANCE_SUBMISSION,
-    referenceType: 'attendance',
-    route: ROUTES.ATTENDANCE,
-  }),
-
   attendanceDecided: (p: {
     attendanceId: string;
     date: string;
@@ -342,6 +307,14 @@ export const NotificationEvents = {
     route: ROUTES.ATTENDANCE,
   }),
 
+  attendanceDeleted: (p: { date: string; byName: string }) => ({
+    title: 'Attendance deleted',
+    message: `Your attendance for ${p.date} was deleted by ${p.byName}`,
+    category: C.ATTENDANCE_DELETED,
+    referenceType: 'attendance',
+    route: ROUTES.ATTENDANCE,
+  }),
+
   attendanceAbsent: (p: { date: string; dateKey: string }) => ({
     title: 'Marked absent',
     message: `You were marked absent for ${p.date}`,
@@ -372,17 +345,6 @@ export const NotificationEvents = {
   }),
 
   // ─── leave ─────────────────────────────────────────────────────────────
-  leaveSubmitted: (p: { leaveType: string; from: string; to: string; days: number | string }) => ({
-    title: 'Leave applied',
-    message: `${capitalize(leaveName(p.leaveType))} ${span(p.from, p.to)} (${count(
-      p.days,
-      'day',
-    )}) applied for approval`,
-    category: C.LEAVE_SUBMISSION,
-    referenceType: 'leave_application',
-    route: ROUTES.LEAVES,
-  }),
-
   leaveForceApplied: (p: {
     leaveType: string;
     from: string;
@@ -423,26 +385,6 @@ export const NotificationEvents = {
     data: { status: decided(p.approved) },
   }),
 
-  leaveCancelled: (p: {
-    leaveId: string;
-    leaveType: string;
-    from: string;
-    to: string;
-    byName: string;
-    remarks?: string;
-  }) => ({
-    title: 'Leave cancelled',
-    message: withRemarks(
-      `Your ${leaveName(p.leaveType)} ${span(p.from, p.to)} was cancelled by ${p.byName}`,
-      p.remarks,
-    ),
-    category: C.LEAVE_CANCELLATION,
-    referenceType: 'leave_application',
-    referenceId: p.leaveId,
-    route: ROUTES.LEAVES,
-  }),
-
-  // ─── asset / vehicle handovers ─────────────────────────────────────────
   assetTransaction: (p: {
     assetMasterId: string;
     assetId: string;
@@ -610,13 +552,6 @@ export const NotificationEvents = {
     dedupeKey: `${C.PAYSLIP}:${p.payrollId}`,
   }),
 
-  fnfDocumentsSent: () => ({
-    title: 'Full & final documents sent',
-    message: 'Your relieving letter, experience letter and F&F statement have been emailed to you',
-    category: C.FNF_DOCUMENTS,
-    referenceType: 'fnf',
-  }),
-
   paymentSheetStage: (p: {
     sheetId: string;
     sheetNumber: string;
@@ -641,6 +576,26 @@ export const NotificationEvents = {
     };
   },
 
+  // ─── employee ──────────────────────────────────────────────────────────
+
+  profileUpdated: (p: { userId: string }) => ({
+    title: 'Profile updated',
+    message: 'Your profile has been updated successfully.',
+    category: C.PROFILE_UPDATED,
+    referenceType: 'user',
+    referenceId: p.userId,
+    route: ROUTES.PROFILE,
+  }),
+
+  emailChanged: (p: { userId: string }) => ({
+    title: 'Email address updated',
+    message: 'Your email address has been updated successfully.',
+    category: C.EMAIL_CHANGED,
+    referenceType: 'user',
+    referenceId: p.userId,
+    route: ROUTES.PROFILE,
+  }),
+
   birthday: (p: { firstName: string }) => ({
     title: 'Happy birthday! 🎂',
     message: `Wishing you a wonderful year ahead, ${p.firstName}`,
@@ -658,6 +613,116 @@ export const NotificationEvents = {
     referenceType: 'celebration',
     dedupeKey: `${C.WORK_ANNIVERSARY}:${istDateKey().slice(0, 4)}`,
   }),
+
+  // ─── payment sheet lines & wallet ──────────────────────────────────────
+
+  expensePaid: (p: { amount: string | number; sheetNumber: string; sheetId: string }) => ({
+    title: 'Expense payment made',
+    message: `${rupees(p.amount)} paid against your expenses — payment sheet ${p.sheetNumber}`,
+    category: C.PAYMENT_SHEET_ITEM,
+    referenceType: 'payment_sheet',
+    referenceId: p.sheetId,
+    route: ROUTES.EXPENSES,
+  }),
+
+  /** Doc wording: "{name} rejected your (fuel) expense payment. Reason: {reason}". */
+  paymentLineRejected: (p: {
+    fuel: boolean;
+    amount: string | number;
+    byName: string;
+    reason: string;
+    sheetNumber: string;
+    sheetId: string;
+  }) => ({
+    title: p.fuel ? 'Fuel expense payment rejected' : 'Expense payment rejected',
+    message: `${p.byName} rejected your ${p.fuel ? 'fuel expense' : 'expense'} payment of ${rupees(
+      p.amount,
+    )} (payment sheet ${p.sheetNumber}). Reason: ${p.reason.trim()}`,
+    category: C.PAYMENT_SHEET_ITEM,
+    referenceType: 'payment_sheet',
+    referenceId: p.sheetId,
+    route: p.fuel ? ROUTES.FUEL : ROUTES.EXPENSES,
+  }),
+
+  walletRecharged: (p: { amount: string | number; sheetId: string }) => ({
+    title: 'Wallet recharged',
+    message: `Your wallet balance has been recharged successfully with ${rupees(p.amount)}.`,
+    category: C.WALLET,
+    referenceType: 'payment_sheet',
+    referenceId: p.sheetId,
+  }),
+
+  // ─── approval documents (PO, JMC, Report, Invoice, …) ──────────────────
+
+  /**
+   * One builder for every action on every approval document, so the wording stays the same
+   * across them. `label` is how the document is called ("PO", "Invoice"); `number` may be missing
+   * on a document that has not been numbered yet.
+   */
+  documentEvent: (p: {
+    action: DocumentAction;
+    label: string;
+    number?: string | null;
+    siteName?: string | null;
+    byName: string;
+    reason?: string | null;
+    category: string;
+    referenceType: string;
+    referenceId: string;
+    route: string;
+    /** False for documents that are approved the moment they are created (site reports). */
+    awaitsApproval?: boolean;
+  }) => {
+    const doc = p.number ? `${p.label} ${p.number}` : p.label;
+    const at = p.siteName ? ` at ${p.siteName}` : '';
+    const a = /^[aeiou]/i.test(p.label) ? 'An' : 'A';
+    const waiting = p.awaitsApproval === false ? '' : ' and is waiting for approval';
+    const text: Record<DocumentAction, [string, string]> = {
+      ADDED: [`${p.label} added`, `${doc}${at} was added by ${p.byName}${waiting}`],
+      EDITED: [`${p.label} edited`, `${doc}${at} was edited by ${p.byName}`],
+      DELETED: [`${p.label} deleted`, `${doc}${at} was deleted by ${p.byName}`],
+      APPROVED: [`${p.label} approved`, `Your ${doc}${at} was approved by ${p.byName}`],
+      REJECTED: [
+        `${p.label} rejected`,
+        withRemarks(`Your ${doc}${at} was rejected by ${p.byName}`, p.reason),
+      ],
+      UNLOCK_REQUESTED: [
+        `${p.label} unlock requested`,
+        withRemarks(
+          `${a} ${p.label} unlock request has been received and requires your attention: ${doc}${at}, requested by ${p.byName}`,
+          p.reason,
+        ),
+      ],
+      UNLOCK_GRANTED: [
+        `${p.label} unlocked`,
+        `Your unlock request for ${doc}${at} was granted by ${p.byName}`,
+      ],
+      UNLOCK_REJECTED: [
+        `${p.label} unlock rejected`,
+        `Your unlock request for ${doc}${at} was rejected by ${p.byName}`,
+      ],
+    };
+    const [title, message] = text[p.action];
+    return {
+      title,
+      message,
+      category: p.category,
+      referenceType: p.referenceType,
+      referenceId: p.referenceId,
+      route: p.route,
+      data: { action: p.action },
+    };
+  },
 };
+
+export type DocumentAction =
+  | 'ADDED'
+  | 'EDITED'
+  | 'DELETED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'UNLOCK_REQUESTED'
+  | 'UNLOCK_GRANTED'
+  | 'UNLOCK_REJECTED';
 
 export const NOTIFICATION_ROUTES = ROUTES;

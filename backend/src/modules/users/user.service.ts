@@ -51,6 +51,8 @@ import { EmailService } from '../common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
 import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
 import { WhatsAppService } from '../common/whatsapp/whatsapp.service';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationEvents } from '../notifications/notification.events';
 
 @Injectable()
 export class UserService {
@@ -70,6 +72,7 @@ export class UserService {
     private jwtService: JwtService,
     private emailService: EmailService,
     private whatsAppService: WhatsAppService,
+    private notificationService: NotificationService,
   ) {}
 
   private validateNotSystemUser(userId: string, operation: 'update' | 'delete' | 'archive'): void {
@@ -541,7 +544,11 @@ export class UserService {
       }
     }
 
-    return await this.dataSource.transaction(async (entityManager) => {
+    const emailChanged =
+      !!updateData.email &&
+      String(updateData.email).trim().toLowerCase() !== (user.email ?? '').trim().toLowerCase();
+
+    const updated = await this.dataSource.transaction(async (entityManager) => {
       // Only profilePicture goes to user table
       const processedData: any = this.utilityService.convertEmptyStringsToNull({
         ...updateData,
@@ -577,6 +584,21 @@ export class UserService {
       // Return user without confidential fields (includeDocuments = true excludes password)
       return await this.findOneOrFail({ where: { id } }, true);
     });
+
+    // After commit. Nobody is told about their own edit. An email change replaces the
+    // profile-updated notice, and its email goes to the new address (the one now on the user).
+    if (updatedBy && updatedBy !== id) {
+      void this.notificationService.notify({
+        userIds: [id],
+        createdBy: updatedBy,
+        email: true,
+        ...(emailChanged
+          ? NotificationEvents.emailChanged({ userId: id })
+          : NotificationEvents.profileUpdated({ userId: id })),
+      });
+    }
+
+    return updated;
   }
 
   private async validateUserAssociations(

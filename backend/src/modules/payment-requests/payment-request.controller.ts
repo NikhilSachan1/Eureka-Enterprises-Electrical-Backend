@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { PaymentRequestService } from './payment-request.service';
+import { DocumentNotifierService } from 'src/modules/notifications/document-notifier.service';
 import {
   CreatePaymentRequestDto,
   UpdatePaymentRequestDto,
@@ -25,7 +26,10 @@ import {
 @ApiBearerAuth('JWT-auth')
 @Controller('payment-requests')
 export class PaymentRequestController {
-  constructor(private readonly service: PaymentRequestService) {}
+  constructor(
+    private readonly service: PaymentRequestService,
+    private readonly docs: DocumentNotifierService,
+  ) {}
 
   @Post()
   @RequiredPermission('financials.payment-requests.create')
@@ -34,7 +38,9 @@ export class PaymentRequestController {
     @Request() { user: { id: createdBy } }: { user: { id: string } },
     @Body() dto: CreatePaymentRequestDto,
   ) {
-    return await this.service.create(dto, createdBy);
+    const result = await this.service.create(dto, createdBy);
+    this.docs.notify('PAYMENT_REQUEST', 'ADDED', result?.id, createdBy);
+    return result;
   }
 
   @Get()
@@ -59,7 +65,9 @@ export class PaymentRequestController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() dto: UpdatePaymentRequestDto,
   ) {
-    return await this.service.update(id, dto, updatedBy);
+    const result = await this.service.update(id, dto, updatedBy);
+    this.docs.notify('PAYMENT_REQUEST', 'EDITED', id, updatedBy);
+    return result;
   }
 
   @Delete(':id')
@@ -69,7 +77,10 @@ export class PaymentRequestController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
   ) {
-    return await this.service.remove(id, deletedBy);
+    const before = await this.docs.snapshot('PAYMENT_REQUEST', id);
+    const result = await this.service.remove(id, deletedBy);
+    this.docs.notify('PAYMENT_REQUEST', 'DELETED', before, deletedBy);
+    return result;
   }
 
   @Post(':id/approve')
@@ -82,7 +93,9 @@ export class PaymentRequestController {
     @Request() { user: { id: approvedBy } }: { user: { id: string } },
     @Body() dto: ApprovePaymentRequestDto,
   ) {
-    return await this.service.approve(id, dto, approvedBy);
+    const result = await this.service.approve(id, dto, approvedBy);
+    this.docs.notify('PAYMENT_REQUEST', 'APPROVED', id, approvedBy);
+    return result;
   }
 
   @Post(':id/reject')
@@ -93,6 +106,8 @@ export class PaymentRequestController {
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
     @Body() dto: RejectPaymentRequestDto,
   ) {
-    return await this.service.reject(id, dto, rejectedBy);
+    const result = await this.service.reject(id, dto, rejectedBy);
+    this.docs.notify('PAYMENT_REQUEST', 'REJECTED', id, rejectedBy, dto.reason);
+    return result;
   }
 }

@@ -16,6 +16,7 @@ import { PetroCardWalletModule } from '../petro-card-wallet/petro-card-wallet.mo
 import { BankTransferModule } from 'src/modules/bank-transfers/bank-transfer.module';
 import { EmailModule } from 'src/modules/common/email/email.module';
 import { FilesModule } from 'src/modules/common/file-upload/files.module';
+import { PaymentAdviceModule } from 'src/modules/payment-advices/payment-advice.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { FilesModule } from 'src/modules/common/file-upload/files.module';
     PetroCardWalletModule,
     EmailModule,
     FilesModule,
+    PaymentAdviceModule,
   ],
   controllers: [PaymentSheetController],
   providers: [PaymentSheetRepository, PaymentSheetService, PaymentSheetPdfService],

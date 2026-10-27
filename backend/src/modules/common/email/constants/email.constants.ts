@@ -75,6 +75,8 @@ export const EMAIL_TEMPLATE = {
   // Asset lost / recovered
   ASSET_LOST: 'assetLost',
   ASSET_RECOVERED: 'assetRecovered',
+  // Generic: the bell title + message as an email (notification requirements v7)
+  NOTIFICATION: 'notification',
 };
 
 export const EMAIL_REDIRECT_ROUTES = {

@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { AdvancePaymentService } from './advance-payment.service';
+import { DocumentNotifierService } from 'src/modules/notifications/document-notifier.service';
 import { CreateAdvancePaymentDto, UpdateAdvancePaymentDto, GetAdvancePaymentDto } from './dto';
 import { RejectDto } from 'src/modules/purchase-orders/dto/approval.dto';
 
@@ -20,7 +21,10 @@ import { RejectDto } from 'src/modules/purchase-orders/dto/approval.dto';
 @ApiBearerAuth('JWT-auth')
 @Controller('advance-payments')
 export class AdvancePaymentController {
-  constructor(private readonly advanceService: AdvancePaymentService) {}
+  constructor(
+    private readonly advanceService: AdvancePaymentService,
+    private readonly docs: DocumentNotifierService,
+  ) {}
 
   @Post()
   @RequiredPermission('financials.advance-payments.create')
@@ -37,7 +41,9 @@ export class AdvancePaymentController {
     { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreateAdvancePaymentDto,
   ) {
-    return await this.advanceService.create(dto, createdBy, activeRole);
+    const result = await this.advanceService.create(dto, createdBy, activeRole);
+    this.docs.notify('ADVANCE', 'ADDED', result?.id, createdBy);
+    return result;
   }
 
   @Get()
@@ -88,7 +94,9 @@ export class AdvancePaymentController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() dto: UpdateAdvancePaymentDto,
   ) {
-    return await this.advanceService.update(id, dto, updatedBy);
+    const result = await this.advanceService.update(id, dto, updatedBy);
+    this.docs.notify('ADVANCE', 'EDITED', id, updatedBy);
+    return result;
   }
 
   @Delete(':id')
@@ -116,7 +124,9 @@ export class AdvancePaymentController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: approvedBy } }: { user: { id: string } },
   ) {
-    return await this.advanceService.approve(id, approvedBy);
+    const result = await this.advanceService.approve(id, approvedBy);
+    this.docs.notify('ADVANCE', 'APPROVED', id, approvedBy);
+    return result;
   }
 
   @Post(':id/reject')
@@ -127,6 +137,8 @@ export class AdvancePaymentController {
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
     @Body() dto: RejectDto,
   ) {
-    return await this.advanceService.reject(id, dto, rejectedBy);
+    const result = await this.advanceService.reject(id, dto, rejectedBy);
+    this.docs.notify('ADVANCE', 'REJECTED', id, rejectedBy, dto.reason);
+    return result;
   }
 }

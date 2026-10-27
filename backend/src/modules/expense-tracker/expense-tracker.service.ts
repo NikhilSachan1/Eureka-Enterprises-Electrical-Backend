@@ -136,7 +136,7 @@ export class ExpenseTrackerService {
       await this.validatePaymentMode(paymentMode);
       await this.validateExpenseDate(expenseDate, timezone);
 
-      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
+      await this.userService.findOneOrFail({ where: { id: userId } });
 
       const result = await this.dataSource.transaction(async (entityManager) => {
         const expense = await this.expenseTrackerRepository.create(
@@ -170,30 +170,7 @@ export class ExpenseTrackerService {
         return { message: EXPENSE_TRACKER_SUCCESS_MESSAGES.EXPENSE_CREATED, id: expense.id };
       });
 
-      // Bell + push — independent of WhatsApp opt-in, so everyone gets it.
-      void this.notificationService.notify({
-        userIds: [employee.id],
-        createdBy: actor,
-        ...NotificationEvents.expenseSubmitted({ expenseId: result.id, amount, category }),
-      });
-
-      // Send WhatsApp notification to employee (non-blocking)
-      try {
-        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-        if (employee.whatsappOptIn && whatsappNumber) {
-          await this.whatsAppService.sendExpenseSubmitted(
-            whatsappNumber,
-            {
-              employeeName: `${employee.firstName} ${employee.lastName}`,
-              amount: `₹${Number(amount).toLocaleString('en-IN')}`,
-              category,
-            },
-            { referenceId: result.id, recipientId: employee.id },
-          );
-        }
-      } catch (err) {
-        Logger.error('Failed to send expense submitted WhatsApp notification:', err);
-      }
+      // No notification for adding your own expense (notification requirements v7).
 
       return { message: result.message };
     } catch (error) {
@@ -395,6 +372,7 @@ export class ExpenseTrackerService {
       void this.notificationService.notify({
         userIds: [employee.id],
         createdBy,
+        email: true,
         ...NotificationEvents.expenseForceCreated({
           expenseId: result.id,
           amount,

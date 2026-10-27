@@ -17,6 +17,9 @@ import {
   PUSH_PROVIDER,
 } from './constants/notification.constants';
 import { FcmPushService, PushMessage, PushResult } from './push/fcm-push.service';
+import { EmailService } from '../common/email/email.service';
+import { EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
+import { Environments } from 'env-configs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,6 +52,7 @@ export class NotificationService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly push: FcmPushService,
     private readonly communicationLogService: CommunicationLogService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -102,6 +106,11 @@ export class NotificationService {
       void this.pushRows(rows, { ...input, title, message, referenceId }).catch((error) =>
         this.logger.warn(`Push fan-out failed: ${error?.message ?? error}`),
       );
+      if (input.email) {
+        void this.emailRows(rows, { ...input, title, message, referenceId }).catch((error) =>
+          this.logger.warn(`Notification email failed: ${error?.message ?? error}`),
+        );
+      }
     } catch (error) {
       this.logger.warn(`Notification "${input.title}" not recorded: ${error?.message ?? error}`);
     }
@@ -129,6 +138,45 @@ export class NotificationService {
       await this.notify({ ...content, userIds: rows.map((r) => r.id) });
     } catch (error) {
       this.logger.warn(`Notification "${content.title}" not recorded: ${error?.message ?? error}`);
+    }
+  }
+
+  // ─── email ───────────────────────────────────────────────────────────────
+
+  /**
+   * The bell text as an email, one per recipient whose row was written — so a deduplicated
+   * notification is not emailed twice either. Sent to the address on the user now, which after an
+   * email change is the new one.
+   */
+  private async emailRows(
+    rows: Array<{ id: string; userId: string }>,
+    content: NotifyInput & { referenceId: string | null },
+  ): Promise<void> {
+    const users: Array<{ id: string; email: string; firstName: string; lastName: string }> =
+      await this.dataSource.query(
+        `SELECT "id", "email", "firstName", "lastName" FROM users
+          WHERE "id" = ANY($1::uuid[]) AND "email" IS NOT NULL`,
+        [rows.map((r) => r.userId)],
+      );
+    const base = (Environments.FE_BASE_URL ?? '').replace(/\/+$/, '');
+    const link = base && content.route ? `${base}/${content.route.replace(/^\/+/, '')}` : base;
+
+    for (const user of users) {
+      await this.emailService.sendMail({
+        receiverEmails: user.email,
+        subject: content.title,
+        template: EMAIL_TEMPLATE.NOTIFICATION,
+        category: content.category as CommunicationCategory,
+        emailData: {
+          firstName: user.firstName,
+          employeeName: `${user.firstName} ${user.lastName ?? ''}`.trim(),
+          title: content.title,
+          message: content.message,
+          link,
+          referenceId: content.referenceId ?? undefined,
+          referenceType: content.referenceType,
+        },
+      });
     }
   }
 

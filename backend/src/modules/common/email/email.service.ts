@@ -21,8 +21,9 @@ export class EmailService {
     const { receiverEmails, template } = emailContext;
     const startTime = Date.now();
 
-    // Determine category from template name
-    const category = TEMPLATE_CATEGORY_MAP[template] || CommunicationCategory.OTHER;
+    // The caller's category if it gave one, else the template's
+    const category =
+      emailContext.category || TEMPLATE_CATEGORY_MAP[template] || CommunicationCategory.OTHER;
 
     // Handle multiple recipients
     const emails = Array.isArray(receiverEmails) ? receiverEmails : [receiverEmails];

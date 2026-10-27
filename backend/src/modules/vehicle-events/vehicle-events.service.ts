@@ -182,6 +182,7 @@ export class VehicleEventsService {
       void this.notificationService.notify({
         userIds: [recipient.id],
         createdBy: actor.id,
+        email: true,
         ...NotificationEvents.vehicleTransaction({
           vehicleMasterId: input.vehicleMasterId,
           vehicleNo: vehicleMaster?.registrationNo || input.vehicleMasterId,

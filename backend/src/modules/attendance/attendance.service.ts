@@ -233,12 +233,7 @@ export class AttendanceService {
     // not resolve until it does.
     await this.reRouteDrivers(affectedDrivers, todayDate, userId);
 
-    // Fire-and-forget WhatsApp notifications (do not block the response)
-    if (action === AttendanceAction.CHECK_IN && 'checkInTime' in result) {
-      this.sendCheckInNotification(userId, todayDate, result.checkInTime);
-    } else if (action === AttendanceAction.CHECK_OUT && 'checkOutTime' in result) {
-      this.sendCheckOutNotification(userId, todayDate, result.checkOutTime, result.workDuration);
-    }
+    // No notification for marking your own attendance (notification requirements v7).
 
     return result;
   }
@@ -2568,72 +2563,28 @@ export class AttendanceService {
     }
   }
 
-  private async sendCheckInNotification(userId: string, attendanceDate: Date, checkInTime: Date) {
-    try {
-      const employee = await this.userService.findOne({ id: userId });
-      if (!employee) return;
-      void this.notificationService.notify({
-        userIds: [employee.id],
-        createdBy: userId,
-        ...NotificationEvents.attendanceCheckedIn({
-          date: this.formatDateForEmail(attendanceDate),
-          time: this.formatTime(checkInTime),
-        }),
-      });
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
-      await this.whatsAppService.sendAttendanceSubmission(
-        whatsappNumber,
-        {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          date: this.formatDateForEmail(attendanceDate),
-          checkInTime: this.formatTime(checkInTime),
-        },
-        { recipientId: employee.id },
-      );
-    } catch (error) {
-      Logger.error('Failed to send check-in WhatsApp notification:', error);
-    }
-  }
-
-  private async sendCheckOutNotification(
+  /** Bell + push + email to the employee. Never throws — the deletion has already happened. */
+  private async sendAttendanceDeletedNotification(
     userId: string,
+    deletedById: string,
     attendanceDate: Date,
-    checkOutTime: Date,
-    workDurationSeconds: number,
   ) {
     try {
-      const employee = await this.userService.findOne({ id: userId });
-      if (!employee) return;
-      let totalHours: string | undefined;
-      if (workDurationSeconds) {
-        const hours = Math.floor(workDurationSeconds / 3600);
-        const minutes = Math.floor((workDurationSeconds % 3600) / 60);
-        totalHours = `${hours}h ${minutes}m`;
-      }
-      void this.notificationService.notify({
-        userIds: [employee.id],
-        createdBy: userId,
-        ...NotificationEvents.attendanceCheckedOut({
+      if (userId === deletedById) return;
+      const deletedBy = await this.userService.findOne({ id: deletedById });
+      await this.notificationService.notify({
+        userIds: [userId],
+        createdBy: deletedById,
+        email: true,
+        ...NotificationEvents.attendanceDeleted({
           date: this.formatDateForEmail(attendanceDate),
-          time: this.formatTime(checkOutTime),
-          totalHours,
+          byName: deletedBy
+            ? `${deletedBy.firstName} ${deletedBy.lastName}`
+            : ATTENDANCE_EMAIL_CONSTANTS.SYSTEM_USER,
         }),
       });
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
-      await this.whatsAppService.sendAttendanceCheckOut(
-        whatsappNumber,
-        {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          date: this.formatDateForEmail(attendanceDate),
-          checkOutTime: this.formatTime(checkOutTime),
-          totalHours,
-        },
-        { recipientId: employee.id },
-      );
     } catch (error) {
-      Logger.error('Failed to send check-out WhatsApp notification:', error);
+      Logger.error('Failed to send attendance deleted notification:', error);
     }
   }
 
@@ -2655,6 +2606,7 @@ export class AttendanceService {
       void this.notificationService.notify({
         userIds: [employee.id],
         createdBy: createdById,
+        email: true,
         ...NotificationEvents.attendanceForceCreated({
           date: this.formatDateForEmail(attendanceDate),
           status,
@@ -4517,6 +4469,12 @@ export class AttendanceService {
     this.logger.log(
       `Deleted attendance ${attendanceId} (user ${attendance.userId}, ${dateStr}) — ` +
         `${summary.deletedRows} row(s), ${summary.reversedExpenses} expense reversal(s), leave: ${summary.leaveEffect}`,
+    );
+
+    void this.sendAttendanceDeletedNotification(
+      attendance.userId,
+      deletedBy,
+      attendance.attendanceDate,
     );
 
     return { message: ATTENDANCE_RESPONSES.ATTENDANCE_DELETED, ...summary };

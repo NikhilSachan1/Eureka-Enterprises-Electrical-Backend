@@ -63,4 +63,9 @@ export interface NotifyInput {
   dedupeKey?: string;
   /** Who caused it, for the audit columns. */
   createdBy?: string;
+  /**
+   * Also email it: the same title and message, in the generic `notification` template, to each
+   * recipient whose bell row was written. For events with no email template of their own.
+   */
+  email?: boolean;
 }

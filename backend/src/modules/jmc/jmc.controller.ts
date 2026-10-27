@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { JmcService } from './jmc.service';
+import { DocumentNotifierService } from 'src/modules/notifications/document-notifier.service';
 import { CreateJmcDto, UpdateJmcDto, GetJmcDto, UploadJmcDto, JmcItemSuggestionDto } from './dto';
 import {
   ApproveDto,
@@ -24,7 +25,10 @@ import {
 @ApiBearerAuth('JWT-auth')
 @Controller('jmcs')
 export class JmcController {
-  constructor(private readonly jmcService: JmcService) {}
+  constructor(
+    private readonly jmcService: JmcService,
+    private readonly docs: DocumentNotifierService,
+  ) {}
 
   @Post()
   @RequiredPermission('financials.jmcs.create')
@@ -40,7 +44,9 @@ export class JmcController {
     { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreateJmcDto,
   ) {
-    return await this.jmcService.create(dto, createdBy, activeRole);
+    const result = await this.jmcService.create(dto, createdBy, activeRole);
+    this.docs.notify('JMC', 'ADDED', result?.id, createdBy);
+    return result;
   }
 
   @Get('dropdown')
@@ -107,7 +113,9 @@ export class JmcController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() dto: UpdateJmcDto,
   ) {
-    return await this.jmcService.update(id, dto, updatedBy);
+    const result = await this.jmcService.update(id, dto, updatedBy);
+    this.docs.notify('JMC', 'EDITED', id, updatedBy);
+    return result;
   }
 
   @Patch(':id/upload')
@@ -131,7 +139,10 @@ export class JmcController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
   ) {
-    return await this.jmcService.remove(id, deletedBy);
+    const before = await this.docs.snapshot('JMC', id);
+    const result = await this.jmcService.remove(id, deletedBy);
+    this.docs.notify('JMC', 'DELETED', before, deletedBy);
+    return result;
   }
 
   @Post(':id/approve')
@@ -141,7 +152,9 @@ export class JmcController {
     @Request() { user: { id: approvedBy } }: { user: { id: string } },
     @Body() dto: ApproveDto,
   ) {
-    return await this.jmcService.approve(id, dto, approvedBy);
+    const result = await this.jmcService.approve(id, dto, approvedBy);
+    this.docs.notify('JMC', 'APPROVED', id, approvedBy);
+    return result;
   }
 
   @Post(':id/reject')
@@ -151,7 +164,9 @@ export class JmcController {
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
     @Body() dto: RejectDto,
   ) {
-    return await this.jmcService.reject(id, dto, rejectedBy);
+    const result = await this.jmcService.reject(id, dto, rejectedBy);
+    this.docs.notify('JMC', 'REJECTED', id, rejectedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/unlock-request')
@@ -161,7 +176,9 @@ export class JmcController {
     @Request() { user: { id: requestedBy } }: { user: { id: string } },
     @Body() dto: UnlockRequestDto,
   ) {
-    return await this.jmcService.requestUnlock(id, dto, requestedBy);
+    const result = await this.jmcService.requestUnlock(id, dto, requestedBy);
+    this.docs.notify('JMC', 'UNLOCK_REQUESTED', id, requestedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/unlock-grant')
@@ -170,7 +187,10 @@ export class JmcController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: grantedBy } }: { user: { id: string } },
   ) {
-    return await this.jmcService.grantUnlock(id, grantedBy);
+    const before = await this.docs.snapshot('JMC', id);
+    const result = await this.jmcService.grantUnlock(id, grantedBy);
+    this.docs.notify('JMC', 'UNLOCK_GRANTED', before, grantedBy);
+    return result;
   }
 
   @Post(':id/unlock-reject')
@@ -180,6 +200,9 @@ export class JmcController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
   ) {
-    return await this.jmcService.rejectUnlock(id, rejectedBy);
+    const before = await this.docs.snapshot('JMC', id);
+    const result = await this.jmcService.rejectUnlock(id, rejectedBy);
+    this.docs.notify('JMC', 'UNLOCK_REJECTED', before, rejectedBy);
+    return result;
   }
 }

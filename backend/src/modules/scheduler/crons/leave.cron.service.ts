@@ -881,6 +881,7 @@ export class LeaveCronService {
       if (!employee) return;
       void this.notificationService.notify({
         userIds: [employee.id],
+        email: true,
         ...NotificationEvents.leaveBalanceCredited({ leaveCategory, credited, total, month }),
       });
       const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
