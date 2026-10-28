@@ -203,6 +203,7 @@ export class AssetEventsService {
       void this.notificationService.notify({
         userIds: [recipient.id],
         createdBy: actor.id,
+        email: true,
         ...NotificationEvents.assetTransaction({
           assetMasterId: input.assetMasterId,
           assetId: assetMaster?.assetId || input.assetMasterId,

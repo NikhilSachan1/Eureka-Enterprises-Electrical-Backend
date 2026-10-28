@@ -1,3 +1,5 @@
+import { CommunicationCategory } from '../communication-logs/constants/communication-log.constants';
+
 export interface IMailAttachment {
   filename: string;
   content?: Buffer | string;
@@ -11,6 +13,8 @@ export interface IMailOptions {
   template: string;
   emailData: IEmailDataValues;
   attachments?: IMailAttachment[];
+  /** Logged category. Defaults to the template's entry in TEMPLATE_CATEGORY_MAP. */
+  category?: CommunicationCategory;
 }
 
 export interface IEmailDataValues {
@@ -127,6 +131,10 @@ export interface IEmailDataValues {
   failedAt?: string;
   durationMs?: number;
   serverName?: string;
+
+  // Generic notification (template: notification)
+  message?: string;
+  link?: string;
 
   // Payment Sheet Notification
   sheetNumber?: string;

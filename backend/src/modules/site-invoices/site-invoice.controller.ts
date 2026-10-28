@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { SiteInvoiceService } from './site-invoice.service';
+import { DocumentNotifierService } from 'src/modules/notifications/document-notifier.service';
 import {
   CreateSiteInvoiceDto,
   UpdateSiteInvoiceDto,
@@ -29,7 +30,10 @@ import {
 @ApiBearerAuth('JWT-auth')
 @Controller('site-invoices')
 export class SiteInvoiceController {
-  constructor(private readonly invoiceService: SiteInvoiceService) {}
+  constructor(
+    private readonly invoiceService: SiteInvoiceService,
+    private readonly docs: DocumentNotifierService,
+  ) {}
 
   @Post()
   @RequiredPermission('financials.invoices.create')
@@ -39,7 +43,9 @@ export class SiteInvoiceController {
     { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreateSiteInvoiceDto,
   ) {
-    return await this.invoiceService.create(dto, createdBy, activeRole);
+    const result = await this.invoiceService.create(dto, createdBy, activeRole);
+    this.docs.notify('INVOICE', 'ADDED', result?.id, createdBy);
+    return result;
   }
 
   @Get('dropdown')
@@ -79,7 +85,9 @@ export class SiteInvoiceController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() dto: UpdateSiteInvoiceDto,
   ) {
-    return await this.invoiceService.update(id, dto, updatedBy);
+    const result = await this.invoiceService.update(id, dto, updatedBy);
+    this.docs.notify('INVOICE', 'EDITED', id, updatedBy);
+    return result;
   }
 
   @Delete(':id')
@@ -88,7 +96,10 @@ export class SiteInvoiceController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
   ) {
-    return await this.invoiceService.remove(id, deletedBy);
+    const before = await this.docs.snapshot('INVOICE', id);
+    const result = await this.invoiceService.remove(id, deletedBy);
+    this.docs.notify('INVOICE', 'DELETED', before, deletedBy);
+    return result;
   }
 
   @Post(':id/approve')
@@ -98,7 +109,9 @@ export class SiteInvoiceController {
     @Request() { user: { id: approvedBy } }: { user: { id: string } },
     @Body() dto: ApproveDto,
   ) {
-    return await this.invoiceService.approve(id, dto, approvedBy);
+    const result = await this.invoiceService.approve(id, dto, approvedBy);
+    this.docs.notify('INVOICE', 'APPROVED', id, approvedBy);
+    return result;
   }
 
   @Post(':id/reject')
@@ -108,7 +121,9 @@ export class SiteInvoiceController {
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
     @Body() dto: RejectDto,
   ) {
-    return await this.invoiceService.reject(id, dto, rejectedBy);
+    const result = await this.invoiceService.reject(id, dto, rejectedBy);
+    this.docs.notify('INVOICE', 'REJECTED', id, rejectedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/advance-settlements')
@@ -161,7 +176,9 @@ export class SiteInvoiceController {
     @Request() { user: { id: requestedBy } }: { user: { id: string } },
     @Body() dto: UnlockRequestDto,
   ) {
-    return await this.invoiceService.requestUnlock(id, dto, requestedBy);
+    const result = await this.invoiceService.requestUnlock(id, dto, requestedBy);
+    this.docs.notify('INVOICE', 'UNLOCK_REQUESTED', id, requestedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/unlock-grant')
@@ -170,7 +187,10 @@ export class SiteInvoiceController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: grantedBy } }: { user: { id: string } },
   ) {
-    return await this.invoiceService.grantUnlock(id, grantedBy);
+    const before = await this.docs.snapshot('INVOICE', id);
+    const result = await this.invoiceService.grantUnlock(id, grantedBy);
+    this.docs.notify('INVOICE', 'UNLOCK_GRANTED', before, grantedBy);
+    return result;
   }
 
   @Post(':id/unlock-reject')
@@ -180,6 +200,9 @@ export class SiteInvoiceController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
   ) {
-    return await this.invoiceService.rejectUnlock(id, rejectedBy);
+    const before = await this.docs.snapshot('INVOICE', id);
+    const result = await this.invoiceService.rejectUnlock(id, rejectedBy);
+    this.docs.notify('INVOICE', 'UNLOCK_REJECTED', before, rejectedBy);
+    return result;
   }
 }

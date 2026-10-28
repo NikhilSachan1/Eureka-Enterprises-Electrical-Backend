@@ -16,6 +16,10 @@ import {
   CommunicationCategory,
   CommunicationStatus,
 } from 'src/modules/common/communication-logs/constants/communication-log.constants';
+import { EmailService } from 'src/modules/common/email/email.service';
+import { EMAIL_TEMPLATE } from 'src/modules/common/email/constants/email.constants';
+import { FilesService } from 'src/modules/common/file-upload/files.service';
+import { rupees } from 'src/modules/notifications/notification.events';
 
 @Injectable()
 export class PaymentAdviceService {
@@ -27,6 +31,8 @@ export class PaymentAdviceService {
     private readonly mailerService: MailerService,
     private readonly communicationLogService: CommunicationLogService,
     private readonly dataSource: DataSource,
+    private readonly emailService: EmailService,
+    private readonly filesService: FilesService,
   ) {}
 
   /**
@@ -158,6 +164,104 @@ export class PaymentAdviceService {
    * Send payment advice email (manual action per BRD §4.7).
    * Logs the send to payment_advice_email_logs and communication_logs.
    */
+  /**
+   * Emails the vendor its payment advice, automatically, once a vendor line is paid in a payment
+   * sheet (notification requirements v7: vendor payment → email only). Fire-and-forget: never
+   * throws, the payment already happened.
+   *
+   * The advice row is written in the bank-transfer transaction, but its PDF is generated just after
+   * commit, so this waits briefly for it. The PDF is downloaded and attached as content — an S3 key
+   * is not a path the mail transport can open. Without a PDF (still generating, or failed) the
+   * email still goes, without the attachment.
+   */
+  async emailVendorForBankTransfer(bankTransferId: string, sentBy: string): Promise<void> {
+    try {
+      const repo = this.dataSource.getRepository(PaymentAdviceEntity);
+      let advice: PaymentAdviceEntity | null = null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        advice = await repo.findOne({
+          where: { bankTransferId, deletedAt: IsNull() },
+          relations: ['bankTransfer', 'vendor', 'site'],
+        });
+        if (advice?.pdfKey) break;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      if (!advice) {
+        this.logger.warn(
+          `No payment advice for bank transfer ${bankTransferId} — vendor not emailed`,
+        );
+        return;
+      }
+      const email = advice.vendor?.email?.trim();
+      if (!email) {
+        this.logger.warn(`Vendor of payment advice ${advice.referenceNumber} has no email address`);
+        return;
+      }
+
+      const transfer = advice.bankTransfer;
+      const paidOn = transfer?.transferDate
+        ? new Date(transfer.transferDate).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })
+        : null;
+      const message =
+        `We have made a payment of ${rupees(transfer?.transferAmount)} to you` +
+        (paidOn ? ` on ${paidOn}` : '') +
+        (transfer?.utrNumber ? ` (UTR ${transfer.utrNumber})` : '') +
+        (advice.site?.name ? ` for ${advice.site.name}` : '') +
+        `. Payment advice ${advice.referenceNumber}${advice.pdfKey ? ' is attached' : ''}.`;
+      const subject = `Payment advice ${advice.referenceNumber}`;
+
+      const attachments = [];
+      if (advice.pdfKey) {
+        try {
+          attachments.push({
+            filename: `${advice.referenceNumber.replace(/[^A-Za-z0-9_-]+/g, '-')}.pdf`,
+            content: await this.filesService.getFileContent(advice.pdfKey),
+            contentType: 'application/pdf',
+          });
+        } catch (error) {
+          this.logger.warn(`Payment advice PDF not attached (${advice.pdfKey}): ${error?.message}`);
+        }
+      }
+
+      await this.emailService.sendMail({
+        receiverEmails: email,
+        subject,
+        template: EMAIL_TEMPLATE.NOTIFICATION,
+        category: CommunicationCategory.PAYMENT_ADVICE,
+        emailData: {
+          firstName: advice.vendor.name,
+          employeeName: advice.vendor.name,
+          title: subject,
+          message,
+          link: '',
+          referenceId: advice.id,
+          referenceType: 'payment_advice',
+        },
+        attachments,
+      });
+
+      await this.paymentAdviceRepository.createEmailLog({
+        paymentAdviceId: advice.id,
+        toEmails: [email],
+        ccEmails: null,
+        subject,
+        body: message,
+        attachmentKeys: advice.pdfKey ? [advice.pdfKey] : null,
+        communicationLogId: null,
+        sentAt: new Date(),
+        createdBy: sentBy,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Vendor email for bank transfer ${bankTransferId} failed: ${error?.message ?? error}`,
+      );
+    }
+  }
+
   async sendEmail(id: string, dto: SendPaymentAdviceEmailDto, sentBy: string) {
     const advice = await this.paymentAdviceRepository.findOne({
       where: { id, deletedAt: IsNull() },

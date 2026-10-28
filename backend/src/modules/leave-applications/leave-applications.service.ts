@@ -563,8 +563,7 @@ export class LeaveApplicationsService {
         );
       });
 
-      // Fire-and-forget submission notification
-      this.sendLeaveSubmittedNotification(userId, leaveCategory, fromDate, toDate, numberOfDays);
+      // No notification for applying your own leave (notification requirements v7).
 
       return this.utilityService.getSuccessMessage(
         LEAVE_APPLICATION_FIELD_NAMES.LEAVE_APPLICATION,
@@ -1164,10 +1163,9 @@ export class LeaveApplicationsService {
           timezone,
         );
 
-        // Send approval/rejection/cancellation notification (email + WhatsApp)
-        if (approvalStatus === ApprovalStatus.CANCELLED) {
-          this.sendLeaveCancelledNotification(leaveApplication, approvalBy, approvalComment);
-        } else {
+        // Approval / rejection notification (email + WhatsApp). A cancellation sends nothing
+        // (notification requirements v7).
+        if (approvalStatus !== ApprovalStatus.CANCELLED) {
           this.sendLeaveApprovalNotification(
             leaveApplication,
             approvalBy,
@@ -1697,44 +1695,6 @@ export class LeaveApplicationsService {
     }
   }
 
-  private async sendLeaveSubmittedNotification(
-    userId: string,
-    leaveCategory: string,
-    fromDate: string,
-    toDate: string,
-    numberOfDays: number,
-  ) {
-    try {
-      const employee = await this.userService.findOne({ id: userId });
-      if (!employee) return;
-      void this.notificationService.notify({
-        userIds: [employee.id],
-        createdBy: userId,
-        ...NotificationEvents.leaveSubmitted({
-          leaveType: leaveCategory,
-          from: this.formatDateForEmail(fromDate),
-          to: this.formatDateForEmail(toDate),
-          days: numberOfDays,
-        }),
-      });
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
-      await this.whatsAppService.sendLeaveSubmission(
-        whatsappNumber,
-        {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          leaveType: leaveCategory,
-          fromDate: this.formatDateForEmail(fromDate),
-          toDate: this.formatDateForEmail(toDate),
-          totalDays: String(numberOfDays),
-        },
-        { recipientId: employee.id },
-      );
-    } catch (error) {
-      Logger.error('Failed to send leave submitted WhatsApp notification:', error);
-    }
-  }
-
   private async sendLeaveForceAppliedNotification(
     userId: string,
     appliedById: string,
@@ -1755,6 +1715,7 @@ export class LeaveApplicationsService {
       void this.notificationService.notify({
         userIds: [employee.id],
         createdBy: appliedById,
+        email: true,
         ...NotificationEvents.leaveForceApplied({
           leaveType: leaveCategory,
           from: this.formatDateForEmail(fromDate),
@@ -1779,56 +1740,6 @@ export class LeaveApplicationsService {
       );
     } catch (error) {
       Logger.error('Failed to send force leave applied WhatsApp notification:', error);
-    }
-  }
-
-  private async sendLeaveCancelledNotification(
-    leaveApplication: LeaveApplicationsEntity,
-    cancelledById: string,
-    approvalComment?: string,
-  ) {
-    try {
-      const [cancelledBy, employee] = await Promise.all([
-        this.userService.findOne({ id: cancelledById }),
-        leaveApplication.user
-          ? Promise.resolve(leaveApplication.user)
-          : this.userService.findOne({ id: leaveApplication.userId }),
-      ]);
-      if (!employee) return;
-      const cancelledByName = cancelledBy
-        ? `${cancelledBy.firstName} ${cancelledBy.lastName}`
-        : LEAVE_EMAIL_CONSTANTS.SYSTEM_USER;
-      void this.notificationService.notify({
-        userIds: [employee.id],
-        createdBy: cancelledById,
-        ...NotificationEvents.leaveCancelled({
-          leaveId: leaveApplication.id,
-          leaveType: leaveApplication.leaveCategory,
-          from: this.formatDateForEmail(leaveApplication.fromDate),
-          to: this.formatDateForEmail(leaveApplication.toDate),
-          byName: cancelledByName,
-          remarks: approvalComment,
-        }),
-      });
-      const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-      if (!employee.whatsappOptIn || !whatsappNumber) return;
-      await this.whatsAppService.sendLeaveCancellation(
-        whatsappNumber,
-        {
-          employeeName: `${employee.firstName} ${employee.lastName}`,
-          leaveType: leaveApplication.leaveCategory,
-          fromDate: this.formatDateForEmail(leaveApplication.fromDate),
-          toDate: this.formatDateForEmail(leaveApplication.toDate),
-          cancelledByName,
-          remarks: approvalComment,
-        },
-        {
-          referenceId: leaveApplication.id,
-          recipientId: employee.id,
-        },
-      );
-    } catch (error) {
-      Logger.error('Failed to send leave cancelled WhatsApp notification:', error);
     }
   }
 

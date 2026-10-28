@@ -1,3 +1,4 @@
+import { PaymentAdviceService } from 'src/modules/payment-advices/payment-advice.service';
 import {
   Injectable,
   Logger,
@@ -76,6 +77,7 @@ export class PaymentSheetService {
     private readonly emailService: EmailService,
     private readonly pdfService: PaymentSheetPdfService,
     private readonly notificationService: NotificationService,
+    private readonly paymentAdviceService: PaymentAdviceService,
   ) {}
 
   // ─────────────────────────── config / stage helpers ───────────────────────────
@@ -1748,6 +1750,8 @@ export class PaymentSheetService {
       await this.maybeComplete(id, user, em);
     });
 
+    this.notifyItemPaid(sheet, item, amount, paymentRef, user);
+
     return { message: PAYMENT_SHEET_RESPONSES.ITEM_PAID, paymentRef };
   }
 
@@ -1856,8 +1860,9 @@ export class PaymentSheetService {
       });
       await this.recomputeTotals(id, em);
       const completed = await this.maybeComplete(id, user, em);
-      return { completed };
+      return { completed, item, sheet };
     });
+    this.notifyItemRejected(res.sheet, res.item, dto.reason, user);
     return { message: PAYMENT_SHEET_RESPONSES.ITEM_REJECTED, completed: res.completed };
   }
 
@@ -2160,6 +2165,93 @@ export class PaymentSheetService {
       this.logger.warn(`emailsForRole failed: ${e}`);
       return [];
     }
+  }
+
+  /**
+   * After a line is paid (notification requirements v7, Payment Sheet):
+   *   expense → the employee · vendor → the vendor's payment-advice email ·
+   *   wallet → every active employee. A fuel line needs nothing here: settling it creates the
+   *   fuel credit, which already notifies the employee ("Fuel reimbursed").
+   * Fire-and-forget; the payment has happened.
+   */
+  private notifyItemPaid(
+    sheet: PaymentSheetEntity,
+    item: PaymentSheetItemEntity,
+    amount: number,
+    paymentRef: string,
+    user: ActingUser,
+  ) {
+    setImmediate(async () => {
+      try {
+        if (item.sourceType === PaymentSourceType.EXPENSE && item.userId) {
+          await this.notificationService.notify({
+            userIds: [item.userId].filter((u) => u !== user.id),
+            createdBy: user.id,
+            email: true,
+            ...NotificationEvents.expensePaid({
+              amount,
+              sheetNumber: sheet.sheetNumber,
+              sheetId: sheet.id,
+            }),
+          });
+        } else if (item.sourceType === PaymentSourceType.PETRO_CARD_WALLET) {
+          const rows: Array<{ id: string }> = await this.repo.raw(
+            `SELECT "id" FROM users WHERE "deletedAt" IS NULL AND "status" = 'ACTIVE' AND "id" <> $1`,
+            [user.id],
+          );
+          await this.notificationService.notify({
+            userIds: rows.map((r) => r.id),
+            createdBy: user.id,
+            email: true,
+            ...NotificationEvents.walletRecharged({ amount, sheetId: sheet.id }),
+          });
+        } else if (item.sourceType === PaymentSourceType.VENDOR_PAYMENT) {
+          // paymentRef is the comma-joined bank-transfer ids, one per allocation.
+          for (const bankTransferId of paymentRef.split(',').filter(Boolean)) {
+            await this.paymentAdviceService.emailVendorForBankTransfer(bankTransferId, user.id);
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`notifyItemPaid failed: ${e}`);
+      }
+    });
+  }
+
+  /** A rejected expense / fuel line tells the employee, with the reason. Wallet and vendor: none. */
+  private notifyItemRejected(
+    sheet: PaymentSheetEntity,
+    item: PaymentSheetItemEntity,
+    reason: string,
+    user: ActingUser,
+  ) {
+    const fuel = item.sourceType === PaymentSourceType.FUEL_EXPENSE;
+    if (!item.userId || (!fuel && item.sourceType !== PaymentSourceType.EXPENSE)) return;
+    setImmediate(async () => {
+      try {
+        const rows = await this.repo.raw(
+          `SELECT "firstName", "lastName" FROM users WHERE "id" = $1`,
+          [user.id],
+        );
+        const byName = rows?.[0]
+          ? `${rows[0].firstName} ${rows[0].lastName ?? ''}`.trim()
+          : 'System';
+        await this.notificationService.notify({
+          userIds: [item.userId].filter((u) => u !== user.id),
+          createdBy: user.id,
+          email: true,
+          ...NotificationEvents.paymentLineRejected({
+            fuel,
+            amount: item.currentAmount,
+            byName,
+            reason,
+            sheetNumber: sheet.sheetNumber,
+            sheetId: sheet.id,
+          }),
+        });
+      } catch (e) {
+        this.logger.warn(`notifyItemRejected failed: ${e}`);
+      }
+    });
   }
 
   private notifyStage(sheetId: string, nextRole: string, action: StageAction) {

@@ -173,7 +173,7 @@ export class FuelExpenseService {
       await this.validateFillDate(fillDate, timezone);
       await this.validatePaymentMode(paymentMode);
 
-      const vehicle = await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
+      await this.vehicleMastersService.findOneOrFail({ where: { id: vehicleId } });
 
       await this.validateVehicleAssignment(vehicleId, userId);
 
@@ -192,7 +192,7 @@ export class FuelExpenseService {
         throw new BadRequestException(FUEL_EXPENSE_ERRORS.CARD_REQUIRED_FOR_PAYMENT_MODE);
       }
 
-      const employee = await this.userService.findOneOrFail({ where: { id: userId } });
+      await this.userService.findOneOrFail({ where: { id: userId } });
 
       await this.validateOdometerReading(vehicleId, odometerKm, fillDate);
 
@@ -231,34 +231,7 @@ export class FuelExpenseService {
         return { message: FUEL_EXPENSE_SUCCESS_MESSAGES.FUEL_EXPENSE_CREATED, id: fuelExpense.id };
       });
 
-      // Bell + push — independent of WhatsApp opt-in, so everyone gets it.
-      void this.notificationService.notify({
-        userIds: [employee.id],
-        createdBy,
-        ...NotificationEvents.fuelSubmitted({
-          fuelExpenseId: result.id,
-          amount: createFuelExpenseDto.fuelAmount,
-          vehicleNo: vehicle.registrationNo,
-        }),
-      });
-
-      // Send WhatsApp notification to employee (non-blocking)
-      try {
-        const whatsappNumber = employee.whatsappNumber || employee.contactNumber;
-        if (employee.whatsappOptIn && whatsappNumber) {
-          await this.whatsAppService.sendFuelExpenseSubmitted(
-            whatsappNumber,
-            {
-              employeeName: `${employee.firstName} ${employee.lastName}`,
-              amount: `₹${Number(createFuelExpenseDto.fuelAmount).toLocaleString('en-IN')}`,
-              vehicleNumber: vehicle.registrationNo,
-            },
-            { referenceId: result.id, recipientId: employee.id },
-          );
-        }
-      } catch (err) {
-        Logger.error('Failed to send fuel expense submitted WhatsApp notification:', err);
-      }
+      // No notification for adding your own fuel expense (notification requirements v7).
 
       return { message: result.message };
     } catch (error) {
@@ -391,6 +364,7 @@ export class FuelExpenseService {
       void this.notificationService.notify({
         userIds: [employee.id],
         createdBy,
+        email: true,
         ...NotificationEvents.fuelForceCreated({
           fuelExpenseId: result.id,
           amount: createFuelExpenseDto.fuelAmount,
@@ -495,10 +469,11 @@ export class FuelExpenseService {
         };
       });
 
-      // Bell + push — independent of WhatsApp opt-in.
+      // Bell + push + email — independent of WhatsApp opt-in.
       void this.notificationService.notify({
         userIds: [employee.id],
         createdBy,
+        email: true,
         ...NotificationEvents.fuelReimbursed({
           fuelExpenseId: result.id,
           amount: createCreditFuelExpenseDto.fuelAmount,

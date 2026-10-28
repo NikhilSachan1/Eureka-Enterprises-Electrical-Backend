@@ -1,3 +1,4 @@
+import { UserEntity } from 'src/modules/users/entities/user.entity';
 import {
   Injectable,
   NotFoundException,
@@ -235,7 +236,8 @@ export class SiteAllocationService {
       where.isCurrentlyAllocated = isCurrentlyAllocated;
     }
 
-    const relations: string[] = [];
+    // Who allocated it and who last changed it (a deallocation is a change) — always included.
+    const relations: string[] = ['createdByUser', 'updatedByUser'];
     if (includeSite) relations.push('site');
     if (includeUser) relations.push('user');
 
@@ -249,7 +251,30 @@ export class SiteAllocationService {
 
     const totalRecords = await this.siteAllocationRepository.count({ where });
 
-    return this.utilityService.listResponse(records, totalRecords);
+    return this.utilityService.listResponse(
+      records.map((record) => ({
+        ...record,
+        createdByUser: SiteAllocationService.actor(record.createdByUser),
+        updatedByUser: SiteAllocationService.actor(record.updatedByUser),
+      })),
+      totalRecords,
+    );
+  }
+
+  /**
+   * The person behind an action, reduced to what a list needs. A joined user row carries the
+   * password hash, bank and ID numbers — never return it whole.
+   */
+  private static actor(user?: UserEntity | null) {
+    return user
+      ? {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          employeeId: user.employeeId,
+        }
+      : null;
   }
 
   async findOne(options: FindOneOptions<SiteAllocationEntity>) {

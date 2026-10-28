@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { PurchaseOrderService } from './purchase-order.service';
+import { DocumentNotifierService } from 'src/modules/notifications/document-notifier.service';
 import {
   CreatePurchaseOrderDto,
   UpdatePurchaseOrderDto,
@@ -27,7 +28,10 @@ import {
 @ApiBearerAuth('JWT-auth')
 @Controller('purchase-orders')
 export class PurchaseOrderController {
-  constructor(private readonly poService: PurchaseOrderService) {}
+  constructor(
+    private readonly poService: PurchaseOrderService,
+    private readonly docs: DocumentNotifierService,
+  ) {}
 
   @Post()
   @RequiredPermission('financials.purchase-orders.create')
@@ -37,7 +41,9 @@ export class PurchaseOrderController {
     { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() dto: CreatePurchaseOrderDto,
   ) {
-    return await this.poService.create(dto, createdBy, activeRole);
+    const result = await this.poService.create(dto, createdBy, activeRole);
+    this.docs.notify('PO', 'ADDED', result?.id, createdBy);
+    return result;
   }
 
   @Get('dropdown')
@@ -125,7 +131,9 @@ export class PurchaseOrderController {
     @Request() { user: { id: updatedBy } }: { user: { id: string } },
     @Body() dto: UpdatePurchaseOrderDto,
   ) {
-    return await this.poService.update(id, dto, updatedBy);
+    const result = await this.poService.update(id, dto, updatedBy);
+    this.docs.notify('PO', 'EDITED', id, updatedBy);
+    return result;
   }
 
   @Delete(':id')
@@ -135,7 +143,10 @@ export class PurchaseOrderController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: deletedBy } }: { user: { id: string } },
   ) {
-    return await this.poService.remove(id, deletedBy);
+    const before = await this.docs.snapshot('PO', id);
+    const result = await this.poService.remove(id, deletedBy);
+    this.docs.notify('PO', 'DELETED', before, deletedBy);
+    return result;
   }
 
   @Post(':id/approve')
@@ -146,7 +157,9 @@ export class PurchaseOrderController {
     @Request() { user: { id: approvedBy } }: { user: { id: string } },
     @Body() dto: ApproveDto,
   ) {
-    return await this.poService.approve(id, dto, approvedBy);
+    const result = await this.poService.approve(id, dto, approvedBy);
+    this.docs.notify('PO', 'APPROVED', id, approvedBy);
+    return result;
   }
 
   @Post(':id/reject')
@@ -157,7 +170,9 @@ export class PurchaseOrderController {
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
     @Body() dto: RejectDto,
   ) {
-    return await this.poService.reject(id, dto, rejectedBy);
+    const result = await this.poService.reject(id, dto, rejectedBy);
+    this.docs.notify('PO', 'REJECTED', id, rejectedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/unlock-request')
@@ -168,7 +183,9 @@ export class PurchaseOrderController {
     @Request() { user: { id: requestedBy } }: { user: { id: string } },
     @Body() dto: UnlockRequestDto,
   ) {
-    return await this.poService.requestUnlock(id, dto, requestedBy);
+    const result = await this.poService.requestUnlock(id, dto, requestedBy);
+    this.docs.notify('PO', 'UNLOCK_REQUESTED', id, requestedBy, dto.reason);
+    return result;
   }
 
   @Post(':id/unlock-grant')
@@ -178,7 +195,10 @@ export class PurchaseOrderController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: grantedBy } }: { user: { id: string } },
   ) {
-    return await this.poService.grantUnlock(id, grantedBy);
+    const before = await this.docs.snapshot('PO', id);
+    const result = await this.poService.grantUnlock(id, grantedBy);
+    this.docs.notify('PO', 'UNLOCK_GRANTED', before, grantedBy);
+    return result;
   }
 
   @Post(':id/unlock-reject')
@@ -188,6 +208,9 @@ export class PurchaseOrderController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
   ) {
-    return await this.poService.rejectUnlock(id, rejectedBy);
+    const before = await this.docs.snapshot('PO', id);
+    const result = await this.poService.rejectUnlock(id, rejectedBy);
+    this.docs.notify('PO', 'UNLOCK_REJECTED', before, rejectedBy);
+    return result;
   }
 }
