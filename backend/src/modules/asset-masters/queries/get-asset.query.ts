@@ -94,7 +94,10 @@ export const getAssetStatsQuery = () => {
       COUNT(DISTINCT CASE WHEN av."status" = '${
         AssetStatus.RETIRED
       }' THEN am."id" END) as "retired",
-      
+      COUNT(DISTINCT CASE WHEN av."status" = '${
+        AssetStatus.LOST
+      }' THEN am."id" END) as "lost",
+
       -- Asset type breakdown
       COUNT(DISTINCT CASE WHEN av."assetType" = '${
         AssetType.CALIBRATED

@@ -15,6 +15,9 @@ class StatusStatsDto {
 
   @ApiProperty({ example: 2 })
   retired: number;
+
+  @ApiProperty({ example: 1 })
+  lost: number;
 }
 
 class AssetTypeStatsDto {
