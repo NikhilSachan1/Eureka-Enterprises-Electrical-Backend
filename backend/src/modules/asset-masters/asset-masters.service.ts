@@ -1138,8 +1138,8 @@ export class AssetMastersService {
     previousAssigneeId: string | null;
     actorUserId: string;
     reason: string;
-    lastSeenDate: string;
-    lastSeenLocation: string;
+    lastSeenDate?: string;
+    lastSeenLocation?: string;
     recoveryAmount: string;
   }): Promise<void> {
     if (!input.previousAssigneeId) return;

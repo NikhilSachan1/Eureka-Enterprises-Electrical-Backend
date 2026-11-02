@@ -46,13 +46,14 @@ export const ASSET_EXPENSE_REFERENCE_TYPES = {
 export const buildLossRecoveryDescription = (params: {
   assetName: string;
   serialNumber?: string | null;
-  lastSeenDate: string;
+  lastSeenDate?: string;
   eventId: string;
   employeeArchived: boolean;
 }): string => {
   const sn = params.serialNumber ? ` (SN: ${params.serialNumber})` : '';
+  const lastSeen = params.lastSeenDate ? ` — Last seen: ${params.lastSeenDate}` : '';
   const archived = params.employeeArchived ? ' (employee archived)' : '';
-  return `Asset loss recovery: ${params.assetName}${sn} — Last seen: ${params.lastSeenDate} — Event: ${params.eventId}${archived}`;
+  return `Asset loss recovery: ${params.assetName}${sn}${lastSeen} — Event: ${params.eventId}${archived}`;
 };
 
 export const buildRefundDescription = (params: {

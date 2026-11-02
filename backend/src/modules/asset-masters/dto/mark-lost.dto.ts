@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsNotEmpty,
@@ -21,19 +22,23 @@ export class MarkLostDto {
   @ApiProperty({
     description: 'Date when the asset was last seen (YYYY-MM-DD)',
     example: '2026-04-25',
+    required: false,
   })
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  @IsOptional()
   @IsDateString()
-  @IsNotEmpty()
-  lastSeenDate: string;
+  lastSeenDate?: string;
 
   @ApiProperty({
     description: 'Location where the asset was last seen',
     example: 'Mumbai Site - Warehouse',
+    required: false,
   })
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(500)
-  lastSeenLocation: string;
+  lastSeenLocation?: string;
 
   @ApiProperty({
     description:

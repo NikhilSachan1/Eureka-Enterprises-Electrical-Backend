@@ -38,7 +38,13 @@
             <tr><td>Asset</td><td>{{assetName}}{{#if serialNumber}} (SN: {{serialNumber}}){{/if}}</td></tr>
             <tr><td>Asset ID</td><td>{{assetId}}</td></tr>
             <tr><td>Reason</td><td>{{reason}}</td></tr>
-            <tr><td>Last seen</td><td>{{lastSeenDate}} at {{lastSeenLocation}}</td></tr>
+            {{#if lastSeenDate}}
+              <tr><td>Last seen</td><td>{{lastSeenDate}}{{#if lastSeenLocation}} at {{lastSeenLocation}}{{/if}}</td></tr>
+            {{else}}
+              {{#if lastSeenLocation}}
+                <tr><td>Last seen</td><td>{{lastSeenLocation}}</td></tr>
+              {{/if}}
+            {{/if}}
             <tr><td>Marked by</td><td>{{actorName}}</td></tr>
             <tr><td>Marked on</td><td>{{markedOn}}</td></tr>
           </table>
