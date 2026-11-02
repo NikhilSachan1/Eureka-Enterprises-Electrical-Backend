@@ -1,4 +1,5 @@
 import { AssetQueryDto } from '../dto/asset-query.dto';
+import { getUserJsonBuildObject } from 'src/utils/utility/utility.service';
 import {
   ASSET_SORT_FIELD_MAPPING,
   AssetEventTypes,
@@ -422,7 +423,19 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         'metadata', ale."metadata",
         'createdAt', ale."createdAt",
         'createdBy', ale."createdBy"${latestEventFilesJson}
-      ) ELSE NULL END as "latestEvent"
+      ) ELSE NULL END as "latestEvent",
+      -- The LOST event behind the current status, in the same shape the event history returns.
+      -- Only while the asset IS lost: the lateral below joins nothing for any other status.
+      CASE WHEN lost."id" IS NOT NULL
+      THEN json_build_object(
+        'id', lost."id",
+        'eventType', lost."eventType",
+        'metadata', lost."metadata",
+        'createdAt', lost."createdAt",
+        'createdByUser', lost."createdByUser",
+        'fromUserDetails', lost."fromUserDetails",
+        'assetFiles', lost."assetFiles"
+      ) ELSE NULL END as "lostDetails"
     FROM "asset_masters" am
     INNER JOIN LATERAL (
       SELECT *
@@ -466,6 +479,42 @@ export const getAssetQuery = (query: AssetQueryDto) => {
       ORDER BY ae."createdAt" DESC, ae."id" DESC
       LIMIT 1
     ) ale ON true
+    LEFT JOIN LATERAL (
+      SELECT
+        ae."id",
+        ae."eventType",
+        ae."metadata",
+        ae."createdAt",
+        CASE WHEN cb."id" IS NOT NULL THEN ${getUserJsonBuildObject(
+          'cb',
+        )} ELSE NULL END AS "createdByUser",
+        CASE WHEN fu."id" IS NOT NULL THEN ${getUserJsonBuildObject(
+          'fu',
+        )} ELSE NULL END AS "fromUserDetails",
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', af."id",
+                'fileKey', af."fileKey",
+                'fileType', af."fileType",
+                'label', af."label"
+              )
+            )
+            FROM "assets_files" af
+            WHERE af."assetEventsId" = ae."id" AND af."deletedAt" IS NULL
+          ),
+          '[]'::json
+        ) AS "assetFiles"
+      FROM "assets_events" ae
+      LEFT JOIN "users" cb ON ae."createdBy" = cb."id"
+      LEFT JOIN "users" fu ON ae."fromUser" = fu."id"
+      WHERE ae."assetMasterId" = am."id"
+        AND ae."deletedAt" IS NULL
+        AND ae."eventType" = '${AssetEventTypes.LOST}'
+      ORDER BY ae."createdAt" DESC, ae."id" DESC
+      LIMIT 1
+    ) lost ON av."status" = '${AssetStatus.LOST}'
     ${whereClause}
     ORDER BY ${orderByColumn} ${sortOrder}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
