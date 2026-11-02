@@ -143,6 +143,7 @@ export const HANDOVER_EVENT_TYPES: AssetEventTypes[] = [
   AssetEventTypes.HANDOVER_REJECTED,
   AssetEventTypes.HANDOVER_CANCELLED,
   AssetEventTypes.DEALLOCATED,
+  AssetEventTypes.LOST,
 ];
 
 /** Status of `latestEvent`, used by the `handoverStatus` list filter and the handover stats. */
