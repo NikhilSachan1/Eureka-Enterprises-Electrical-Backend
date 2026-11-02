@@ -428,6 +428,7 @@ export class AssetMastersService {
           underMaintenance: Number(stats.underMaintenance || 0),
           damaged: Number(stats.damaged || 0),
           retired: Number(stats.retired || 0),
+          lost: Number(stats.lost || 0),
         },
         byAssetType: {
           calibrated: Number(stats.calibrated || 0),
@@ -1138,8 +1139,8 @@ export class AssetMastersService {
     previousAssigneeId: string | null;
     actorUserId: string;
     reason: string;
-    lastSeenDate: string;
-    lastSeenLocation: string;
+    lastSeenDate?: string;
+    lastSeenLocation?: string;
     recoveryAmount: string;
   }): Promise<void> {
     if (!input.previousAssigneeId) return;

@@ -418,14 +418,16 @@ export const WHATSAPP_TEMPLATES = {
       assetName: string;
       actorName: string;
       reason: string;
-      lastSeenDate: string;
+      lastSeenDate?: string;
       recoveryAmount?: string;
     }) =>
       `🚨 *Asset Marked as Lost*\n\nHi *${data.employeeName}*,\n\nThe asset *${
         data.assetName
       }* (ID: ${data.assetId}) previously assigned to you has been marked as lost by *${
         data.actorName
-      }*.\n\n📝 *Reason:* ${data.reason}\n📅 *Last seen:* ${data.lastSeenDate}${
+      }*.\n\n📝 *Reason:* ${data.reason}${
+        data.lastSeenDate ? `\n📅 *Last seen:* ${data.lastSeenDate}` : ''
+      }${
         data.recoveryAmount && Number(data.recoveryAmount) > 0
           ? `\n\n💰 *Recovery:* ₹${data.recoveryAmount} has been added to your account as a debit. Please contact HR if you have any concerns.`
           : ''

@@ -10,7 +10,6 @@ import {
   Query,
   Get,
   Res,
-  ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AssetMastersService } from './asset-masters.service';
@@ -39,7 +38,6 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import { AssetActionDto } from './dto/asset-action.dto';
 import { GenerateAssetReportDto } from './dto/generate-asset-report.dto';
-import { Roles } from '../roles/constants/role.constants';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Asset Management')
@@ -127,10 +125,9 @@ export class AssetMastersController {
   @ApiOperation({
     summary: 'List currently lost assets',
     description:
-      'Admin-only. Returns all assets with status = LOST, joined with previous assignee, marked-by user, and recovery expense.',
+      'Returns all assets with status = LOST, joined with previous assignee, marked-by user, and recovery expense.',
   })
-  async findLost(@Request() req: any) {
-    this.assertAdminAccess(req);
+  async findLost() {
     return await this.assetMastersService.findLost();
   }
 
@@ -233,8 +230,9 @@ export class AssetMastersController {
   @ApiOperation({
     summary: 'Mark asset as LOST',
     description:
-      'Admin/HR only. Updates asset status to LOST, creates an event with metadata + files, ' +
-      'and (if recoveryAmount > 0 and asset was assigned) creates a debit expense on the previous assignee.',
+      'Updates asset status to LOST, creates an event with metadata + files, ' +
+      'and (if recoveryAmount > 0 and asset was assigned) charges the previous assignee through a ' +
+      'CREDIT entry on their expense ledger.',
   })
   async markLost(
     @Request() req: any,
@@ -243,7 +241,6 @@ export class AssetMastersController {
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.ASSET_FILES)
     { assetFiles }: { assetFiles: string[] } = { assetFiles: [] },
   ) {
-    this.assertAdminAccess(req);
     const actorUserId = req?.user?.id;
     return await this.assetMastersService.markLost(assetMasterId, dto, assetFiles, actorUserId);
   }
@@ -255,8 +252,8 @@ export class AssetMastersController {
   @ApiOperation({
     summary: 'Mark previously LOST asset as RECOVERED',
     description:
-      'Admin/HR only. Updates asset status to AVAILABLE, creates a RECOVERED event. ' +
-      'If refundRecoveryAmount=true, automatically creates a credit expense reversing the original debit.',
+      'Updates asset status to AVAILABLE, creates a RECOVERED event. ' +
+      'If refundRecoveryAmount=true, automatically creates a DEBIT entry reversing the original recovery charge.',
   })
   async markRecovered(
     @Request() req: any,
@@ -265,7 +262,6 @@ export class AssetMastersController {
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.ASSET_FILES)
     { assetFiles }: { assetFiles: string[] } = { assetFiles: [] },
   ) {
-    this.assertAdminAccess(req);
     const actorUserId = req?.user?.id;
     return await this.assetMastersService.markRecovered(
       assetMasterId,
@@ -273,17 +269,5 @@ export class AssetMastersController {
       assetFiles,
       actorUserId,
     );
-  }
-
-  // ==================== Helpers ====================
-
-  private assertAdminAccess(req: any): void {
-    const role = req?.user?.activeRole || req?.user?.roles?.[0];
-    const allowed: string[] = [Roles.SUPER_ADMIN, Roles.ADMIN, Roles.HR];
-    if (!allowed.includes(role)) {
-      throw new ForbiddenException(
-        'Access denied. Only Super Admin, Admin, or HR can perform this action.',
-      );
-    }
   }
 }

@@ -981,7 +981,7 @@ export class WhatsAppService {
       assetName: string;
       actorName: string;
       reason: string;
-      lastSeenDate: string;
+      lastSeenDate?: string;
       recoveryAmount?: string;
     },
     options?: { referenceId?: string; recipientId?: string },
