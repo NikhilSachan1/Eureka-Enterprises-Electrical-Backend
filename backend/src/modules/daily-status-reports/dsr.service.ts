@@ -5,7 +5,15 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { IsNull, Between, MoreThanOrEqual, LessThanOrEqual, FindOneOptions, In } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  FindOneOptions,
+  In,
+} from 'typeorm';
 import { DsrRepository } from './dsr.repository';
 import { DailyStatusReportEntity, DsrFileEntity, DsrEditHistoryEntity } from './entities';
 import { CreateDsrDto, ForceCreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
@@ -34,6 +42,7 @@ import {
 import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
 import { Roles } from '../roles/constants/role.constants';
+import { resolveReadableSiteFilter } from '../common/financials/site-access.helper';
 
 @Injectable()
 export class DsrService {
@@ -45,6 +54,7 @@ export class DsrService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createDto: CreateDsrDto, userId: string, fileKeys: string[] = []) {
@@ -261,7 +271,7 @@ export class DsrService {
     );
   }
 
-  async findAll(options: GetDsrDto) {
+  async findAll(options: GetDsrDto, requesterId: string, activeRole?: string) {
     const {
       siteId,
       userId,
@@ -284,7 +294,14 @@ export class DsrService {
       isActive: true,
     };
 
-    if (siteId) where.siteId = siteId;
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      requesterId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return this.utilityService.listResponse([], 0);
+    if (siteIds) where.siteId = In(siteIds);
     if (userId && userId.length > 0) {
       where.userId = userId.length === 1 ? userId[0] : In(userId);
     }
@@ -639,14 +656,24 @@ export class DsrService {
   }
 
   // Get DSRs by site
-  async getDsrsBySite(siteId: string, options?: Partial<GetDsrDto>) {
+  async getDsrsBySite(
+    siteId: string,
+    requesterId: string,
+    activeRole?: string,
+    options?: Partial<GetDsrDto>,
+  ) {
     await this.siteService.findOneOrFail({ where: { id: siteId, deletedAt: IsNull() } });
-    return this.findAll({ ...options, siteId } as GetDsrDto);
+    return this.findAll({ ...options, siteId } as GetDsrDto, requesterId, activeRole);
   }
 
   // Get DSRs by user
-  async getDsrsByUser(userId: string, options?: Partial<GetDsrDto>) {
-    return this.findAll({ ...options, userId: [userId] } as GetDsrDto);
+  async getDsrsByUser(
+    userId: string,
+    requesterId: string,
+    activeRole?: string,
+    options?: Partial<GetDsrDto>,
+  ) {
+    return this.findAll({ ...options, userId: [userId] } as GetDsrDto, requesterId, activeRole);
   }
 
   // Get edit history for a DSR

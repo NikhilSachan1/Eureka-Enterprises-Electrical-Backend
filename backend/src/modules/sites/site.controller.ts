@@ -60,8 +60,11 @@ export class SiteController {
       'Returns site details, linked contractors, linked vendors, and full employee allocation/deallocation history. ' +
       'Filterable by site name/ID, company, contractor, vendor, and employee name. No siteId required — use filters.',
   })
-  async getSiteActivity(@Query() query: GetSiteActivityDto) {
-    return await this.siteService.getSiteActivity(query);
+  async getSiteActivity(
+    @Query() query: GetSiteActivityDto,
+    @Request() req: { user: { id: string; activeRole: string } },
+  ) {
+    return await this.siteService.getSiteActivity(query, req.user.id, req.user.activeRole);
   }
 
   @Get(':id')

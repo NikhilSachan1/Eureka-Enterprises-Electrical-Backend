@@ -84,8 +84,11 @@ export class JmcController {
   @Get()
   @RequiredPermission('financials.jmcs.view-list')
   @ApiOperation({ summary: 'List JMCs' })
-  async findAll(@Query() query: GetJmcDto) {
-    return await this.jmcService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetJmcDto,
+  ) {
+    return await this.jmcService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

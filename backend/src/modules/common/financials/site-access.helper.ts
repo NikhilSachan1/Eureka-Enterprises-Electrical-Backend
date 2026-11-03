@@ -120,3 +120,19 @@ export async function getReadableSiteIds(
   );
   return rows.map((r) => r.siteId);
 }
+
+/**
+ * Site filter for a list endpoint: `getReadableSiteIds` intersected with any siteIds the caller
+ * asked for. Returns `null` when no site filter applies; `[]` means the list must be empty.
+ */
+export async function resolveReadableSiteFilter(
+  db: DataSource | EntityManager,
+  userId: string,
+  activeRole?: string,
+  requestedSiteIds?: string[],
+): Promise<string[] | null> {
+  const requested = requestedSiteIds?.length ? requestedSiteIds : null;
+  const readable = await getReadableSiteIds(db, userId, activeRole);
+  if (readable === null) return requested;
+  return requested ? requested.filter((id) => readable.includes(id)) : readable;
+}

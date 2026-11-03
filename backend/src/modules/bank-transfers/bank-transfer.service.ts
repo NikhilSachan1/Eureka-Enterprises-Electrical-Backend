@@ -21,6 +21,7 @@ import { BankTransferEntity } from './entities/bank-transfer.entity';
 import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
 import { BANK_TRANSFER_ERRORS, BANK_TRANSFER_RESPONSES } from './constants/bank-transfer.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
@@ -339,7 +340,7 @@ export class BankTransferService {
     });
   }
 
-  async findAll(query: GetBankTransferDto) {
+  async findAll(query: GetBankTransferDto, userId: string, activeRole?: string) {
     const {
       companyId,
       siteId,
@@ -365,7 +366,9 @@ export class BankTransferService {
 
     const where: any = { deletedAt: IsNull() };
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (partyType) where.partyType = partyType;
     if (invoiceId) where.invoiceId = invoiceId;
     if (bookPaymentId) where.bookPaymentId = bookPaymentId;

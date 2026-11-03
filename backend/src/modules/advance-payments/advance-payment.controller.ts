@@ -49,8 +49,11 @@ export class AdvancePaymentController {
   @Get()
   @RequiredPermission('financials.advance-payments.view-list')
   @ApiOperation({ summary: 'List advance payments' })
-  async findAll(@Query() query: GetAdvancePaymentDto) {
-    return await this.advanceService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetAdvancePaymentDto,
+  ) {
+    return await this.advanceService.findAll(query, userId, activeRole);
   }
 
   // Declared before `:id` — otherwise "dropdown" is read as an id and rejected by ParseUUIDPipe.
