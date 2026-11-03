@@ -45,20 +45,25 @@ export const getAllocatedEmployeesBySitesQuery = (siteIds: string[]) => {
 };
 
 /**
- * Get overall site statistics (status-wise counts)
+ * Get overall site statistics (status-wise counts).
+ * Pass siteIds to count only those sites; omit it to count every site.
  */
-export const getOverallSiteStatsQuery = `
-  SELECT
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL) as "totalSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'upcoming') as "upcomingSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'ongoing') as "ongoingSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'hold') as "holdSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'work_completed') as "workCompletedSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'completed') as "completedSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = true) as "activeSites",
-    COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = false) as "inactiveSites"
-  FROM sites
-`;
+export const getOverallSiteStatsQuery = (siteIds?: string[]) => ({
+  query: `
+    SELECT
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL) as "totalSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'upcoming') as "upcomingSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'ongoing') as "ongoingSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'hold') as "holdSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'work_completed') as "workCompletedSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND status = 'completed') as "completedSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = true) as "activeSites",
+      COUNT(*) FILTER (WHERE "deletedAt" IS NULL AND "isActive" = false) as "inactiveSites"
+    FROM sites
+    ${siteIds ? 'WHERE id = ANY($1::uuid[])' : ''}
+  `,
+  params: siteIds ? [siteIds] : [],
+});
 
 /**
  * Get health scores for multiple sites in a single query

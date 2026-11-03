@@ -203,17 +203,22 @@ export class SiteService {
     // For EMPLOYEE role — restrict to sites they were ever allocated to
     const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'OPERATION_MANAGER', 'HR'];
     const isEmployee = activeRole && !ADMIN_ROLES.includes(activeRole.toUpperCase());
+    // Stats follow the same restriction as the list; undefined means every site.
+    let visibleSiteIds: string[] | undefined;
     if (isEmployee && requestUserId) {
       const allocatedSiteRows = await this.dataSource.query(
         `SELECT DISTINCT "siteId" FROM site_allocations WHERE "userId" = $1 AND "deletedAt" IS NULL`,
         [requestUserId],
       );
-      const allocatedSiteIds = allocatedSiteRows.map((r: any) => r.siteId);
-      if (allocatedSiteIds.length === 0) {
+      visibleSiteIds = allocatedSiteRows.map((r: any) => r.siteId);
+      if (visibleSiteIds.length === 0) {
         // Employee has no allocations — return empty
-        return this.utilityService.listResponse([], 0);
+        return {
+          ...this.utilityService.listResponse([], 0),
+          stats: await this.getOverallSiteStats(visibleSiteIds),
+        };
       }
-      where.id = In(allocatedSiteIds);
+      where.id = In(visibleSiteIds);
     }
 
     const relations: string[] = ['company'];
@@ -380,7 +385,7 @@ export class SiteService {
     });
 
     // Get overall site stats
-    const overallStats = await this.getOverallSiteStats();
+    const overallStats = await this.getOverallSiteStats(visibleSiteIds);
 
     return {
       records: transformedRecords,
@@ -392,8 +397,9 @@ export class SiteService {
   /**
    * Get overall site statistics (aggregate counts by status)
    */
-  private async getOverallSiteStats(): Promise<OverallSiteStats> {
-    const result = await this.dataSource.query(getOverallSiteStatsQuery);
+  private async getOverallSiteStats(siteIds?: string[]): Promise<OverallSiteStats> {
+    const { query, params } = getOverallSiteStatsQuery(siteIds);
+    const result = await this.dataSource.query(query, params);
     const row = result[0] || {};
 
     return {
