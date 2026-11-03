@@ -28,7 +28,10 @@ import {
   PartyType,
   FinancialApprovalStatus,
 } from 'src/modules/common/financials/financial.constants';
-import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
+import {
+  checkSiteCreateAccess,
+  resolveReadableSiteFilter,
+} from 'src/modules/common/financials/site-access.helper';
 import { formatInr } from 'src/modules/common/financials/amount-format.helper';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
@@ -544,7 +547,7 @@ export class AdvancePaymentService {
     };
   }
 
-  async findAll(query: GetAdvancePaymentDto) {
+  async findAll(query: GetAdvancePaymentDto, userId: string, activeRole?: string) {
     const {
       siteId,
       vendorId,
@@ -562,7 +565,9 @@ export class AdvancePaymentService {
     } = query;
 
     const where: Record<string, unknown> = { deletedAt: IsNull() };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (vendorId?.length) where.vendorId = In(vendorId);
     if (poId) where.poId = poId;
     // Its own filter rather than part of `search`: the PO number is the one thing a user searches

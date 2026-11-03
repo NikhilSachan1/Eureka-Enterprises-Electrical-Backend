@@ -44,8 +44,11 @@ export class SiteAllocationController {
     description:
       'Retrieves a list of all site allocations with optional filtering, pagination, and sorting based on query parameters.',
   })
-  async findAll(@Query() query: GetSiteAllocationDto) {
-    return this.siteAllocationService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetSiteAllocationDto,
+  ) {
+    return this.siteAllocationService.findAll(query, userId, activeRole);
   }
 
   @Get('employees')

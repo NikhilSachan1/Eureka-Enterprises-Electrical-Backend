@@ -64,8 +64,11 @@ export class SiteReportController {
 
   @Get()
   @RequiredPermission('financials.site-reports.view-list')
-  async findAll(@Query() query: GetSiteReportDto) {
-    return await this.reportService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetSiteReportDto,
+  ) {
+    return await this.reportService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

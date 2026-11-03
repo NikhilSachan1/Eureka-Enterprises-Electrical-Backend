@@ -21,6 +21,7 @@ import {
 import { buildVendorListQuery } from './queries/book-payment.queries';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentSourceType } from './constants/book-payment.constants';
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
@@ -338,7 +339,7 @@ export class BookPaymentService {
     }
   }
 
-  async findAll(query: GetBookPaymentDto) {
+  async findAll(query: GetBookPaymentDto, userId: string, activeRole?: string) {
     const {
       invoiceId,
       companyId,
@@ -359,7 +360,9 @@ export class BookPaymentService {
     const where: any = { deletedAt: IsNull() };
     if (invoiceId) where.invoiceId = invoiceId;
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (vendorId?.length) where.vendorId = In(vendorId);
     if (poId) where.poId = poId;
     if (dateFrom && dateTo) where.bookingDate = Between(dateFrom, dateTo);

@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, ILike, FindOneOptions } from 'typeorm';
+import { DataSource, IsNull, ILike, In, FindOneOptions } from 'typeorm';
 import { SiteAllocationRepository } from './site-allocation.repository';
 import { SiteAllocationEntity } from './entities/site-allocation.entity';
 import {
@@ -42,6 +42,7 @@ import {
   CONFIGURATION_KEYS,
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
+import { resolveReadableSiteFilter } from '../common/financials/site-access.helper';
 
 @Injectable()
 export class SiteAllocationService {
@@ -57,6 +58,7 @@ export class SiteAllocationService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly utilityService: UtilityService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -197,7 +199,7 @@ export class SiteAllocationService {
     return { ...base, message: `${(base as any).message ?? ''}${note}`.trim() };
   }
 
-  async findAll(options: GetSiteAllocationDto) {
+  async findAll(options: GetSiteAllocationDto, requesterId: string, activeRole?: string) {
     const {
       siteId,
       userId,
@@ -216,9 +218,14 @@ export class SiteAllocationService {
       deletedAt: IsNull(),
     };
 
-    if (siteId) {
-      where.siteId = siteId;
-    }
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      requesterId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return this.utilityService.listResponse([], 0);
+    if (siteIds) where.siteId = In(siteIds);
 
     if (userId) {
       where.userId = userId;

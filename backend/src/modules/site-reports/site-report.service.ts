@@ -11,6 +11,7 @@ import { CreateSiteReportDto, UpdateSiteReportDto, GetSiteReportDto } from './dt
 import { REPORT_ERRORS, REPORT_RESPONSES } from './constants/site-report.constants';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import {
   FinancialApprovalStatus,
   FINANCIAL_ERRORS,
@@ -95,7 +96,7 @@ export class SiteReportService {
     return { message: REPORT_RESPONSES.REJECTED };
   }
 
-  async findAll(query: GetSiteReportDto) {
+  async findAll(query: GetSiteReportDto, userId: string, activeRole?: string) {
     const {
       jmcId,
       companyId,
@@ -117,7 +118,9 @@ export class SiteReportService {
     const where: any = { deletedAt: IsNull() };
     if (jmcId) where.jmcId = jmcId;
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (partyType) where.partyType = partyType;
     if (contractorId?.length) where.contractorId = In(contractorId);
     if (vendorId?.length) where.vendorId = In(vendorId);

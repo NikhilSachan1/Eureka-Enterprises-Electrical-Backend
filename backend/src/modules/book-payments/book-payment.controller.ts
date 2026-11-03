@@ -77,8 +77,12 @@ export class BookPaymentController {
   @Get()
   @RequiredPermission('financials.book-payments.view-list')
   @ApiOperation({ summary: 'List book payments with filters and pagination' })
-  findAll(@Query() query: GetBookPaymentDto) {
-    return this.bookPaymentService.findAll(query);
+  findAll(
+    @Query() query: GetBookPaymentDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.bookPaymentService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

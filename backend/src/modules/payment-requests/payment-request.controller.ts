@@ -46,8 +46,11 @@ export class PaymentRequestController {
   @Get()
   @RequiredPermission('financials.payment-requests.view-list')
   @ApiOperation({ summary: 'List payment requests' })
-  async findAll(@Query() query: GetPaymentRequestDto) {
-    return await this.service.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetPaymentRequestDto,
+  ) {
+    return await this.service.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

@@ -70,8 +70,11 @@ export class DsrController {
     summary: 'Get all DSR entries',
     description: 'Retrieves a list of daily status reports with optional filtering and pagination.',
   })
-  async findAll(@Query() query: GetDsrDto) {
-    return await this.dsrService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetDsrDto,
+  ) {
+    return await this.dsrService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

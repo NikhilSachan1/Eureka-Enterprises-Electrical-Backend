@@ -38,7 +38,10 @@ import {
   deleteTdsRegisterEntryForInvoiceQuery,
 } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
-import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
+import {
+  checkSiteCreateAccess,
+  resolveReadableSiteFilter,
+} from 'src/modules/common/financials/site-access.helper';
 import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
@@ -349,7 +352,7 @@ export class SiteInvoiceService {
     return { message: INVOICE_RESPONSES.CREATED, id: created.id };
   }
 
-  async findAll(query: GetSiteInvoiceDto) {
+  async findAll(query: GetSiteInvoiceDto, userId: string, activeRole?: string) {
     const {
       jmcId,
       poId,
@@ -375,7 +378,9 @@ export class SiteInvoiceService {
     if (jmcId) where.jmcId = jmcId;
     if (poId) where.poId = poId;
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (partyType) where.partyType = partyType;
     if (contractorId?.length) where.contractorId = In(contractorId);
     if (vendorId?.length) where.vendorId = In(vendorId);

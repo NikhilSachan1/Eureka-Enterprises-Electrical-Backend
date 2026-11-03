@@ -36,7 +36,10 @@ import {
 import { JMC_ERRORS, JMC_RESPONSES, NO_JMC_LABEL } from './constants/jmc.constants';
 import { checkJmcHasChildrenQuery } from './queries/jmc.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
-import { checkSiteCreateAccess } from 'src/modules/common/financials/site-access.helper';
+import {
+  checkSiteCreateAccess,
+  resolveReadableSiteFilter,
+} from 'src/modules/common/financials/site-access.helper';
 import { PurchaseOrderEntity } from 'src/modules/purchase-orders/entities/purchase-order.entity';
 import { PoType } from 'src/modules/purchase-orders/constants/purchase-order.constants';
 import {
@@ -187,7 +190,7 @@ export class JmcService {
     });
   }
 
-  async findAll(query: GetJmcDto) {
+  async findAll(query: GetJmcDto, userId: string, activeRole?: string) {
     const {
       poId,
       companyId,
@@ -213,7 +216,9 @@ export class JmcService {
     const where: any = { deletedAt: IsNull() };
     if (poId) where.poId = poId;
     if (companyId?.length) where.site = { companyId: In(companyId) };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (partyType) where.partyType = partyType;
     if (contractorId?.length) where.contractorId = In(contractorId);
     if (vendorId?.length) where.vendorId = In(vendorId);

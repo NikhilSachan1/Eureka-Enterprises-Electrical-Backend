@@ -68,8 +68,11 @@ export class SiteInvoiceController {
 
   @Get()
   @RequiredPermission('financials.invoices.view-list')
-  async findAll(@Query() query: GetSiteInvoiceDto) {
-    return await this.invoiceService.findAll(query);
+  async findAll(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetSiteInvoiceDto,
+  ) {
+    return await this.invoiceService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

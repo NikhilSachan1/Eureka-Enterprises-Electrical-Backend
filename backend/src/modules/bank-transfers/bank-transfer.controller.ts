@@ -34,8 +34,12 @@ export class BankTransferController {
   @Get()
   @RequiredPermission('financials.bank-transfers.view-list')
   @ApiOperation({ summary: 'List bank transfers with filters and pagination' })
-  findAll(@Query() query: GetBankTransferDto) {
-    return this.bankTransferService.findAll(query);
+  findAll(
+    @Query() query: GetBankTransferDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.bankTransferService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

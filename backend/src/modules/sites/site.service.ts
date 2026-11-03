@@ -46,6 +46,7 @@ import {
   getAllocatedEmployeesBySitesQuery,
 } from './queries/site.queries';
 import { OverallSiteStats, AllocatedEmployee, SiteAllocationInfo } from './site.types';
+import { resolveReadableSiteFilter } from '../common/financials/site-access.helper';
 
 @Injectable()
 export class SiteService {
@@ -934,7 +935,7 @@ export class SiteService {
    * Returns site details + contractors + vendors + full employee allocation history.
    * Filterable by site name, siteId[], companyId[], contractorId[], vendorId[], employeeName.
    */
-  async getSiteActivity(options: GetSiteActivityDto) {
+  async getSiteActivity(options: GetSiteActivityDto, userId: string, activeRole?: string) {
     const {
       search,
       siteId,
@@ -958,8 +959,10 @@ export class SiteService {
       conditions.push(`s.name ILIKE $${params.length}`);
     }
 
-    if (siteId && siteId.length > 0) {
-      params.push(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) {
+      params.push(siteIds);
       conditions.push(`s.id = ANY($${params.length})`);
     }
 

@@ -4,6 +4,7 @@ import { PaymentRequestEntity } from './entities/payment-request.entity';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import {
   CreatePaymentRequestDto,
   UpdatePaymentRequestDto,
@@ -219,7 +220,7 @@ export class PaymentRequestService {
     };
   }
 
-  async findAll(query: GetPaymentRequestDto) {
+  async findAll(query: GetPaymentRequestDto, userId: string, activeRole?: string) {
     const {
       siteId,
       invoiceId,
@@ -233,7 +234,9 @@ export class PaymentRequestService {
       pageSize = 10,
     } = query;
     const where: any = { deletedAt: IsNull() };
-    if (siteId?.length) where.siteId = In(siteId);
+    const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (invoiceId) where.invoiceId = invoiceId;
     if (status) where.status = status;
 
