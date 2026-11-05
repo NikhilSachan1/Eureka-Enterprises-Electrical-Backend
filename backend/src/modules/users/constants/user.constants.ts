@@ -79,9 +79,20 @@ export enum UserStatus {
   SYSTEM = 'SYSTEM',
 }
 
+// These roles are what the attendance and leave crons treat as a working employee.
+export const SYSTEM_USER_BLOCKED_ROLES = ['EMPLOYEE', 'DRIVER'];
+
+export const SYSTEM_USER_ERRORS = {
+  NOT_FOUND: 'System user not found',
+  ROLE_NOT_ALLOWED:
+    'System users cannot have the role(s): {roles}. These roles are for employees with attendance and leave.',
+  SUPER_ADMIN_ONLY: 'Only a Super Admin can manage a system user with the Super Admin role.',
+};
+
 export const USERS_RESPONSES = {
   PASSWORD_UPDATED: 'Password updated successfully.',
   EMPLOYEE_CREATED: 'Employee created successfully.',
+  SYSTEM_USER_CREATED: 'System user created successfully.',
   EMAIL_ALREADY_EXISTS: 'An account with this email address already exists.',
   ROLE_NOT_FOUND: 'Role not found.',
   BULK_DELETE_PROCESSED:

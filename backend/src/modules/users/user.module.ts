@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserEntity } from './entities/user.entity';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
+import { SystemUserController } from './system-user.controller';
 import { UserRepository } from './user.repository';
 import { SharedModule } from '../shared/shared.module';
 import { RolesModule } from '../roles/role.module';
@@ -31,6 +32,6 @@ import { EmailModule } from '../common/email/email.module';
   ],
   providers: [UserService, UserRepository],
   exports: [UserService],
-  controllers: [UserController],
+  controllers: [UserController, SystemUserController],
 })
 export class UsersModule {}
