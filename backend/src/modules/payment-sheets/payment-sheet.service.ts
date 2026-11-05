@@ -547,7 +547,10 @@ export class PaymentSheetService {
         const { item, allocations } = await this.buildItem(sheetId, input, userId, em);
         await this.persistAllocations(item.id, allocations, userId, em);
         await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, stage, userId, em, {
-          newAmount: Number(item.requestedAmount),
+          // An advance line's amount is still a 0 placeholder, so log the balance it was added at.
+          newAmount: this.isAdvanceLine(item)
+            ? Number(item.pendingSnapshot)
+            : Number(item.requestedAmount),
         });
         allocations.forEach((a) => seenBookPayments.add(a.bookPaymentId));
         seen.push(item);
