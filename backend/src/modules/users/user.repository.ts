@@ -5,7 +5,7 @@ import { UserEntity } from './entities/user.entity';
 import { GetUsersDto, CreateUserDto } from './dto';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
-import { UserStatus, EMPLOYEE_ID_PREFIX } from './constants/user.constants';
+import { UserStatus, EMPLOYEE_ID_PREFIX, SYSTEM_USER_ID } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 
 @Injectable()
@@ -18,6 +18,7 @@ export class UserRepository {
 
   async findAll(
     options: GetUsersDto,
+    systemUsers = false,
   ): Promise<{ records: UserEntity[] | any[]; totalRecords: number } | undefined> {
     try {
       const { pageSize, page, sortOrder, sortField, role, search, ...whereCondition } = options;
@@ -43,8 +44,9 @@ export class UserRepository {
           'user-roles.id',
           'role.name',
         ])
-        // Exclude system user from regular listings
-        .where('users.isSystemUser = false');
+        // Regular listings exclude system users. The system-user listing excludes the internal bot.
+        .where('users.isSystemUser = :isSystemUser', { isSystemUser: systemUsers })
+        .andWhere('users.id != :botId', { botId: SYSTEM_USER_ID });
 
       if (Object.keys(whereCondition).length > 0) {
         Object.entries(whereCondition).forEach(([key, value]) => {

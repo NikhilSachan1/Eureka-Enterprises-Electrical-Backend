@@ -6,3 +6,4 @@ export * from './create-employee.dto';
 export * from './create-employee-with-salary.dto';
 export * from './bulk-delete-user.dto';
 export * from './resend-password-link.dto';
+export * from './system-user.dto';

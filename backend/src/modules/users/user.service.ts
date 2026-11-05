@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -18,6 +19,8 @@ import {
   VALIDATION_PATTERNS,
   USER_DTO_ERRORS,
   SYSTEM_USER_ID,
+  SYSTEM_USER_BLOCKED_ROLES,
+  SYSTEM_USER_ERRORS,
 } from './constants/user.constants';
 import { UserMetrics } from './user.types';
 import { DataSuccessOperationType, SortOrder } from 'src/utils/utility/constants/utility.constants';
@@ -26,9 +29,13 @@ import {
   BulkDeleteUserDto,
   CreateEmployeeDto,
   CreateEmployeeWithSalaryDto,
+  CreateSystemUserDto,
   GetUsersDto,
   ResendPasswordLinkDto,
+  UpdateSystemUserDto,
 } from './dto';
+import { UserFromRequest } from '../auth/auth.types';
+import { Roles } from '../roles/constants/role.constants';
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { CONFIGURATION_KEYS } from 'src/utils/master-constants/master-constants';
@@ -399,6 +406,160 @@ export class UserService {
         throw error;
       }
     });
+  }
+
+  async findAllSystemUsers(options: GetUsersDto) {
+    if (options.role && options.role.length > 0) {
+      await this.validateRolesFromDb(options.role);
+    }
+    return await this.userRepository.findAll(options, true);
+  }
+
+  async getSystemUser(id: string) {
+    const user = await this.findSystemUserOrFail(id);
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      contactNumber: user.contactNumber,
+      profilePicture: user.profilePicture,
+      status: user.status,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      roles: (await this.getRoleNames(id)).map((name) => ({ name })),
+    };
+  }
+
+  /**
+   * Same login setup as createEmployee, without the salary structure, leave credit and identity
+   * documents. employeeId stays null so the EE-xxxx sequence stays for employees.
+   */
+  async createSystemUser(
+    dto: CreateSystemUserDto,
+    files: { profilePicture?: Express.Multer.File[] } | undefined,
+    actor: UserFromRequest,
+  ) {
+    const { email, roles } = dto;
+
+    const blockedRoles = roles.filter((role) =>
+      SYSTEM_USER_BLOCKED_ROLES.includes(role.toUpperCase()),
+    );
+    if (blockedRoles.length > 0) {
+      throw new BadRequestException(
+        SYSTEM_USER_ERRORS.ROLE_NOT_ALLOWED.replace('{roles}', blockedRoles.join(', ')),
+      );
+    }
+    this.assertCanManageRoles(roles, actor);
+
+    // withDeleted: the email column stays unique after a soft delete.
+    const existingUser = await this.userRepository.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (existingUser) {
+      throw new BadRequestException(USERS_RESPONSES.EMAIL_ALREADY_EXISTS);
+    }
+
+    const roleEntities = [];
+    for (const roleName of roles) {
+      const roleEntity = await this.roleService.findOne({ where: { name: roleName } });
+      if (!roleEntity) {
+        throw new NotFoundException(`${USERS_RESPONSES.ROLE_NOT_FOUND}: ${roleName}`);
+      }
+      roleEntities.push(roleEntity);
+    }
+
+    const uploadedFiles = files?.profilePicture?.length
+      ? await this.handleFileUploads(files, email)
+      : {};
+    const generatedPassword = this.utilityService.generateSecurePassword();
+
+    let user: UserEntity;
+    try {
+      user = await this.dataSource.transaction(async (entityManager) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { roles: _roles, ...details } = dto;
+        const created = await this.create(
+          {
+            ...this.utilityService.convertEmptyStringsToNull(details),
+            password: this.utilityService.createHash(generatedPassword),
+            status: UserStatus.ACTIVE,
+            isSystemUser: true,
+            profilePicture: uploadedFiles.profilePicture || null,
+            createdBy: actor.id,
+          },
+          entityManager,
+        );
+
+        for (const roleEntity of roleEntities) {
+          await this.userRoleService.create(
+            { userId: created.id, roleId: roleEntity.id },
+            entityManager,
+          );
+        }
+        return created;
+      });
+    } catch (error) {
+      Logger.error('Create system user failed:', error);
+      await this.cleanupUploadedFiles(uploadedFiles);
+      throw error;
+    }
+
+    await this.sendWelcomeEmail({
+      email,
+      tempPassword: generatedPassword,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+    });
+
+    return { id: user.id, message: USERS_RESPONSES.SYSTEM_USER_CREATED };
+  }
+
+  async updateSystemUser(
+    id: string,
+    dto: UpdateSystemUserDto,
+    files: { profilePicture?: Express.Multer.File[] } | undefined,
+    actor: UserFromRequest,
+  ) {
+    await this.findSystemUserOrFail(id);
+    this.assertCanManageRoles(await this.getRoleNames(id), actor);
+
+    await this.updateEmployee(id, dto, files, actor.id);
+    return await this.getSystemUser(id);
+  }
+
+  async deleteSystemUser(id: string, actor: UserFromRequest) {
+    await this.findSystemUserOrFail(id);
+    this.assertCanManageRoles(await this.getRoleNames(id), actor);
+
+    return await this.delete(id, actor.id);
+  }
+
+  private async findSystemUserOrFail(id: string): Promise<UserEntity> {
+    // The internal bot carries the same flag but is not manageable through this API.
+    const user =
+      id === SYSTEM_USER_ID
+        ? null
+        : await this.userRepository.findOne({ where: { id, isSystemUser: true } });
+    if (!user) throw new NotFoundException(SYSTEM_USER_ERRORS.NOT_FOUND);
+    return user;
+  }
+
+  private async getRoleNames(userId: string): Promise<string[]> {
+    const userRoles = await this.userRoleService.findAll({
+      where: { userId },
+      relations: ['role'],
+    });
+    return userRoles?.map((ur) => ur.role?.name).filter(Boolean) || [];
+  }
+
+  // Stops an Admin from minting a Super Admin, or taking one over by changing its email.
+  private assertCanManageRoles(roles: string[], actor: UserFromRequest): void {
+    const touchesSuperAdmin = roles.some((role) => role.toUpperCase() === Roles.SUPER_ADMIN);
+    if (touchesSuperAdmin && actor.activeRole !== Roles.SUPER_ADMIN) {
+      throw new ForbiddenException(SYSTEM_USER_ERRORS.SUPER_ADMIN_ONLY);
+    }
   }
 
   private async createUserDocuments(
@@ -941,12 +1102,14 @@ export class UserService {
     tempPassword: string;
     firstName: string;
     lastName?: string;
-    employeeId: string;
+    employeeId?: string;
     designation?: string;
     dateOfJoining?: string;
   }): Promise<void> {
     try {
       const loginUrl = Environments.FE_BASE_URL;
+      // System users have no employee id, designation or joining date to show.
+      const isEmployee = !!data.employeeId;
 
       await this.emailService.sendMail({
         receiverEmails: data.email,
@@ -958,18 +1121,13 @@ export class UserService {
           email: data.email,
           tempPassword: data.tempPassword,
           employeeId: data.employeeId,
-          designation: data.designation || 'To be assigned',
-          dateOfJoining: data.dateOfJoining
-            ? new Date(data.dateOfJoining).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })
-            : new Date().toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              }),
+          designation: isEmployee ? data.designation || 'To be assigned' : undefined,
+          dateOfJoining: isEmployee
+            ? (data.dateOfJoining ? new Date(data.dateOfJoining) : new Date()).toLocaleDateString(
+                'en-IN',
+                { day: '2-digit', month: 'short', year: 'numeric' },
+              )
+            : undefined,
           loginUrl,
           companyName: COMPANY_DETAILS.NAME,
           companyLogo: COMPANY_DETAILS.LOGO_URL,

@@ -85,14 +85,16 @@
           <div class='info-card'>
             <h3 class='info-card-title'>📋 Your Employment Details</h3>
             <table width='100%' cellpadding='0' cellspacing='0' border='0'>
-              <tr>
-                <td
-                  style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #6b7280; font-size: 14px;'
-                >Employee ID</td>
-                <td
-                  style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #1f2937; font-weight: 600; font-size: 14px; text-align: right;'
-                >{{employeeId}}</td>
-              </tr>
+              {{#if employeeId}}
+                <tr>
+                  <td
+                    style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #6b7280; font-size: 14px;'
+                  >Employee ID</td>
+                  <td
+                    style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #1f2937; font-weight: 600; font-size: 14px; text-align: right;'
+                  >{{employeeId}}</td>
+                </tr>
+              {{/if}}
               {{#if designation}}
                 <tr>
                   <td
@@ -113,14 +115,16 @@
                   >{{department}}</td>
                 </tr>
               {{/if}}
-              <tr>
-                <td
-                  style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #6b7280; font-size: 14px;'
-                >Date of Joining</td>
-                <td
-                  style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #1f2937; font-weight: 600; font-size: 14px; text-align: right;'
-                >{{dateOfJoining}}</td>
-              </tr>
+              {{#if dateOfJoining}}
+                <tr>
+                  <td
+                    style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #6b7280; font-size: 14px;'
+                  >Date of Joining</td>
+                  <td
+                    style='padding: 10px 0; border-bottom: 1px solid #a7f3d0; color: #1f2937; font-weight: 600; font-size: 14px; text-align: right;'
+                  >{{dateOfJoining}}</td>
+                </tr>
+              {{/if}}
               {{#if reportingManager}}
                 <tr>
                   <td style='padding: 10px 0; color: #6b7280; font-size: 14px;'>Reporting Manager</td>
