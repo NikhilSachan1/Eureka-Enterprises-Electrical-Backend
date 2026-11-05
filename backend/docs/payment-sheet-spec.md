@@ -188,6 +188,11 @@ Pending shifts after sheet creation (new approvals, new credits, new book paymen
 - `GET /payment-sheets/:id/reconcile` → per item: `pendingSnapshot`, `currentAmount`,
   **`livePending`** (recomputed now), `difference`, and a `conflict` flag when `currentAmount > livePending`.
 - Pay-time re-checks `livePending`; an Accountant can never disburse more than is currently owed.
+- Exception: **advance lines** (`pendingSnapshot ≤ 0`; exposed as `isAdvance` on `GET /payment-sheets/:id`). An EXPENSE / FUEL_EXPENSE line added while the
+  user's balance is ≤ 0 starts at ₹0 and gets its amount through the item edit. Submit and forward are
+  blocked while such a line is still ₹0; ADMIN_REVIEW may set the first amount despite being
+  decrease-only. It skips the pending checks above and `sync-to-latest`, and paying it pushes the
+  balance further negative (-500, advance 1000 → -1500).
 
 ---
 

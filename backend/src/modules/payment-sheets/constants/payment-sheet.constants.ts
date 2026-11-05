@@ -149,6 +149,7 @@ export const PAYMENT_SHEET_ERRORS = {
   NOT_EDITABLE_STAGE: 'You are not authorized to act on this sheet at its current stage',
   AMOUNT_EXCEEDS_PENDING: 'Amount cannot exceed the beneficiary current pending amount',
   AMOUNT_MUST_BE_POSITIVE: 'Amount must be greater than zero',
+  ADVANCE_AMOUNT_REQUIRED: 'Enter an amount for every advance beneficiary before forwarding',
   WALLET_SOURCE_MISMATCH: 'Wallet items must use sourceType PETRO_CARD_WALLET',
   AMOUNT_INCREASE_NOT_ALLOWED: 'Amount can only be decreased at this stage',
   AMOUNT_EDIT_NOT_ALLOWED: 'Amount editing is not allowed at this stage',

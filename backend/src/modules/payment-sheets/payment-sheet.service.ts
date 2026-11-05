@@ -215,6 +215,32 @@ export class PaymentSheetService {
 
   // ─────────────────────────── live pending recompute ───────────────────────────
 
+  /**
+   * An expense/fuel line raised while the balance was <= 0. Its amount is an advance, not a share of
+   * pending, so the pending checks do not apply. Read from pendingSnapshot rather than the live
+   * balance, which can turn positive before the line is paid. Other lines always snapshot > 0, and
+   * sync-to-latest never rewrites an advance line's snapshot.
+   */
+  private isAdvanceLine(item: PaymentSheetItemEntity): boolean {
+    return (
+      (item.sourceType === PaymentSourceType.EXPENSE ||
+        item.sourceType === PaymentSourceType.FUEL_EXPENSE) &&
+      Number(item.pendingSnapshot) <= 0
+    );
+  }
+
+  private assertAdvanceAmountsSet(items: PaymentSheetItemEntity[]) {
+    const hasUnsetAdvance = items.some(
+      (i) =>
+        i.itemStatus !== PaymentSheetItemStatus.REJECTED &&
+        this.isAdvanceLine(i) &&
+        Number(i.currentAmount) <= 0,
+    );
+    if (hasUnsetAdvance) {
+      throw new BadRequestException(PAYMENT_SHEET_ERRORS.ADVANCE_AMOUNT_REQUIRED);
+    }
+  }
+
   private async computeLivePending(
     item: PaymentSheetItemEntity,
     em?: EntityManager,
@@ -387,17 +413,23 @@ export class PaymentSheetService {
       throw new BadRequestException('User items must use EXPENSE or FUEL_EXPENSE');
     }
     const requested = Number(input.requestedAmount);
-    if (!(requested > 0)) {
-      throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
-    }
     const pendingQuery =
       input.sourceType === PaymentSourceType.EXPENSE
         ? userExpensePendingQuery(input.userId)
         : userFuelPendingQuery(input.userId);
     const pr = await this.repo.raw(pendingQuery.query, pendingQuery.params, em);
-    const pending = Math.max(0, Number(pr?.[0]?.pending ?? 0));
-    if (requested > pending + 0.01) {
-      throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_EXCEEDS_PENDING);
+    const pending = Number(pr?.[0]?.pending ?? 0);
+    // Derived here, never taken from the client, so a line with money still due stays capped. An
+    // advance line may start at 0: its amount is set by editing the line, and the forward checks
+    // stop it leaving a stage without one.
+    const isAdvance = pending <= 0;
+    if (!isAdvance) {
+      if (!(requested > 0)) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
+      }
+      if (requested > pending + 0.01) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_EXCEEDS_PENDING);
+      }
     }
     const bank = await this.repo.raw(
       `SELECT "bankHolderName", "bankName", "accountNumber", "ifscCode" FROM "users" WHERE id = $1`,
@@ -515,7 +547,10 @@ export class PaymentSheetService {
         const { item, allocations } = await this.buildItem(sheetId, input, userId, em);
         await this.persistAllocations(item.id, allocations, userId, em);
         await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, stage, userId, em, {
-          newAmount: Number(item.requestedAmount),
+          // An advance line's amount is still a 0 placeholder, so log the balance it was added at.
+          newAmount: this.isAdvanceLine(item)
+            ? Number(item.pendingSnapshot)
+            : Number(item.requestedAmount),
         });
         allocations.forEach((a) => seenBookPayments.add(a.bookPaymentId));
         seen.push(item);
@@ -1011,6 +1046,7 @@ export class PaymentSheetService {
       const verifiedStages = vers.map((x) => x.stage);
       return {
         ...i,
+        isAdvance: this.isAdvanceLine(i),
         user: u
           ? {
               id: u.id,
@@ -1203,7 +1239,9 @@ export class PaymentSheetService {
         throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_MUST_BE_POSITIVE);
       const prev = Number(item.currentAmount);
 
-      if (cfg.amountEdit === 'decrease-only') {
+      // Admin can add lines, so a 0 advance line can first get its amount at a decrease-only stage.
+      const isFirstAdvanceAmount = this.isAdvanceLine(item) && prev <= 0;
+      if (cfg.amountEdit === 'decrease-only' && !isFirstAdvanceAmount) {
         if (newAmount > prev + 0.01) {
           throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_INCREASE_NOT_ALLOWED);
         }
@@ -1212,10 +1250,12 @@ export class PaymentSheetService {
         }
       }
 
-      // Never exceed current live pending.
-      const livePending = await this.computeLivePending(item, em);
-      if (newAmount > livePending + 0.01) {
-        throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_EXCEEDS_PENDING);
+      // Never exceed current live pending. An advance is not backed by pending, so it has no cap.
+      if (!this.isAdvanceLine(item)) {
+        const livePending = await this.computeLivePending(item, em);
+        if (newAmount > livePending + 0.01) {
+          throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_EXCEEDS_PENDING);
+        }
       }
 
       await this.repo.updateItem(
@@ -1224,7 +1264,8 @@ export class PaymentSheetService {
         em,
       );
       await this.addHistory(item, ItemHistoryAction.AMOUNT_EDIT, sheet.currentStage, user.id, em, {
-        previousAmount: prev,
+        // An advance line's 0 is only a placeholder, so its first edit starts from the balance.
+        previousAmount: isFirstAdvanceAmount ? Number(item.pendingSnapshot) : prev,
         newAmount,
         reason: dto.reason ?? null,
       });
@@ -1388,6 +1429,7 @@ export class PaymentSheetService {
         em,
       );
       if (!items.length) throw new BadRequestException(PAYMENT_SHEET_ERRORS.EMPTY_SHEET);
+      this.assertAdvanceAmountsSet(items);
 
       const next = this.nextStage(flow, PaymentSheetStage.INITIATION);
       if (!next) throw new BadRequestException('Approval flow has no review stage configured');
@@ -1410,12 +1452,14 @@ export class PaymentSheetService {
       const flow = await this.getApprovalFlow(em);
       const cfg = this.assertStageAuthority(flow, sheet, user);
 
+      const items = await this.repo.findItems(
+        { where: { paymentSheetId: id, deletedAt: IsNull() } },
+        em,
+      );
+      this.assertAdvanceAmountsSet(items);
+
       // Verify gate: at a verifyItems stage, every active line must be verified for it.
       if (cfg.verifyItems && sheet.currentStage) {
-        const items = await this.repo.findItems(
-          { where: { paymentSheetId: id, deletedAt: IsNull() } },
-          em,
-        );
         const active = items.filter((i) => i.itemStatus !== PaymentSheetItemStatus.REJECTED);
         const verified = await this.repo.findVerifications(
           { where: { paymentSheetId: id, stage: sheet.currentStage } },
@@ -1593,10 +1637,15 @@ export class PaymentSheetService {
       throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEM_NOT_PENDING);
     }
     const amount = Number(item.currentAmount);
-    const livePending = await this.computeLivePending(item);
-    if (amount > livePending + 0.01) {
-      throw new BadRequestException(PAYMENT_SHEET_ERRORS.PENDING_CONFLICT);
+    if (!this.isAdvanceLine(item)) {
+      const livePending = await this.computeLivePending(item);
+      if (amount > livePending + 0.01) {
+        throw new BadRequestException(PAYMENT_SHEET_ERRORS.PENDING_CONFLICT);
+      }
     }
+    const defaultDescription = this.isAdvanceLine(item)
+      ? `Advance paid via Payment Sheet ${sheet.sheetNumber}`
+      : `Settled via Payment Sheet ${sheet.sheetNumber}`;
 
     const traceRef = `PS:${sheet.sheetNumber}:${item.id}`;
 
@@ -1613,7 +1662,7 @@ export class PaymentSheetService {
       await this.expenseService.createCreditExpense({
         userId: item.userId as string,
         category: dto.category,
-        description: dto.description ?? `Settled via Payment Sheet ${sheet.sheetNumber}`,
+        description: dto.description ?? defaultDescription,
         amount,
         transactionId: dto.transactionId,
         expenseDate: new Date(dto.paidDate),
@@ -1635,7 +1684,7 @@ export class PaymentSheetService {
         fillDate: new Date(dto.paidDate),
         paymentMode: dto.paymentMode,
         transactionId: dto.transactionId,
-        description: dto.description ?? `Settled via Payment Sheet ${sheet.sheetNumber}`,
+        description: dto.description ?? defaultDescription,
         files: [],
         createdBy: user.id,
         fileKeys: [],
@@ -1916,7 +1965,7 @@ export class PaymentSheetService {
         currentAmount: current,
         livePending,
         difference: Number((livePending - Number(item.pendingSnapshot)).toFixed(2)),
-        conflict: current > livePending + 0.01,
+        conflict: !this.isAdvanceLine(item) && current > livePending + 0.01,
       });
     }
     return { sheetId: id, sheetNumber: sheet.sheetNumber, status: sheet.status, lines };
@@ -1963,6 +2012,13 @@ export class PaymentSheetService {
         // Verified-by-a-later-stage lines are locked for the initiator — leave untouched.
         if (await this.isEditLocked(item.id, sheet.currentStage, flow, em)) {
           skipped.push({ itemId: item.id, reason: 'verified by a later stage (locked)' });
+          continue;
+        }
+
+        // An advance is a typed amount, not a copy of pending: syncing would remove the line or
+        // overwrite the amount.
+        if (this.isAdvanceLine(item)) {
+          skipped.push({ itemId: item.id, reason: 'advance payment (not linked to pending)' });
           continue;
         }
 
