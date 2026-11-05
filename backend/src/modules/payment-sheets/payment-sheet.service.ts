@@ -1261,7 +1261,8 @@ export class PaymentSheetService {
         em,
       );
       await this.addHistory(item, ItemHistoryAction.AMOUNT_EDIT, sheet.currentStage, user.id, em, {
-        previousAmount: prev,
+        // An advance line's 0 is only a placeholder, so its first edit starts from the balance.
+        previousAmount: isFirstAdvanceAmount ? Number(item.pendingSnapshot) : prev,
         newAmount,
         reason: dto.reason ?? null,
       });
