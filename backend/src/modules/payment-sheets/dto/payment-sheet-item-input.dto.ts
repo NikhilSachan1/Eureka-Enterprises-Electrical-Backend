@@ -41,7 +41,9 @@ export class PaymentSheetItemInputDto {
 
   @ApiPropertyOptional({
     description:
-      'Amount to pay (≤ live pending). Required for USER items. Ignored for WALLET items, where ' +
+      'Amount to pay. Required for USER items: must be > 0 and ≤ live pending. When the live ' +
+      'balance is ≤ 0 the line is an advance: send 0 and set the amount by editing the line. ' +
+      'Ignored for WALLET items, where ' +
       'it comes from the recharge. For VENDOR items it is derived from bookPaymentIds and may be ' +
       'omitted; if sent it must equal that sum.',
     example: 1000,
@@ -52,7 +54,7 @@ export class PaymentSheetItemInputDto {
       (o.beneficiaryType !== BeneficiaryType.WALLET && o.requestedAmount !== undefined),
   )
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @Min(0)
   requestedAmount?: number;
 
   // No reference number or remarks here: for a wallet line those are payment details, known only
