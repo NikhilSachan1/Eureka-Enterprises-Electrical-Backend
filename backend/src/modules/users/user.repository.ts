@@ -6,6 +6,7 @@ import { GetUsersDto, CreateUserDto } from './dto';
 import { SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { UserStatus, EMPLOYEE_ID_PREFIX, SYSTEM_USER_ID } from './constants/user.constants';
+import { Roles } from '../roles/constants/role.constants';
 import { UserMetrics } from './user.types';
 
 @Injectable()
@@ -47,6 +48,17 @@ export class UserRepository {
         // Regular listings exclude system users. The system-user listing excludes the internal bot.
         .where('users.isSystemUser = :isSystemUser', { isSystemUser: systemUsers })
         .andWhere('users.id != :botId', { botId: SYSTEM_USER_ID });
+
+      if (systemUsers) {
+        queryBuilder.andWhere(
+          `NOT EXISTS (
+            SELECT 1 FROM user_roles ur
+            INNER JOIN roles r ON r.id = ur."roleId" AND r."deletedAt" IS NULL
+            WHERE ur."userId" = users.id AND ur."deletedAt" IS NULL AND r.name = :superAdminRole
+          )`,
+          { superAdminRole: Roles.SUPER_ADMIN },
+        );
+      }
 
       if (Object.keys(whereCondition).length > 0) {
         Object.entries(whereCondition).forEach(([key, value]) => {
