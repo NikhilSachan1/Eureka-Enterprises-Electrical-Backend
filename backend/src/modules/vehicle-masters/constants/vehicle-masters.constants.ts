@@ -97,6 +97,13 @@ export const HANDOVER_EVENT_TYPES: VehicleEventTypes[] = [
   VehicleEventTypes.DEALLOCATED,
 ];
 
+/**
+ * Events that say nothing about a pending handover. Editing a vehicle writes UPDATED; without this
+ * an edit made after HANDOVER_INITIATED hid the handover, so accept/reject failed with "No handover
+ * is pending" and the auto-accept cron skipped it.
+ */
+export const HANDOVER_NEUTRAL_EVENT_TYPES: VehicleEventTypes[] = [VehicleEventTypes.UPDATED];
+
 /** Status of `latestEvent`, used by the `handoverStatuses` list filter and the handover stats. */
 export enum HandoverStatus {
   INITIATED = 'INITIATED',
