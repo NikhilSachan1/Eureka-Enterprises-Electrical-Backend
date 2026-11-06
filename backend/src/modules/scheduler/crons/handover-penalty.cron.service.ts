@@ -28,6 +28,7 @@ import {
   AssetStatus,
 } from '../../asset-masters/constants/asset-masters.constants';
 import {
+  HANDOVER_NEUTRAL_EVENT_TYPES,
   VehicleEventTypes,
   VehicleStatus,
 } from '../../vehicle-masters/constants/vehicle-masters.constants';
@@ -65,6 +66,8 @@ interface ModuleSpec {
   /** Expense category the penalty is filed under — one per module, so each can be filtered. */
   expenseCategory: string;
   select: (hours: number) => { query: string; params: unknown[] };
+  /** Event types that do not count as acting on a handover; must match what `select` skips. */
+  neutralEventTypes: readonly string[];
   createEvent: (
     em: EntityManager,
     row: StaleHandoverRow,
@@ -233,7 +236,7 @@ export class HandoverPenaltyCronService {
     const notify = await this.dataSource.transaction(async (em) => {
       // Re-check under a lock: two overlapping runs can both have selected this row.
       const [latest] = await em.query(
-        getLatestEventForUpdateQuery(spec.eventsTable, spec.itemIdColumn),
+        getLatestEventForUpdateQuery(spec.eventsTable, spec.itemIdColumn, spec.neutralEventTypes),
         [row.itemId],
       );
       if (!latest || latest.eventType !== AssetEventTypes.HANDOVER_INITIATED) {
@@ -336,6 +339,7 @@ export class HandoverPenaltyCronService {
       referenceType: HANDOVER_PENALTY_REFERENCE_TYPES.ASSET,
       expenseCategory: HANDOVER_PENALTY_CATEGORIES.ASSET,
       select: getStaleAssetHandoversQuery,
+      neutralEventTypes: [],
       createEvent: async (em, row) => {
         const metadata = this.baseMetadata(row);
         const event = await em.getRepository(AssetEventEntity).save({
@@ -390,6 +394,7 @@ export class HandoverPenaltyCronService {
       referenceType: HANDOVER_PENALTY_REFERENCE_TYPES.VEHICLE,
       expenseCategory: HANDOVER_PENALTY_CATEGORIES.VEHICLE,
       select: getStaleVehicleHandoversQuery,
+      neutralEventTypes: HANDOVER_NEUTRAL_EVENT_TYPES,
       createEvent: async (em, row) => {
         const metadata = this.baseMetadata(row);
         const event = await em.getRepository(VehicleEventEntity).save({

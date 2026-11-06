@@ -1,5 +1,12 @@
 import { AssetEventTypes } from 'src/modules/asset-masters/constants/asset-masters.constants';
+import { HANDOVER_NEUTRAL_EVENT_TYPES } from 'src/modules/vehicle-masters/constants/vehicle-masters.constants';
 import { UserStatus } from 'src/modules/users/constants/user.constants';
+
+/** `AND <column> NOT IN (...)` for events that must not count as acting on a handover. */
+const excludeEventTypes = (column: string, eventTypes: readonly string[]): string =>
+  eventTypes.length > 0
+    ? `AND ${column} NOT IN (${eventTypes.map((type) => `'${type}'`).join(', ')})`
+    : '';
 
 /**
  * Handovers that have sat untouched past the window.
@@ -18,8 +25,17 @@ const buildStaleHandoverQuery = (opts: {
   itemIdColumn: string;
   labelExpression: string;
   identifierExpression: string;
+  /** Later events of these types do not stop the penalty (a vehicle edit, for example). */
+  neutralEventTypes?: readonly string[];
 }) => {
-  const { eventsTable, versionsTable, itemIdColumn, labelExpression, identifierExpression } = opts;
+  const {
+    eventsTable,
+    versionsTable,
+    itemIdColumn,
+    labelExpression,
+    identifierExpression,
+    neutralEventTypes = [],
+  } = opts;
 
   return `
     SELECT
@@ -54,6 +70,7 @@ const buildStaleHandoverQuery = (opts: {
          WHERE later."${itemIdColumn}" = e."${itemIdColumn}"
            AND later."deletedAt" IS NULL
            AND later."createdAt" > e."createdAt"
+           ${excludeEventTypes('later."eventType"', neutralEventTypes)}
       )
     ORDER BY e."createdAt" ASC
   `;
@@ -77,6 +94,7 @@ export const getStaleVehicleHandoversQuery = (hours: number) => ({
     itemIdColumn: 'vehicleMasterId',
     labelExpression: `COALESCE(NULLIF(TRIM(CONCAT_WS(' ', v."brand", v."model")), ''), 'Vehicle')`,
     identifierExpression: `v."registrationNo"`,
+    neutralEventTypes: HANDOVER_NEUTRAL_EVENT_TYPES,
   }),
   params: [String(hours)],
 });
@@ -88,11 +106,16 @@ export const getStaleVehicleHandoversQuery = (hours: number) => ({
  * twice. The row is locked so the loser waits, then sees the auto-accept event the winner wrote and
  * skips.
  */
-export const getLatestEventForUpdateQuery = (eventsTable: string, itemIdColumn: string) => `
+export const getLatestEventForUpdateQuery = (
+  eventsTable: string,
+  itemIdColumn: string,
+  neutralEventTypes: readonly string[] = [],
+) => `
   SELECT id, "eventType"
     FROM ${eventsTable}
    WHERE "${itemIdColumn}" = $1
      AND "deletedAt" IS NULL
+     ${excludeEventTypes('"eventType"', neutralEventTypes)}
    ORDER BY "createdAt" DESC
    LIMIT 1
    FOR UPDATE

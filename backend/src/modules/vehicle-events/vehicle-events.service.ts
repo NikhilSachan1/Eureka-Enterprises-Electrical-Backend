@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateVehicleEventDto } from './dto/create-vehicle-event.dto';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In, Not } from 'typeorm';
 import { VehicleEventsRepository } from './vehicle-events.repository';
 import { VehicleActionDto } from '../vehicle-versions/dto/vehicle-action.dto';
 import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
 import {
+  HANDOVER_NEUTRAL_EVENT_TYPES,
   VehicleEventTypes,
   VehicleFileTypes,
   VehicleStatus,
@@ -91,9 +92,10 @@ export class VehicleEventsService {
     }
   }
 
+  /** Latest event that can open or close a handover; a plain vehicle edit (UPDATED) is skipped. */
   private async getLastEvent(vehicleMasterId: string): Promise<VehicleEventEntity | null> {
     const result = await this.vehicleEventsRepository.findOne({
-      where: { vehicleMasterId },
+      where: { vehicleMasterId, eventType: Not(In(HANDOVER_NEUTRAL_EVENT_TYPES)) },
       order: { createdAt: SortOrder.DESC },
     });
     return result || null;
