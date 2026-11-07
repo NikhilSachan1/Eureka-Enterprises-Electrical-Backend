@@ -314,7 +314,9 @@ export class VehicleEventsService {
                 vehicleMasterId,
                 eventType: action,
                 toUser: fromUserId, // The person accepting is the toUser
-                fromUser: activeVersion?.assignedTo, // Previous holder
+                // Previous holder. An item handed over straight from stock has no assignee yet, so fall
+                // back to the initiator: the history then reads initiator -> acceptor, as the request did.
+                fromUser: activeVersion?.assignedTo ?? pendingHandover?.fromUser,
                 metadata,
                 createdBy,
               },
