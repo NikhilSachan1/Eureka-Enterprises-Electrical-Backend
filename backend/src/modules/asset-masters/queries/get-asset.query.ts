@@ -425,7 +425,8 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         'toUserUser', ale."toUserDetails",
         'metadata', ale."metadata",
         'createdAt', ale."createdAt",
-        'createdBy', ale."createdBy"${latestEventFilesJson}
+        'createdBy', ale."createdBy",
+        'createdByUser', ale."createdByDetails"${latestEventFilesJson}
       ) ELSE NULL END as "latestEvent",
       -- The LOST event behind the current status, in the same shape the event history returns.
       -- Only while the asset IS lost: the lateral below joins nothing for any other status.
@@ -472,10 +473,19 @@ export const getAssetQuery = (query: AssetQueryDto) => {
           'lastName', tu."lastName",
           'email', tu."email",
           'employeeId', tu."employeeId"
-        ) ELSE NULL END AS "toUserDetails"${latestEventFilesSelect}
+        ) ELSE NULL END AS "toUserDetails",
+        -- Who acted. A return has no target user, so the list names the person who answered it.
+        CASE WHEN cbu."id" IS NOT NULL THEN json_build_object(
+          'id', cbu."id",
+          'firstName', cbu."firstName",
+          'lastName', cbu."lastName",
+          'email', cbu."email",
+          'employeeId', cbu."employeeId"
+        ) ELSE NULL END AS "createdByDetails"${latestEventFilesSelect}
       FROM "assets_events" ae
       LEFT JOIN "users" fu ON ae."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ae."toUser" = tu."id" AND tu."deletedAt" IS NULL
+      LEFT JOIN "users" cbu ON ae."createdBy" = cbu."id" AND cbu."deletedAt" IS NULL
       WHERE ae."assetMasterId" = am."id"
         AND ae."deletedAt" IS NULL
         AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
