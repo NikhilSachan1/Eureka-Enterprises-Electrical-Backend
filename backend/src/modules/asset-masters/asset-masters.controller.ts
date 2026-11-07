@@ -86,13 +86,14 @@ export class AssetMastersController {
     required: true,
   })
   action(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() assetActionDto: AssetActionDto,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.ASSET_FILES)
     { assetFiles }: { assetFiles: string[] } = { assetFiles: [] },
   ) {
     return this.assetMastersService.action(
-      { ...assetActionDto, fromUserId: createdBy },
+      { ...assetActionDto, fromUserId: createdBy, activeRole },
       assetFiles,
       createdBy,
     );

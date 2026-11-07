@@ -20,7 +20,7 @@ export const ASSET_MASTERS_ERRORS = {
   ASSET_NOT_LOST: 'Asset is not marked as lost. Cannot mark as recovered',
   ASSET_RETIRED_CANNOT_BE_LOST: 'Retired asset cannot be marked as lost',
   PENDING_HANDOVER_BLOCKS_LOST:
-    'Asset has a pending handover. Resolve the handover first before marking as lost',
+    'Asset has a pending handover or return. Resolve it first before marking as lost',
   RECOVERY_AMOUNT_INVALID: 'Recovery amount must be a non-negative number',
   REASON_REQUIRED_FOR_LOST: 'Reason is required when marking an asset as lost',
   LOST_EVENT_NOT_FOUND: 'Lost event not found for this asset',
@@ -129,6 +129,16 @@ export enum AssetEventTypes {
    * It is never a user-supplied action, so it is deliberately absent from VALID_ACTIONS_BY_STATUS.
    */
   HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
+  /**
+   * Return to office: the holder sends the asset back, office staff accept or reject it.
+   * Unlike a handover there is no target user — whoever holds `asset.return-accepted` /
+   * `asset.return-rejected` may respond. `fromUser` is always the holder on all four events;
+   * `createdBy` records who acted.
+   */
+  RETURN_INITIATED = 'RETURN_INITIATED',
+  RETURN_ACCEPTED = 'RETURN_ACCEPTED',
+  RETURN_REJECTED = 'RETURN_REJECTED',
+  RETURN_CANCELLED = 'RETURN_CANCELLED',
   LOST = 'LOST',
   RECOVERED = 'RECOVERED',
 }
@@ -143,8 +153,18 @@ export const HANDOVER_EVENT_TYPES: AssetEventTypes[] = [
   AssetEventTypes.HANDOVER_AUTO_ACCEPTED,
   AssetEventTypes.HANDOVER_REJECTED,
   AssetEventTypes.HANDOVER_CANCELLED,
+  AssetEventTypes.RETURN_INITIATED,
+  AssetEventTypes.RETURN_ACCEPTED,
+  AssetEventTypes.RETURN_REJECTED,
+  AssetEventTypes.RETURN_CANCELLED,
   AssetEventTypes.DEALLOCATED,
   AssetEventTypes.LOST,
+];
+
+/** A request waiting for an answer. Only one may be open per asset, whichever kind it is. */
+export const PENDING_REQUEST_EVENT_TYPES: AssetEventTypes[] = [
+  AssetEventTypes.HANDOVER_INITIATED,
+  AssetEventTypes.RETURN_INITIATED,
 ];
 
 /** Status of `latestEvent`, used by the `handoverStatus` list filter and the handover stats. */
@@ -154,7 +174,10 @@ export enum HandoverStatus {
 }
 
 export const HANDOVER_STATUS_EVENT_TYPES: Record<HandoverStatus, AssetEventTypes[]> = {
-  [HandoverStatus.INITIATED]: [AssetEventTypes.HANDOVER_INITIATED],
+  [HandoverStatus.INITIATED]: [
+    AssetEventTypes.HANDOVER_INITIATED,
+    AssetEventTypes.RETURN_INITIATED,
+  ],
   [HandoverStatus.ACCEPTED]: [
     AssetEventTypes.HANDOVER_ACCEPTED,
     AssetEventTypes.HANDOVER_AUTO_ACCEPTED,

@@ -12,6 +12,10 @@ import { AssetEventTypes } from 'src/modules/asset-masters/constants/asset-maste
  * | HANDOVER_ACCEPTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_REJECTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_CANCELLED  | Derived (JWT)     | Optional   |
+ * | RETURN_INITIATED    | Not needed        | Required   |
+ * | RETURN_ACCEPTED     | Not needed        | Optional   |
+ * | RETURN_REJECTED     | Not needed        | Optional   |
+ * | RETURN_CANCELLED    | Not needed        | Optional   |
  * | DEALLOCATED         | Auto (assignedTo) | Optional   |
  * | UNDER_MAINTENANCE   | Not needed        | Optional   |
  * | AVAILABLE           | Not needed        | Not needed |

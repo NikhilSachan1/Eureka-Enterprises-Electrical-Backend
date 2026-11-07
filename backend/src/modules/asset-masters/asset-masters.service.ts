@@ -37,6 +37,7 @@ import {
   ASSET_EXPENSE_REFERENCE_TYPES,
   buildLossRecoveryDescription,
   buildRefundDescription,
+  PENDING_REQUEST_EVENT_TYPES,
 } from './constants/asset-masters.constants';
 import { UserStatus } from '../users/constants/user.constants';
 import { BulkDeleteAssetDto } from './dto/bulk-delete-asset.dto';
@@ -348,7 +349,7 @@ export class AssetMastersService {
   }
 
   async action(
-    assetActionDto: AssetActionDto & { fromUserId: string },
+    assetActionDto: AssetActionDto & { fromUserId: string; activeRole?: string },
     assetFiles: string[],
     createdBy: string,
   ) {
@@ -814,12 +815,12 @@ export class AssetMastersService {
       throw new BadRequestException(ASSET_MASTERS_ERRORS.ASSET_RETIRED_CANNOT_BE_LOST);
     }
 
-    // Block if a handover is pending
+    // Block if a handover or a return to office is pending
     const lastEvent = await this.assetEventsService.findOneEvent({
       where: { assetMasterId },
       order: { createdAt: 'DESC' },
     });
-    if (lastEvent?.eventType === AssetEventTypes.HANDOVER_INITIATED) {
+    if (lastEvent && PENDING_REQUEST_EVENT_TYPES.includes(lastEvent.eventType as AssetEventTypes)) {
       throw new BadRequestException(ASSET_MASTERS_ERRORS.PENDING_HANDOVER_BLOCKS_LOST);
     }
 

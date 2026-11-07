@@ -20,6 +20,19 @@ export const ASSET_EVENTS_ERRORS = {
   ONLY_TARGET_USER_CAN_ACCEPT: 'Only the target user of the handover can accept it',
   ONLY_TARGET_USER_CAN_REJECT: 'Only the target user of the handover can reject it',
   ONLY_INITIATOR_CAN_CANCEL: 'Only the initiator of the handover can cancel it',
+  REQUEST_ALREADY_PENDING: 'A handover or return is already pending for this asset',
+  NO_RETURN_PENDING: 'No return to office is pending for this asset',
+  FILES_REQUIRED_FOR_RETURN_INITIATE: 'Files are required to return an asset to the office',
+  ONLY_ASSIGNEE_CAN_RETURN: 'Only the user the asset is assigned to can return it to the office',
+  ONLY_INITIATOR_CAN_CANCEL_RETURN: 'Only the user who started the return can cancel it',
+  CANNOT_RESPOND_TO_OWN_RETURN: 'You cannot accept or reject a return you started yourself',
+  RETURN_PERMISSION_REQUIRED: 'You do not have permission to {action} this return',
+};
+
+/** Who may answer a pending return. Checked in the service, as the action endpoint has no guard. */
+export const RETURN_RESPONSE_PERMISSIONS: Partial<Record<AssetEventTypes, string>> = {
+  [AssetEventTypes.RETURN_ACCEPTED]: 'asset.return-accepted',
+  [AssetEventTypes.RETURN_REJECTED]: 'asset.return-rejected',
 };
 
 export const ASSET_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
@@ -27,6 +40,10 @@ export const ASSET_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
   [AssetEventTypes.HANDOVER_ACCEPTED]: 'Handover accepted successfully',
   [AssetEventTypes.HANDOVER_REJECTED]: 'Handover rejected successfully',
   [AssetEventTypes.HANDOVER_CANCELLED]: 'Handover cancelled successfully',
+  [AssetEventTypes.RETURN_INITIATED]: 'Return to office initiated successfully',
+  [AssetEventTypes.RETURN_ACCEPTED]: 'Return accepted successfully. The asset is available again',
+  [AssetEventTypes.RETURN_REJECTED]: 'Return rejected successfully',
+  [AssetEventTypes.RETURN_CANCELLED]: 'Return cancelled successfully',
   [AssetEventTypes.DEALLOCATED]: 'Asset deallocated successfully',
   [AssetEventTypes.CALIBRATED]: 'Asset calibrated successfully',
   [AssetEventTypes.UNDER_MAINTENANCE]: 'Asset marked under maintenance successfully',
@@ -51,6 +68,7 @@ export const VALID_ACTIONS_BY_STATUS: Record<string, AssetEventTypes[]> = {
   ],
   [AssetStatus.ASSIGNED]: [
     AssetEventTypes.HANDOVER_INITIATED,
+    AssetEventTypes.RETURN_INITIATED,
     AssetEventTypes.DEALLOCATED,
     AssetEventTypes.UNDER_MAINTENANCE,
     AssetEventTypes.DAMAGED,
@@ -79,6 +97,12 @@ export const HANDOVER_RESPONSE_ACTIONS = [
   AssetEventTypes.HANDOVER_ACCEPTED,
   AssetEventTypes.HANDOVER_REJECTED,
   AssetEventTypes.HANDOVER_CANCELLED,
+];
+
+export const RETURN_RESPONSE_ACTIONS = [
+  AssetEventTypes.RETURN_ACCEPTED,
+  AssetEventTypes.RETURN_REJECTED,
+  AssetEventTypes.RETURN_CANCELLED,
 ];
 
 export enum AssetEventsSortableFields {

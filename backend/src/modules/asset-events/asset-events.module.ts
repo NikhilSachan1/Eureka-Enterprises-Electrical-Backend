@@ -7,6 +7,7 @@ import { AssetEventsRepository } from './asset-events.repository';
 import { SharedModule } from '../shared/shared.module';
 import { AssetFilesModule } from '../asset-files/asset-files.module';
 import { AssetVersionsModule } from '../asset-versions/asset-versions.module';
+import { UserDelegationModule } from '../user-delegations/user-delegation.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AssetVersionsModule } from '../asset-versions/asset-versions.module';
     SharedModule,
     AssetFilesModule,
     forwardRef(() => AssetVersionsModule),
+    UserDelegationModule,
   ],
   controllers: [AssetEventsController],
   providers: [AssetEventsService, AssetEventsRepository],

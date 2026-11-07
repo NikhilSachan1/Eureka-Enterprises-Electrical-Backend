@@ -54,6 +54,9 @@ const HANDOVER_TITLES: Record<string, string> = {
   HANDOVER_REJECTED: 'Asset handover rejected',
   HANDOVER_CANCELLED: 'Asset handover cancelled',
   DEALLOCATED: 'Asset taken back',
+  RETURN_INITIATED: 'Asset return to office',
+  RETURN_ACCEPTED: 'Asset return accepted',
+  RETURN_REJECTED: 'Asset return rejected',
 };
 
 const handoverMessage = (
@@ -74,6 +77,12 @@ const handoverMessage = (
       return `${byName} cancelled the handover of ${thing}`;
     case 'DEALLOCATED':
       return `${thing[0].toUpperCase()}${thing.slice(1)} was taken back from you by ${byName}`;
+    case 'RETURN_INITIATED':
+      return `${byName} is returning ${thing} to the office — accept or reject it`;
+    case 'RETURN_ACCEPTED':
+      return `${byName} accepted the return of ${thing}. It is no longer with you`;
+    case 'RETURN_REJECTED':
+      return `${byName} rejected the return of ${thing}. It stays with you`;
     default:
       return `${thing[0].toUpperCase()}${thing.slice(1)} was updated by ${byName}`;
   }
