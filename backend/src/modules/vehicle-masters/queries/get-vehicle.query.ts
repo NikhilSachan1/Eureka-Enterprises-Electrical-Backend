@@ -9,6 +9,7 @@ import {
   ServiceDueStatus,
   HandoverStatus,
   HANDOVER_STATUS_EVENT_TYPES,
+  VehicleEventTypes,
 } from '../constants/vehicle-masters.constants';
 
 const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
@@ -22,6 +23,29 @@ const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
     AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
   ORDER BY ve."createdAt" DESC, ve."id" DESC
   LIMIT 1
+)`;
+
+/**
+ * The latest request on the item is one of these users' to follow: a handover sent to them, or a
+ * return to office they started. A return has no target user — it waits on the office — but for
+ * the person returning it is still pending, so it counts as theirs.
+ */
+const latestRequestOfUserSql = (param: string) => `EXISTS (
+  SELECT 1
+  FROM (
+    SELECT ve."eventType", ve."fromUser", ve."toUser"
+    FROM "vehicles_events" ve
+    WHERE ve."vehicleMasterId" = vm."id"
+      AND ve."deletedAt" IS NULL
+      AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+    ORDER BY ve."createdAt" DESC, ve."id" DESC
+    LIMIT 1
+  ) le
+  WHERE le."toUser" = ANY(${param}::uuid[])
+     OR (
+       le."eventType" = '${VehicleEventTypes.RETURN_INITIATED}'
+       AND le."fromUser" = ANY(${param}::uuid[])
+     )
 )`;
 
 export const getVehicleStatsQuery = () => {
@@ -302,7 +326,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
   }
 
   if (handoverToUser && handoverToUser.length > 0) {
-    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    filters.push(latestRequestOfUserSql(`$${paramIndex}`));
     params.push(handoverToUser);
     paramIndex++;
   }

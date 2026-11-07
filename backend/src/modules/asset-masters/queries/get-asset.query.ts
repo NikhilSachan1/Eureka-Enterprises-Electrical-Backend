@@ -27,6 +27,29 @@ const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
   LIMIT 1
 )`;
 
+/**
+ * The latest request on the item is one of these users' to follow: a handover sent to them, or a
+ * return to office they started. A return has no target user — it waits on the office — but for
+ * the person returning it is still pending, so it counts as theirs.
+ */
+const latestRequestOfUserSql = (param: string) => `EXISTS (
+  SELECT 1
+  FROM (
+    SELECT ae."eventType", ae."fromUser", ae."toUser"
+    FROM "assets_events" ae
+    WHERE ae."assetMasterId" = am."id"
+      AND ae."deletedAt" IS NULL
+      AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+    ORDER BY ae."createdAt" DESC, ae."id" DESC
+    LIMIT 1
+  ) le
+  WHERE le."toUser" = ANY(${param}::uuid[])
+     OR (
+       le."eventType" = '${AssetEventTypes.RETURN_INITIATED}'
+       AND le."fromUser" = ANY(${param}::uuid[])
+     )
+)`;
+
 export const getLostAssetsQuery = () => `
   SELECT
     am.id                             AS "assetMasterId",
@@ -336,7 +359,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
   }
 
   if (handoverToUser && handoverToUser.length > 0) {
-    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    filters.push(latestRequestOfUserSql(`$${paramIndex}`));
     params.push(handoverToUser);
     paramIndex++;
   }
