@@ -12,6 +12,10 @@ import { VehicleEventTypes } from '../constants/vehicle-masters.constants';
  * | HANDOVER_ACCEPTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_REJECTED   | Derived (JWT)     | Optional   |
  * | HANDOVER_CANCELLED  | Derived (JWT)     | Optional   |
+ * | RETURN_INITIATED    | Not needed        | Required   |
+ * | RETURN_ACCEPTED     | Not needed        | Optional   |
+ * | RETURN_REJECTED     | Not needed        | Optional   |
+ * | RETURN_CANCELLED    | Not needed        | Optional   |
  * | DEALLOCATED         | Auto (assignedTo) | Optional   |
  * | UNDER_MAINTENANCE   | Not needed        | Optional   |
  * | AVAILABLE           | Not needed        | Not needed |
@@ -34,6 +38,10 @@ export class VehicleActionDto {
       VehicleEventTypes.HANDOVER_ACCEPTED,
       VehicleEventTypes.HANDOVER_REJECTED,
       VehicleEventTypes.HANDOVER_CANCELLED,
+      VehicleEventTypes.RETURN_INITIATED,
+      VehicleEventTypes.RETURN_ACCEPTED,
+      VehicleEventTypes.RETURN_REJECTED,
+      VehicleEventTypes.RETURN_CANCELLED,
       VehicleEventTypes.UNDER_MAINTENANCE,
       VehicleEventTypes.DEALLOCATED,
       VehicleEventTypes.AVAILABLE,
@@ -48,6 +56,10 @@ export class VehicleActionDto {
     VehicleEventTypes.HANDOVER_ACCEPTED,
     VehicleEventTypes.HANDOVER_REJECTED,
     VehicleEventTypes.HANDOVER_CANCELLED,
+    VehicleEventTypes.RETURN_INITIATED,
+    VehicleEventTypes.RETURN_ACCEPTED,
+    VehicleEventTypes.RETURN_REJECTED,
+    VehicleEventTypes.RETURN_CANCELLED,
     VehicleEventTypes.UNDER_MAINTENANCE,
     VehicleEventTypes.DEALLOCATED,
     VehicleEventTypes.AVAILABLE,

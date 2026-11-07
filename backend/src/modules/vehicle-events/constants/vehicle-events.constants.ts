@@ -22,6 +22,19 @@ export const VEHICLE_EVENTS_ERRORS = {
   ONLY_INITIATOR_CAN_CANCEL: 'Only the initiator of the handover can cancel it',
   TO_USER_ALREADY_HAS_VEHICLE:
     'The target user already has a vehicle assigned. A user can only hold one vehicle at a time.',
+  REQUEST_ALREADY_PENDING: 'A handover or return is already pending for this vehicle',
+  NO_RETURN_PENDING: 'No return to office is pending for this vehicle',
+  FILES_REQUIRED_FOR_RETURN_INITIATE: 'Files are required to return a vehicle to the office',
+  ONLY_ASSIGNEE_CAN_RETURN: 'Only the user the vehicle is assigned to can return it to the office',
+  ONLY_INITIATOR_CAN_CANCEL_RETURN: 'Only the user who started the return can cancel it',
+  CANNOT_RESPOND_TO_OWN_RETURN: 'You cannot accept or reject a return you started yourself',
+  RETURN_PERMISSION_REQUIRED: 'You do not have permission to {action} this return',
+};
+
+/** Who may answer a pending return. Checked in the service, as the action endpoint has no guard. */
+export const RETURN_RESPONSE_PERMISSIONS: Partial<Record<VehicleEventTypes, string>> = {
+  [VehicleEventTypes.RETURN_ACCEPTED]: 'vehicle.return-accepted',
+  [VehicleEventTypes.RETURN_REJECTED]: 'vehicle.return-rejected',
 };
 
 export const VEHICLE_EVENTS_DTO_ERRORS = {
@@ -38,6 +51,7 @@ export const VALID_ACTIONS_BY_STATUS: Record<string, VehicleEventTypes[]> = {
   ],
   [VehicleStatus.ASSIGNED]: [
     VehicleEventTypes.HANDOVER_INITIATED,
+    VehicleEventTypes.RETURN_INITIATED,
     VehicleEventTypes.DEALLOCATED,
     VehicleEventTypes.UNDER_MAINTENANCE,
     VehicleEventTypes.DAMAGED,
@@ -62,11 +76,22 @@ export const HANDOVER_RESPONSE_ACTIONS = [
   VehicleEventTypes.HANDOVER_CANCELLED,
 ];
 
+export const RETURN_RESPONSE_ACTIONS = [
+  VehicleEventTypes.RETURN_ACCEPTED,
+  VehicleEventTypes.RETURN_REJECTED,
+  VehicleEventTypes.RETURN_CANCELLED,
+];
+
 export const VEHICLE_EVENTS_SUCCESS_MESSAGES: Record<string, string> = {
   [VehicleEventTypes.HANDOVER_INITIATED]: 'Handover initiated successfully',
   [VehicleEventTypes.HANDOVER_ACCEPTED]: 'Handover accepted successfully',
   [VehicleEventTypes.HANDOVER_REJECTED]: 'Handover rejected successfully',
   [VehicleEventTypes.HANDOVER_CANCELLED]: 'Handover cancelled successfully',
+  [VehicleEventTypes.RETURN_INITIATED]: 'Return to office initiated successfully',
+  [VehicleEventTypes.RETURN_ACCEPTED]:
+    'Return accepted successfully. The vehicle is available again',
+  [VehicleEventTypes.RETURN_REJECTED]: 'Return rejected successfully',
+  [VehicleEventTypes.RETURN_CANCELLED]: 'Return cancelled successfully',
   [VehicleEventTypes.DEALLOCATED]: 'Vehicle deallocated successfully',
   [VehicleEventTypes.UNDER_MAINTENANCE]: 'Vehicle marked under maintenance successfully',
   [VehicleEventTypes.DAMAGED]: 'Vehicle marked as damaged successfully',

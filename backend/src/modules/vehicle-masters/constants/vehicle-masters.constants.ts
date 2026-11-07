@@ -82,6 +82,15 @@ export enum VehicleEventTypes {
   HANDOVER_CANCELLED = 'HANDOVER_CANCELLED',
   /** Auto-penalty cron's counterpart to HANDOVER_ACCEPTED — see the asset enum for the reasoning. */
   HANDOVER_AUTO_ACCEPTED = 'HANDOVER_AUTO_ACCEPTED',
+  /**
+   * Return to office: the holder sends the vehicle back, office staff accept or reject it.
+   * There is no target user — whoever holds `vehicle.return-accepted` / `vehicle.return-rejected`
+   * may respond. `fromUser` is always the holder on all four events; `createdBy` records who acted.
+   */
+  RETURN_INITIATED = 'RETURN_INITIATED',
+  RETURN_ACCEPTED = 'RETURN_ACCEPTED',
+  RETURN_REJECTED = 'RETURN_REJECTED',
+  RETURN_CANCELLED = 'RETURN_CANCELLED',
 }
 
 /**
@@ -94,7 +103,17 @@ export const HANDOVER_EVENT_TYPES: VehicleEventTypes[] = [
   VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
   VehicleEventTypes.HANDOVER_REJECTED,
   VehicleEventTypes.HANDOVER_CANCELLED,
+  VehicleEventTypes.RETURN_INITIATED,
+  VehicleEventTypes.RETURN_ACCEPTED,
+  VehicleEventTypes.RETURN_REJECTED,
+  VehicleEventTypes.RETURN_CANCELLED,
   VehicleEventTypes.DEALLOCATED,
+];
+
+/** A request waiting for an answer. Only one may be open per vehicle, whichever kind it is. */
+export const PENDING_REQUEST_EVENT_TYPES: VehicleEventTypes[] = [
+  VehicleEventTypes.HANDOVER_INITIATED,
+  VehicleEventTypes.RETURN_INITIATED,
 ];
 
 /**
@@ -111,7 +130,10 @@ export enum HandoverStatus {
 }
 
 export const HANDOVER_STATUS_EVENT_TYPES: Record<HandoverStatus, VehicleEventTypes[]> = {
-  [HandoverStatus.INITIATED]: [VehicleEventTypes.HANDOVER_INITIATED],
+  [HandoverStatus.INITIATED]: [
+    VehicleEventTypes.HANDOVER_INITIATED,
+    VehicleEventTypes.RETURN_INITIATED,
+  ],
   [HandoverStatus.ACCEPTED]: [
     VehicleEventTypes.HANDOVER_ACCEPTED,
     VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,

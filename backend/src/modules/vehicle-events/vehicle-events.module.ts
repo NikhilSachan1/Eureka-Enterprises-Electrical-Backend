@@ -7,6 +7,7 @@ import { VehicleEventsRepository } from './vehicle-events.repository';
 import { SharedModule } from '../shared/shared.module';
 import { VehicleFilesModule } from '../vehicle-files/vehicle-files.module';
 import { VehicleVersionsModule } from '../vehicle-versions/vehicle-versions.module';
+import { UserDelegationModule } from '../user-delegations/user-delegation.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { VehicleVersionsModule } from '../vehicle-versions/vehicle-versions.modu
     SharedModule,
     VehicleFilesModule,
     forwardRef(() => VehicleVersionsModule),
+    UserDelegationModule,
   ],
   controllers: [VehicleEventsController],
   providers: [VehicleEventsService, VehicleEventsRepository],

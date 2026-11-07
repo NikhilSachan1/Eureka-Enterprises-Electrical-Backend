@@ -465,7 +465,8 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         'toUserUser', vle."toUserDetails",
         'metadata', vle."metadata",
         'createdAt', vle."createdAt",
-        'createdBy', vle."createdBy"${latestEventFilesJson}
+        'createdBy', vle."createdBy",
+        'createdByUser', vle."createdByDetails"${latestEventFilesJson}
       ) ELSE NULL END as "latestEvent"
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
@@ -501,10 +502,19 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
           'lastName', tu."lastName",
           'email', tu."email",
           'employeeId', tu."employeeId"
-        ) ELSE NULL END AS "toUserDetails"${latestEventFilesSelect}
+        ) ELSE NULL END AS "toUserDetails",
+        -- Who acted. A return has no target user, so the list names the person who answered it.
+        CASE WHEN cbu."id" IS NOT NULL THEN json_build_object(
+          'id', cbu."id",
+          'firstName', cbu."firstName",
+          'lastName', cbu."lastName",
+          'email', cbu."email",
+          'employeeId', cbu."employeeId"
+        ) ELSE NULL END AS "createdByDetails"${latestEventFilesSelect}
       FROM "vehicles_events" ve
       LEFT JOIN "users" fu ON ve."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ve."toUser" = tu."id" AND tu."deletedAt" IS NULL
+      LEFT JOIN "users" cbu ON ve."createdBy" = cbu."id" AND cbu."deletedAt" IS NULL
       WHERE ve."vehicleMasterId" = vm."id"
         AND ve."deletedAt" IS NULL
         AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})

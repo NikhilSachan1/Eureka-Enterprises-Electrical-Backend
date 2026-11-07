@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { CreateVehicleEventDto } from './dto/create-vehicle-event.dto';
 import { DataSource, EntityManager, In, Not } from 'typeorm';
 import { VehicleEventsRepository } from './vehicle-events.repository';
@@ -6,6 +6,7 @@ import { VehicleActionDto } from '../vehicle-versions/dto/vehicle-action.dto';
 import { VehicleFilesService } from '../vehicle-files/vehicle-files.service';
 import {
   HANDOVER_NEUTRAL_EVENT_TYPES,
+  PENDING_REQUEST_EVENT_TYPES,
   VehicleEventTypes,
   VehicleFileTypes,
   VehicleStatus,
@@ -15,6 +16,8 @@ import {
   VEHICLE_EVENTS_SUCCESS_MESSAGES,
   VALID_ACTIONS_BY_STATUS,
   HANDOVER_RESPONSE_ACTIONS,
+  RETURN_RESPONSE_ACTIONS,
+  RETURN_RESPONSE_PERMISSIONS,
 } from './constants/vehicle-events.constants';
 import { VehicleEventsQueryDto } from './dto/vehicle-events-query.dto';
 import { VehicleVersionsService } from '../vehicle-versions/vehicle-versions.service';
@@ -30,6 +33,8 @@ import { VehicleMasterEntity } from '../vehicle-masters/entities/vehicle-master.
 import { UserEntity } from '../users/entities/user.entity';
 import { NotificationService } from 'src/modules/notifications/notification.service';
 import { NotificationEvents } from 'src/modules/notifications/notification.events';
+import { NotificationRecipientsService } from 'src/modules/notifications/recipients.service';
+import { ManagedUsersService } from '../user-delegations/managed-users.service';
 
 @Injectable()
 export class VehicleEventsService {
@@ -41,6 +46,8 @@ export class VehicleEventsService {
     private readonly dateTimeService: DateTimeService,
     private readonly whatsAppService: WhatsAppService,
     private readonly notificationService: NotificationService,
+    private readonly notificationRecipientsService: NotificationRecipientsService,
+    private readonly managedUsersService: ManagedUsersService,
   ) {}
 
   async create(
@@ -74,6 +81,12 @@ export class VehicleEventsService {
         }
         break;
 
+      case VehicleEventTypes.RETURN_INITIATED:
+        if (!hasFiles) {
+          throw new BadRequestException(VEHICLE_EVENTS_ERRORS.FILES_REQUIRED_FOR_RETURN_INITIATE);
+        }
+        break;
+
       // Optional files for these actions.
       // HANDOVER_ACCEPTED used to require files as condition evidence from the receiver; that was
       // dropped so an accept is never blocked when the receiver cannot photograph the vehicle.
@@ -82,6 +95,9 @@ export class VehicleEventsService {
       case VehicleEventTypes.HANDOVER_ACCEPTED:
       case VehicleEventTypes.HANDOVER_REJECTED:
       case VehicleEventTypes.HANDOVER_CANCELLED:
+      case VehicleEventTypes.RETURN_ACCEPTED:
+      case VehicleEventTypes.RETURN_REJECTED:
+      case VehicleEventTypes.RETURN_CANCELLED:
       case VehicleEventTypes.DEALLOCATED:
       case VehicleEventTypes.UNDER_MAINTENANCE:
       case VehicleEventTypes.DAMAGED:
@@ -101,10 +117,14 @@ export class VehicleEventsService {
     return result || null;
   }
 
-  private async getPendingHandover(vehicleMasterId: string): Promise<VehicleEventEntity | null> {
+  /** The open handover or return to office, if the vehicle's last event is one. */
+  private async getPendingRequest(vehicleMasterId: string): Promise<VehicleEventEntity | null> {
     const lastEvent = await this.getLastEvent(vehicleMasterId);
 
-    if (lastEvent?.eventType === VehicleEventTypes.HANDOVER_INITIATED) {
+    if (
+      lastEvent &&
+      PENDING_REQUEST_EVENT_TYPES.includes(lastEvent.eventType as VehicleEventTypes)
+    ) {
       return lastEvent;
     }
     return null;
@@ -113,17 +133,29 @@ export class VehicleEventsService {
   private validateStateTransition(
     currentStatus: string,
     action: VehicleEventTypes,
-    pendingHandover: VehicleEventEntity | null,
+    pendingRequest: VehicleEventEntity | null,
   ): void {
+    // A response must answer the kind of request that is open, so a handover accept can never
+    // close a return or the other way round.
     if (HANDOVER_RESPONSE_ACTIONS.includes(action)) {
-      if (!pendingHandover) {
+      if (pendingRequest?.eventType !== VehicleEventTypes.HANDOVER_INITIATED) {
         throw new BadRequestException(VEHICLE_EVENTS_ERRORS.NO_HANDOVER_PENDING);
       }
       return;
     }
+    if (RETURN_RESPONSE_ACTIONS.includes(action)) {
+      if (pendingRequest?.eventType !== VehicleEventTypes.RETURN_INITIATED) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.NO_RETURN_PENDING);
+      }
+      return;
+    }
 
-    if (pendingHandover) {
-      throw new BadRequestException(VEHICLE_EVENTS_ERRORS.HANDOVER_ALREADY_PENDING);
+    if (pendingRequest) {
+      throw new BadRequestException(
+        pendingRequest.eventType === VehicleEventTypes.HANDOVER_INITIATED
+          ? VEHICLE_EVENTS_ERRORS.HANDOVER_ALREADY_PENDING
+          : VEHICLE_EVENTS_ERRORS.REQUEST_ALREADY_PENDING,
+      );
     }
 
     const validActions = VALID_ACTIONS_BY_STATUS[currentStatus] || [];
@@ -154,6 +186,42 @@ export class VehicleEventsService {
       if (pendingHandover.createdBy !== currentUserId) {
         throw new BadRequestException(VEHICLE_EVENTS_ERRORS.ONLY_INITIATOR_CAN_CANCEL);
       }
+    }
+  }
+
+  /**
+   * A return has no target user, so the answer is gated by permission instead: office staff with
+   * `vehicle.return-accepted` / `vehicle.return-rejected` respond, and never to their own return.
+   * Only the person who started the return can cancel it.
+   */
+  private async validateReturnPermissions(
+    action: VehicleEventTypes,
+    pendingReturn: VehicleEventEntity,
+    currentUserId: string,
+    activeRole: string | undefined,
+  ): Promise<void> {
+    if (action === VehicleEventTypes.RETURN_CANCELLED) {
+      if (pendingReturn.createdBy !== currentUserId) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.ONLY_INITIATOR_CAN_CANCEL_RETURN);
+      }
+      return;
+    }
+
+    if (pendingReturn.createdBy === currentUserId) {
+      throw new BadRequestException(VEHICLE_EVENTS_ERRORS.CANNOT_RESPOND_TO_OWN_RETURN);
+    }
+
+    const permission = RETURN_RESPONSE_PERMISSIONS[action];
+    const allowed =
+      !!permission &&
+      (await this.managedUsersService.hasPermission(currentUserId, activeRole, permission));
+    if (!allowed) {
+      throw new ForbiddenException(
+        VEHICLE_EVENTS_ERRORS.RETURN_PERMISSION_REQUIRED.replace(
+          '{action}',
+          action === VehicleEventTypes.RETURN_ACCEPTED ? 'accept' : 'reject',
+        ),
+      );
     }
   }
 
@@ -215,12 +283,13 @@ export class VehicleEventsService {
   }
 
   async action(
-    vehicleActionDto: VehicleActionDto & { fromUserId: string },
+    vehicleActionDto: VehicleActionDto & { fromUserId: string; activeRole?: string },
     vehicleFiles: string[],
     createdBy: string,
   ) {
     try {
-      const { vehicleMasterId, action, toUserId, fromUserId, metadata } = vehicleActionDto;
+      const { vehicleMasterId, action, toUserId, fromUserId, activeRole, metadata } =
+        vehicleActionDto;
 
       // Validate action-specific requirements (files, toUserId etc)
       this.validateActionRequirements(action, toUserId, vehicleFiles);
@@ -232,12 +301,27 @@ export class VehicleEventsService {
 
       const currentStatus = activeVersion?.status || 'AVAILABLE';
 
-      const pendingHandover = await this.getPendingHandover(vehicleMasterId);
+      const pendingRequest = await this.getPendingRequest(vehicleMasterId);
+      const pendingHandover =
+        pendingRequest?.eventType === VehicleEventTypes.HANDOVER_INITIATED ? pendingRequest : null;
+      const pendingReturn =
+        pendingRequest?.eventType === VehicleEventTypes.RETURN_INITIATED ? pendingRequest : null;
 
-      this.validateStateTransition(currentStatus, action, pendingHandover);
+      this.validateStateTransition(currentStatus, action, pendingRequest);
 
       if (HANDOVER_RESPONSE_ACTIONS.includes(action) && pendingHandover) {
         this.validateHandoverPermissions(action, pendingHandover, fromUserId);
+      }
+
+      if (RETURN_RESPONSE_ACTIONS.includes(action) && pendingReturn) {
+        await this.validateReturnPermissions(action, pendingReturn, fromUserId, activeRole);
+      }
+
+      if (
+        action === VehicleEventTypes.RETURN_INITIATED &&
+        activeVersion?.assignedTo !== fromUserId
+      ) {
+        throw new BadRequestException(VEHICLE_EVENTS_ERRORS.ONLY_ASSIGNEE_CAN_RETURN);
       }
 
       let whatsappNotification:
@@ -431,6 +515,116 @@ export class VehicleEventsService {
             break;
           }
 
+          // Return to office - only the holder, files mandatory. No target user: office staff answer it.
+          case VehicleEventTypes.RETURN_INITIATED: {
+            const event = await this.create(
+              {
+                vehicleMasterId,
+                eventType: action,
+                fromUser: fromUserId, // The holder returning the vehicle
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            await this.vehicleFilesService.create(
+              {
+                vehicleMasterId,
+                fileType: VehicleFileTypes.VEHICLE_IMAGE,
+                fileKeys: vehicleFiles,
+                vehicleEventsId: event.id,
+                createdBy,
+              },
+              entityManager,
+            );
+            break;
+          }
+
+          // Return accepted - the vehicle is back at the office: available, nobody holds it
+          case VehicleEventTypes.RETURN_ACCEPTED: {
+            const holderUserId = pendingReturn?.fromUser;
+            const event = await this.create(
+              {
+                vehicleMasterId,
+                eventType: action,
+                fromUser: holderUserId, // The holder who returned it; createdBy is who accepted
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (vehicleFiles && vehicleFiles.length > 0) {
+              await this.vehicleFilesService.create(
+                {
+                  vehicleMasterId,
+                  fileType: VehicleFileTypes.VEHICLE_IMAGE,
+                  fileKeys: vehicleFiles,
+                  vehicleEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            await this.vehicleVersionsService.update(
+              { vehicleMasterId, isActive: true },
+              { status: VehicleStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
+              entityManager,
+            );
+
+            if (holderUserId) {
+              whatsappNotification = {
+                action,
+                vehicleMasterId,
+                recipientUserId: holderUserId,
+                actorUserId: fromUserId,
+              };
+            }
+            break;
+          }
+
+          // Return rejected / cancelled - the vehicle stays with the holder, nothing else changes
+          case VehicleEventTypes.RETURN_REJECTED:
+          case VehicleEventTypes.RETURN_CANCELLED: {
+            const holderUserId = pendingReturn?.fromUser;
+            const event = await this.create(
+              {
+                vehicleMasterId,
+                eventType: action,
+                fromUser: holderUserId, // The holder; createdBy is who rejected or cancelled
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (vehicleFiles && vehicleFiles.length > 0) {
+              await this.vehicleFilesService.create(
+                {
+                  vehicleMasterId,
+                  fileType: VehicleFileTypes.OTHER,
+                  fileKeys: vehicleFiles,
+                  vehicleEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            // The holder cancelled it themselves, so only a rejection needs telling them.
+            if (action === VehicleEventTypes.RETURN_REJECTED && holderUserId) {
+              whatsappNotification = {
+                action,
+                vehicleMasterId,
+                recipientUserId: holderUserId,
+                actorUserId: fromUserId,
+              };
+            }
+            break;
+          }
+
           // Deallocate - fromUser auto-derived from vehicle's assignedTo
           case VehicleEventTypes.DEALLOCATED: {
             if (!activeVersion?.assignedTo) {
@@ -613,12 +807,36 @@ export class VehicleEventsService {
         void this.sendVehicleTransactionWhatsappNotification(whatsappNotification);
       }
 
+      if (action === VehicleEventTypes.RETURN_INITIATED) {
+        void this.notifyOfficeOfReturn(vehicleMasterId, fromUserId);
+      }
+
       return {
         message: VEHICLE_EVENTS_SUCCESS_MESSAGES[action],
       };
     } catch (error) {
       throw error;
     }
+  }
+
+  /** A return has no target user, so everyone who may accept it hears about it. */
+  private async notifyOfficeOfReturn(vehicleMasterId: string, holderUserId: string): Promise<void> {
+    const recipients = await this.notificationRecipientsService.usersWithPermission(
+      RETURN_RESPONSE_PERMISSIONS[VehicleEventTypes.RETURN_ACCEPTED],
+    );
+
+    await Promise.all(
+      recipients
+        .filter((userId) => userId !== holderUserId)
+        .map((recipientUserId) =>
+          this.sendVehicleTransactionWhatsappNotification({
+            action: VehicleEventTypes.RETURN_INITIATED,
+            vehicleMasterId,
+            recipientUserId,
+            actorUserId: holderUserId,
+          }),
+        ),
+    );
   }
 
   async findAll(vehicleMasterId: string, query: VehicleEventsQueryDto, timezone: string) {
@@ -671,6 +889,10 @@ export class VehicleEventsService {
           HANDOVER_ACCEPTED: Number(statsRow.HANDOVER_ACCEPTED || 0),
           HANDOVER_REJECTED: Number(statsRow.HANDOVER_REJECTED || 0),
           HANDOVER_CANCELLED: Number(statsRow.HANDOVER_CANCELLED || 0),
+          RETURN_INITIATED: Number(statsRow.RETURN_INITIATED || 0),
+          RETURN_ACCEPTED: Number(statsRow.RETURN_ACCEPTED || 0),
+          RETURN_REJECTED: Number(statsRow.RETURN_REJECTED || 0),
+          RETURN_CANCELLED: Number(statsRow.RETURN_CANCELLED || 0),
         },
       };
 
