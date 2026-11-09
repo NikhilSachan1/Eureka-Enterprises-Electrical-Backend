@@ -23,7 +23,10 @@ import {
   AUTH_RESPONSES,
   AUTH_REDIRECT_ROUTES,
   ADMIN_RESETTABLE_TARGET_ROLES,
+  IMPERSONATION_ACCESS_TOKEN_EXPIRY,
+  IMPERSONATION_SESSION_MINUTES,
 } from './constants/auth.constants';
+import { Roles } from '../roles/constants/role.constants';
 import { UtilityService } from 'src/utils/utility/utility.service';
 import { EmailService } from '../common/email/email.service';
 import { UserStatus } from '../users/constants/user.constants';
@@ -80,7 +83,9 @@ export class AuthService {
   private generateAccessToken(payload: JwtPayload): string {
     return this.jwtService.sign(payload, {
       secret: Environments.JWT_AUTH_SECRET_KEY,
-      expiresIn: Environments.JWT_AUTH_TOKEN_EXPIRY,
+      expiresIn: payload.impersonatedBy
+        ? IMPERSONATION_ACCESS_TOKEN_EXPIRY
+        : Environments.JWT_AUTH_TOKEN_EXPIRY,
     });
   }
 
@@ -197,6 +202,13 @@ export class AuthService {
       throw new ForbiddenException(AUTH_ERRORS.USER_HAS_NO_ROLES);
     }
 
+    // The admin may have been archived or demoted since the session started.
+    const { impersonatedBy } = payload;
+    if (impersonatedBy && !(await this.isSuperAdmin(impersonatedBy))) {
+      await this.refreshTokenRepository.update({ token: refreshToken }, { isRevoked: true });
+      throw new UnauthorizedException(AUTH_ERRORS.IMPERSONATION_NOT_ALLOWED);
+    }
+
     const roles = userRoles.map((ur) => ur.role.name);
     const defaultActiveRole = roles[0];
 
@@ -205,6 +217,7 @@ export class AuthService {
       email: user.email,
       roles,
       activeRole: defaultActiveRole,
+      ...(impersonatedBy && { impersonatedBy }),
     };
     const newAccessToken = this.generateAccessToken(accessTokenPayload);
 
@@ -214,6 +227,7 @@ export class AuthService {
     const newRefreshTokenPayload: RefreshTokenPayload = {
       userId: user.id,
       tokenId: newTokenId,
+      ...(impersonatedBy && { impersonatedBy }),
     };
     const newRefreshToken = this.generateRefreshToken(
       newRefreshTokenPayload,
@@ -233,7 +247,9 @@ export class AuthService {
       refreshToken: newRefreshToken,
       roles,
       activeRole: defaultActiveRole,
-      expiresIn: Environments.JWT_AUTH_TOKEN_EXPIRY,
+      expiresIn: impersonatedBy
+        ? IMPERSONATION_ACCESS_TOKEN_EXPIRY
+        : Environments.JWT_AUTH_TOKEN_EXPIRY,
       message: AUTH_RESPONSES.TOKEN_REFRESHED,
     };
   }
@@ -280,6 +296,7 @@ export class AuthService {
       email: user.email,
       roles: currentRoles,
       activeRole: targetRole,
+      ...(currentUser.impersonatedBy && { impersonatedBy: currentUser.impersonatedBy }),
     };
     const accessToken = this.generateAccessToken(accessTokenPayload);
 
@@ -287,8 +304,107 @@ export class AuthService {
       accessToken,
       roles: currentRoles,
       activeRole: targetRole,
-      expiresIn: Environments.JWT_AUTH_TOKEN_EXPIRY,
+      expiresIn: currentUser.impersonatedBy
+        ? IMPERSONATION_ACCESS_TOKEN_EXPIRY
+        : Environments.JWT_AUTH_TOKEN_EXPIRY,
       message: AUTH_RESPONSES.ROLE_SWITCHED,
+    };
+  }
+
+  private async getRoleNames(userId: string): Promise<string[]> {
+    const userRoles = await this.userRoleService.findAll({
+      where: { userId },
+      relations: ['role'],
+    });
+    return (userRoles ?? []).map((userRole) => userRole.role.name);
+  }
+
+  private holdsSuperAdminRole(roleNames: string[]): boolean {
+    return roleNames.some((name) => String(name).toUpperCase() === Roles.SUPER_ADMIN);
+  }
+
+  /** Checked against the database, so a stale token cannot keep this power after a demotion. */
+  private async isSuperAdmin(userId: string): Promise<boolean> {
+    const user = await this.userService.findOne({ id: userId, deletedAt: null });
+    if (!user || user.status === UserStatus.ARCHIVED) {
+      return false;
+    }
+    return this.holdsSuperAdminRole(await this.getRoleNames(userId));
+  }
+
+  /**
+   * Starts a short-lived session as another user without their password, for SUPER_ADMIN only.
+   *
+   * The tokens carry `impersonatedBy`, which the audit log records on every request made during the
+   * session, so the target is never blamed for what the admin did. Other SUPER_ADMINs cannot be
+   * targeted, which keeps one super admin's actions from being attributed to another.
+   */
+  async impersonate(actor: UserFromRequest, targetUserId: string, metadata?: RequestMetadata) {
+    if (actor.impersonatedBy) {
+      throw new ForbiddenException(AUTH_ERRORS.IMPERSONATION_ALREADY_ACTIVE);
+    }
+
+    if (actor.activeRole !== Roles.SUPER_ADMIN || !(await this.isSuperAdmin(actor.id))) {
+      throw new ForbiddenException(AUTH_ERRORS.IMPERSONATION_NOT_ALLOWED);
+    }
+
+    if (targetUserId === actor.id) {
+      throw new ForbiddenException(AUTH_ERRORS.IMPERSONATION_TARGET_SELF);
+    }
+
+    const target = await this.userService.findOne({ id: targetUserId, deletedAt: null });
+    if (!target) {
+      throw new NotFoundException(AUTH_ERRORS.EMAIL_NOT_EXISTS);
+    }
+    if (target.status === UserStatus.ARCHIVED) {
+      throw new ForbiddenException(AUTH_ERRORS.USER_ARCHIVED);
+    }
+
+    const roles = await this.getRoleNames(targetUserId);
+    if (roles.length === 0) {
+      throw new ForbiddenException(AUTH_ERRORS.USER_HAS_NO_ROLES);
+    }
+    if (this.holdsSuperAdminRole(roles)) {
+      throw new ForbiddenException(AUTH_ERRORS.IMPERSONATION_TARGET_SUPER_ADMIN);
+    }
+
+    const activeRole = roles[0];
+    const accessToken = this.generateAccessToken({
+      id: target.id,
+      email: target.email,
+      roles,
+      activeRole,
+      impersonatedBy: actor.id,
+    });
+
+    const expiresAt = new Date(Date.now() + IMPERSONATION_SESSION_MINUTES * 60 * 1000);
+    const refreshToken = this.generateRefreshToken(
+      { userId: target.id, tokenId: uuidv4(), impersonatedBy: actor.id },
+      expiresAt,
+    );
+    await this.refreshTokenRepository.create({
+      userId: target.id,
+      token: refreshToken,
+      expiresAt,
+      userAgent: metadata?.userAgent,
+      ipAddress: metadata?.ipAddress,
+    });
+
+    this.logger.warn(`Super admin ${actor.id} started impersonating user ${target.id}`);
+
+    return {
+      accessToken,
+      refreshToken,
+      name: `${target.firstName} ${target.lastName}`,
+      email: target.email,
+      firstName: target.firstName,
+      lastName: target.lastName,
+      designation: target.designation,
+      profilePicture: target.profilePicture || null,
+      roles,
+      activeRole,
+      expiresIn: IMPERSONATION_ACCESS_TOKEN_EXPIRY,
+      userId: target.id,
     };
   }
 

@@ -37,7 +37,21 @@ export const AUTH_ERRORS = {
   RESET_TARGET_SELF:
     'You cannot reset your own password here. Use change password or forgot password.',
   RESET_TARGET_HAS_NO_ROLES: 'This user has no roles assigned, so their password cannot be reset.',
+  // Super admin sign-in as another user
+  IMPERSONATION_NOT_ALLOWED: 'Only a Super Admin can sign in as another user.',
+  IMPERSONATION_ALREADY_ACTIVE: 'Exit the current user session before signing in as someone else.',
+  IMPERSONATION_TARGET_SELF: 'You cannot sign in as yourself.',
+  IMPERSONATION_TARGET_SUPER_ADMIN: 'You cannot sign in as another Super Admin.',
+  IMPERSONATION_ACTION_BLOCKED: 'This action is not available while signed in as another user.',
 };
+
+/**
+ * Impersonation sessions are deliberately much shorter than normal ones (access tokens are days
+ * long in some environments). The refresh token's expiry is carried across rotation, so the session
+ * length is a hard cap: a session can outlive it only by one access-token lifetime.
+ */
+export const IMPERSONATION_ACCESS_TOKEN_EXPIRY = '15m';
+export const IMPERSONATION_SESSION_MINUTES = 60;
 
 /**
  * Roles a target may hold and still be password-resettable by an admin.
