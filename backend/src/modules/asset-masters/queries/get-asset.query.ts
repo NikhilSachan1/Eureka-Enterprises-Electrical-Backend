@@ -16,9 +16,9 @@ import {
 
 const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
 
-/** A column of the same row the list returns as `latestEvent`, for an outer alias `am`. */
-const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
-  SELECT ae."${column}"
+/** The event type of the row the list returns as `latestEvent`, for an outer alias `am`. */
+const latestHandoverEventTypeSql = `(
+  SELECT ae."eventType"
   FROM "assets_events" ae
   WHERE ae."assetMasterId" = am."id"
     AND ae."deletedAt" IS NULL
@@ -192,7 +192,7 @@ export const getAssetStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) av ON true
-    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventTypeSql} AS "eventType") lh ON true
     WHERE am."deletedAt" IS NULL
   `;
 };
@@ -358,7 +358,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
   }
 
   if (handoverStatus && handoverStatus.length > 0) {
-    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
+    filters.push(`${latestHandoverEventTypeSql} = ANY($${paramIndex})`);
     params.push(handoverStatus.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
     paramIndex++;
   }
