@@ -88,6 +88,7 @@ export class AuthController {
 
   @ApiBearerAuth('JWT-auth')
   @Post('impersonate/:userId')
+  @RequiredPermission('auth.impersonate')
   @ApiOperation({
     summary: 'Sign in as another user (super admin only)',
     description:
