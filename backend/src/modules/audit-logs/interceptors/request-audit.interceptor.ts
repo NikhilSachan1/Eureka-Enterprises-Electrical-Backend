@@ -31,6 +31,7 @@ export class RequestAuditInterceptor implements NestInterceptor {
 
     // Extract user from request (set by AuthGuard)
     const userId = request.user?.id;
+    const impersonatedBy = request.user?.impersonatedBy;
     const userIp = getClientIp(request);
     const userAgent = request.headers['user-agent'];
 
@@ -38,6 +39,7 @@ export class RequestAuditInterceptor implements NestInterceptor {
     const auditContext: AuditContext = {
       correlationId,
       userId,
+      impersonatedBy,
       userIp,
     };
 
@@ -64,6 +66,7 @@ export class RequestAuditInterceptor implements NestInterceptor {
                 responseBody,
                 responseTimeMs,
                 userId,
+                impersonatedBy,
                 userIp,
                 userAgent,
               });
@@ -93,6 +96,7 @@ export class RequestAuditInterceptor implements NestInterceptor {
                 errorMessage: error.message,
                 errorStack: error.stack,
                 userId,
+                impersonatedBy,
                 userIp,
                 userAgent,
               });

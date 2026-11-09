@@ -5,6 +5,8 @@ export interface JwtPayload {
   email: string;
   roles: string[];
   activeRole: string;
+  /** Id of the SUPER_ADMIN acting as this user. Only present on impersonation tokens. */
+  impersonatedBy?: string;
 }
 
 export interface UserFromRequest {
@@ -13,6 +15,7 @@ export interface UserFromRequest {
   roles: string[];
   activeRole: string;
   role: string;
+  impersonatedBy?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -22,6 +25,7 @@ export interface AuthenticatedRequest extends Request {
 export interface RefreshTokenPayload {
   userId: string;
   tokenId: string;
+  impersonatedBy?: string;
 }
 
 export interface RequestMetadata {

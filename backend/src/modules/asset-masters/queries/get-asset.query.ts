@@ -16,15 +16,42 @@ import {
 
 const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
 
-/** A column of the same row the list returns as `latestEvent`, for an outer alias `am`. */
-const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
-  SELECT ae."${column}"
+/** The event type of the row the list returns as `latestEvent`, for an outer alias `am`. */
+const latestHandoverEventTypeSql = `(
+  SELECT ae."eventType"
   FROM "assets_events" ae
   WHERE ae."assetMasterId" = am."id"
     AND ae."deletedAt" IS NULL
     AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
   ORDER BY ae."createdAt" DESC, ae."id" DESC
   LIMIT 1
+)`;
+
+/**
+ * The latest request on the item is waiting on one of these users: a handover sent to them, or —
+ * with `includeReturns` — a return to office started by someone else. A return has no target
+ * user; it waits on office staff, so the caller turns it on for users who may accept or reject it.
+ */
+const latestRequestOfUserSql = (param: string, includeReturns: boolean) => `EXISTS (
+  SELECT 1
+  FROM (
+    SELECT ae."eventType", ae."fromUser", ae."toUser"
+    FROM "assets_events" ae
+    WHERE ae."assetMasterId" = am."id"
+      AND ae."deletedAt" IS NULL
+      AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+    ORDER BY ae."createdAt" DESC, ae."id" DESC
+    LIMIT 1
+  ) le
+  WHERE le."toUser" = ANY(${param}::uuid[])${
+  includeReturns
+    ? `
+     OR (
+       le."eventType" = '${AssetEventTypes.RETURN_INITIATED}'
+       AND NOT (le."fromUser" = ANY(${param}::uuid[]))
+     )`
+    : ''
+}
 )`;
 
 export const getLostAssetsQuery = () => `
@@ -165,7 +192,7 @@ export const getAssetStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) av ON true
-    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventTypeSql} AS "eventType") lh ON true
     WHERE am."deletedAt" IS NULL
   `;
 };
@@ -183,6 +210,7 @@ export const getAssetQuery = (query: AssetQueryDto) => {
     warrantyStatus,
     handoverStatus,
     handoverToUser,
+    includePendingReturns,
     assignedTo,
     search,
     includeLatestEventFiles,
@@ -330,13 +358,13 @@ export const getAssetQuery = (query: AssetQueryDto) => {
   }
 
   if (handoverStatus && handoverStatus.length > 0) {
-    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
+    filters.push(`${latestHandoverEventTypeSql} = ANY($${paramIndex})`);
     params.push(handoverStatus.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
     paramIndex++;
   }
 
   if (handoverToUser && handoverToUser.length > 0) {
-    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    filters.push(latestRequestOfUserSql(`$${paramIndex}`, !!includePendingReturns));
     params.push(handoverToUser);
     paramIndex++;
   }
@@ -425,7 +453,8 @@ export const getAssetQuery = (query: AssetQueryDto) => {
         'toUserUser', ale."toUserDetails",
         'metadata', ale."metadata",
         'createdAt', ale."createdAt",
-        'createdBy', ale."createdBy"${latestEventFilesJson}
+        'createdBy', ale."createdBy",
+        'createdByUser', ale."createdByDetails"${latestEventFilesJson}
       ) ELSE NULL END as "latestEvent",
       -- The LOST event behind the current status, in the same shape the event history returns.
       -- Only while the asset IS lost: the lateral below joins nothing for any other status.
@@ -472,10 +501,19 @@ export const getAssetQuery = (query: AssetQueryDto) => {
           'lastName', tu."lastName",
           'email', tu."email",
           'employeeId', tu."employeeId"
-        ) ELSE NULL END AS "toUserDetails"${latestEventFilesSelect}
+        ) ELSE NULL END AS "toUserDetails",
+        -- Who acted. A return has no target user, so the list names the person who answered it.
+        CASE WHEN cbu."id" IS NOT NULL THEN json_build_object(
+          'id', cbu."id",
+          'firstName', cbu."firstName",
+          'lastName', cbu."lastName",
+          'email', cbu."email",
+          'employeeId', cbu."employeeId"
+        ) ELSE NULL END AS "createdByDetails"${latestEventFilesSelect}
       FROM "assets_events" ae
       LEFT JOIN "users" fu ON ae."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ae."toUser" = tu."id" AND tu."deletedAt" IS NULL
+      LEFT JOIN "users" cbu ON ae."createdBy" = cbu."id" AND cbu."deletedAt" IS NULL
       WHERE ae."assetMasterId" = am."id"
         AND ae."deletedAt" IS NULL
         AND ae."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})

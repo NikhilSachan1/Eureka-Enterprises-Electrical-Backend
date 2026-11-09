@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Public } from './decorators/public.decorator';
@@ -13,6 +23,7 @@ import {
 } from './dto';
 import { AuthenticatedRequest } from './auth.types';
 import { RequiredPermission } from './decorators/required-permission.decorator';
+import { AUTH_ERRORS } from './constants/auth.constants';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -24,6 +35,13 @@ export class AuthController {
       userAgent: req.headers['user-agent'],
       ipAddress: req.ip || req.headers['x-forwarded-for']?.toString(),
     };
+  }
+
+  /** For account-level actions that would change the real user's sessions or credentials. */
+  private assertNotImpersonating(req: AuthenticatedRequest): void {
+    if (req.user.impersonatedBy) {
+      throw new ForbiddenException(AUTH_ERRORS.IMPERSONATION_ACTION_BLOCKED);
+    }
   }
 
   @Public()
@@ -64,7 +82,24 @@ export class AuthController {
     description: 'Invalidates all refresh tokens and signs out the user from all devices.',
   })
   async signOutAllDevices(@Req() req: AuthenticatedRequest) {
+    this.assertNotImpersonating(req);
     return this.authService.signOutAllDevices(req.user.id);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @Post('impersonate/:userId')
+  @ApiOperation({
+    summary: 'Sign in as another user (super admin only)',
+    description:
+      'Returns a session for the target user without needing their password. The session lasts ' +
+      'at most an hour and every request made with it is audit-logged against the super admin. ' +
+      'Other super admins and archived users cannot be targeted.',
+  })
+  async impersonate(
+    @Req() req: AuthenticatedRequest,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.authService.impersonate(req.user, userId, this.getRequestMetadata(req));
   }
 
   @ApiBearerAuth('JWT-auth')
@@ -111,11 +146,12 @@ export class AuthController {
       'outstanding reset link for them stops working.',
   })
   async adminResetUserPassword(
-    @Req() { user: { id: actorUserId } }: AuthenticatedRequest,
+    @Req() req: AuthenticatedRequest,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Body() body: AdminResetPasswordDto,
   ) {
-    return await this.authService.adminResetUserPassword(userId, body, actorUserId);
+    this.assertNotImpersonating(req);
+    return await this.authService.adminResetUserPassword(userId, body, req.user.id);
   }
 
   @Public()

@@ -42,6 +42,7 @@ export class AuditLogService {
     errorMessage?: string;
     errorStack?: string;
     userId?: string;
+    impersonatedBy?: string;
     userIp?: string;
     userAgent?: string;
   }): Promise<RequestAuditLogEntity> {

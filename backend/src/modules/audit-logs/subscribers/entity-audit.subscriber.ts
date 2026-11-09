@@ -87,6 +87,7 @@ export class EntityAuditSubscriber implements EntitySubscriberInterface {
           newValues: maskedNewValues,
           changedFields,
           changedBy: auditContext?.userId || this.extractUserFromEntity(entity),
+          impersonatedBy: auditContext?.impersonatedBy,
           timestamp: new Date(),
         })
         .execute();

@@ -149,6 +149,17 @@ export class AssetQueryDto extends BaseGetDto {
   handoverToUser?: string[];
 
   @ApiProperty({
+    description:
+      'With handoverToUser: also match returns to office waiting on the office (latestEvent RETURN_INITIATED), except those the same user started. Set it for users who may accept or reject returns.',
+    required: false,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includePendingReturns?: boolean;
+
+  @ApiProperty({
     description: 'Filter by assigned user (supports multiple values)',
     example: ['123e4567-e89b-12d3-a456-426614174000'],
     isArray: true,

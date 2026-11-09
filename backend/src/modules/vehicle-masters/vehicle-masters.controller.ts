@@ -75,13 +75,14 @@ export class VehicleMastersController {
     required: true,
   })
   action(
-    @Request() { user: { id: createdBy } }: { user: { id: string } },
+    @Request()
+    { user: { id: createdBy, activeRole } }: { user: { id: string; activeRole?: string } },
     @Body() vehicleActionDto: VehicleActionDto,
     @ValidateAndUploadFiles(FILE_UPLOAD_FOLDER_NAMES.VEHICLE_FILES)
     { vehicleFiles }: { vehicleFiles: string[] } = { vehicleFiles: [] },
   ) {
     return this.vehicleMastersService.action(
-      { ...vehicleActionDto, fromUserId: createdBy },
+      { ...vehicleActionDto, fromUserId: createdBy, activeRole },
       vehicleFiles,
       createdBy,
     );

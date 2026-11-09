@@ -45,6 +45,9 @@ export class RequestAuditLogEntity {
   @Column({ type: 'uuid', nullable: true })
   userId: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  impersonatedBy: string;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   userIp: string;
 

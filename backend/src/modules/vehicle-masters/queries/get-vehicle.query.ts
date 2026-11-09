@@ -9,19 +9,47 @@ import {
   ServiceDueStatus,
   HandoverStatus,
   HANDOVER_STATUS_EVENT_TYPES,
+  VehicleEventTypes,
 } from '../constants/vehicle-masters.constants';
 
 const toSqlList = (values: string[]) => values.map((v) => `'${v}'`).join(', ');
 
-/** A column of the same row the list returns as `latestEvent`, for an outer alias `vm`. */
-const latestHandoverEventSql = (column: 'eventType' | 'toUser') => `(
-  SELECT ve."${column}"
+/** The event type of the row the list returns as `latestEvent`, for an outer alias `vm`. */
+const latestHandoverEventTypeSql = `(
+  SELECT ve."eventType"
   FROM "vehicles_events" ve
   WHERE ve."vehicleMasterId" = vm."id"
     AND ve."deletedAt" IS NULL
     AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
   ORDER BY ve."createdAt" DESC, ve."id" DESC
   LIMIT 1
+)`;
+
+/**
+ * The latest request on the item is waiting on one of these users: a handover sent to them, or —
+ * with `includeReturns` — a return to office started by someone else. A return has no target
+ * user; it waits on office staff, so the caller turns it on for users who may accept or reject it.
+ */
+const latestRequestOfUserSql = (param: string, includeReturns: boolean) => `EXISTS (
+  SELECT 1
+  FROM (
+    SELECT ve."eventType", ve."fromUser", ve."toUser"
+    FROM "vehicles_events" ve
+    WHERE ve."vehicleMasterId" = vm."id"
+      AND ve."deletedAt" IS NULL
+      AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})
+    ORDER BY ve."createdAt" DESC, ve."id" DESC
+    LIMIT 1
+  ) le
+  WHERE le."toUser" = ANY(${param}::uuid[])${
+  includeReturns
+    ? `
+     OR (
+       le."eventType" = '${VehicleEventTypes.RETURN_INITIATED}'
+       AND NOT (le."fromUser" = ANY(${param}::uuid[]))
+     )`
+    : ''
+}
 )`;
 
 export const getVehicleStatsQuery = () => {
@@ -129,7 +157,7 @@ export const getVehicleStatsQuery = () => {
         AND "deletedAt" IS NULL
       LIMIT 1
     ) vv ON true
-    LEFT JOIN LATERAL (SELECT ${latestHandoverEventSql('eventType')} AS "eventType") lh ON true
+    LEFT JOIN LATERAL (SELECT ${latestHandoverEventTypeSql} AS "eventType") lh ON true
     WHERE vm."deletedAt" IS NULL
   `;
 };
@@ -148,6 +176,7 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
     serviceDueStatuses,
     handoverStatuses,
     handoverToUser,
+    includePendingReturns,
     assignedTo,
     search,
     includeLatestEventFiles,
@@ -296,13 +325,13 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
   }
 
   if (handoverStatuses && handoverStatuses.length > 0) {
-    filters.push(`${latestHandoverEventSql('eventType')} = ANY($${paramIndex})`);
+    filters.push(`${latestHandoverEventTypeSql} = ANY($${paramIndex})`);
     params.push(handoverStatuses.flatMap((s) => HANDOVER_STATUS_EVENT_TYPES[s]));
     paramIndex++;
   }
 
   if (handoverToUser && handoverToUser.length > 0) {
-    filters.push(`${latestHandoverEventSql('toUser')} = ANY($${paramIndex}::uuid[])`);
+    filters.push(latestRequestOfUserSql(`$${paramIndex}`, !!includePendingReturns));
     params.push(handoverToUser);
     paramIndex++;
   }
@@ -465,7 +494,8 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
         'toUserUser', vle."toUserDetails",
         'metadata', vle."metadata",
         'createdAt', vle."createdAt",
-        'createdBy', vle."createdBy"${latestEventFilesJson}
+        'createdBy', vle."createdBy",
+        'createdByUser', vle."createdByDetails"${latestEventFilesJson}
       ) ELSE NULL END as "latestEvent"
     FROM "vehicle_masters" vm
     INNER JOIN LATERAL (
@@ -501,10 +531,19 @@ export const getVehicleQuery = (query: VehicleQueryDto) => {
           'lastName', tu."lastName",
           'email', tu."email",
           'employeeId', tu."employeeId"
-        ) ELSE NULL END AS "toUserDetails"${latestEventFilesSelect}
+        ) ELSE NULL END AS "toUserDetails",
+        -- Who acted. A return has no target user, so the list names the person who answered it.
+        CASE WHEN cbu."id" IS NOT NULL THEN json_build_object(
+          'id', cbu."id",
+          'firstName', cbu."firstName",
+          'lastName', cbu."lastName",
+          'email', cbu."email",
+          'employeeId', cbu."employeeId"
+        ) ELSE NULL END AS "createdByDetails"${latestEventFilesSelect}
       FROM "vehicles_events" ve
       LEFT JOIN "users" fu ON ve."fromUser" = fu."id" AND fu."deletedAt" IS NULL
       LEFT JOIN "users" tu ON ve."toUser" = tu."id" AND tu."deletedAt" IS NULL
+      LEFT JOIN "users" cbu ON ve."createdBy" = cbu."id" AND cbu."deletedAt" IS NULL
       WHERE ve."vehicleMasterId" = vm."id"
         AND ve."deletedAt" IS NULL
         AND ve."eventType" IN (${toSqlList(HANDOVER_EVENT_TYPES)})

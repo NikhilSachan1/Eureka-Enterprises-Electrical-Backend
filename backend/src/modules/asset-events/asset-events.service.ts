@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { CreateAssetEventDto } from './dto/create-asset-event.dto';
 import { DataSource, EntityManager, FindOneOptions } from 'typeorm';
 import { AssetEventsRepository } from './asset-events.repository';
@@ -8,12 +8,15 @@ import {
   AssetEventTypes,
   AssetFileTypes,
   AssetStatus,
+  PENDING_REQUEST_EVENT_TYPES,
 } from '../asset-masters/constants/asset-masters.constants';
 import {
   ASSET_EVENTS_ERRORS,
   ASSET_EVENTS_SUCCESS_MESSAGES,
   VALID_ACTIONS_BY_STATUS,
   HANDOVER_RESPONSE_ACTIONS,
+  RETURN_RESPONSE_ACTIONS,
+  RETURN_RESPONSE_PERMISSIONS,
 } from './constants/asset-events.constants';
 import { AssetEventsQueryDto } from './dto/asset-events-query.dto';
 import { AssetVersionsService } from '../asset-versions/asset-versions.service';
@@ -26,6 +29,8 @@ import { AssetMasterEntity } from '../asset-masters/entities/asset-master.entity
 import { UserEntity } from '../users/entities/user.entity';
 import { NotificationService } from 'src/modules/notifications/notification.service';
 import { NotificationEvents } from 'src/modules/notifications/notification.events';
+import { NotificationRecipientsService } from 'src/modules/notifications/recipients.service';
+import { ManagedUsersService } from '../user-delegations/managed-users.service';
 
 @Injectable()
 export class AssetEventsService {
@@ -37,6 +42,8 @@ export class AssetEventsService {
     private readonly dateTimeService: DateTimeService,
     private readonly whatsAppService: WhatsAppService,
     private readonly notificationService: NotificationService,
+    private readonly notificationRecipientsService: NotificationRecipientsService,
+    private readonly managedUsersService: ManagedUsersService,
   ) {}
 
   async create(
@@ -79,6 +86,12 @@ export class AssetEventsService {
         }
         break;
 
+      case AssetEventTypes.RETURN_INITIATED:
+        if (!hasFiles) {
+          throw new BadRequestException(ASSET_EVENTS_ERRORS.FILES_REQUIRED_FOR_RETURN_INITIATE);
+        }
+        break;
+
       case AssetEventTypes.CALIBRATED:
         if (!hasFiles) {
           throw new BadRequestException(ASSET_EVENTS_ERRORS.FILES_REQUIRED_FOR_CALIBRATION);
@@ -93,6 +106,9 @@ export class AssetEventsService {
       case AssetEventTypes.HANDOVER_ACCEPTED:
       case AssetEventTypes.HANDOVER_REJECTED:
       case AssetEventTypes.HANDOVER_CANCELLED:
+      case AssetEventTypes.RETURN_ACCEPTED:
+      case AssetEventTypes.RETURN_REJECTED:
+      case AssetEventTypes.RETURN_CANCELLED:
       case AssetEventTypes.DEALLOCATED:
       case AssetEventTypes.UNDER_MAINTENANCE:
       case AssetEventTypes.DAMAGED:
@@ -121,10 +137,11 @@ export class AssetEventsService {
     return result || null;
   }
 
-  private async getPendingHandover(assetMasterId: string): Promise<AssetEventEntity | null> {
+  /** The open handover or return to office, if the asset's last event is one. */
+  private async getPendingRequest(assetMasterId: string): Promise<AssetEventEntity | null> {
     const lastEvent = await this.getLastEvent(assetMasterId);
 
-    if (lastEvent?.eventType === AssetEventTypes.HANDOVER_INITIATED) {
+    if (lastEvent && PENDING_REQUEST_EVENT_TYPES.includes(lastEvent.eventType as AssetEventTypes)) {
       return lastEvent;
     }
     return null;
@@ -133,16 +150,28 @@ export class AssetEventsService {
   private validateStateTransition(
     currentStatus: string,
     action: AssetEventTypes,
-    pendingHandover: AssetEventEntity | null,
+    pendingRequest: AssetEventEntity | null,
   ): void {
+    // A response must answer the kind of request that is open, so a handover accept can never
+    // close a return or the other way round.
     if (HANDOVER_RESPONSE_ACTIONS.includes(action)) {
-      if (!pendingHandover) {
+      if (pendingRequest?.eventType !== AssetEventTypes.HANDOVER_INITIATED) {
         throw new BadRequestException(ASSET_EVENTS_ERRORS.NO_HANDOVER_PENDING);
       }
       return;
     }
-    if (pendingHandover) {
-      throw new BadRequestException(ASSET_EVENTS_ERRORS.HANDOVER_ALREADY_PENDING);
+    if (RETURN_RESPONSE_ACTIONS.includes(action)) {
+      if (pendingRequest?.eventType !== AssetEventTypes.RETURN_INITIATED) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.NO_RETURN_PENDING);
+      }
+      return;
+    }
+    if (pendingRequest) {
+      throw new BadRequestException(
+        pendingRequest.eventType === AssetEventTypes.HANDOVER_INITIATED
+          ? ASSET_EVENTS_ERRORS.HANDOVER_ALREADY_PENDING
+          : ASSET_EVENTS_ERRORS.REQUEST_ALREADY_PENDING,
+      );
     }
 
     const validActions = VALID_ACTIONS_BY_STATUS[currentStatus] || [];
@@ -173,6 +202,42 @@ export class AssetEventsService {
       if (pendingHandover.createdBy !== currentUserId) {
         throw new BadRequestException(ASSET_EVENTS_ERRORS.ONLY_INITIATOR_CAN_CANCEL);
       }
+    }
+  }
+
+  /**
+   * A return has no target user, so the answer is gated by permission instead: office staff with
+   * `asset.return-accepted` / `asset.return-rejected` respond, and never to their own return.
+   * Only the person who started the return can cancel it.
+   */
+  private async validateReturnPermissions(
+    action: AssetEventTypes,
+    pendingReturn: AssetEventEntity,
+    currentUserId: string,
+    activeRole: string | undefined,
+  ): Promise<void> {
+    if (action === AssetEventTypes.RETURN_CANCELLED) {
+      if (pendingReturn.createdBy !== currentUserId) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.ONLY_INITIATOR_CAN_CANCEL_RETURN);
+      }
+      return;
+    }
+
+    if (pendingReturn.createdBy === currentUserId) {
+      throw new BadRequestException(ASSET_EVENTS_ERRORS.CANNOT_RESPOND_TO_OWN_RETURN);
+    }
+
+    const permission = RETURN_RESPONSE_PERMISSIONS[action];
+    const allowed =
+      !!permission &&
+      (await this.managedUsersService.hasPermission(currentUserId, activeRole, permission));
+    if (!allowed) {
+      throw new ForbiddenException(
+        ASSET_EVENTS_ERRORS.RETURN_PERMISSION_REQUIRED.replace(
+          '{action}',
+          action === AssetEventTypes.RETURN_ACCEPTED ? 'accept' : 'reject',
+        ),
+      );
     }
   }
 
@@ -234,12 +299,12 @@ export class AssetEventsService {
   }
 
   async action(
-    assetActionDto: AssetActionDto & { fromUserId: string },
+    assetActionDto: AssetActionDto & { fromUserId: string; activeRole?: string },
     assetFiles: string[],
     createdBy: string,
   ) {
     try {
-      const { assetMasterId, action, toUserId, fromUserId, metadata } = assetActionDto;
+      const { assetMasterId, action, toUserId, fromUserId, activeRole, metadata } = assetActionDto;
 
       // Validate action-specific requirements (files, toUserId etc)
       this.validateActionRequirements(action, toUserId, assetFiles);
@@ -251,15 +316,27 @@ export class AssetEventsService {
 
       const currentStatus = activeVersion?.status || 'AVAILABLE';
 
-      // Check for pending handover
-      const pendingHandover = await this.getPendingHandover(assetMasterId);
+      // Check for a pending handover or return to office
+      const pendingRequest = await this.getPendingRequest(assetMasterId);
+      const pendingHandover =
+        pendingRequest?.eventType === AssetEventTypes.HANDOVER_INITIATED ? pendingRequest : null;
+      const pendingReturn =
+        pendingRequest?.eventType === AssetEventTypes.RETURN_INITIATED ? pendingRequest : null;
 
       // Validate state transition
-      this.validateStateTransition(currentStatus, action, pendingHandover);
+      this.validateStateTransition(currentStatus, action, pendingRequest);
 
       // Validate handover permissions if it's a handover response action
       if (HANDOVER_RESPONSE_ACTIONS.includes(action) && pendingHandover) {
         this.validateHandoverPermissions(action, pendingHandover, fromUserId);
+      }
+
+      if (RETURN_RESPONSE_ACTIONS.includes(action) && pendingReturn) {
+        await this.validateReturnPermissions(action, pendingReturn, fromUserId, activeRole);
+      }
+
+      if (action === AssetEventTypes.RETURN_INITIATED && activeVersion?.assignedTo !== fromUserId) {
+        throw new BadRequestException(ASSET_EVENTS_ERRORS.ONLY_ASSIGNEE_CAN_RETURN);
       }
 
       let whatsappNotification:
@@ -316,7 +393,9 @@ export class AssetEventsService {
                 assetMasterId,
                 eventType: action,
                 toUser: fromUserId, // The person accepting is the toUser
-                fromUser: activeVersion?.assignedTo, // Previous holder
+                // Previous holder. An item handed over straight from stock has no assignee yet, so fall
+                // back to the initiator: the history then reads initiator -> acceptor, as the request did.
+                fromUser: activeVersion?.assignedTo ?? pendingHandover?.fromUser,
                 metadata,
                 createdBy,
               },
@@ -425,6 +504,116 @@ export class AssetEventsService {
                 action,
                 assetMasterId,
                 recipientUserId: assigneeUserId,
+                actorUserId: fromUserId,
+              };
+            }
+            break;
+          }
+
+          // Return to office - only the holder, files mandatory. No target user: office staff answer it.
+          case AssetEventTypes.RETURN_INITIATED: {
+            const event = await this.create(
+              {
+                assetMasterId,
+                eventType: action,
+                fromUser: fromUserId, // The holder returning the asset
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            await this.assetFilesService.create(
+              {
+                assetMasterId,
+                fileType: AssetFileTypes.ASSET_IMAGE,
+                fileKeys: assetFiles,
+                assetEventsId: event.id,
+                createdBy,
+              },
+              entityManager,
+            );
+            break;
+          }
+
+          // Return accepted - the asset is back at the office: available, nobody holds it
+          case AssetEventTypes.RETURN_ACCEPTED: {
+            const holderUserId = pendingReturn?.fromUser;
+            const event = await this.create(
+              {
+                assetMasterId,
+                eventType: action,
+                fromUser: holderUserId, // The holder who returned it; createdBy is who accepted
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (assetFiles && assetFiles.length > 0) {
+              await this.assetFilesService.create(
+                {
+                  assetMasterId,
+                  fileType: AssetFileTypes.ASSET_IMAGE,
+                  fileKeys: assetFiles,
+                  assetEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            await this.assetVersionsService.update(
+              { assetMasterId, isActive: true },
+              { status: AssetStatus.AVAILABLE, assignedTo: null, updatedBy: createdBy },
+              entityManager,
+            );
+
+            if (holderUserId) {
+              whatsappNotification = {
+                action,
+                assetMasterId,
+                recipientUserId: holderUserId,
+                actorUserId: fromUserId,
+              };
+            }
+            break;
+          }
+
+          // Return rejected / cancelled - the asset stays with the holder, nothing else changes
+          case AssetEventTypes.RETURN_REJECTED:
+          case AssetEventTypes.RETURN_CANCELLED: {
+            const holderUserId = pendingReturn?.fromUser;
+            const event = await this.create(
+              {
+                assetMasterId,
+                eventType: action,
+                fromUser: holderUserId, // The holder; createdBy is who rejected or cancelled
+                metadata,
+                createdBy,
+              },
+              entityManager,
+            );
+
+            if (assetFiles && assetFiles.length > 0) {
+              await this.assetFilesService.create(
+                {
+                  assetMasterId,
+                  fileType: AssetFileTypes.OTHER,
+                  fileKeys: assetFiles,
+                  assetEventsId: event.id,
+                  createdBy,
+                },
+                entityManager,
+              );
+            }
+
+            // The holder cancelled it themselves, so only a rejection needs telling them.
+            if (action === AssetEventTypes.RETURN_REJECTED && holderUserId) {
+              whatsappNotification = {
+                action,
+                assetMasterId,
+                recipientUserId: holderUserId,
                 actorUserId: fromUserId,
               };
             }
@@ -638,12 +827,36 @@ export class AssetEventsService {
         void this.sendAssetTransactionWhatsappNotification(whatsappNotification);
       }
 
+      if (action === AssetEventTypes.RETURN_INITIATED) {
+        void this.notifyOfficeOfReturn(assetMasterId, fromUserId);
+      }
+
       return {
         message: ASSET_EVENTS_SUCCESS_MESSAGES[action],
       };
     } catch (error) {
       throw error;
     }
+  }
+
+  /** A return has no target user, so everyone who may accept it hears about it. */
+  private async notifyOfficeOfReturn(assetMasterId: string, holderUserId: string): Promise<void> {
+    const recipients = await this.notificationRecipientsService.usersWithPermission(
+      RETURN_RESPONSE_PERMISSIONS[AssetEventTypes.RETURN_ACCEPTED],
+    );
+
+    await Promise.all(
+      recipients
+        .filter((userId) => userId !== holderUserId)
+        .map((recipientUserId) =>
+          this.sendAssetTransactionWhatsappNotification({
+            action: AssetEventTypes.RETURN_INITIATED,
+            assetMasterId,
+            recipientUserId,
+            actorUserId: holderUserId,
+          }),
+        ),
+    );
   }
 
   async findAll(assetMasterId: string, query: AssetEventsQueryDto, timezone: string) {
@@ -692,6 +905,10 @@ export class AssetEventsService {
         HANDOVER_ACCEPTED: Number(statsRow.HANDOVER_ACCEPTED || 0),
         HANDOVER_REJECTED: Number(statsRow.HANDOVER_REJECTED || 0),
         HANDOVER_CANCELLED: Number(statsRow.HANDOVER_CANCELLED || 0),
+        RETURN_INITIATED: Number(statsRow.RETURN_INITIATED || 0),
+        RETURN_ACCEPTED: Number(statsRow.RETURN_ACCEPTED || 0),
+        RETURN_REJECTED: Number(statsRow.RETURN_REJECTED || 0),
+        RETURN_CANCELLED: Number(statsRow.RETURN_CANCELLED || 0),
         LOST: Number(statsRow.LOST || 0),
         RECOVERED: Number(statsRow.RECOVERED || 0),
       },

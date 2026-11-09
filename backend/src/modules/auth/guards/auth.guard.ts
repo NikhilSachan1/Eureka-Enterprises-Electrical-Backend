@@ -46,7 +46,7 @@ export class AuthGuard implements CanActivate {
         secret: Environments.JWT_AUTH_SECRET_KEY,
       });
 
-      const { id, email, roles, activeRole: tokenActiveRole } = payload;
+      const { id, email, roles, activeRole: tokenActiveRole, impersonatedBy } = payload;
 
       const user = await this.userService.findOne({ id, email, deletedAt: null });
       if (!user || user.status === UserStatus.ARCHIVED) {
@@ -70,6 +70,7 @@ export class AuthGuard implements CanActivate {
         roles,
         activeRole,
         role: activeRole, // Backwards compatibility - existing code uses user.role
+        ...(impersonatedBy && { impersonatedBy }),
       };
 
       request['user'] = userFromRequest;

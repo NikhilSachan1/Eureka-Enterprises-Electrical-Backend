@@ -303,7 +303,7 @@ export class VehicleMastersService {
   }
 
   async action(
-    vehicleActionDto: VehicleActionDto & { fromUserId: string },
+    vehicleActionDto: VehicleActionDto & { fromUserId: string; activeRole?: string },
     vehicleFiles: string[],
     createdBy: string,
   ) {

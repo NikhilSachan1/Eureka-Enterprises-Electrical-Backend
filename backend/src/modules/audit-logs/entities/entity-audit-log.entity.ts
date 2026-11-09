@@ -44,6 +44,9 @@ export class EntityAuditLogEntity {
   @Column({ type: 'uuid', nullable: true })
   changedBy: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  impersonatedBy: string;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   timestamp: Date;
 

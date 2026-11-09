@@ -31,8 +31,12 @@ const GAINED = [
   VehicleEventTypes.HANDOVER_AUTO_ACCEPTED,
 ];
 
-/** Events that end possession without naming a new holder. */
-const LOST = [VehicleEventTypes.DEALLOCATED, VehicleEventTypes.RETIRED];
+/** Events that end possession without naming a new holder. An accepted return sends it to the office. */
+const LOST = [
+  VehicleEventTypes.DEALLOCATED,
+  VehicleEventTypes.RETIRED,
+  VehicleEventTypes.RETURN_ACCEPTED,
+];
 
 const quoted = (types: VehicleEventTypes[]) => types.map((t) => `'${t}'`).join(', ');
 
