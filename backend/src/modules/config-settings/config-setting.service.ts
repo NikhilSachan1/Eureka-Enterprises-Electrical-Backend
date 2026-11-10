@@ -38,14 +38,15 @@ export class ConfigSettingService {
     updateDto: UpdateConfigSettingDto,
     entityManager?: EntityManager,
   ): Promise<ConfigSettingEntity> {
-    const configSetting = await this.findOneOrFail({ where: { id } });
+    // Load the parent configuration for value-type validation, but keep the relation
+    // object out of the update payload (TypeORM update() only accepts column values).
+    const { configuration, ...configSetting } = await this.findOneOrFail({
+      where: { id },
+      relations: ['configuration'],
+    });
 
     if (updateDto.value !== undefined) {
-      ValueTypeValidator.validate(
-        updateDto.value,
-        configSetting.configuration.valueType,
-        configSetting.configuration.key,
-      );
+      ValueTypeValidator.validate(updateDto.value, configuration.valueType, configuration.key);
     }
 
     const updateData: Partial<ConfigSettingEntity> = {
