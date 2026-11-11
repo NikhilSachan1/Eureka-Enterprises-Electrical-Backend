@@ -68,4 +68,9 @@ export interface NotifyInput {
    * recipient whose bell row was written. For events with no email template of their own.
    */
   email?: boolean;
+  /**
+   * Push it to the recipients' devices. Defaults to true; `false` keeps it to the bell (and email,
+   * if asked) — for low-urgency digests that should not buzz a phone.
+   */
+  push?: boolean;
 }
