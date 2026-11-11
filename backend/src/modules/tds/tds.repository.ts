@@ -155,6 +155,7 @@ export class TdsRepository {
     const repo = em ? em.getRepository(TdsRegisterEntryEntity) : this.registerRepository;
     return await repo.find({
       where: { id: In(ids), deletedAt: null as any },
+      relations: ['invoice'],
     });
   }
 }

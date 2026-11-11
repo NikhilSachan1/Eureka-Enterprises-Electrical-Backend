@@ -152,6 +152,7 @@ export class GstRepository {
     const repo = em ? em.getRepository(GstRegisterEntryEntity) : this.registerRepository;
     return await repo.find({
       where: { id: In(ids), deletedAt: null as any },
+      relations: ['invoice'],
     });
   }
 

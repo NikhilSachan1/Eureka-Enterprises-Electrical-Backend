@@ -35,6 +35,7 @@ import {
 import { PO_ERRORS, PO_RESPONSES, PO_UNITS_CONFIG_KEY } from './constants/purchase-order.constants';
 import { checkPoHasJmcsQuery } from './queries/purchase-order.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { loadPoTaxTotals } from 'src/modules/common/financials/tax-register-status.helper';
 import {
   checkSiteCreateAccess,
   getReadableSiteIds,
@@ -230,6 +231,11 @@ export class PurchaseOrderService {
       this.poRepository.count({ where }),
     ]);
 
+    const taxTotalsByPo = await loadPoTaxTotals(
+      this.dataSource,
+      records.map((po) => po.id),
+    );
+
     return {
       records: records.map((po) => {
         const invoicedTotal = Number(po.invoicedTotal) || 0;
@@ -238,6 +244,7 @@ export class PurchaseOrderService {
 
         return {
           ...po,
+          taxTotals: taxTotalsByPo.get(po.id) ?? null,
           items: (po.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
           createdByUser: formatUser(po.createdByUser),
           updatedByUser: formatUser(po.updatedByUser),
@@ -273,9 +280,11 @@ export class PurchaseOrderService {
     });
     if (!po) throw new NotFoundException(PO_ERRORS.NOT_FOUND);
     const items = (po.items ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const taxTotals = (await loadPoTaxTotals(this.dataSource, [po.id])).get(po.id) ?? null;
     return {
       ...po,
       items,
+      taxTotals,
       createdByUser: formatUser(po.createdByUser),
       updatedByUser: formatUser(po.updatedByUser),
       approvalByUser: formatUser(po.approvalByUser),

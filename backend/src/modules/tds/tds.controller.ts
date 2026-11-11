@@ -30,7 +30,7 @@ export class TdsController {
 
   @Post('register/:id/verify')
   @RequiredPermission('financials.tds.verify')
-  @ApiOperation({ summary: 'Verify a TDS register entry' })
+  @ApiOperation({ summary: 'Verify a TDS register entry (26Q for purchase, Form 26AS for sale)' })
   verifyEntry(
     @Param('id', ParseUUIDPipe) id: string,
     @GetUser('id') userId: string,
@@ -42,7 +42,7 @@ export class TdsController {
   @Post('register/:id/revert')
   @RequiredPermission('financials.tds.revert')
   @ApiOperation({
-    summary: 'Revert verification of a TDS register entry (blocked if payment released)',
+    summary: 'Revert 26Q / 26AS verification of a TDS register entry',
   })
   revertEntry(
     @Param('id', ParseUUIDPipe) id: string,
@@ -54,14 +54,16 @@ export class TdsController {
 
   @Post('payments')
   @RequiredPermission('financials.tds.release-payment')
-  @ApiOperation({ summary: 'Release monthly TDS payment (atomic across all verified entries)' })
+  @ApiOperation({
+    summary: 'Record a TDS challan deposited with the government (purchase side only)',
+  })
   releasePayment(@Body() dto: CreateTdsPaymentDto, @GetUser('id') userId: string) {
     return this.tdsService.releasePayment(dto, userId);
   }
 
   @Get('payments')
   @RequiredPermission('financials.tds.view-list')
-  @ApiOperation({ summary: 'List TDS payments' })
+  @ApiOperation({ summary: 'List TDS challans' })
   findAllPayments(@Query('siteId') siteId?: string, @Query('partyType') partyType?: PartyType) {
     return this.tdsService.findAllPayments(siteId, partyType);
   }

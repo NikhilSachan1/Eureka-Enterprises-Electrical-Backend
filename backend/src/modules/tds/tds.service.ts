@@ -15,12 +15,47 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
+/**
+ * TDS register — how TDS actually moves:
+ *
+ *  PURCHASE (we are the deductor):
+ *    1. We deduct TDS from the vendor's payment (entry created at invoice approval).
+ *    2. We deposit it with the government via challan (BSR code + serial no.) — one challan can
+ *       cover several vendors.
+ *    3. We verify once it is filed in our 26Q / Form 16A is issued. Needs the challan first.
+ *
+ *  SALE (the client is the deductor):
+ *    The client deposits the TDS; we only verify that it is credited in our Form 26AS.
+ *    There is no challan on our side.
+ */
 @Injectable()
 export class TdsService {
   constructor(
     private readonly tdsRepository: TdsRepository,
     private readonly dataSource: DataSource,
   ) {}
+
+  private static readonly ENTRY_RELATIONS = [
+    // Invoice-level entries (current model): invoice → jmc → po
+    'invoice',
+    'invoice.jmc',
+    'invoice.jmc.po',
+    // Legacy entries projected from book payments / bank transfers
+    'bookPayment',
+    'bookPayment.invoice',
+    'bookPayment.invoice.jmc',
+    'bookPayment.invoice.jmc.po',
+    'bankTransfer',
+    'bankTransfer.invoice',
+    'bankTransfer.invoice.jmc',
+    'bankTransfer.invoice.jmc.po',
+    // Party & challan
+    'site',
+    'site.company',
+    'contractor',
+    'vendor',
+    'tdsPayment',
+  ];
 
   async findAllRegisterEntries(query: GetTdsRegisterDto) {
     const {
@@ -57,25 +92,7 @@ export class TdsService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: [
-          // PURCHASE: bookPayment → invoice → jmc → po
-          'bookPayment',
-          'bookPayment.invoice',
-          'bookPayment.invoice.jmc',
-          'bookPayment.invoice.jmc.po',
-          // SALE: bankTransfer → invoice → jmc → po
-          // PURCHASE: bankTransfer (bookPaymentId set; invoice already via bookPayment above)
-          'bankTransfer',
-          'bankTransfer.invoice',
-          'bankTransfer.invoice.jmc',
-          'bankTransfer.invoice.jmc.po',
-          // Party & payment
-          'site',
-          'site.company',
-          'contractor',
-          'vendor',
-          'tdsPayment',
-        ],
+        relations: TdsService.ENTRY_RELATIONS,
       }),
       this.tdsRepository.countRegisterEntries({ where }),
     ]);
@@ -86,26 +103,7 @@ export class TdsService {
   async findRegisterEntryById(id: string) {
     const entry = await this.tdsRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
-      relations: [
-        // PURCHASE: bookPayment → invoice → jmc → po
-        'bookPayment',
-        'bookPayment.invoice',
-        'bookPayment.invoice.jmc',
-        'bookPayment.invoice.jmc.po',
-        // SALE: bankTransfer → invoice → jmc → po
-        // PURCHASE: bankTransfer (bookPaymentId set; invoice already via bookPayment above)
-        'bankTransfer',
-        'bankTransfer.invoice',
-        'bankTransfer.invoice.jmc',
-        'bankTransfer.invoice.jmc.po',
-        // Party, audit & payment
-        'site',
-        'site.company',
-        'contractor',
-        'vendor',
-        'verifiedByUser',
-        'tdsPayment',
-      ],
+      relations: [...TdsService.ENTRY_RELATIONS, 'verifiedByUser'],
     });
     if (!entry) throw new NotFoundException(TDS_ERRORS.ENTRY_NOT_FOUND);
     return {
@@ -123,7 +121,9 @@ export class TdsService {
   }
 
   /**
-   * Verify a TDS register entry (both sides).
+   * Verify a TDS entry.
+   *   PURCHASE → filed in our 26Q (challan must already be recorded).
+   *   SALE     → credit visible in our Form 26AS.
    */
   async verifyEntry(
     id: string,
@@ -132,11 +132,17 @@ export class TdsService {
   ) {
     const entry = await this.tdsRepository.findOneRegisterEntry({
       where: { id, deletedAt: IsNull() },
+      relations: ['invoice'],
     });
     if (!entry) throw new NotFoundException(TDS_ERRORS.ENTRY_NOT_FOUND);
 
     if (entry.isVerified) {
       throw new ConflictException(TDS_ERRORS.ALREADY_VERIFIED);
+    }
+    if (entry.partyType === PartyType.PURCHASE && !entry.tdsPaymentId) {
+      throw new BadRequestException(
+        TDS_ERRORS.CHALLAN_REQUIRED_BEFORE_VERIFY(entry.invoice?.invoiceNumber ?? entry.invoiceId),
+      );
     }
 
     await this.tdsRepository.updateRegisterEntry(
@@ -148,6 +154,7 @@ export class TdsService {
         verifyFileKey: dto?.fileKey ?? null,
         verifyFileName: dto?.fileName ?? null,
         verifyRemarks: dto?.remarks ?? null,
+        revertReason: null,
         updatedBy: verifiedBy,
       },
     );
@@ -156,7 +163,8 @@ export class TdsService {
   }
 
   /**
-   * Revert verification of a TDS register entry (blocked if payment released).
+   * Revert verification. The challan (if any) stays — money already deposited is not undone,
+   * only the 26Q / 26AS confirmation is.
    */
   async revertEntry(id: string, revertedBy: string, reason: string) {
     const entry = await this.tdsRepository.findOneRegisterEntry({
@@ -166,9 +174,6 @@ export class TdsService {
 
     if (!entry.isVerified) {
       throw new BadRequestException(TDS_ERRORS.NOT_VERIFIED);
-    }
-    if (entry.tdsPaymentId) {
-      throw new BadRequestException(TDS_ERRORS.CANNOT_REVERT_PAYMENT_RELEASED);
     }
 
     await this.tdsRepository.updateRegisterEntry(
@@ -186,62 +191,49 @@ export class TdsService {
   }
 
   /**
-   * Release TDS payment — entry-wise bulk selection.
+   * Record a TDS challan deposited with the government (PURCHASE only), all-or-nothing.
+   * One challan may cover several vendors of the same site.
    */
   async releasePayment(dto: CreateTdsPaymentDto, releasedBy: string) {
     return await this.dataSource.transaction(async (em) => {
-      // Fetch all selected entries
       const entries = await this.tdsRepository.getEntriesByIds(dto.entryIds, em);
 
       if (entries.length === 0) {
-        throw new BadRequestException(TDS_ERRORS.NO_VERIFIED_ENTRIES);
+        throw new BadRequestException(TDS_ERRORS.NO_ENTRIES);
       }
       if (entries.length !== dto.entryIds.length) {
-        throw new BadRequestException('One or more entries not found.');
+        throw new BadRequestException(TDS_ERRORS.ENTRIES_NOT_FOUND);
       }
-
-      // Validate all entries are verified and unpaid
+      if (entries.some((e) => e.partyType !== PartyType.PURCHASE)) {
+        throw new BadRequestException(TDS_ERRORS.SALE_HAS_NO_CHALLAN);
+      }
+      const siteIds = [...new Set(entries.map((e) => e.siteId))];
+      if (siteIds.length > 1) {
+        throw new BadRequestException(TDS_ERRORS.MIXED_SITE);
+      }
       for (const entry of entries) {
-        if (!entry.isVerified) {
+        if (entry.tdsPaymentId) {
           throw new BadRequestException(
-            `Entry ${entry.id} is not verified. Verify all entries before releasing payment.`,
+            TDS_ERRORS.ALREADY_IN_CHALLAN(entry.invoice?.invoiceNumber ?? entry.invoiceId),
           );
         }
-        if (entry.tdsPaymentId) {
-          throw new BadRequestException(`Entry ${entry.id} is already linked to a payment.`);
-        }
       }
 
-      // All entries must share the same site, partyType, and party (contractor or vendor)
-      const siteIds = [...new Set(entries.map((e) => e.siteId))];
-      const partyTypes = [...new Set(entries.map((e) => e.partyType))];
-      if (siteIds.length > 1 || partyTypes.length > 1) {
-        throw new BadRequestException(
-          'All selected entries must belong to the same site and party type.',
-        );
-      }
-      const siteId = siteIds[0];
-      const partyType = partyTypes[0] as PartyType;
-      const contractorId = partyType === PartyType.SALE ? entries[0].contractorId : null;
-      const vendorId = partyType === PartyType.PURCHASE ? entries[0].vendorId : null;
-      const paymentMonth = entries[0].invoiceMonth;
+      const vendorIds = [...new Set(entries.map((e) => e.vendorId))];
+      const netAmount = Number(entries.reduce((sum, e) => sum + Number(e.tdsAmount), 0).toFixed(2));
 
-      // Calculate net amount
-      const netAmount = entries.reduce((sum, e) => sum + Number(e.tdsAmount), 0);
-
-      const financialYear = getFinancialYear(dto.paymentDate);
-
-      // Create payment
       const payment = await this.tdsRepository.createPayment(
         {
-          siteId,
-          partyType,
-          contractorId,
-          vendorId,
-          paymentMonth,
-          financialYear,
+          siteId: siteIds[0],
+          partyType: PartyType.PURCHASE,
+          contractorId: null,
+          vendorId: vendorIds.length === 1 ? vendorIds[0] : null,
+          paymentMonth: entries[0].invoiceMonth,
+          financialYear: getFinancialYear(dto.paymentDate),
           netAmount,
-          utrNumber: dto.utrNumber,
+          bsrCode: dto.bsrCode,
+          challanSerialNumber: dto.challanSerialNumber,
+          utrNumber: dto.utrNumber ?? null,
           paymentDate: new Date(dto.paymentDate),
           fileKey: dto.fileKey ?? null,
           fileName: dto.fileName ?? null,
@@ -261,7 +253,7 @@ export class TdsService {
       }
 
       return {
-        message: TDS_RESPONSES.PAYMENT_RELEASED,
+        message: TDS_RESPONSES.CHALLAN_RECORDED,
         id: payment.id,
         netAmount,
         entriesCount: entries.length,
@@ -270,7 +262,7 @@ export class TdsService {
   }
 
   /**
-   * Get TDS payments list.
+   * Get TDS challans list.
    */
   async findAllPayments(siteId?: string, partyType?: PartyType) {
     const where: any = { deletedAt: IsNull() };
