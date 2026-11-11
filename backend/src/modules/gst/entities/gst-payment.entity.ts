@@ -6,10 +6,10 @@ import { ContractorEntity } from 'src/modules/contractors/entities/contractor.en
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
 
 /**
- * GST Payment — both SALE and PURCHASE sides, monthly release.
- * SALE side: GST-1 (output tax) — contractorId set, vendorId null.
- * PURCHASE side: GST-3B (input tax) — vendorId set, contractorId null.
- * Once released, no revert.
+ * GST Settlement of HELD GST — entry-wise, both sides.
+ * SALE side: held GST RECEIVED from the client — contractorId set, vendorId null.
+ * PURCHASE side: held GST RELEASED to the vendor — vendorId set, contractorId null.
+ * Once settled, no revert.
  */
 @Entity('gst_payments')
 @Index('IDX_GST_PAYMENT_SITE', ['siteId'])
@@ -69,8 +69,9 @@ export class GstPaymentEntity extends BaseEntity {
   remarks: string | null;
 
   // Auto-generated GST payment advice reference (separate sequence from Payment Advice)
-  @Column({ type: 'varchar', length: 50 })
-  paymentAdviceReferenceNumber: string;
+  // PURCHASE releases only — a receipt from a client (SALE) has no payment advice.
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  paymentAdviceReferenceNumber: string | null;
 
   @Column({ type: 'varchar', length: 20, default: FinancialApprovalStatus.APPROVED })
   approvalStatus: string;

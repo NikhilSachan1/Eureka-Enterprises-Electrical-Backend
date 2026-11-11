@@ -29,7 +29,9 @@ export class GstController {
 
   @Post('register/:id/verify')
   @RequiredPermission('financials.gst.verify')
-  @ApiOperation({ summary: 'Verify a GST register entry (PURCHASE side only)' })
+  @ApiOperation({
+    summary: 'Verify a GST register entry on the portal (GSTR-2B for purchase, GSTR-1 for sale)',
+  })
   verifyEntry(
     @Param('id', ParseUUIDPipe) id: string,
     @GetUser('id') userId: string,
@@ -41,7 +43,7 @@ export class GstController {
   @Post('register/:id/revert')
   @RequiredPermission('financials.gst.revert')
   @ApiOperation({
-    summary: 'Revert verification of a GST register entry (blocked if payment released)',
+    summary: 'Revert verification of a GST register entry (blocked once held GST is settled)',
   })
   revertEntry(
     @Param('id', ParseUUIDPipe) id: string,
@@ -53,14 +55,16 @@ export class GstController {
 
   @Post('payments')
   @RequiredPermission('financials.gst.release-payment')
-  @ApiOperation({ summary: 'Release monthly GST payment (atomic across all verified entries)' })
+  @ApiOperation({
+    summary: 'Settle held GST — release to vendor (purchase) or record receipt from client (sale)',
+  })
   releasePayment(@Body() dto: CreateGstPaymentDto, @GetUser('id') userId: string) {
     return this.gstService.releasePayment(dto, userId);
   }
 
   @Get('payments')
   @RequiredPermission('financials.gst.view-list')
-  @ApiOperation({ summary: 'List GST payments' })
+  @ApiOperation({ summary: 'List held-GST settlements' })
   findAllPayments(
     @Query('siteId') siteId?: string,
     @Query('vendorId') vendorId?: string,

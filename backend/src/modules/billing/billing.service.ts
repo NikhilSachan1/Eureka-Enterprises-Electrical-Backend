@@ -20,6 +20,7 @@ export class BillingService {
     }
     const r = result[0];
     const gstInvoiced = Number(r.gstInvoiced);
+    const gstHeld = Number(r.gstHeld);
     const gstPaid = Number(r.gstPaid);
     const tdsDeducted = Number(r.tdsDeducted);
     const tdsPaid = Number(r.tdsPaid);
@@ -76,14 +77,18 @@ export class BillingService {
         },
       },
 
-      // GST breakdown
+      // GST breakdown — `held` is withheld GST; `paid` is the held GST already settled
+      // (released to vendor / received from client); `pending` is held GST still to settle.
+      // GST that was not held (invoiced − held) moved with the invoice payment.
       gst: {
         invoiced: gstInvoiced,
+        held: gstHeld,
+        withPayment: Number((gstInvoiced - gstHeld).toFixed(2)),
         paid: gstPaid,
-        pending: Number((gstInvoiced - gstPaid).toFixed(2)),
+        pending: Number((gstHeld - gstPaid).toFixed(2)),
       },
 
-      // TDS breakdown
+      // TDS breakdown — `paid` is challan-deposited (purchase) / 26AS-verified (sale)
       tds: {
         deducted: tdsDeducted,
         paid: tdsPaid,

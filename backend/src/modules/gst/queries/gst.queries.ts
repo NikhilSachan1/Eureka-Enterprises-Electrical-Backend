@@ -5,8 +5,11 @@
 
 export const GST_QUERIES = {
   /**
-   * GST summary per BRD §5.3.
-   * Returns aggregated data by partyType and gstType.
+   * GST summary per BRD §5.3, by partyType and gstType.
+   *   heldGst            — GST withheld (by us on purchase, by the client on sale)
+   *   settledGst         — held GST released to vendors / received from clients
+   *   pendingSettlement  — held GST still to be released / received
+   *   withPaymentGst     — GST not held; it moved with the invoice payment
    */
   GST_SUMMARY: `
     SELECT
@@ -16,8 +19,10 @@ export const GST_QUERIES = {
       SUM("gstAmount") as "totalGst",
       COUNT(*) FILTER (WHERE "isVerified" = true) as "verifiedCount",
       COUNT(*) FILTER (WHERE "isVerified" = false) as "unverifiedCount",
-      SUM("gstAmount") FILTER (WHERE "gstPaymentId" IS NOT NULL) as "paidGst",
-      SUM("gstAmount") FILTER (WHERE "gstPaymentId" IS NULL AND "isVerified" = true) as "pendingGst"
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true), 0) as "heldGst",
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND "gstPaymentId" IS NOT NULL), 0) as "settledGst",
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND "gstPaymentId" IS NULL), 0) as "pendingSettlement",
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = false), 0) as "withPaymentGst"
     FROM gst_register_entries
     WHERE "siteId" = $1
       AND "financialYear" = $2

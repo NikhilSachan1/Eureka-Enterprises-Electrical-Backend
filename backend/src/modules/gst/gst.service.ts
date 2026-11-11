@@ -16,6 +16,18 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 
+/**
+ * GST register — how GST actually moves:
+ *
+ *  Verification (both sides, every entry): the invoice is matched on the GST portal.
+ *    PURCHASE → the vendor's invoice appears in our GSTR-2B (so we can take ITC).
+ *    SALE     → our GSTR-1 reflects the invoice (so the client can take ITC).
+ *
+ *  Settlement (held entries only):
+ *    PURCHASE → we withheld the vendor's GST; we RELEASE it once it is verified in GSTR-2B.
+ *    SALE     → the client withheld our GST; we record it as RECEIVED when they pay it.
+ *  GST that was not held moved with the invoice payment itself — there is nothing to settle.
+ */
 @Injectable()
 export class GstService {
   constructor(
@@ -58,7 +70,16 @@ export class GstService {
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        relations: ['invoice', 'site', 'site.company', 'contractor', 'vendor', 'gstPayment'],
+        relations: [
+          'invoice',
+          'invoice.jmc',
+          'invoice.jmc.po',
+          'site',
+          'site.company',
+          'contractor',
+          'vendor',
+          'gstPayment',
+        ],
       }),
       this.gstRepository.countRegisterEntries({ where }),
     ]);
@@ -71,6 +92,8 @@ export class GstService {
       where: { id, deletedAt: IsNull() },
       relations: [
         'invoice',
+        'invoice.jmc',
+        'invoice.jmc.po',
         'site',
         'site.company',
         'contractor',
@@ -95,7 +118,7 @@ export class GstService {
   }
 
   /**
-   * Verify a GST register entry (both SALE and PURCHASE).
+   * Mark an entry as matched on the GST portal (both sides, held or not).
    */
   async verifyEntry(
     id: string,
@@ -112,7 +135,7 @@ export class GstService {
     }
 
     await this.gstRepository.updateRegisterEntry(
-      { id },
+      { id, financialYear: entry.financialYear },
       {
         isVerified: true,
         verifiedAt: new Date(),
@@ -120,6 +143,7 @@ export class GstService {
         verifyFileKey: dto?.fileKey ?? null,
         verifyFileName: dto?.fileName ?? null,
         verifyRemarks: dto?.remarks ?? null,
+        revertReason: null,
         updatedBy: verifiedBy,
       },
     );
@@ -128,7 +152,7 @@ export class GstService {
   }
 
   /**
-   * Revert verification of a GST register entry (blocked if payment released).
+   * Revert portal verification (blocked once the held GST is settled).
    */
   async revertEntry(id: string, revertedBy: string, reason: string) {
     const entry = await this.gstRepository.findOneRegisterEntry({
@@ -140,7 +164,7 @@ export class GstService {
       throw new BadRequestException(GST_ERRORS.NOT_VERIFIED);
     }
     if (entry.gstPaymentId) {
-      throw new BadRequestException(GST_ERRORS.CANNOT_REVERT_PAYMENT_RELEASED);
+      throw new BadRequestException(GST_ERRORS.CANNOT_REVERT_SETTLED);
     }
 
     await this.gstRepository.updateRegisterEntry(
@@ -158,77 +182,61 @@ export class GstService {
   }
 
   /**
-   * Release GST payment — entry-wise bulk selection.
+   * Settle HELD GST — entry-wise bulk selection, all-or-nothing.
+   *   PURCHASE → release to the vendor (entries must be verified in GSTR-2B).
+   *   SALE     → record receipt from the client.
    */
   async releasePayment(dto: CreateGstPaymentDto, releasedBy: string) {
     return await this.dataSource.transaction(async (em) => {
-      // Fetch all selected entries
       const entries = await this.gstRepository.getEntriesByIds(dto.entryIds, em);
 
       if (entries.length === 0) {
-        throw new BadRequestException(GST_ERRORS.NO_VERIFIED_ENTRIES);
+        throw new BadRequestException(GST_ERRORS.NO_ENTRIES);
       }
       if (entries.length !== dto.entryIds.length) {
-        throw new BadRequestException('One or more entries not found.');
+        throw new BadRequestException(GST_ERRORS.ENTRIES_NOT_FOUND);
       }
 
-      // Validate all entries are verified and unpaid
-      for (const entry of entries) {
-        if (!entry.isVerified) {
-          throw new BadRequestException(
-            `Entry ${entry.id} is not verified. Verify all entries before releasing payment.`,
-          );
-        }
-        if (entry.gstPaymentId) {
-          throw new BadRequestException(`Entry ${entry.id} is already linked to a payment.`);
-        }
-      }
-
-      // All entries must share the same site and partyType
       const siteIds = [...new Set(entries.map((e) => e.siteId))];
       const partyTypes = [...new Set(entries.map((e) => e.partyType))];
       if (siteIds.length > 1 || partyTypes.length > 1) {
-        throw new BadRequestException(
-          'All selected entries must belong to the same site and party type.',
-        );
+        throw new BadRequestException(GST_ERRORS.MIXED_SITE_OR_SIDE);
       }
       const siteId = siteIds[0];
       const partyType = partyTypes[0] as PartyType;
+      const isPurchase = partyType === PartyType.PURCHASE;
 
-      // Validate party consistency per side
-      if (partyType === PartyType.PURCHASE) {
-        const vendorIds = [...new Set(entries.map((e) => e.vendorId))];
-        if (vendorIds.length > 1) {
-          throw new BadRequestException(
-            'All selected PURCHASE entries must belong to the same vendor.',
-          );
+      if (isPurchase && new Set(entries.map((e) => e.vendorId)).size > 1) {
+        throw new BadRequestException(GST_ERRORS.MIXED_VENDOR);
+      }
+      if (!isPurchase && new Set(entries.map((e) => e.contractorId)).size > 1) {
+        throw new BadRequestException(GST_ERRORS.MIXED_CONTRACTOR);
+      }
+
+      for (const entry of entries) {
+        const invoiceNumber = entry.invoice?.invoiceNumber ?? entry.invoiceId;
+        if (!entry.isGstHold) {
+          throw new BadRequestException(GST_ERRORS.NOT_HELD(invoiceNumber));
         }
-      } else {
-        const contractorIds = [...new Set(entries.map((e) => e.contractorId))];
-        if (contractorIds.length > 1) {
-          throw new BadRequestException(
-            'All selected SALE entries must belong to the same contractor.',
-          );
+        if (entry.gstPaymentId) {
+          throw new BadRequestException(GST_ERRORS.ALREADY_SETTLED(invoiceNumber));
+        }
+        if (isPurchase && !entry.isVerified) {
+          throw new BadRequestException(GST_ERRORS.PURCHASE_NOT_VERIFIED(invoiceNumber));
         }
       }
 
-      const contractorId = partyType === PartyType.SALE ? entries[0].contractorId : null;
-      const vendorId = partyType === PartyType.PURCHASE ? entries[0].vendorId : null;
-
-      // Use the first entry's invoiceMonth as paymentMonth for reference
+      const contractorId = isPurchase ? null : entries[0].contractorId;
+      const vendorId = isPurchase ? entries[0].vendorId : null;
       const paymentMonth = entries[0].invoiceMonth;
-
-      // Calculate net amount
-      const netAmount = entries.reduce((sum, e) => sum + Number(e.gstAmount), 0);
-
-      // Get financial year and allocate sequence
+      const netAmount = Number(entries.reduce((sum, e) => sum + Number(e.gstAmount), 0).toFixed(2));
       const financialYear = getFinancialYear(dto.paymentDate);
-      const { referenceNumber } = await this.gstRepository.allocateGstPaymentSequence(
-        financialYear,
-        em,
-      );
 
-      // Create payment
+      // Only a release to a vendor carries a payment advice reference.
+      const referenceNumber = isPurchase
+        ? (await this.gstRepository.allocateGstPaymentSequence(financialYear, em)).referenceNumber
+        : null;
+
       const payment = await this.gstRepository.createPayment(
         {
           siteId,
@@ -250,7 +258,6 @@ export class GstService {
         em,
       );
 
-      // Link selected entries to this payment
       for (const entry of entries) {
         await this.gstRepository.updateRegisterEntry(
           { id: entry.id, financialYear: entry.financialYear },
@@ -260,7 +267,7 @@ export class GstService {
       }
 
       return {
-        message: GST_RESPONSES.PAYMENT_RELEASED,
+        message: isPurchase ? GST_RESPONSES.RELEASED_TO_VENDOR : GST_RESPONSES.RECEIVED_FROM_CLIENT,
         id: payment.id,
         referenceNumber,
         netAmount,
@@ -282,7 +289,7 @@ export class GstService {
   }
 
   /**
-   * Get GST payments list.
+   * Get GST settlements list.
    */
   async findAllPayments(
     siteId?: string,

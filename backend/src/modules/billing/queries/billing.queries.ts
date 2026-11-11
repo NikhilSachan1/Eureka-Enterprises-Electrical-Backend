@@ -78,13 +78,21 @@ export const BILLING_QUERIES = {
         WHERE inv."poId" = po.id AND inv."approvalStatus" = 'APPROVED' AND inv."deletedAt" IS NULL
       ), 0) AS "gstInvoiced",
 
+      -- Held GST on this PO's invoices, and how much of it is settled (released to the vendor /
+      -- received from the client). Read through the register so it is PO-wise, not party-wide.
       COALESCE((
-        SELECT SUM(gp."netAmount")
-        FROM gst_payments gp
-        WHERE gp."siteId" = po."siteId"
-          AND (po."partyType" = 'PURCHASE')
-          AND gp."vendorId" = po."vendorId"
-          AND gp."deletedAt" IS NULL
+        SELECT SUM(g."gstAmount")
+        FROM gst_register_entries g
+        JOIN site_invoices inv ON inv.id = g."invoiceId"
+        WHERE inv."poId" = po.id AND g."isGstHold" = true AND g."deletedAt" IS NULL
+      ), 0) AS "gstHeld",
+
+      COALESCE((
+        SELECT SUM(g."gstAmount")
+        FROM gst_register_entries g
+        JOIN site_invoices inv ON inv.id = g."invoiceId"
+        WHERE inv."poId" = po.id AND g."isGstHold" = true AND g."gstPaymentId" IS NOT NULL
+          AND g."deletedAt" IS NULL
       ), 0) AS "gstPaid",
 
       -- TDS breakdown
@@ -94,16 +102,18 @@ export const BILLING_QUERIES = {
         WHERE inv."poId" = po.id AND inv."approvalStatus" = 'APPROVED' AND inv."deletedAt" IS NULL
       ), 0) AS "tdsDeducted",
 
+      -- TDS cleared on this PO's invoices:
+      --   PURCHASE → included in a deposited challan (we are the deductor)
+      --   SALE     → verified in Form 26AS (the client deposited it)
       COALESCE((
-        SELECT SUM(tp."netAmount")
-        FROM tds_payments tp
-        WHERE tp."siteId" = po."siteId"
+        SELECT SUM(t."tdsAmount")
+        FROM tds_register_entries t
+        JOIN site_invoices inv ON inv.id = t."invoiceId"
+        WHERE inv."poId" = po.id AND t."deletedAt" IS NULL
           AND (
-            (po."partyType" = 'SALE'     AND tp."contractorId" = po."contractorId")
-            OR
-            (po."partyType" = 'PURCHASE' AND tp."vendorId"     = po."vendorId")
+            (t."partyType" = 'PURCHASE' AND t."tdsPaymentId" IS NOT NULL)
+            OR (t."partyType" = 'SALE' AND t."isVerified" = true)
           )
-          AND tp."deletedAt" IS NULL
       ), 0) AS "tdsPaid"
 
     FROM purchase_orders po
@@ -235,35 +245,38 @@ export const BILLING_QUERIES = {
   `,
 
   /**
-   * Check GST/TDS settlement status.
+   * Check GST/TDS settlement status — every row must be 0 for the site to close.
+   *   GST not verified        — invoice not yet matched on the GST portal (both sides)
+   *   Held GST not settled    — held GST not yet released to vendor / received from client
+   *   TDS challan not recorded — purchase TDS we deducted but have not deposited
+   *   TDS not verified        — not yet in our 26Q (purchase) / Form 26AS (sale)
+   * GST that was not held is settled with the invoice payment, so it never counts as unsettled.
    */
   UNVERIFIED_GST_TDS: `
-    SELECT 'GST' as "type", COUNT(*) as "count"
+    SELECT 'GST not verified on portal' as "type", COUNT(*) as "count"
     FROM gst_register_entries
     WHERE "siteId" = $1
-      AND "partyType" = 'PURCHASE'
       AND "isVerified" = false
       AND "deletedAt" IS NULL
     UNION ALL
-    SELECT 'GST_UNPAID' as "type", COUNT(*) as "count"
+    SELECT 'Held GST not settled' as "type", COUNT(*) as "count"
     FROM gst_register_entries
     WHERE "siteId" = $1
-      AND "partyType" = 'PURCHASE'
-      AND "isVerified" = true
+      AND "isGstHold" = true
       AND "gstPaymentId" IS NULL
       AND "deletedAt" IS NULL
     UNION ALL
-    SELECT 'TDS' as "type", COUNT(*) as "count"
+    SELECT 'TDS challan not recorded' as "type", COUNT(*) as "count"
+    FROM tds_register_entries
+    WHERE "siteId" = $1
+      AND "partyType" = 'PURCHASE'
+      AND "tdsPaymentId" IS NULL
+      AND "deletedAt" IS NULL
+    UNION ALL
+    SELECT 'TDS not verified' as "type", COUNT(*) as "count"
     FROM tds_register_entries
     WHERE "siteId" = $1
       AND "isVerified" = false
-      AND "deletedAt" IS NULL
-    UNION ALL
-    SELECT 'TDS_UNPAID' as "type", COUNT(*) as "count"
-    FROM tds_register_entries
-    WHERE "siteId" = $1
-      AND "isVerified" = true
-      AND "tdsPaymentId" IS NULL
       AND "deletedAt" IS NULL
   `,
 
