@@ -51,16 +51,9 @@ export class TdsPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   netAmount: number;
 
-  // Challan identity: BSR code + deposit date + challan serial no. together form the CIN
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  bsrCode: string | null;
-
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  challanSerialNumber: string | null;
-
-  // Optional bank reference of the challan payment (legacy rows always have one)
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  utrNumber: string | null;
+  // UTR / reference number of the challan payment — identifies the challan
+  @Column({ type: 'varchar', length: 100 })
+  utrNumber: string;
 
   @Column({ type: 'date' })
   paymentDate: Date;

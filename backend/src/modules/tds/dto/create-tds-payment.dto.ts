@@ -11,8 +11,8 @@ import {
 } from 'class-validator';
 
 /**
- * Record a TDS challan (ITNS 281) deposited with the government — PURCHASE side only.
- * BSR code + deposit date + challan serial no. identify the challan (CIN).
+ * Record a TDS challan deposited with the government — PURCHASE side only.
+ * The challan is identified by the UTR / reference number of its payment.
  */
 export class CreateTdsPaymentDto {
   @ApiProperty({
@@ -25,27 +25,15 @@ export class CreateTdsPaymentDto {
   @IsUUID('4', { each: true })
   entryIds: string[];
 
-  @ApiProperty({ description: 'BSR code of the bank branch (7 digits)', example: '0510308' })
+  @ApiProperty({ description: 'UTR / reference number of the challan payment' })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(20)
-  bsrCode: string;
-
-  @ApiProperty({ description: 'Challan serial number', example: '00123' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(20)
-  challanSerialNumber: string;
+  @MaxLength(100)
+  utrNumber: string;
 
   @ApiProperty({ description: 'Date of deposit' })
   @IsDateString()
   paymentDate: string;
-
-  @ApiPropertyOptional({ description: 'Bank reference / UTR of the challan payment' })
-  @IsString()
-  @IsOptional()
-  @MaxLength(100)
-  utrNumber?: string;
 
   @ApiPropertyOptional({ description: 'Challan proof file S3 key' })
   @IsString()
