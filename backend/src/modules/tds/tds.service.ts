@@ -20,7 +20,7 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
  *
  *  PURCHASE (we are the deductor):
  *    1. We deduct TDS from the vendor's payment (entry created at invoice approval).
- *    2. We deposit it with the government via challan (BSR code + serial no.) — one challan can
+ *    2. We deposit it with the government via challan (identified by its UTR) — one challan can
  *       cover several vendors.
  *    3. We verify once it is filed in our 26Q / Form 16A is issued. Needs the challan first.
  *
@@ -231,9 +231,7 @@ export class TdsService {
           paymentMonth: entries[0].invoiceMonth,
           financialYear: getFinancialYear(dto.paymentDate),
           netAmount,
-          bsrCode: dto.bsrCode,
-          challanSerialNumber: dto.challanSerialNumber,
-          utrNumber: dto.utrNumber ?? null,
+          utrNumber: dto.utrNumber,
           paymentDate: new Date(dto.paymentDate),
           fileKey: dto.fileKey ?? null,
           fileName: dto.fileName ?? null,
