@@ -37,6 +37,82 @@ const scopeOn = (alias: string, col = 'createdBy') =>
 const partyTypeOf = (alias: string) =>
   `CASE ${alias}."partyType" WHEN 'SALE' THEN 'CONTRACTOR' WHEN 'PURCHASE' THEN 'VENDOR' ELSE NULL END AS "partyType"`;
 
+/**
+ * Builds a gap whose count and list read the same rows. `from` is the FROM … WHERE … body and
+ * must expose the project as `s`; the other fields are SQL expressions over it.
+ */
+const defineGap = (g: {
+  key: string;
+  label: string;
+  hint: string;
+  severity: 'problem' | 'info';
+  from: string;
+  id: string;
+  documentNumber: string;
+  amount: string;
+  since: string;
+  partyType: string;
+}): DocumentGapDef => ({
+  key: g.key,
+  label: g.label,
+  hint: g.hint,
+  severity: g.severity,
+  countSql: `
+    SELECT COUNT(*)::int AS count,
+           COALESCE(MAX(EXTRACT(DAY FROM NOW() - ${g.since})), 0)::int AS "oldestDays"
+    ${g.from}`,
+  listSql: `
+    SELECT ${g.id} AS "id", COALESCE(NULLIF(${g.documentNumber}, ''), '(no number)') AS "documentNumber",
+           s."name" AS "siteName", ${g.amount} AS amount, ${g.since} AS "since",
+           EXTRACT(DAY FROM NOW() - ${g.since})::int AS "ageDays",
+           ${g.partyType} AS "partyType"
+    ${g.from}
+     ORDER BY ${g.since} ASC NULLS LAST
+     LIMIT $2`,
+});
+
+/** VENDOR / CONTRACTOR from a register row's SALE / PURCHASE side. */
+const sidePartyOf = (alias: string) =>
+  `CASE ${alias}."partyType" WHEN 'SALE' THEN 'CONTRACTOR' ELSE 'VENDOR' END`;
+
+/**
+ * A GST / TDS register row joined to its live, approved invoice. The register rows are written by
+ * the system, so "raised by me" scoping reads the invoice's creator.
+ */
+const registerFrom = (table: 'gst_register_entries' | 'tds_register_entries', where: string) => `
+      FROM ${table} r
+      JOIN site_invoices i ON i."id" = r."invoiceId" AND i."deletedAt" IS NULL
+                          AND i."approvalStatus" = 'APPROVED'
+      LEFT JOIN sites s ON s."id" = r."siteId"
+     WHERE r."deletedAt" IS NULL
+       AND ${where}
+       AND ${scopeOn('i')}`;
+
+/** When the invoice behind a register row was approved — how long the tax step has waited. */
+const INVOICE_APPROVED_AT = `COALESCE(i."approvalAt", i."createdAt")`;
+
+/** The advance has gone out: at least one of its bookings has its bank transfer. */
+const ADVANCE_PAID = `EXISTS (
+  SELECT 1 FROM book_payments b
+   WHERE b."advancePaymentId" = a."id" AND b."deletedAt" IS NULL AND b."hasTransfer" = true)`;
+
+/**
+ * An approved vendor invoice on the advance's PO that still has room to absorb it: net payable
+ * less what is already settled from advances and what is already booked. Expects `a`.
+ */
+const INVOICE_CAN_ABSORB_ADVANCE = (alias = 'iv') => `
+  FROM site_invoices ${alias}
+ WHERE ${alias}."poId" = a."poId" AND ${alias}."deletedAt" IS NULL
+   AND ${alias}."approvalStatus" = 'APPROVED' AND ${alias}."partyType" = 'PURCHASE'
+   AND (CASE WHEN ${alias}."isGstHold" = true
+             THEN COALESCE(${alias}."taxableAmount", 0) - COALESCE(${alias}."tdsAmount", 0)
+             ELSE COALESCE(${alias}."taxableAmount", 0) + COALESCE(${alias}."gstAmount", 0) - COALESCE(${alias}."tdsAmount", 0)
+        END) - COALESCE(${alias}."advanceSettledAmount", 0) - COALESCE(${alias}."bookedTotal", 0) > 0.01`;
+
+/** Live, approved advances with a balance not yet settled against an invoice. Expects `a`. */
+const ADVANCE_OPEN = `a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
+         AND COALESCE(a."settledAmount", 0) < a."amount"`;
+
 export const DOCUMENT_GAPS: DocumentGapDef[] = [
   {
     key: 'po-without-jmc',
@@ -125,6 +201,8 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        ORDER BY i."approvalAt" ASC NULLS LAST
        LIMIT $2`,
   },
+  // Invoice bookings only — an advance's booking and a GST release each have a gap of their own
+  // below, worded for what they are, so counting them here as well would show them twice.
   {
     key: 'booked-not-transferred',
     label: 'Book payment approved, money not transferred',
@@ -136,6 +214,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
         FROM book_payments b
        WHERE b."deletedAt" IS NULL AND b."approvalStatus" = 'APPROVED'
          AND b."hasTransfer" = false
+         AND b."sourceType" = 'INVOICE'
          AND ${scopeOn('b')}`,
     listSql: `
       SELECT b."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber",
@@ -148,36 +227,160 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
         LEFT JOIN site_invoices i ON i."id" = b."invoiceId"
        WHERE b."deletedAt" IS NULL AND b."approvalStatus" = 'APPROVED'
          AND b."hasTransfer" = false
+         AND b."sourceType" = 'INVOICE'
          AND ${scopeOn('b')}
        ORDER BY b."approvalAt" ASC NULLS LAST
        LIMIT $2`,
   },
-  {
-    key: 'advance-not-settled',
-    label: 'Advance paid, not fully settled',
-    hint: 'Settle the advance against an invoice.',
+
+  // ── advances ──
+  //
+  // An advance runs: approved (its booking is created on approval) → paid by bank transfer →
+  // settled against the vendor's invoice once it is raised. Each step that has stalled is its own
+  // gap, because each one needs a different person to act.
+  defineGap({
+    key: 'advance-not-paid',
+    label: 'Advance approved, money not transferred',
+    hint: 'Pay the advance from a payment sheet or record its bank transfer.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - a."advanceDate")), 0)::int AS "oldestDays"
-        FROM advance_payments a
-       WHERE a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
-         AND COALESCE(a."settledAmount", 0) < a."amount"
-         AND ${scopeOn('a')}`,
-    listSql: `
-      SELECT a."id", COALESCE(NULLIF(a."advanceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
-             (a."amount" - COALESCE(a."settledAmount", 0)) AS amount,
-             a."advanceDate" AS "since",
-             EXTRACT(DAY FROM NOW() - a."advanceDate")::int AS "ageDays",
-             'VENDOR' AS "partyType"
-        FROM advance_payments a
-        LEFT JOIN sites s ON s."id" = a."siteId"
-       WHERE a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
-         AND COALESCE(a."settledAmount", 0) < a."amount"
-         AND ${scopeOn('a')}
-       ORDER BY a."advanceDate" ASC NULLS LAST
-       LIMIT $2`,
-  },
+    from: `
+      FROM book_payments b
+      JOIN advance_payments a ON a."id" = b."advancePaymentId" AND a."deletedAt" IS NULL
+      LEFT JOIN sites s ON s."id" = b."siteId"
+     WHERE b."deletedAt" IS NULL AND b."approvalStatus" = 'APPROVED'
+       AND b."sourceType" = 'ADVANCE' AND b."hasTransfer" = false
+       AND ${scopeOn('a')}`,
+    id: 'a."id"',
+    documentNumber: 'a."advanceNumber"',
+    amount: 'b."paymentTotalAmount"',
+    since: 'COALESCE(b."approvalAt", b."createdAt")',
+    partyType: `'VENDOR'`,
+  }),
+  defineGap({
+    key: 'advance-invoice-not-adjusted',
+    label: 'Advance paid, invoice raised but advance not adjusted',
+    hint: 'Settle the advance against the vendor invoice on the same PO.',
+    severity: 'problem',
+    from: `
+      FROM advance_payments a
+      LEFT JOIN sites s ON s."id" = a."siteId"
+     WHERE ${ADVANCE_OPEN}
+       AND ${ADVANCE_PAID}
+       AND EXISTS (SELECT 1 ${INVOICE_CAN_ABSORB_ADVANCE()})
+       AND ${scopeOn('a')}`,
+    id: 'a."id"',
+    documentNumber: `a."advanceNumber" || COALESCE(' → ' || (
+        SELECT iv."invoiceNumber" ${INVOICE_CAN_ABSORB_ADVANCE()}
+         ORDER BY iv."invoiceDate" ASC NULLS LAST LIMIT 1), '')`,
+    amount: '(a."amount" - COALESCE(a."settledAmount", 0))',
+    since: 'a."advanceDate"',
+    partyType: `'VENDOR'`,
+  }),
+
+  // ── GST ──
+  //
+  // Every entry is matched on the portal (GSTR-2B for vendor invoices, GSTR-1 for ours). Held GST
+  // is then settled: released to the vendor through a GST book payment and its bank transfer, or
+  // received from the client as a GST bank transfer.
+  defineGap({
+    key: 'gst-not-verified',
+    label: 'GST not verified on the portal',
+    hint: 'Check GSTR-2B (vendor) / GSTR-1 (contractor) and verify the entry in the GST summary.',
+    severity: 'problem',
+    from: registerFrom('gst_register_entries', `r."isVerified" = false`),
+    id: 'r."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: 'r."gstAmount"',
+    since: INVOICE_APPROVED_AT,
+    partyType: sidePartyOf('r'),
+  }),
+  defineGap({
+    key: 'gst-release-pending',
+    label: 'Held GST verified, release not booked',
+    hint: 'Book the GST release from the GST summary.',
+    severity: 'problem',
+    from: registerFrom(
+      'gst_register_entries',
+      `r."partyType" = 'PURCHASE' AND r."isGstHold" = true AND r."isVerified" = true
+       AND r."gstPaymentId" IS NULL AND r."gstBookPaymentId" IS NULL AND r."gstBankTransferId" IS NULL`,
+    ),
+    id: 'r."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: 'r."gstAmount"',
+    since: 'COALESCE(r."verifiedAt", i."approvalAt", i."createdAt")',
+    partyType: `'VENDOR'`,
+  }),
+  defineGap({
+    key: 'gst-release-not-transferred',
+    label: 'GST release booked, money not transferred',
+    hint: 'Pay the GST release from a payment sheet or record its bank transfer.',
+    severity: 'problem',
+    from: `
+      FROM gst_register_entries r
+      JOIN site_invoices i ON i."id" = r."invoiceId" AND i."deletedAt" IS NULL
+      JOIN book_payments b ON b."id" = r."gstBookPaymentId" AND b."deletedAt" IS NULL
+      LEFT JOIN sites s ON s."id" = r."siteId"
+     WHERE r."deletedAt" IS NULL
+       AND r."gstBankTransferId" IS NULL AND r."gstPaymentId" IS NULL
+       AND ${scopeOn('i')}`,
+    id: 'r."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: 'b."paymentTotalAmount"',
+    since: 'COALESCE(b."approvalAt", b."createdAt")',
+    partyType: `'VENDOR'`,
+  }),
+  defineGap({
+    key: 'gst-receipt-pending',
+    label: 'Held GST not yet received from the client',
+    hint: 'Once the client pays the withheld GST, mark it received in the GST summary.',
+    severity: 'problem',
+    from: registerFrom(
+      'gst_register_entries',
+      `r."partyType" = 'SALE' AND r."isGstHold" = true
+       AND r."gstPaymentId" IS NULL AND r."gstBankTransferId" IS NULL`,
+    ),
+    id: 'r."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: 'r."gstAmount"',
+    since: INVOICE_APPROVED_AT,
+    partyType: `'CONTRACTOR'`,
+  }),
+
+  // ── TDS ──
+  //
+  // Vendor side: we deduct, deposit it by challan, then it shows in our 26Q. Contractor side: the
+  // client deducts and deposits, and we check the credit in Form 26AS.
+  defineGap({
+    key: 'tds-challan-pending',
+    label: 'TDS deducted, challan not recorded',
+    hint: 'Deposit the TDS and record the challan in the TDS summary.',
+    severity: 'problem',
+    from: registerFrom(
+      'tds_register_entries',
+      `r."partyType" = 'PURCHASE' AND r."tdsPaymentId" IS NULL AND r."tdsAmount" > 0`,
+    ),
+    id: 'r."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: 'r."tdsAmount"',
+    since: INVOICE_APPROVED_AT,
+    partyType: `'VENDOR'`,
+  }),
+  defineGap({
+    key: 'tds-not-verified',
+    label: 'TDS not verified in 26Q / Form 26AS',
+    hint: 'Vendor: verify once filed in 26Q. Contractor: verify the credit in Form 26AS.',
+    severity: 'problem',
+    from: registerFrom(
+      'tds_register_entries',
+      `r."isVerified" = false AND r."tdsAmount" > 0
+       AND (r."partyType" = 'SALE' OR r."tdsPaymentId" IS NOT NULL)`,
+    ),
+    id: 'r."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: 'r."tdsAmount"',
+    since: INVOICE_APPROVED_AT,
+    partyType: sidePartyOf('r'),
+  }),
 
   // ── missing files ──
   //
@@ -265,6 +468,48 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        ORDER BY i."createdAt" ASC
        LIMIT $2`,
   },
+  defineGap({
+    key: 'advance-file-missing',
+    label: 'Advance with no document uploaded',
+    hint: 'Upload the vendor’s advance request / proforma.',
+    severity: 'problem',
+    from: `
+      FROM advance_payments a
+      LEFT JOIN sites s ON s."id" = a."siteId"
+     WHERE a."deletedAt" IS NULL AND a."approvalStatus" <> 'REJECTED'
+       AND (a."fileKey" IS NULL OR a."fileKey" = '')
+       AND ${scopeOn('a')}`,
+    id: 'a."id"',
+    documentNumber: 'a."advanceNumber"',
+    amount: 'a."amount"',
+    since: 'a."createdAt"',
+    partyType: `'VENDOR'`,
+  }),
+
+  // ── reported, not flagged ──
+  //
+  // An advance exists because work starts before the bill. Until the vendor raises an invoice
+  // there is nothing to settle it against, so a paid advance waiting for its invoice is normal —
+  // it is listed, not flagged. Once an invoice it can be settled against exists, it moves to the
+  // "invoice raised but advance not adjusted" problem above.
+  defineGap({
+    key: 'advance-not-settled',
+    label: 'Advance paid, invoice awaited',
+    hint: 'Settle the advance once the vendor raises the invoice.',
+    severity: 'info',
+    from: `
+      FROM advance_payments a
+      LEFT JOIN sites s ON s."id" = a."siteId"
+     WHERE ${ADVANCE_OPEN}
+       AND ${ADVANCE_PAID}
+       AND NOT EXISTS (SELECT 1 ${INVOICE_CAN_ABSORB_ADVANCE()})
+       AND ${scopeOn('a')}`,
+    id: 'a."id"',
+    documentNumber: 'a."advanceNumber"',
+    amount: '(a."amount" - COALESCE(a."settledAmount", 0))',
+    since: 'a."advanceDate"',
+    partyType: `'VENDOR'`,
+  }),
 
   // ── reported, not flagged ──
   //
