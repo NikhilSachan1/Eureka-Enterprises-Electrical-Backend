@@ -26,6 +26,11 @@ export interface DocumentGapDef {
    */
   parties?: GapParty[];
   /**
+   * Wording for one side, when the step is named differently there (GSTR-2B vs GSTR-1, 26Q vs
+   * 26AS). The contractor and vendor gaps are shown apart, so each reads in its own terms.
+   */
+  sideText?: Partial<Record<GapParty, GapText>>;
+  /**
    * The rows in the gap. `$1` scope (null = company, else raised-by that user), `$2` limit (null =
    * all). Counts are read off this same query, split by `partyType`, so a count can never
    * disagree with the list behind it.
@@ -34,6 +39,11 @@ export interface DocumentGapDef {
 }
 
 export type GapParty = 'CONTRACTOR' | 'VENDOR';
+
+export interface GapText {
+  label: string;
+  hint: string;
+}
 
 export const GAP_PARTIES: GapParty[] = ['CONTRACTOR', 'VENDOR'];
 
@@ -63,11 +73,13 @@ const defineGap = (g: {
   amount: string;
   since: string;
   partyType: string;
+  sideText?: DocumentGapDef['sideText'];
 }): DocumentGapDef => ({
   key: g.key,
   label: g.label,
   hint: g.hint,
   severity: g.severity,
+  sideText: g.sideText,
   // A literal side ('VENDOR') pins the gap to that side; an expression can yield either.
   parties: GAP_PARTIES.filter((p) => g.partyType === `'${p}'`),
   listSql: `
@@ -141,31 +153,10 @@ const VENDOR_INVOICE_LIVE = (alias: string) =>
   `${alias}."deletedAt" IS NULL AND ${alias}."approvalStatus" = 'APPROVED'
        AND ${alias}."partyType" = 'PURCHASE' AND ${alias}."invoiceNumber" IS NOT NULL`;
 
-/**
- * Every live rejected document of the chain, in one shape. `docKind` is the workspace document
- * list it lives in (po / jmc / invoice / advance-payment).
- */
-const REJECTED_DOCS = `
-  SELECT po."id", po."poNumber" AS "number", po."totalAmount" AS "amount",
-         COALESCE(po."approvalAt", po."updatedAt") AS "since", po."partyType", po."siteId",
-         po."createdBy", 'po' AS "docKind"
-    FROM purchase_orders po
-   WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'REJECTED'
-  UNION ALL
-  SELECT j."id", j."jmcNumber", NULL::numeric, COALESCE(j."approvalAt", j."updatedAt"),
-         j."partyType", j."siteId", j."createdBy", 'jmc'
-    FROM jmcs j
-   WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'REJECTED'
-  UNION ALL
-  SELECT i."id", i."invoiceNumber", i."totalAmount", COALESCE(i."approvalAt", i."updatedAt"),
-         i."partyType", i."siteId", i."createdBy", 'invoice'
-    FROM site_invoices i
-   WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'REJECTED'
-  UNION ALL
-  SELECT a."id", a."advanceNumber", a."amount", COALESCE(a."approvalAt", a."updatedAt"),
-         'PURCHASE', a."siteId", a."createdBy", 'advance-payment'
-    FROM advance_payments a
-   WHERE a."deletedAt" IS NULL AND a."approvalStatus" = 'REJECTED'`;
+/** A live, approved, real (numbered) contractor invoice. */
+const CONTRACTOR_INVOICE_LIVE = (alias: string) =>
+  `${alias}."deletedAt" IS NULL AND ${alias}."approvalStatus" = 'APPROVED'
+       AND ${alias}."partyType" = 'SALE' AND ${alias}."invoiceNumber" IS NOT NULL`;
 
 /** Live, approved advances with a balance not yet settled against an invoice. Expects `a`. */
 const ADVANCE_OPEN = `a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
@@ -216,25 +207,32 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'jmc-without-report',
-    label: 'Vendor JMC approved, site report not added',
-    hint: 'Add the site report (or mark it as no report) so the invoice can be raised.',
+    label: 'JMC approved, site report not added',
+    hint: 'Add the site report, or mark it as no report.',
+    sideText: {
+      VENDOR: {
+        label: 'JMC approved, site report not added',
+        hint: 'Add the site report (or mark it as no report) so the invoice can be raised.',
+      },
+    },
     severity: 'problem',
+    // Vendor: the report is needed before the invoice, so a JMC already invoiced is past this
+    // step. Contractor: the report does not block the invoice, so it stays owed until added.
     from: `
       FROM jmcs j
       LEFT JOIN sites s ON s."id" = j."siteId"
      WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'APPROVED'
-       AND j."partyType" = 'PURCHASE'
        AND COALESCE(j."isNoJmc", false) = false
        AND ${scopeOn('j')}
        AND NOT EXISTS (
          SELECT 1 FROM site_reports r WHERE r."jmcId" = j."id" AND r."deletedAt" IS NULL)
-       AND NOT EXISTS (
-         SELECT 1 FROM site_invoices i WHERE i."jmcId" = j."id" AND i."deletedAt" IS NULL)`,
+       AND (j."partyType" = 'SALE' OR NOT EXISTS (
+         SELECT 1 FROM site_invoices i WHERE i."jmcId" = j."id" AND i."deletedAt" IS NULL))`,
     id: 'j."id"',
     documentNumber: 'j."jmcNumber"',
     amount: 'NULL::numeric',
     since: 'COALESCE(j."approvalAt", j."createdAt")',
-    partyType: `'VENDOR'`,
+    partyType: sidePartyOf('j'),
   }),
 
   // Vendor invoices only (a contractor invoice is never booked — it is received, see below), real
@@ -242,7 +240,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // still to book: net payable less advances settled against it less bookings already made.
   defineGap({
     key: 'invoice-not-booked',
-    label: 'Vendor invoice approved, not booked for payment',
+    label: 'Invoice approved, not booked for payment',
     hint: 'Create the book payment so it can be paid.',
     severity: 'problem',
     from: `
@@ -262,7 +260,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'invoice-partially-booked',
-    label: 'Vendor invoice partly booked, balance not booked',
+    label: 'Invoice partly booked, balance not booked',
     hint: 'Book the remaining amount of the invoice.',
     severity: 'problem',
     from: `
@@ -280,18 +278,38 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     since: 'COALESCE(i."approvalAt", i."createdAt")',
     partyType: `'VENDOR'`,
   }),
+  // The contractor side has no booking step — the client pays straight in — so where a vendor
+  // invoice is "not booked / partly booked", a contractor invoice is "not received / partly
+  // received".
   defineGap({
     key: 'contractor-payment-pending',
-    label: 'Contractor invoice approved, payment not received in full',
+    label: 'Invoice approved, payment not received',
     hint: 'Follow up with the client, then record the bank transfer.',
     severity: 'problem',
     from: `
       FROM site_invoices i
       LEFT JOIN sites s ON s."id" = i."siteId"
-     WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
-       AND i."partyType" = 'SALE'
-       AND i."invoiceNumber" IS NOT NULL
+     WHERE ${CONTRACTOR_INVOICE_LIVE('i')}
        AND ${INVOICE_STILL_TO_PAY('i')} > 0.01
+       AND COALESCE(i."paidTotal", 0) <= 0.01
+       AND ${scopeOn('i')}`,
+    id: 'i."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: INVOICE_STILL_TO_PAY('i'),
+    since: 'COALESCE(i."approvalAt", i."createdAt")',
+    partyType: `'CONTRACTOR'`,
+  }),
+  defineGap({
+    key: 'contractor-payment-partial',
+    label: 'Invoice partly received, balance not received',
+    hint: 'Follow up with the client for the balance, then record the bank transfer.',
+    severity: 'problem',
+    from: `
+      FROM site_invoices i
+      LEFT JOIN sites s ON s."id" = i."siteId"
+     WHERE ${CONTRACTOR_INVOICE_LIVE('i')}
+       AND ${INVOICE_STILL_TO_PAY('i')} > 0.01
+       AND COALESCE(i."paidTotal", 0) > 0.01
        AND ${scopeOn('i')}`,
     id: 'i."id"',
     documentNumber: 'i."invoiceNumber"',
@@ -368,30 +386,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     partyType: `'VENDOR'`,
   }),
 
-  // ── rejected ──
-  //
-  // Rejection is terminal: a rejected document cannot be approved or edited, and while a rejected
-  // invoice / report exists the JMC cannot get a new one (one per JMC). So a rejected document left
-  // lying blocks the chain until someone deletes it and raises a corrected one. `docKind` tells the
-  // dashboard which document list each row opens.
-  {
-    key: 'rejected-not-replaced',
-    label: 'Rejected document not yet replaced',
-    hint: 'Delete the rejected document and raise a corrected one.',
-    severity: 'problem',
-    listSql: `
-      SELECT x."id", COALESCE(NULLIF(x."number", ''), '(no number)') AS "documentNumber",
-             s."name" AS "siteName", x."amount" AS amount, x."since" AS "since",
-             EXTRACT(DAY FROM NOW() - x."since")::int AS "ageDays",
-             ${sidePartyOf('x')} AS "partyType",
-             x."docKind"
-        FROM (${REJECTED_DOCS}) x
-        LEFT JOIN sites s ON s."id" = x."siteId"
-       WHERE ${scopeOn('x')}
-       ORDER BY x."since" ASC NULLS LAST
-       LIMIT $2`,
-  },
-
   // ── GST ──
   //
   // Every entry is matched on the portal (GSTR-2B for vendor invoices, GSTR-1 for ours). Held GST
@@ -401,6 +395,16 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     key: 'gst-not-verified',
     label: 'GST not verified on the portal',
     hint: 'Check GSTR-2B (vendor) / GSTR-1 (contractor) and verify the entry in the GST summary.',
+    sideText: {
+      VENDOR: {
+        label: 'GST not verified in GSTR-2B',
+        hint: 'Check the vendor’s invoice in GSTR-2B, then verify it in the GST summary.',
+      },
+      CONTRACTOR: {
+        label: 'GST not verified in GSTR-1',
+        hint: 'Check the invoice in our GSTR-1, then verify it in the GST summary.',
+      },
+    },
     severity: 'problem',
     from: registerFrom('gst_register_entries', `r."isVerified" = false`),
     id: 'r."id"',
@@ -484,6 +488,16 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     key: 'tds-not-verified',
     label: 'TDS not verified in 26Q / Form 26AS',
     hint: 'Vendor: verify once filed in 26Q. Contractor: verify the credit in Form 26AS.',
+    sideText: {
+      VENDOR: {
+        label: 'TDS deposited, not verified in 26Q',
+        hint: 'Verify the entry in the TDS summary once it is filed in the 26Q return.',
+      },
+      CONTRACTOR: {
+        label: 'TDS not verified in Form 26AS',
+        hint: 'Check the client’s TDS credit in Form 26AS, then verify it in the TDS summary.',
+      },
+    },
     severity: 'problem',
     from: registerFrom(
       'tds_register_entries',
@@ -502,25 +516,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // A system-generated document has no file to upload and never will, so counting it would make
   // the list permanently wrong. A No-JMC entry is the same: it stands for the absence of a JMC,
   // so there is no certificate behind it.
-  {
-    key: 'po-file-missing',
-    label: 'PO with no document uploaded',
-    hint: 'Upload the signed purchase order.',
-    severity: 'problem',
-    listSql: `
-      SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
-             po."totalAmount" AS amount, po."createdAt" AS "since",
-             EXTRACT(DAY FROM NOW() - po."createdAt")::int AS "ageDays",
-             ${partyTypeOf('po')}
-        FROM purchase_orders po
-        LEFT JOIN sites s ON s."id" = po."siteId"
-       WHERE po."deletedAt" IS NULL
-         AND COALESCE(po."isSystemGenerated", false) = false
-         AND (po."fileKey" IS NULL OR po."fileKey" = '')
-         AND ${scopeOn('po')}
-       ORDER BY po."createdAt" ASC
-       LIMIT $2`,
-  },
   {
     key: 'jmc-file-missing',
     label: 'JMC with no document uploaded',
@@ -544,7 +539,17 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   {
     key: 'invoice-file-missing',
     label: 'Invoice with no document uploaded',
-    hint: 'Upload the vendor invoice.',
+    hint: 'Upload the invoice document.',
+    sideText: {
+      VENDOR: {
+        label: 'Invoice with no document uploaded',
+        hint: 'Upload the vendor’s invoice.',
+      },
+      CONTRACTOR: {
+        label: 'Invoice with no document uploaded',
+        hint: 'Upload the invoice sent to the client.',
+      },
+    },
     severity: 'problem',
     listSql: `
       SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
@@ -630,6 +635,10 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
 ];
 
 export const findGap = (key: string) => DOCUMENT_GAPS.find((g) => g.key === key);
+
+/** The gap's label and hint as one side reads them. */
+export const gapTextFor = (gap: DocumentGapDef, party: GapParty): GapText =>
+  gap.sideText?.[party] ?? { label: gap.label, hint: gap.hint };
 
 /** The sides a gap is shown under. */
 export const gapParties = (gap: DocumentGapDef): GapParty[] =>

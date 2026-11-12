@@ -35,6 +35,7 @@ export class PaymentRequestService {
       .getRepository(SiteInvoiceEntity)
       .findOne({ where: { id: dto.invoiceId, deletedAt: IsNull() } });
     if (!invoice) throw new NotFoundException(PAYMENT_REQUEST_ERRORS.INVOICE_NOT_FOUND);
+    this.assertWithinUnbooked(invoice, Number(dto.requestedAmount));
 
     const created = await this.repo.save(
       this.repo.create({
@@ -59,7 +60,14 @@ export class PaymentRequestService {
     this.assertPending(pr, PAYMENT_REQUEST_ERRORS.NOT_PENDING_EDIT);
 
     const patch: Partial<PaymentRequestEntity> = {};
-    if (dto.requestedAmount !== undefined) patch.requestedAmount = dto.requestedAmount;
+    if (dto.requestedAmount !== undefined) {
+      const invoice = await this.dataSource
+        .getRepository(SiteInvoiceEntity)
+        .findOne({ where: { id: pr.invoiceId, deletedAt: IsNull() } });
+      if (!invoice) throw new NotFoundException(PAYMENT_REQUEST_ERRORS.INVOICE_NOT_FOUND);
+      this.assertWithinUnbooked(invoice, Number(dto.requestedAmount));
+      patch.requestedAmount = dto.requestedAmount;
+    }
     if (dto.reason !== undefined) patch.reason = dto.reason ?? null;
 
     if (Object.keys(patch).length === 0) {
@@ -79,6 +87,39 @@ export class PaymentRequestService {
     await this.repo.update({ id }, { deletedBy, updatedBy: deletedBy });
     await this.repo.softDelete({ id });
     return { message: PAYMENT_REQUEST_RESPONSES.DELETED };
+  }
+
+  /**
+   * A request becomes a book payment once approved, so it may not ask for more than the invoice
+   * still has to book: net payable (taxable − TDS, plus GST unless held) less advances settled
+   * and bookings already made. The book payment re-checks this on approval; checking here stops a
+   * request being raised against an invoice that advances have already covered.
+   */
+  private assertWithinUnbooked(invoice: SiteInvoiceEntity, requested: number): void {
+    const taxable = Number(invoice.taxableAmount ?? 0);
+    const tds = Number(invoice.tdsAmount ?? 0);
+    const gst = invoice.isGstHold ? 0 : Number(invoice.gstAmount ?? 0);
+    const unbooked =
+      Math.round(
+        (taxable -
+          tds +
+          gst -
+          Number(invoice.advanceSettledAmount ?? 0) -
+          Number(invoice.bookedTotal ?? 0)) *
+          100,
+      ) / 100;
+
+    if (unbooked <= 0) {
+      throw new BadRequestException(PAYMENT_REQUEST_ERRORS.INVOICE_FULLY_COVERED);
+    }
+    if (requested > unbooked + 0.01) {
+      throw new BadRequestException(
+        PAYMENT_REQUEST_ERRORS.EXCEEDS_UNBOOKED.replace(
+          '{amount}',
+          unbooked.toLocaleString('en-IN'),
+        ),
+      );
+    }
   }
 
   private assertPending(pr: PaymentRequestEntity, template: string): void {

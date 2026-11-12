@@ -15,6 +15,7 @@ import {
   gapListSql,
   GapParty,
   gapParties,
+  gapTextFor,
 } from './queries/document-gap.queries';
 import {
   outstandingByPartyQuery,
@@ -230,7 +231,11 @@ export class WorkBoardService {
         const rows = await this.rows<any>(gapCountsSql(gap), [scopeUserId, null]);
         const side = (party: GapParty) => {
           const row = rows.find((r) => r.partyType === party);
-          return { count: Number(row?.count ?? 0), oldestDays: Number(row?.oldestDays ?? 0) };
+          return {
+            ...gapTextFor(gap, party),
+            count: Number(row?.count ?? 0),
+            oldestDays: Number(row?.oldestDays ?? 0),
+          };
         };
         const byParty = { contractor: side('CONTRACTOR'), vendor: side('VENDOR') };
         return {
@@ -356,10 +361,11 @@ export class WorkBoardService {
       );
     }
     const items = await this.rows<any>(gapListSql(gap), [scopeUserId, null, party, GAP_LIST_LIMIT]);
+    const text = party ? gapTextFor(gap, party) : { label: gap.label, hint: gap.hint };
     return {
       key: gap.key,
-      label: gap.label,
-      hint: gap.hint,
+      label: text.label,
+      hint: text.hint,
       severity: gap.severity,
       party,
       items,
