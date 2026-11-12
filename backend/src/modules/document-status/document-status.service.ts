@@ -9,6 +9,7 @@ import {
   OVERALL_STATUS_CASE,
   ADVANCE_ISSUE_BRANCH,
 } from './constants/document-status.constants';
+import { loadInvoiceTaxStatus } from 'src/modules/common/financials/tax-register-status.helper';
 
 @Injectable()
 export class DocumentStatusService {
@@ -652,8 +653,17 @@ export class DocumentStatusService {
             [jmcIds],
           ),
           this.dataSource.query(
+            // Net payable is what the payment actually covers: taxable − TDS when GST is held
+            // (the GST is settled separately), taxable + GST − TDS otherwise. The gross
+            // totalAmount is never fully "paid", so measuring against it showed every paid
+            // invoice as still owing.
             `SELECT id, "invoiceNumber", "invoiceDate", "jmcId", "approvalStatus" AS status,
-                    "totalAmount", COALESCE("paidTotal", 0) AS "paidTotal"
+                    "totalAmount", COALESCE("paidTotal", 0) AS "paidTotal",
+                    COALESCE("advanceSettledAmount", 0) AS "advanceSettledAmount",
+                    CASE WHEN "isGstHold" = true
+                         THEN COALESCE("taxableAmount", 0) - COALESCE("tdsAmount", 0)
+                         ELSE COALESCE("taxableAmount", 0) + COALESCE("gstAmount", 0) - COALESCE("tdsAmount", 0)
+                    END AS "netPayable"
              FROM site_invoices WHERE "jmcId" = ANY($1) AND "deletedAt" IS NULL`,
             [jmcIds],
           ),
@@ -675,14 +685,26 @@ export class DocumentStatusService {
 
     // 5b) Advances of these POs — a sibling of the JMC subtree, not part of it. An advance exists
     // precisely because no JMC was raised, so it hangs directly off the PO.
+    // Booked / paid come off the advance's own book payments (created on approval).
     const advanceRows: any[] = await this.dataSource.query(
-      `SELECT id, "poId", "advanceNumber", "advanceDate", amount, "settledAmount",
-              "approvalStatus" AS status
-         FROM advance_payments
-        WHERE "poId" = ANY($1) AND "deletedAt" IS NULL
-        ORDER BY "advanceDate" ASC, "createdAt" ASC`,
+      `SELECT a.id, a."poId", a."advanceNumber", a."advanceDate", a.amount, a."settledAmount",
+              a."approvalStatus" AS status,
+              (a."fileKey" IS NOT NULL AND a."fileKey" <> '') AS "hasUpload",
+              COALESCE(SUM(b."paymentTotalAmount"), 0) AS "bookedAmount",
+              COALESCE(SUM(b."paymentTotalAmount") FILTER (WHERE b."hasTransfer" = true), 0) AS "paidAmount",
+              MAX(bt."transferDate") AS "lastPaidAt",
+              MAX(bt."utrNumber") AS "utrNumber"
+         FROM advance_payments a
+         LEFT JOIN book_payments b ON b."advancePaymentId" = a.id AND b."deletedAt" IS NULL
+         LEFT JOIN bank_transfers bt ON bt."bookPaymentId" = b.id AND bt."deletedAt" IS NULL
+        WHERE a."poId" = ANY($1) AND a."deletedAt" IS NULL
+        GROUP BY a.id
+        ORDER BY a."advanceDate" ASC, a."createdAt" ASC`,
       [poIds],
     );
+
+    // GST / TDS register status of every invoice — what happened to the tax after payment.
+    const taxStatusByInvoice = await loadInvoiceTaxStatus(this.dataSource, invoiceIds);
     const advanceByPo = new Map<string, any[]>();
     for (const a of advanceRows) {
       (advanceByPo.get(a.poId) ?? advanceByPo.set(a.poId, []).get(a.poId))!.push(a);
@@ -692,7 +714,7 @@ export class DocumentStatusService {
     const btRows: any[] = invoiceIds.length
       ? await this.dataSource.query(
           `SELECT id, "invoiceId", "bookPaymentId", "transferDate", "utrNumber", "transferAmount",
-                  "approvalStatus" AS status
+                  "paymentType", "approvalStatus" AS status
            FROM bank_transfers
            WHERE ("invoiceId" = ANY($1) OR "bookPaymentId" = ANY($2)) AND "deletedAt" IS NULL
            ORDER BY "createdAt" ASC`,
@@ -728,6 +750,8 @@ export class DocumentStatusService {
       transferDate: t.transferDate,
       utrNumber: t.utrNumber,
       transferAmount: num(t.transferAmount),
+      // REGULAR | GST — a GST transfer is held GST released / received, not the invoice payment.
+      paymentType: t.paymentType ?? 'REGULAR',
       status: t.status,
     });
 
@@ -790,7 +814,23 @@ export class DocumentStatusService {
                 status: inv.status,
                 totalAmount: num(inv.totalAmount),
                 paidTotal: num(inv.paidTotal),
-                remaining: num(inv.totalAmount) - num(inv.paidTotal),
+                netPayable: num(inv.netPayable),
+                advanceSettledAmount: num(inv.advanceSettledAmount),
+                // Still to pay / receive on the invoice itself — net payable less advances
+                // settled against it and what has been paid. Held GST and TDS are tracked in
+                // `gst` / `tds`, not here.
+                remaining: Math.max(
+                  Number(
+                    (
+                      num(inv.netPayable) -
+                      num(inv.advanceSettledAmount) -
+                      num(inv.paidTotal)
+                    ).toFixed(2),
+                  ),
+                  0,
+                ),
+                gst: taxStatusByInvoice.get(inv.id)?.gstStatus ?? null,
+                tds: taxStatusByInvoice.get(inv.id)?.tdsStatus ?? null,
                 // PURCHASE: payments hang off book payments; SALE: bank transfers direct on invoice.
                 bookPayments: (bpByInvoice.get(inv.id) ?? []).map((bp) => ({
                   id: bp.id,
@@ -873,6 +913,11 @@ export class DocumentStatusService {
         settledAmount: num(a.settledAmount),
         unsettled: num(a.amount) - num(a.settledAmount),
         status: a.status,
+        hasUpload: !!a.hasUpload,
+        bookedAmount: num(a.bookedAmount),
+        paidAmount: num(a.paidAmount),
+        lastPaidAt: a.lastPaidAt ?? null,
+        utrNumber: a.utrNumber ?? null,
       }));
       const outstanding = advances.filter((a) => a.status === 'APPROVED' && a.unsettled > 0);
       counts.advance = {
