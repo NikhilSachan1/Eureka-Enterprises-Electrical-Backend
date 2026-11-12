@@ -276,9 +276,12 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       COALESCE(SUM(bp."gstAmount"::numeric), 0)                               AS "totalGstAmount",
       COALESCE(SUM(bp."paymentTotalAmount"::numeric), 0)                      AS "totalPaymentAmount",
       COALESCE(SUM(bp."paymentHoldAmount"::numeric), 0)                       AS "totalHoldAmount",
-      COALESCE(SUM(COALESCE(inv."tdsAmount"::numeric, 0)), 0)                 AS "totalTdsAmount",
+      COALESCE(SUM(CASE WHEN bp."sourceType" = 'GST_RELEASE' THEN 0
+                        ELSE COALESCE(inv."tdsAmount"::numeric, 0) END), 0)   AS "totalTdsAmount",
       COALESCE(SUM(
-        CASE WHEN inv."isGstHold" = true
+        CASE WHEN bp."sourceType" = 'GST_RELEASE'
+          THEN bp."paymentTotalAmount"::numeric
+        WHEN inv."isGstHold" = true
           THEN bp."taxableAmount"::numeric - COALESCE(inv."tdsAmount"::numeric, 0)
           ELSE bp."taxableAmount"::numeric + bp."gstAmount"::numeric - COALESCE(inv."tdsAmount"::numeric, 0)
         END

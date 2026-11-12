@@ -99,12 +99,14 @@ export class BankTransferRepository {
   /**
    * Sum of transferAmount for a given invoice (SALE side).
    * TDS is now at invoice level — ceiling check: Σ(transferAmount) ≤ invoice.taxableAmount − invoice.tdsAmount.
+   * GST receipts are outside that ceiling (the held GST is settled through the GST register).
    */
   async sumByInvoice(invoiceId: string, em?: EntityManager): Promise<number> {
     const result = await this.repo(em)
       .createQueryBuilder('bt')
       .select('COALESCE(SUM(bt."transferAmount"), 0)', 'total')
       .where('bt."invoiceId" = :invoiceId', { invoiceId })
+      .andWhere(`bt."paymentType" <> 'GST'`)
       .andWhere('bt."deletedAt" IS NULL')
       .getRawOne();
     return Number(result?.total ?? 0);

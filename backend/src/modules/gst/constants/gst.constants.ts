@@ -11,6 +11,12 @@ export const GST_ERRORS = {
   ALREADY_VERIFIED: 'Entry is already verified.',
   NOT_VERIFIED: 'Entry is not verified.',
   CANNOT_REVERT_SETTLED: 'Cannot revert — the held GST has already been settled.',
+  CANNOT_REVERT_BOOKED:
+    'Cannot revert — a GST release is booked for this entry. Delete the GST book payment first.',
+  RELEASE_IN_PROCESS: (invoiceNumber: string) =>
+    `A GST release is already booked for invoice ${invoiceNumber} — pay it from the payment sheet or bank transfer.`,
+  UTR_REQUIRED_FOR_RECEIPT:
+    'UTR / reference number is required to record GST received from the client.',
   NO_ENTRIES: 'No GST register entries were selected.',
   ENTRIES_NOT_FOUND: 'One or more entries not found.',
   NOT_HELD: (invoiceNumber: string) =>
@@ -27,6 +33,7 @@ export const GST_ERRORS = {
 export const GST_RESPONSES = {
   ENTRY_VERIFIED: 'GST register entry verified successfully.',
   ENTRY_REVERTED: 'GST register entry verification reverted.',
-  RELEASED_TO_VENDOR: 'Held GST released to the vendor successfully.',
-  RECEIVED_FROM_CLIENT: 'Held GST received from the client recorded successfully.',
+  RELEASED_TO_VENDOR:
+    'GST release booked. Pay it from the payment sheet or bank transfer — the GST is marked released once the transfer is done.',
+  RECEIVED_FROM_CLIENT: 'GST received from the client recorded as a bank transfer.',
 };

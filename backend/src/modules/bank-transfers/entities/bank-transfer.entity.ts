@@ -31,6 +31,13 @@ export class BankTransferEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 20 })
   partyType: string; // SALE | PURCHASE
 
+  /**
+   * REGULAR = invoice / advance payment. GST = held GST released to a vendor or received from a
+   * client — kept out of invoice / PO paidTotal; settled through the GST register.
+   */
+  @Column({ type: 'varchar', length: 20, default: 'REGULAR' })
+  paymentType: string;
+
   // For SALE side: direct link to invoice (nullable)
   @Column({ type: 'uuid', nullable: true })
   invoiceId: string | null;

@@ -41,7 +41,29 @@ import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/adva
  * flag a null dereference — the guard has to be explicit rather than relying on types.
  */
 function isInvoiceBacked(bp: Pick<BookPaymentEntity, 'sourceType' | 'invoiceId'>): boolean {
-  return bp.sourceType !== BookPaymentSourceType.ADVANCE && !!bp.invoiceId;
+  return (
+    bp.sourceType !== BookPaymentSourceType.ADVANCE &&
+    bp.sourceType !== BookPaymentSourceType.GST_RELEASE &&
+    !!bp.invoiceId
+  );
+}
+
+/**
+ * Held GST released to the vendor. It never moves invoice / PO bookedTotal (the ceiling on a held
+ * invoice is taxable − TDS); the GST register entry points at it instead.
+ */
+function isGstRelease(bp: Pick<BookPaymentEntity, 'sourceType'>): boolean {
+  return bp.sourceType === BookPaymentSourceType.GST_RELEASE;
+}
+
+/** Puts a GST entry back to "release pending" once its GST book payment is gone. */
+async function clearGstBooking(bookPaymentId: string, em: EntityManager): Promise<void> {
+  await em.query(
+    `UPDATE gst_register_entries
+        SET "gstBookPaymentId" = NULL, "updatedAt" = NOW()
+      WHERE "gstBookPaymentId" = $1 AND "gstBankTransferId" IS NULL`,
+    [bookPaymentId],
+  );
 }
 
 /**
@@ -79,6 +101,9 @@ export class BookPaymentService {
   async create(dto: CreateBookPaymentDto, createdBy: string) {
     if (dto.sourceType === BookPaymentSourceType.ADVANCE) {
       return await this.createFromAdvance(dto, createdBy);
+    }
+    if (dto.sourceType === BookPaymentSourceType.GST_RELEASE) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_RELEASE_ONLY_FROM_GST_SUMMARY);
     }
 
     return await this.dataSource.transaction(async (em) => {
@@ -324,6 +349,62 @@ export class BookPaymentService {
   }
 
   /**
+   * Books the release of an invoice's held GST to its vendor, inside the GST service's
+   * transaction. The GST service has already checked the entry (held, verified in GSTR-2B, not
+   * booked or settled). The booking carries only the GST — taxable 0, no TDS — and stays out of
+   * the invoice / PO bookedTotal. It then goes to the payment sheet / bank transfer like any
+   * other book payment; the transfer marks the GST entry released.
+   */
+  async bookGstReleaseWithin(
+    em: EntityManager,
+    params: {
+      invoiceId: string;
+      gstAmount: number;
+      bookingDate: Date;
+      remarks?: string | null;
+      createdBy: string;
+    },
+  ): Promise<BookPaymentEntity> {
+    const invoice = await em
+      .getRepository(SiteInvoiceEntity)
+      .findOne({ where: { id: params.invoiceId, deletedAt: IsNull() } });
+    if (!invoice) throw new NotFoundException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_FOUND);
+    if (invoice.partyType !== PartyType.PURCHASE) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_PURCHASE);
+    }
+    if (invoice.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_NOT_APPROVED);
+    }
+
+    const gstAmount = Number(Number(params.gstAmount).toFixed(2));
+    return await this.bookPaymentRepository.create(
+      {
+        sourceType: BookPaymentSourceType.GST_RELEASE,
+        invoiceId: invoice.id,
+        advancePaymentId: null,
+        siteId: invoice.siteId,
+        vendorId: invoice.vendorId,
+        poId: invoice.poId,
+        bookingDate: params.bookingDate,
+        taxableAmount: 0,
+        gstAmount,
+        gstPercentage: invoice.gstPercentage ?? null,
+        paymentTotalAmount: gstAmount,
+        paymentHoldAmount: 0,
+        paymentHoldReason: null,
+        remarks: params.remarks ?? null,
+        approvalStatus: FinancialApprovalStatus.APPROVED,
+        approvalBy: params.createdBy,
+        approvalAt: new Date(),
+        isLocked: true,
+        hasTransfer: false,
+        createdBy: params.createdBy,
+      } as Partial<BookPaymentEntity>,
+      em,
+    );
+  }
+
+  /**
    * Clears `hasBookPayment` once the last booking against an advance is gone, so an advance booked
    * by mistake becomes editable again instead of being frozen forever.
    */
@@ -425,6 +506,14 @@ export class BookPaymentService {
       }
       if (bp.hasTransfer) {
         throw new BadRequestException(BOOK_PAYMENT_ERRORS.CANNOT_UPDATE_HAS_TRANSFER);
+      }
+
+      // A GST release always books the full held GST of its invoice — only date / remarks change.
+      if (isGstRelease(bp) && dto.transferAmount !== undefined) {
+        if (Number(dto.transferAmount) !== Number(bp.paymentTotalAmount)) {
+          throw new BadRequestException(BOOK_PAYMENT_ERRORS.GST_RELEASE_AMOUNT_NOT_EDITABLE);
+        }
+        dto = { ...dto, transferAmount: undefined };
       }
 
       if (dto.transferAmount !== undefined) {
@@ -534,7 +623,16 @@ export class BookPaymentService {
             { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` },
           );
       }
-      await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
+      if (isGstRelease(bp)) {
+        // Never added to bookedTotal — the GST entry just goes back to "release pending".
+        await clearGstBooking(bp.id, em);
+      } else {
+        await this.purchaseOrderService.adjustRollups(
+          bp.poId,
+          { bookedTotal: -effectiveAmount },
+          em,
+        );
+      }
 
       await this.bookPaymentRepository.update({ id }, { deletedBy }, em);
       await this.bookPaymentRepository.softDelete({ id }, em);
@@ -589,7 +687,15 @@ export class BookPaymentService {
             { bookedTotal: () => `"bookedTotal" - ${effectiveAmount}` },
           );
       }
-      await this.purchaseOrderService.adjustRollups(bp.poId, { bookedTotal: -effectiveAmount }, em);
+      if (isGstRelease(bp)) {
+        await clearGstBooking(bp.id, em);
+      } else {
+        await this.purchaseOrderService.adjustRollups(
+          bp.poId,
+          { bookedTotal: -effectiveAmount },
+          em,
+        );
+      }
 
       await this.bookPaymentRepository.update(
         { id },
@@ -846,9 +952,15 @@ export class BookPaymentService {
         const vendor = vendorFrom(bpVendorRows[0] ?? invVendorRows[0]);
 
         const bookPayments = bpVendorRows.map((r) => {
-          const tdsAmount = r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : 0;
+          // A GST release carries only the held GST — no taxable, no TDS — so its net payable is
+          // the GST itself.
+          const isGstReleaseRow = r.sourceType === BookPaymentSourceType.GST_RELEASE;
+          const tdsAmount =
+            !isGstReleaseRow && r.invoiceTdsAmount !== null ? Number(r.invoiceTdsAmount) : 0;
           const isGstHold = r.invoiceIsGstHold === true;
-          const netPayableAmount = isGstHold
+          const netPayableAmount = isGstReleaseRow
+            ? Number(r.paymentTotalAmount)
+            : isGstHold
             ? Number(r.taxableAmount) - tdsAmount
             : Number(r.taxableAmount) + Number(r.gstAmount) - tdsAmount;
           const isAdvance = r.sourceType === BookPaymentSourceType.ADVANCE;
@@ -902,9 +1014,10 @@ export class BookPaymentService {
                     r.advanceSettledAmount !== null ? Number(r.advanceSettledAmount) : 0,
                 }
               : null,
-            jmc: !isAdvance && r.jmcId
-              ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate }
-              : null,
+            jmc:
+              !isAdvance && r.jmcId
+                ? { id: r.jmcId, jmcNumber: r.jmcNumber, jmcDate: r.jmcDate }
+                : null,
             po: r.poId
               ? {
                   id: r.poId,

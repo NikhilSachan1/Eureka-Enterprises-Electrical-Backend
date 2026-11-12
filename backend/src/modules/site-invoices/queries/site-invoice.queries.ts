@@ -32,6 +32,8 @@ export const deleteGstRegisterEntryForInvoiceQuery = `
   WHERE "invoiceId" = $1
     AND "isVerified" = false
     AND "gstPaymentId" IS NULL
+    AND "gstBookPaymentId" IS NULL
+    AND "gstBankTransferId" IS NULL
 `;
 
 /**

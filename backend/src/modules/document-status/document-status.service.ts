@@ -117,7 +117,7 @@ export class DocumentStatusService {
           COUNT(si.id) - COUNT(bp.id)           AS not_started
         FROM site_invoices si
         LEFT JOIN book_payments bp
-               ON bp."invoiceId" = si.id AND bp."deletedAt" IS NULL
+               ON bp."invoiceId" = si.id AND bp."deletedAt" IS NULL AND bp."sourceType" <> 'GST_RELEASE'
         WHERE si."siteId"         = ANY($1)
           AND si."deletedAt"      IS NULL
           AND si."partyType"      = 'PURCHASE'
@@ -543,7 +543,7 @@ export class DocumentStatusService {
         LEFT JOIN site_invoices si
           ON si."jmcId" = j.id AND si."deletedAt" IS NULL
         LEFT JOIN book_payments bp
-          ON bp."invoiceId" = si.id AND bp."deletedAt" IS NULL
+          ON bp."invoiceId" = si.id AND bp."deletedAt" IS NULL AND bp."sourceType" <> 'GST_RELEASE'
 
         -- A No-JMC placeholder has nothing of its own to chase — no number, no document, no
         -- report. Its invoice raises its own issues; the phantom JMC must not raise any.
@@ -665,7 +665,7 @@ export class DocumentStatusService {
     const bpRows: any[] = invoiceIds.length
       ? await this.dataSource.query(
           `SELECT id, "invoiceId", "bookingDate", "paymentTotalAmount", "hasTransfer",
-                  "approvalStatus" AS status
+                  "sourceType", "approvalStatus" AS status
            FROM book_payments WHERE "invoiceId" = ANY($1) AND "deletedAt" IS NULL
            ORDER BY "createdAt" ASC`,
           [invoiceIds],
@@ -798,6 +798,8 @@ export class DocumentStatusService {
                   paymentTotalAmount: num(bp.paymentTotalAmount),
                   status: bp.status,
                   hasTransfer: bp.hasTransfer,
+                  // INVOICE | GST_RELEASE — a GST release is the invoice's held GST paid out.
+                  sourceType: bp.sourceType,
                   bankTransfers: (btByBookPayment.get(bp.id) ?? []).map(mapBt),
                 })),
                 bankTransfers: (btByInvoice.get(inv.id) ?? []).map(mapBt),

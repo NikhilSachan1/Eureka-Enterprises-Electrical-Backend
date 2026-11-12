@@ -39,6 +39,10 @@ export const BOOK_PAYMENT_ERRORS = {
   ONLY_APPROVED_LOCKED_CAN_REQUEST_UNLOCK: 'Only APPROVED locked book payments can request unlock.',
   CANNOT_UNLOCK_HAS_TRANSFER:
     'Cannot unlock — a bank transfer exists against this book payment. Reverse the bank transfer first.',
+  GST_RELEASE_ONLY_FROM_GST_SUMMARY:
+    'A GST release is booked from the GST summary, after the entry is verified in GSTR-2B.',
+  GST_RELEASE_AMOUNT_NOT_EDITABLE:
+    'The amount of a GST release is the full held GST of the invoice and cannot be edited.',
 };
 
 export const GST_HOLD_REMARK =
@@ -65,4 +69,10 @@ export const BOOK_PAYMENT_RESPONSES = {
 export enum BookPaymentSourceType {
   INVOICE = 'INVOICE',
   ADVANCE = 'ADVANCE',
+  /**
+   * Held GST released to the vendor. Invoice-backed, but outside the invoice's payment ceiling
+   * (taxable − TDS on a held invoice) and its bookedTotal / paidTotal rollups — the GST register
+   * tracks it. Created only from the GST summary, after the entry is verified in GSTR-2B.
+   */
+  GST_RELEASE = 'GST_RELEASE',
 }

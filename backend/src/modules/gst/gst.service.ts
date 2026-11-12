@@ -9,12 +9,18 @@ import { GstRepository } from './gst.repository';
 import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
 import { GST_ERRORS, GST_RESPONSES } from './constants/gst.constants';
 import { GST_QUERIES } from './queries/gst.queries';
-import {
-  PartyType,
-  FinancialApprovalStatus,
-  getFinancialYear,
-} from 'src/modules/common/financials/financial.constants';
+import { PartyType, getFinancialYear } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
+import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
+import { BankTransferService } from 'src/modules/bank-transfers/bank-transfer.service';
+
+/** Relations that show how an entry's held GST was settled. */
+const GST_SETTLEMENT_RELATIONS = [
+  'gstPayment', // legacy direct record
+  'gstBookPayment',
+  'gstBankTransfer',
+  'gstBankTransfer.paymentAdvice',
+];
 
 /**
  * GST register — how GST actually moves:
@@ -23,15 +29,20 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
  *    PURCHASE → the vendor's invoice appears in our GSTR-2B (so we can take ITC).
  *    SALE     → our GSTR-1 reflects the invoice (so the client can take ITC).
  *
- *  Settlement (held entries only):
- *    PURCHASE → we withheld the vendor's GST; we RELEASE it once it is verified in GSTR-2B.
- *    SALE     → the client withheld our GST; we record it as RECEIVED when they pay it.
+ *  Settlement (held entries only), through the normal payment chain:
+ *    PURCHASE → we withheld the vendor's GST. Once verified in GSTR-2B, "release" books a GST
+ *               book payment (release in process); its bank transfer — from the payment sheet or
+ *               directly — marks the GST released.
+ *    SALE     → the client withheld our GST. "Mark received" records a GST bank transfer.
  *  GST that was not held moved with the invoice payment itself — there is nothing to settle.
+ *  Entries settled before this flow carry a legacy gstPaymentId and are left as they are.
  */
 @Injectable()
 export class GstService {
   constructor(
     private readonly gstRepository: GstRepository,
+    private readonly bookPaymentService: BookPaymentService,
+    private readonly bankTransferService: BankTransferService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -78,7 +89,7 @@ export class GstService {
           'site.company',
           'contractor',
           'vendor',
-          'gstPayment',
+          ...GST_SETTLEMENT_RELATIONS,
         ],
       }),
       this.gstRepository.countRegisterEntries({ where }),
@@ -99,7 +110,7 @@ export class GstService {
         'contractor',
         'vendor',
         'verifiedByUser',
-        'gstPayment',
+        ...GST_SETTLEMENT_RELATIONS,
       ],
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
@@ -163,8 +174,11 @@ export class GstService {
     if (!entry.isVerified) {
       throw new BadRequestException(GST_ERRORS.NOT_VERIFIED);
     }
-    if (entry.gstPaymentId) {
+    if (entry.gstPaymentId || entry.gstBankTransferId) {
       throw new BadRequestException(GST_ERRORS.CANNOT_REVERT_SETTLED);
+    }
+    if (entry.gstBookPaymentId) {
+      throw new BadRequestException(GST_ERRORS.CANNOT_REVERT_BOOKED);
     }
 
     await this.gstRepository.updateRegisterEntry(
@@ -218,58 +232,64 @@ export class GstService {
         if (!entry.isGstHold) {
           throw new BadRequestException(GST_ERRORS.NOT_HELD(invoiceNumber));
         }
-        if (entry.gstPaymentId) {
+        if (entry.gstPaymentId || entry.gstBankTransferId) {
           throw new BadRequestException(GST_ERRORS.ALREADY_SETTLED(invoiceNumber));
+        }
+        if (entry.gstBookPaymentId) {
+          throw new BadRequestException(GST_ERRORS.RELEASE_IN_PROCESS(invoiceNumber));
         }
         if (isPurchase && !entry.isVerified) {
           throw new BadRequestException(GST_ERRORS.PURCHASE_NOT_VERIFIED(invoiceNumber));
         }
       }
+      if (!isPurchase && !dto.utrNumber?.trim()) {
+        throw new BadRequestException(GST_ERRORS.UTR_REQUIRED_FOR_RECEIPT);
+      }
 
-      const contractorId = isPurchase ? null : entries[0].contractorId;
-      const vendorId = isPurchase ? entries[0].vendorId : null;
-      const paymentMonth = entries[0].invoiceMonth;
       const netAmount = Number(entries.reduce((sum, e) => sum + Number(e.gstAmount), 0).toFixed(2));
-      const financialYear = getFinancialYear(dto.paymentDate);
-
-      // Only a release to a vendor carries a payment advice reference.
-      const referenceNumber = isPurchase
-        ? (await this.gstRepository.allocateGstPaymentSequence(financialYear, em)).referenceNumber
-        : null;
-
-      const payment = await this.gstRepository.createPayment(
-        {
-          siteId,
-          partyType,
-          contractorId,
-          vendorId,
-          paymentMonth,
-          financialYear,
-          netAmount,
-          utrNumber: dto.utrNumber,
-          paymentDate: new Date(dto.paymentDate),
-          fileKey: dto.fileKey ?? null,
-          fileName: dto.fileName ?? null,
-          remarks: dto.remarks ?? null,
-          paymentAdviceReferenceNumber: referenceNumber,
-          approvalStatus: FinancialApprovalStatus.APPROVED,
-          createdBy: releasedBy,
-        },
-        em,
-      );
+      const ids: string[] = [];
 
       for (const entry of entries) {
-        await this.gstRepository.updateRegisterEntry(
-          { id: entry.id, financialYear: entry.financialYear },
-          { gstPaymentId: payment.id, updatedBy: releasedBy },
-          em,
-        );
+        if (isPurchase) {
+          // Release to vendor → GST book payment; paid later via payment sheet / bank transfer.
+          const booking = await this.bookPaymentService.bookGstReleaseWithin(em, {
+            invoiceId: entry.invoiceId,
+            gstAmount: Number(entry.gstAmount),
+            bookingDate: new Date(dto.paymentDate),
+            remarks: dto.remarks ?? null,
+            createdBy: releasedBy,
+          });
+          await this.gstRepository.updateRegisterEntry(
+            { id: entry.id, financialYear: entry.financialYear },
+            { gstBookPaymentId: booking.id, updatedBy: releasedBy },
+            em,
+          );
+          ids.push(booking.id);
+        } else {
+          // Receipt from client → GST bank transfer straight away.
+          const transfer = await this.bankTransferService.recordGstReceiptWithin(em, {
+            invoiceId: entry.invoiceId,
+            gstAmount: Number(entry.gstAmount),
+            utrNumber: dto.utrNumber.trim(),
+            transferDate: dto.paymentDate,
+            proofFileKey: dto.fileKey ?? null,
+            proofFileName: dto.fileName ?? null,
+            remarks: dto.remarks ?? null,
+            createdBy: releasedBy,
+          });
+          await this.gstRepository.updateRegisterEntry(
+            { id: entry.id, financialYear: entry.financialYear },
+            { gstBankTransferId: transfer.id, updatedBy: releasedBy },
+            em,
+          );
+          ids.push(transfer.id);
+        }
       }
 
       return {
         message: isPurchase ? GST_RESPONSES.RELEASED_TO_VENDOR : GST_RESPONSES.RECEIVED_FROM_CLIENT,
-        id: payment.id,
-        referenceNumber,
+        siteId,
+        ...(isPurchase ? { bookPaymentIds: ids } : { bankTransferIds: ids }),
         netAmount,
         entriesCount: entries.length,
       };

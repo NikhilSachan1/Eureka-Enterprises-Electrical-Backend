@@ -818,7 +818,8 @@ export class SiteInvoiceService {
         // immutable and cannot be re-projected with edited amounts.
         const gstPaid = await em.query(
           `SELECT 1 FROM gst_register_entries
-           WHERE "invoiceId" = $1 AND "gstPaymentId" IS NOT NULL
+           WHERE "invoiceId" = $1
+             AND ("gstPaymentId" IS NOT NULL OR "gstBookPaymentId" IS NOT NULL OR "gstBankTransferId" IS NOT NULL)
            LIMIT 1`,
           [id],
         );

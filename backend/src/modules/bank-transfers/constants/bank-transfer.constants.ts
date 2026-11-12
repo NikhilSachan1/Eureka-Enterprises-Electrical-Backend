@@ -25,7 +25,19 @@ export const BANK_TRANSFER_ERRORS = {
   LOCKED: 'Bank transfer is locked. Admin must unlock it before editing or deleting.',
   ALREADY_LOCKED: 'Bank transfer is already locked.',
   ALREADY_UNLOCKED: 'Bank transfer is already unlocked.',
+  CANNOT_CHANGE_AMOUNT_GST:
+    'Cannot change the amount of a GST payment — it is the full held GST of the invoice.',
 };
+
+/**
+ * What a bank transfer pays. REGULAR = the invoice / advance payment itself. GST = held GST
+ * released to a vendor (via a GST_RELEASE book payment) or received from a client. GST transfers
+ * never touch invoice / PO paidTotal; the GST register records their settlement.
+ */
+export enum BankTransferPaymentType {
+  REGULAR = 'REGULAR',
+  GST = 'GST',
+}
 
 export const BANK_TRANSFER_RESPONSES = {
   CREATED: 'Bank transfer created successfully.',

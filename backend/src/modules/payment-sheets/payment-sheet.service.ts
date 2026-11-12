@@ -832,13 +832,18 @@ export class PaymentSheetService {
         if (row && row.invoiceId) {
           const netPayable = Number(row.invoiceNetPayableAmount);
           const bookedTotal = Number(row.invoiceBookedTotal);
+          // A GST release pays the invoice's held GST in full — outside the invoice's net
+          // payable and bookedTotal — so it is due exactly what it pays, with nothing left over.
+          const isGstRelease = row.sourceType === 'GST_RELEASE';
           invoice = {
             invoiceId: row.invoiceId,
             invoiceNumber: row.invoiceNumber,
             invoiceDate: row.invoiceDate,
-            actualDueAmount: netPayable - (bookedTotal - payableAmount),
+            actualDueAmount: isGstRelease
+              ? payableAmount
+              : netPayable - (bookedTotal - payableAmount),
             payableAmount,
-            remainingAmount: Number(row.invoicePendingToBook),
+            remainingAmount: isGstRelease ? 0 : Number(row.invoicePendingToBook),
             companyName: row.companyName,
             projectName: row.siteName,
             city: row.siteCity,
