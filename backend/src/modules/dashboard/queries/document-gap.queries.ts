@@ -20,11 +20,22 @@ export interface DocumentGapDef {
   hint: string;
   /** `problem` needs action; `info` is normal often enough that flagging it would cry wolf. */
   severity: 'problem' | 'info';
-  /** Counts the rows in the gap. `$1` = scope (null = company, else raised-by that user). */
-  countSql: string;
-  /** The same rows, listed. `$1` scope, `$2` limit. */
+  /**
+   * The sides this gap can occur on, so the dashboard shows it only under those. Omitted or
+   * empty means both. Every row's `partyType` is one of these.
+   */
+  parties?: GapParty[];
+  /**
+   * The rows in the gap. `$1` scope (null = company, else raised-by that user), `$2` limit (null =
+   * all). Counts are read off this same query, split by `partyType`, so a count can never
+   * disagree with the list behind it.
+   */
   listSql: string;
 }
+
+export type GapParty = 'CONTRACTOR' | 'VENDOR';
+
+export const GAP_PARTIES: GapParty[] = ['CONTRACTOR', 'VENDOR'];
 
 /** Shared by every gap: the row must be live and, when scoped, raised by the reader. */
 const scopeOn = (alias: string, col = 'createdBy') =>
@@ -57,10 +68,8 @@ const defineGap = (g: {
   label: g.label,
   hint: g.hint,
   severity: g.severity,
-  countSql: `
-    SELECT COUNT(*)::int AS count,
-           COALESCE(MAX(EXTRACT(DAY FROM NOW() - ${g.since})), 0)::int AS "oldestDays"
-    ${g.from}`,
+  // A literal side ('VENDOR') pins the gap to that side; an expression can yield either.
+  parties: GAP_PARTIES.filter((p) => g.partyType === `'${p}'`),
   listSql: `
     SELECT ${g.id} AS "id", COALESCE(NULLIF(${g.documentNumber}, ''), '(no number)') AS "documentNumber",
            s."name" AS "siteName", ${g.amount} AS amount, ${g.since} AS "since",
@@ -168,15 +177,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'PO approved, no JMC raised',
     hint: 'Raise the JMC, or mark it as a No-JMC purchase order.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - po."approvalAt")), 0)::int AS "oldestDays"
-        FROM purchase_orders po
-       WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'APPROVED'
-         AND ${scopeOn('po')}
-         AND NOT EXISTS (
-           SELECT 1 FROM jmcs j WHERE j."poId" = po."id" AND j."deletedAt" IS NULL
-         )`,
     listSql: `
       SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              po."totalAmount" AS amount, po."approvalAt" AS "since",
@@ -306,14 +306,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'Book payment approved, money not transferred',
     hint: 'Record the bank transfer, or put it on a payment sheet.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - b."approvalAt")), 0)::int AS "oldestDays"
-        FROM book_payments b
-       WHERE b."deletedAt" IS NULL AND b."approvalStatus" = 'APPROVED'
-         AND b."hasTransfer" = false
-         AND b."sourceType" = 'INVOICE'
-         AND ${scopeOn('b')}`,
+    parties: ['VENDOR'],
     listSql: `
       SELECT b."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber",
              s."name" AS "siteName", b."paymentTotalAmount" AS amount,
@@ -386,11 +379,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'Rejected document not yet replaced',
     hint: 'Delete the rejected document and raise a corrected one.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - x."since")), 0)::int AS "oldestDays"
-        FROM (${REJECTED_DOCS}) x
-       WHERE ${scopeOn('x')}`,
     listSql: `
       SELECT x."id", COALESCE(NULLIF(x."number", ''), '(no number)') AS "documentNumber",
              s."name" AS "siteName", x."amount" AS amount, x."since" AS "since",
@@ -519,14 +507,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'PO with no document uploaded',
     hint: 'Upload the signed purchase order.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - po."createdAt")), 0)::int AS "oldestDays"
-        FROM purchase_orders po
-       WHERE po."deletedAt" IS NULL
-         AND COALESCE(po."isSystemGenerated", false) = false
-         AND (po."fileKey" IS NULL OR po."fileKey" = '')
-         AND ${scopeOn('po')}`,
     listSql: `
       SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              po."totalAmount" AS amount, po."createdAt" AS "since",
@@ -546,15 +526,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'JMC with no document uploaded',
     hint: 'Upload the signed JMC.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - j."createdAt")), 0)::int AS "oldestDays"
-        FROM jmcs j
-       WHERE j."deletedAt" IS NULL
-         AND COALESCE(j."isNoJmc", false) = false
-         AND COALESCE(j."isSystemGenerated", false) = false
-         AND (j."fileKey" IS NULL OR j."fileKey" = '')
-         AND ${scopeOn('j')}`,
     listSql: `
       SELECT j."id", COALESCE(NULLIF(j."jmcNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              NULL::numeric AS amount, j."createdAt" AS "since",
@@ -575,14 +546,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'Invoice with no document uploaded',
     hint: 'Upload the vendor invoice.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - i."createdAt")), 0)::int AS "oldestDays"
-        FROM site_invoices i
-       WHERE i."deletedAt" IS NULL
-         AND i."invoiceNumber" IS NOT NULL
-         AND (i."fileKey" IS NULL OR i."fileKey" = '')
-         AND ${scopeOn('i')}`,
     listSql: `
       SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              i."totalAmount" AS amount, i."createdAt" AS "since",
@@ -650,13 +613,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     label: 'PO not fully invoiced',
     hint: 'Normal while work is in progress — shown so nothing is forgotten.',
     severity: 'info',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - po."approvalAt")), 0)::int AS "oldestDays"
-        FROM purchase_orders po
-       WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'APPROVED'
-         AND COALESCE(po."invoicedTotal", 0) < po."totalAmount"
-         AND ${scopeOn('po')}`,
     listSql: `
       SELECT po."id", COALESCE(NULLIF(po."poNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              (po."totalAmount" - COALESCE(po."invoicedTotal", 0)) AS amount,
@@ -674,3 +630,25 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
 ];
 
 export const findGap = (key: string) => DOCUMENT_GAPS.find((g) => g.key === key);
+
+/** The sides a gap is shown under. */
+export const gapParties = (gap: DocumentGapDef): GapParty[] =>
+  gap.parties?.length ? gap.parties : GAP_PARTIES;
+
+/** A row with no side (a document missing its `partyType`) is a vendor one, as the screens treat it. */
+const ROW_PARTY = `COALESCE(x."partyType", 'VENDOR')`;
+
+/** A gap's rows counted per side. `$1` scope, `$2` must be null (no limit). */
+export const gapCountsSql = (gap: DocumentGapDef) => `
+  SELECT ${ROW_PARTY} AS "partyType", COUNT(*)::int AS count,
+         COALESCE(MAX(x."ageDays"), 0)::int AS "oldestDays"
+    FROM (${gap.listSql}) x
+   GROUP BY 1`;
+
+/** A gap's rows on one side. `$1` scope, `$2` null, `$3` side (null = both), `$4` limit. */
+export const gapListSql = (gap: DocumentGapDef) => `
+  SELECT x.*
+    FROM (${gap.listSql}) x
+   WHERE $3::text IS NULL OR ${ROW_PARTY} = $3::text
+   ORDER BY x."since" ASC NULLS LAST
+   LIMIT $4`;
