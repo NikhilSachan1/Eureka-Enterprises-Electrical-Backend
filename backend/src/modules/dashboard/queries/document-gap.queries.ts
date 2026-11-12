@@ -104,10 +104,59 @@ const INVOICE_CAN_ABSORB_ADVANCE = (alias = 'iv') => `
   FROM site_invoices ${alias}
  WHERE ${alias}."poId" = a."poId" AND ${alias}."deletedAt" IS NULL
    AND ${alias}."approvalStatus" = 'APPROVED' AND ${alias}."partyType" = 'PURCHASE'
-   AND (CASE WHEN ${alias}."isGstHold" = true
-             THEN COALESCE(${alias}."taxableAmount", 0) - COALESCE(${alias}."tdsAmount", 0)
-             ELSE COALESCE(${alias}."taxableAmount", 0) + COALESCE(${alias}."gstAmount", 0) - COALESCE(${alias}."tdsAmount", 0)
-        END) - COALESCE(${alias}."advanceSettledAmount", 0) - COALESCE(${alias}."bookedTotal", 0) > 0.01`;
+   AND ${INVOICE_PENDING_TO_BOOK(alias)} > 0.01`;
+
+/**
+ * What the invoice payment covers: taxable − TDS when GST is held (the held GST is settled on its
+ * own), taxable + GST − TDS otherwise.
+ */
+const INVOICE_NET_PAYABLE = (alias: string) => `(CASE WHEN ${alias}."isGstHold" = true
+    THEN COALESCE(${alias}."taxableAmount", 0) - COALESCE(${alias}."tdsAmount", 0)
+    ELSE COALESCE(${alias}."taxableAmount", 0) + COALESCE(${alias}."gstAmount", 0) - COALESCE(${alias}."tdsAmount", 0)
+  END)`;
+
+/** Vendor invoice amount not booked yet: net payable less advances settled and bookings made. */
+const INVOICE_PENDING_TO_BOOK = (alias: string) =>
+  `(${INVOICE_NET_PAYABLE(
+    alias,
+  )} - COALESCE(${alias}."advanceSettledAmount", 0) - COALESCE(${alias}."bookedTotal", 0))`;
+
+/** Invoice amount not paid / received yet: net payable less advances settled and paid. */
+const INVOICE_STILL_TO_PAY = (alias: string) =>
+  `(${INVOICE_NET_PAYABLE(
+    alias,
+  )} - COALESCE(${alias}."advanceSettledAmount", 0) - COALESCE(${alias}."paidTotal", 0))`;
+
+/** A live, approved, real (numbered) vendor invoice. */
+const VENDOR_INVOICE_LIVE = (alias: string) =>
+  `${alias}."deletedAt" IS NULL AND ${alias}."approvalStatus" = 'APPROVED'
+       AND ${alias}."partyType" = 'PURCHASE' AND ${alias}."invoiceNumber" IS NOT NULL`;
+
+/**
+ * Every live rejected document of the chain, in one shape. `docKind` is the workspace document
+ * list it lives in (po / jmc / invoice / advance-payment).
+ */
+const REJECTED_DOCS = `
+  SELECT po."id", po."poNumber" AS "number", po."totalAmount" AS "amount",
+         COALESCE(po."approvalAt", po."updatedAt") AS "since", po."partyType", po."siteId",
+         po."createdBy", 'po' AS "docKind"
+    FROM purchase_orders po
+   WHERE po."deletedAt" IS NULL AND po."approvalStatus" = 'REJECTED'
+  UNION ALL
+  SELECT j."id", j."jmcNumber", NULL::numeric, COALESCE(j."approvalAt", j."updatedAt"),
+         j."partyType", j."siteId", j."createdBy", 'jmc'
+    FROM jmcs j
+   WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'REJECTED'
+  UNION ALL
+  SELECT i."id", i."invoiceNumber", i."totalAmount", COALESCE(i."approvalAt", i."updatedAt"),
+         i."partyType", i."siteId", i."createdBy", 'invoice'
+    FROM site_invoices i
+   WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'REJECTED'
+  UNION ALL
+  SELECT a."id", a."advanceNumber", a."amount", COALESCE(a."approvalAt", a."updatedAt"),
+         'PURCHASE', a."siteId", a."createdBy", 'advance-payment'
+    FROM advance_payments a
+   WHERE a."deletedAt" IS NULL AND a."approvalStatus" = 'REJECTED'`;
 
 /** Live, approved advances with a balance not yet settled against an invoice. Expects `a`. */
 const ADVANCE_OPEN = `a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
@@ -143,64 +192,113 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        ORDER BY po."approvalAt" ASC NULLS LAST
        LIMIT $2`,
   },
-  {
+  // A vendor JMC needs its site report before the invoice can be raised, so for those the report
+  // is the step that is stuck — counted below, not here.
+  defineGap({
     key: 'jmc-without-invoice',
     label: 'JMC approved, no invoice raised',
     hint: 'Raise the invoice against this JMC.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - j."approvalAt")), 0)::int AS "oldestDays"
-        FROM jmcs j
-       WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'APPROVED'
-         AND ${scopeOn('j')}
-         AND NOT EXISTS (
-           SELECT 1 FROM site_invoices i WHERE i."jmcId" = j."id" AND i."deletedAt" IS NULL
-         )`,
-    listSql: `
-      SELECT j."id", COALESCE(NULLIF(j."jmcNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
-             NULL::numeric AS amount, j."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - j."approvalAt")::int AS "ageDays",
-             ${partyTypeOf('j')}
-        FROM jmcs j
-        LEFT JOIN sites s ON s."id" = j."siteId"
-       WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'APPROVED'
-         AND ${scopeOn('j')}
-         AND NOT EXISTS (
-           SELECT 1 FROM site_invoices i WHERE i."jmcId" = j."id" AND i."deletedAt" IS NULL
-         )
-       ORDER BY j."approvalAt" ASC NULLS LAST
-       LIMIT $2`,
-  },
-  {
+    from: `
+      FROM jmcs j
+      LEFT JOIN sites s ON s."id" = j."siteId"
+     WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'APPROVED'
+       AND ${scopeOn('j')}
+       AND NOT EXISTS (
+         SELECT 1 FROM site_invoices i WHERE i."jmcId" = j."id" AND i."deletedAt" IS NULL)
+       AND (j."partyType" = 'SALE' OR EXISTS (
+         SELECT 1 FROM site_reports r WHERE r."jmcId" = j."id" AND r."deletedAt" IS NULL))`,
+    id: 'j."id"',
+    documentNumber: 'j."jmcNumber"',
+    amount: 'NULL::numeric',
+    since: 'COALESCE(j."approvalAt", j."createdAt")',
+    partyType: sidePartyOf('j'),
+  }),
+  defineGap({
+    key: 'jmc-without-report',
+    label: 'Vendor JMC approved, site report not added',
+    hint: 'Add the site report (or mark it as no report) so the invoice can be raised.',
+    severity: 'problem',
+    from: `
+      FROM jmcs j
+      LEFT JOIN sites s ON s."id" = j."siteId"
+     WHERE j."deletedAt" IS NULL AND j."approvalStatus" = 'APPROVED'
+       AND j."partyType" = 'PURCHASE'
+       AND COALESCE(j."isNoJmc", false) = false
+       AND ${scopeOn('j')}
+       AND NOT EXISTS (
+         SELECT 1 FROM site_reports r WHERE r."jmcId" = j."id" AND r."deletedAt" IS NULL)
+       AND NOT EXISTS (
+         SELECT 1 FROM site_invoices i WHERE i."jmcId" = j."id" AND i."deletedAt" IS NULL)`,
+    id: 'j."id"',
+    documentNumber: 'j."jmcNumber"',
+    amount: 'NULL::numeric',
+    since: 'COALESCE(j."approvalAt", j."createdAt")',
+    partyType: `'VENDOR'`,
+  }),
+
+  // Vendor invoices only (a contractor invoice is never booked — it is received, see below), real
+  // invoices only (a "No invoice / bill later" marker has no number), and only while something is
+  // still to book: net payable less advances settled against it less bookings already made.
+  defineGap({
     key: 'invoice-not-booked',
-    label: 'Invoice approved, not booked for payment',
+    label: 'Vendor invoice approved, not booked for payment',
     hint: 'Create the book payment so it can be paid.',
     severity: 'problem',
-    countSql: `
-      SELECT COUNT(*)::int AS count,
-             COALESCE(MAX(EXTRACT(DAY FROM NOW() - i."approvalAt")), 0)::int AS "oldestDays"
-        FROM site_invoices i
-       WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
-         AND ${scopeOn('i')}
-         AND NOT EXISTS (
-           SELECT 1 FROM book_payments b WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL AND b."sourceType" <> 'GST_RELEASE'
-         )`,
-    listSql: `
-      SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
-             i."totalAmount" AS amount, i."approvalAt" AS "since",
-             EXTRACT(DAY FROM NOW() - i."approvalAt")::int AS "ageDays",
-             ${partyTypeOf('i')}
-        FROM site_invoices i
-        LEFT JOIN sites s ON s."id" = i."siteId"
-       WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
-         AND ${scopeOn('i')}
-         AND NOT EXISTS (
-           SELECT 1 FROM book_payments b WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL AND b."sourceType" <> 'GST_RELEASE'
-         )
-       ORDER BY i."approvalAt" ASC NULLS LAST
-       LIMIT $2`,
-  },
+    from: `
+      FROM site_invoices i
+      LEFT JOIN sites s ON s."id" = i."siteId"
+     WHERE ${VENDOR_INVOICE_LIVE('i')}
+       AND ${INVOICE_PENDING_TO_BOOK('i')} > 0.01
+       AND NOT EXISTS (
+         SELECT 1 FROM book_payments b
+          WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL AND b."sourceType" = 'INVOICE')
+       AND ${scopeOn('i')}`,
+    id: 'i."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: INVOICE_PENDING_TO_BOOK('i'),
+    since: 'COALESCE(i."approvalAt", i."createdAt")',
+    partyType: `'VENDOR'`,
+  }),
+  defineGap({
+    key: 'invoice-partially-booked',
+    label: 'Vendor invoice partly booked, balance not booked',
+    hint: 'Book the remaining amount of the invoice.',
+    severity: 'problem',
+    from: `
+      FROM site_invoices i
+      LEFT JOIN sites s ON s."id" = i."siteId"
+     WHERE ${VENDOR_INVOICE_LIVE('i')}
+       AND ${INVOICE_PENDING_TO_BOOK('i')} > 0.01
+       AND EXISTS (
+         SELECT 1 FROM book_payments b
+          WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL AND b."sourceType" = 'INVOICE')
+       AND ${scopeOn('i')}`,
+    id: 'i."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: INVOICE_PENDING_TO_BOOK('i'),
+    since: 'COALESCE(i."approvalAt", i."createdAt")',
+    partyType: `'VENDOR'`,
+  }),
+  defineGap({
+    key: 'contractor-payment-pending',
+    label: 'Contractor invoice approved, payment not received in full',
+    hint: 'Follow up with the client, then record the bank transfer.',
+    severity: 'problem',
+    from: `
+      FROM site_invoices i
+      LEFT JOIN sites s ON s."id" = i."siteId"
+     WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
+       AND i."partyType" = 'SALE'
+       AND i."invoiceNumber" IS NOT NULL
+       AND ${INVOICE_STILL_TO_PAY('i')} > 0.01
+       AND ${scopeOn('i')}`,
+    id: 'i."id"',
+    documentNumber: 'i."invoiceNumber"',
+    amount: INVOICE_STILL_TO_PAY('i'),
+    since: 'COALESCE(i."approvalAt", i."createdAt")',
+    partyType: `'CONTRACTOR'`,
+  }),
   // Invoice bookings only — an advance's booking and a GST release each have a gap of their own
   // below, worded for what they are, so counting them here as well would show them twice.
   {
@@ -276,6 +374,35 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
     since: 'a."advanceDate"',
     partyType: `'VENDOR'`,
   }),
+
+  // ── rejected ──
+  //
+  // Rejection is terminal: a rejected document cannot be approved or edited, and while a rejected
+  // invoice / report exists the JMC cannot get a new one (one per JMC). So a rejected document left
+  // lying blocks the chain until someone deletes it and raises a corrected one. `docKind` tells the
+  // dashboard which document list each row opens.
+  {
+    key: 'rejected-not-replaced',
+    label: 'Rejected document not yet replaced',
+    hint: 'Delete the rejected document and raise a corrected one.',
+    severity: 'problem',
+    countSql: `
+      SELECT COUNT(*)::int AS count,
+             COALESCE(MAX(EXTRACT(DAY FROM NOW() - x."since")), 0)::int AS "oldestDays"
+        FROM (${REJECTED_DOCS}) x
+       WHERE ${scopeOn('x')}`,
+    listSql: `
+      SELECT x."id", COALESCE(NULLIF(x."number", ''), '(no number)') AS "documentNumber",
+             s."name" AS "siteName", x."amount" AS amount, x."since" AS "since",
+             EXTRACT(DAY FROM NOW() - x."since")::int AS "ageDays",
+             ${sidePartyOf('x')} AS "partyType",
+             x."docKind"
+        FROM (${REJECTED_DOCS}) x
+        LEFT JOIN sites s ON s."id" = x."siteId"
+       WHERE ${scopeOn('x')}
+       ORDER BY x."since" ASC NULLS LAST
+       LIMIT $2`,
+  },
 
   // ── GST ──
   //
@@ -453,6 +580,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
              COALESCE(MAX(EXTRACT(DAY FROM NOW() - i."createdAt")), 0)::int AS "oldestDays"
         FROM site_invoices i
        WHERE i."deletedAt" IS NULL
+         AND i."invoiceNumber" IS NOT NULL
          AND (i."fileKey" IS NULL OR i."fileKey" = '')
          AND ${scopeOn('i')}`,
     listSql: `
@@ -463,11 +591,31 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
         FROM site_invoices i
         LEFT JOIN sites s ON s."id" = i."siteId"
        WHERE i."deletedAt" IS NULL
+         AND i."invoiceNumber" IS NOT NULL
          AND (i."fileKey" IS NULL OR i."fileKey" = '')
          AND ${scopeOn('i')}
        ORDER BY i."createdAt" ASC
        LIMIT $2`,
   },
+  // Proof is optional when the transfer is recorded (payment sheet or bank transfer screen), so it
+  // is easy to forget — and it is what answers "did this money really go out".
+  defineGap({
+    key: 'bank-transfer-proof-missing',
+    label: 'Bank transfer with no proof uploaded',
+    hint: 'Upload the bank statement / transfer receipt on the bank transfer.',
+    severity: 'problem',
+    from: `
+      FROM bank_transfers t
+      LEFT JOIN sites s ON s."id" = t."siteId"
+     WHERE t."deletedAt" IS NULL
+       AND (t."proofFileKey" IS NULL OR t."proofFileKey" = '')
+       AND ${scopeOn('t')}`,
+    id: 't."id"',
+    documentNumber: 't."utrNumber"',
+    amount: 't."transferAmount"',
+    since: 't."createdAt"',
+    partyType: sidePartyOf('t'),
+  }),
   defineGap({
     key: 'advance-file-missing',
     label: 'Advance with no document uploaded',

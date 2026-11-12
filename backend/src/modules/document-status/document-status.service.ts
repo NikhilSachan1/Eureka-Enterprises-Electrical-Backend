@@ -613,6 +613,8 @@ export class DocumentStatusService {
     const poRows: any[] = await this.dataSource.query(
       `SELECT po.id, po."poNumber", po."poDate", po."partyType", po."approvalStatus" AS status,
               po."totalAmount",
+              (po."fileKey" IS NOT NULL AND po."fileKey" <> '') AS "hasUpload",
+              COALESCE(po."isSystemGenerated", false) AS "isSystemGenerated",
               s.id AS "siteId", s.name AS "siteName", co.name AS "companyName",
               COALESCE(ct.name, v.name) AS "partyName",
               COUNT(*) OVER() AS "totalRecords"
@@ -659,6 +661,7 @@ export class DocumentStatusService {
             // invoice as still owing.
             `SELECT id, "invoiceNumber", "invoiceDate", "jmcId", "approvalStatus" AS status,
                     "totalAmount", COALESCE("paidTotal", 0) AS "paidTotal",
+                    ("fileKey" IS NOT NULL AND "fileKey" <> '') AS "hasUpload",
                     COALESCE("advanceSettledAmount", 0) AS "advanceSettledAmount",
                     CASE WHEN "isGstHold" = true
                          THEN COALESCE("taxableAmount", 0) - COALESCE("tdsAmount", 0)
@@ -713,11 +716,19 @@ export class DocumentStatusService {
     // 6) Bank transfers — SALE: by invoiceId; PURCHASE: by bookPaymentId
     const btRows: any[] = invoiceIds.length
       ? await this.dataSource.query(
-          `SELECT id, "invoiceId", "bookPaymentId", "transferDate", "utrNumber", "transferAmount",
-                  "paymentType", "approvalStatus" AS status
-           FROM bank_transfers
-           WHERE ("invoiceId" = ANY($1) OR "bookPaymentId" = ANY($2)) AND "deletedAt" IS NULL
-           ORDER BY "createdAt" ASC`,
+          // Vendor transfers carry a payment advice; whether it was emailed to the vendor is the
+          // last step of the chain.
+          `SELECT t.id, t."invoiceId", t."bookPaymentId", t."transferDate", t."utrNumber",
+                  t."transferAmount", t."paymentType", t."approvalStatus" AS status,
+                  (t."proofFileKey" IS NOT NULL AND t."proofFileKey" <> '') AS "hasProof",
+                  pa.id AS "adviceId", pa."referenceNumber" AS "adviceReference",
+                  pa."generatedAt" AS "adviceGeneratedAt",
+                  EXISTS (SELECT 1 FROM payment_advice_email_logs l
+                           WHERE l."paymentAdviceId" = pa.id AND l."deletedAt" IS NULL) AS "adviceEmailed"
+           FROM bank_transfers t
+           LEFT JOIN payment_advices pa ON pa."bankTransferId" = t.id AND pa."deletedAt" IS NULL
+           WHERE (t."invoiceId" = ANY($1) OR t."bookPaymentId" = ANY($2)) AND t."deletedAt" IS NULL
+           ORDER BY t."createdAt" ASC`,
           [invoiceIds, bpIds.length ? bpIds : ['00000000-0000-0000-0000-000000000000']],
         )
       : [];
@@ -753,6 +764,15 @@ export class DocumentStatusService {
       // REGULAR | GST — a GST transfer is held GST released / received, not the invoice payment.
       paymentType: t.paymentType ?? 'REGULAR',
       status: t.status,
+      hasProof: !!t.hasProof,
+      paymentAdvice: t.adviceId
+        ? {
+            id: t.adviceId,
+            referenceNumber: t.adviceReference,
+            generatedAt: t.adviceGeneratedAt,
+            isEmailed: !!t.adviceEmailed,
+          }
+        : null,
     });
 
     // Empty status-count bucket helper.
@@ -812,6 +832,7 @@ export class DocumentStatusService {
                 invoiceNumber: inv.invoiceNumber,
                 invoiceDate: inv.invoiceDate,
                 status: inv.status,
+                hasUpload: !!inv.hasUpload,
                 totalAmount: num(inv.totalAmount),
                 paidTotal: num(inv.paidTotal),
                 netPayable: num(inv.netPayable),
@@ -935,6 +956,9 @@ export class DocumentStatusService {
         poDate: po.poDate,
         partyType: po.partyType,
         status: po.status,
+        // A system-generated PO has no signed copy to upload.
+        hasUpload: !!po.hasUpload,
+        isSystemGenerated: !!po.isSystemGenerated,
         totalAmount: num(po.totalAmount),
         partyName: po.partyName ?? null,
         site: { id: po.siteId, name: po.siteName, companyName: po.companyName ?? null },
