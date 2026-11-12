@@ -39,6 +39,7 @@ import {
 } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { loadInvoiceTaxStatus } from 'src/modules/common/financials/tax-register-status.helper';
+import { buildInvoicePaymentSummary } from 'src/modules/common/financials/invoice-payment-summary.helper';
 import {
   checkSiteCreateAccess,
   resolveReadableSiteFilter,
@@ -472,6 +473,7 @@ export class SiteInvoiceService {
           advanceSettlements: settlementsByInvoice.get(inv.id) ?? [],
           gstStatus: taxStatus?.gstStatus ?? null,
           tdsStatus: taxStatus?.tdsStatus ?? null,
+          paymentSummary: buildInvoicePaymentSummary(inv, taxStatus),
           createdByUser: formatUser(inv.createdByUser),
           updatedByUser: formatUser(inv.updatedByUser),
           approvalByUser: formatUser(inv.approvalByUser),
@@ -517,6 +519,7 @@ export class SiteInvoiceService {
       advanceSettlements: rows.map(mapAdvanceSettlement),
       gstStatus: taxStatus?.gstStatus ?? null,
       tdsStatus: taxStatus?.tdsStatus ?? null,
+      paymentSummary: buildInvoicePaymentSummary(invoice, taxStatus),
       createdByUser: formatUser(invoice.createdByUser),
       updatedByUser: formatUser(invoice.updatedByUser),
       approvalByUser: formatUser(invoice.approvalByUser),
