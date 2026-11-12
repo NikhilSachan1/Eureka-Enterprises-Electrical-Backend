@@ -720,7 +720,6 @@ export class DocumentStatusService {
           // last step of the chain.
           `SELECT t.id, t."invoiceId", t."bookPaymentId", t."transferDate", t."utrNumber",
                   t."transferAmount", t."paymentType", t."approvalStatus" AS status,
-                  (t."proofFileKey" IS NOT NULL AND t."proofFileKey" <> '') AS "hasProof",
                   pa.id AS "adviceId", pa."referenceNumber" AS "adviceReference",
                   pa."generatedAt" AS "adviceGeneratedAt",
                   EXISTS (SELECT 1 FROM payment_advice_email_logs l
@@ -764,7 +763,6 @@ export class DocumentStatusService {
       // REGULAR | GST — a GST transfer is held GST released / received, not the invoice payment.
       paymentType: t.paymentType ?? 'REGULAR',
       status: t.status,
-      hasProof: !!t.hasProof,
       paymentAdvice: t.adviceId
         ? {
             id: t.adviceId,

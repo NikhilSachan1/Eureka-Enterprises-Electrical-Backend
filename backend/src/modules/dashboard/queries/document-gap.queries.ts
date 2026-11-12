@@ -597,25 +597,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        ORDER BY i."createdAt" ASC
        LIMIT $2`,
   },
-  // Proof is optional when the transfer is recorded (payment sheet or bank transfer screen), so it
-  // is easy to forget — and it is what answers "did this money really go out".
-  defineGap({
-    key: 'bank-transfer-proof-missing',
-    label: 'Bank transfer with no proof uploaded',
-    hint: 'Upload the bank statement / transfer receipt on the bank transfer.',
-    severity: 'problem',
-    from: `
-      FROM bank_transfers t
-      LEFT JOIN sites s ON s."id" = t."siteId"
-     WHERE t."deletedAt" IS NULL
-       AND (t."proofFileKey" IS NULL OR t."proofFileKey" = '')
-       AND ${scopeOn('t')}`,
-    id: 't."id"',
-    documentNumber: 't."utrNumber"',
-    amount: 't."transferAmount"',
-    since: 't."createdAt"',
-    partyType: sidePartyOf('t'),
-  }),
   defineGap({
     key: 'advance-file-missing',
     label: 'Advance with no document uploaded',
