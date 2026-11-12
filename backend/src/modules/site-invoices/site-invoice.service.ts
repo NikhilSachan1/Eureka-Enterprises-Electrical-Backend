@@ -955,9 +955,15 @@ export class SiteInvoiceService {
    */
   async getDropdown(
     siteId: string,
-    forDocument: 'book-payment' | 'bank-transfer',
+    requestedFor: 'book-payment' | 'bank-transfer' | undefined,
     partyTypeOverride?: 'PURCHASE' | 'SALE',
   ) {
+    // A vendor invoice asked for with no `forDocument` (the payment request form) ends up as a
+    // book payment once the request is approved, so it is measured like one: net payable less
+    // advances settled and bookings already made. Falling through to the sale arithmetic ignored
+    // the advances and showed a fully-settled invoice as still owing.
+    const forDocument =
+      requestedFor ?? (partyTypeOverride === 'PURCHASE' ? 'book-payment' : 'bank-transfer');
     const partyType = partyTypeOverride ?? (forDocument === 'book-payment' ? 'PURCHASE' : 'SALE');
 
     const isPurchaseBankTransfer = forDocument === 'bank-transfer' && partyType === 'PURCHASE';
