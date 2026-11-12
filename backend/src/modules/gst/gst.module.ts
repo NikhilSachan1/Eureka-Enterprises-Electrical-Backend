@@ -6,6 +6,8 @@ import { GstPaymentAdviceSequenceEntity } from './entities/gst-payment-advice-se
 import { GstRepository } from './gst.repository';
 import { GstService } from './gst.service';
 import { GstController } from './gst.controller';
+import { BookPaymentModule } from 'src/modules/book-payments/book-payment.module';
+import { BankTransferModule } from 'src/modules/bank-transfers/bank-transfer.module';
 
 @Module({
   imports: [
@@ -14,6 +16,9 @@ import { GstController } from './gst.controller';
       GstPaymentEntity,
       GstPaymentAdviceSequenceEntity,
     ]),
+    // Held GST is settled through the normal payment chain (book payment → bank transfer).
+    BookPaymentModule,
+    BankTransferModule,
   ],
   controllers: [GstController],
   providers: [GstRepository, GstService],

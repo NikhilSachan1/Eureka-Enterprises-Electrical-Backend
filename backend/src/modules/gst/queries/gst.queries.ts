@@ -8,7 +8,9 @@ export const GST_QUERIES = {
    * GST summary per BRD §5.3, by partyType and gstType.
    *   heldGst            — GST withheld (by us on purchase, by the client on sale)
    *   settledGst         — held GST released to vendors / received from clients
+   *                        (bank transfer done, or a legacy direct record)
    *   pendingSettlement  — held GST still to be released / received
+   *   inProcessGst       — part of pendingSettlement: GST release booked, transfer not done yet
    *   withPaymentGst     — GST not held; it moved with the invoice payment
    */
   GST_SUMMARY: `
@@ -20,8 +22,9 @@ export const GST_QUERIES = {
       COUNT(*) FILTER (WHERE "isVerified" = true) as "verifiedCount",
       COUNT(*) FILTER (WHERE "isVerified" = false) as "unverifiedCount",
       COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true), 0) as "heldGst",
-      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND "gstPaymentId" IS NOT NULL), 0) as "settledGst",
-      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND "gstPaymentId" IS NULL), 0) as "pendingSettlement",
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND ("gstPaymentId" IS NOT NULL OR "gstBankTransferId" IS NOT NULL)), 0) as "settledGst",
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND "gstPaymentId" IS NULL AND "gstBankTransferId" IS NULL), 0) as "pendingSettlement",
+      COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = true AND "gstBookPaymentId" IS NOT NULL AND "gstBankTransferId" IS NULL), 0) as "inProcessGst",
       COALESCE(SUM("gstAmount") FILTER (WHERE "isGstHold" = false), 0) as "withPaymentGst"
     FROM gst_register_entries
     WHERE "siteId" = $1
@@ -42,6 +45,8 @@ export const GST_QUERIES = {
       AND "partyType" = 'PURCHASE'
       AND "isVerified" = true
       AND "gstPaymentId" IS NULL
+      AND "gstBookPaymentId" IS NULL
+      AND "gstBankTransferId" IS NULL
       AND "deletedAt" IS NULL
   `,
 

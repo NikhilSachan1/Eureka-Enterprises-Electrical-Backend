@@ -91,7 +91,7 @@ export const BILLING_QUERIES = {
         SELECT SUM(g."gstAmount")
         FROM gst_register_entries g
         JOIN site_invoices inv ON inv.id = g."invoiceId"
-        WHERE inv."poId" = po.id AND g."isGstHold" = true AND g."gstPaymentId" IS NOT NULL
+        WHERE inv."poId" = po.id AND g."isGstHold" = true AND (g."gstPaymentId" IS NOT NULL OR g."gstBankTransferId" IS NOT NULL)
           AND g."deletedAt" IS NULL
       ), 0) AS "gstPaid",
 
@@ -264,6 +264,7 @@ export const BILLING_QUERIES = {
     WHERE "siteId" = $1
       AND "isGstHold" = true
       AND "gstPaymentId" IS NULL
+      AND "gstBankTransferId" IS NULL
       AND "deletedAt" IS NULL
     UNION ALL
     SELECT 'TDS challan not recorded' as "type", COUNT(*) as "count"

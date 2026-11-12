@@ -8,7 +8,7 @@ import { DataSource, EntityManager } from 'typeorm';
  * ceilings are built on. Tax settlement is reported next to them, never folded into them.
  */
 
-export type GstSettlementStatus = 'NOT_HELD' | 'PENDING' | 'SETTLED';
+export type GstSettlementStatus = 'NOT_HELD' | 'PENDING' | 'IN_PROCESS' | 'SETTLED';
 
 export interface InvoiceGstStatus {
   entryId: string;
@@ -16,7 +16,11 @@ export interface InvoiceGstStatus {
   isGstHold: boolean;
   /** Matched on the GST portal (GSTR-2B purchase / GSTR-1 sale). */
   isVerified: boolean;
-  /** NOT_HELD: moved with the invoice payment. PENDING / SETTLED: held GST. */
+  /**
+   * NOT_HELD: moved with the invoice payment. Held GST: PENDING → IN_PROCESS (GST release
+   * booked, bank transfer not done — purchase only) → SETTLED (bank transfer done, or a legacy
+   * direct record).
+   */
   settlementStatus: GstSettlementStatus;
   settledAmount: number;
   settledAt: string | null;
@@ -66,9 +70,11 @@ export async function loadInvoiceTaxStatus(
     runner.query(
       `
         SELECT g."invoiceId", g."id", g."gstAmount", g."isGstHold", g."isVerified",
-               g."gstPaymentId", gp."paymentDate"
+               g."gstPaymentId", g."gstBookPaymentId", g."gstBankTransferId",
+               COALESCE(bt."transferDate", gp."paymentDate") AS "paymentDate"
         FROM gst_register_entries g
         LEFT JOIN gst_payments gp ON gp."id" = g."gstPaymentId"
+        LEFT JOIN bank_transfers bt ON bt."id" = g."gstBankTransferId" AND bt."deletedAt" IS NULL
         WHERE g."invoiceId" = ANY($1::uuid[]) AND g."deletedAt" IS NULL
       `,
       [invoiceIds],
@@ -95,13 +101,20 @@ export async function loadInvoiceTaxStatus(
     const entry = result.get(r.invoiceId);
     if (!entry) continue;
     const isGstHold = Boolean(r.isGstHold);
-    const isSettled = Boolean(r.gstPaymentId);
+    const isSettled = Boolean(r.gstPaymentId || r.gstBankTransferId);
+    const isInProcess = !isSettled && Boolean(r.gstBookPaymentId);
     entry.gstStatus = {
       entryId: r.id,
       gstAmount: Number(r.gstAmount),
       isGstHold,
       isVerified: Boolean(r.isVerified),
-      settlementStatus: !isGstHold ? 'NOT_HELD' : isSettled ? 'SETTLED' : 'PENDING',
+      settlementStatus: !isGstHold
+        ? 'NOT_HELD'
+        : isSettled
+        ? 'SETTLED'
+        : isInProcess
+        ? 'IN_PROCESS'
+        : 'PENDING',
       settledAmount: isGstHold && isSettled ? Number(r.gstAmount) : 0,
       settledAt: isGstHold && isSettled ? toIsoDate(r.paymentDate) : null,
     };
@@ -140,7 +153,7 @@ export async function loadPoTaxTotals(
         SELECT inv."poId",
                COALESCE(SUM(g."gstAmount") FILTER (WHERE g."isGstHold" = true), 0) AS "gstHeldTotal",
                COALESCE(SUM(g."gstAmount") FILTER (
-                 WHERE g."isGstHold" = true AND g."gstPaymentId" IS NOT NULL), 0)    AS "gstSettledTotal"
+                 WHERE g."isGstHold" = true AND (g."gstPaymentId" IS NOT NULL OR g."gstBankTransferId" IS NOT NULL)), 0)    AS "gstSettledTotal"
         FROM gst_register_entries g
         JOIN site_invoices inv ON inv."id" = g."invoiceId"
         WHERE inv."poId" = ANY($1::uuid[]) AND g."deletedAt" IS NULL

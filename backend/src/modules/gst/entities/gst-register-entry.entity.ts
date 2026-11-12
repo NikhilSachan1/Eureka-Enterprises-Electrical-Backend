@@ -6,6 +6,8 @@ import { ContractorEntity } from 'src/modules/contractors/entities/contractor.en
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { GstPaymentEntity } from './gst-payment.entity';
+import type { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
+import type { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
 
 /**
  * GST Register Entry — projected from invoices at approval time (§5.1.13)
@@ -107,11 +109,27 @@ export class GstRegisterEntryEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   verifyRemarks: string | null;
 
-  // Set once the held GST is settled (released to vendor / received from client)
+  // Legacy direct settlement (recorded before GST moved through book payment / bank transfer)
   @Column({ type: 'uuid', nullable: true })
   gstPaymentId: string | null;
 
   @ManyToOne(() => GstPaymentEntity, { nullable: true })
   @JoinColumn({ name: 'gstPaymentId' })
   gstPayment: GstPaymentEntity | null;
+
+  // PURCHASE: GST release booked → "release in process" until its bank transfer goes out
+  @Column({ type: 'uuid', nullable: true })
+  gstBookPaymentId: string | null;
+
+  @ManyToOne('BookPaymentEntity', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'gstBookPaymentId' })
+  gstBookPayment: BookPaymentEntity | null;
+
+  // The bank transfer that moved the held GST (release to vendor / receipt from client) → settled
+  @Column({ type: 'uuid', nullable: true })
+  gstBankTransferId: string | null;
+
+  @ManyToOne('BankTransferEntity', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'gstBankTransferId' })
+  gstBankTransfer: BankTransferEntity | null;
 }

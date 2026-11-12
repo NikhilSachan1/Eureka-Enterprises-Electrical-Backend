@@ -41,7 +41,7 @@ const HELD_GST_SETTLED = `COALESCE((
   FROM gst_register_entries g
   WHERE g."invoiceId" = i."id"
     AND g."isGstHold" = true
-    AND g."gstPaymentId" IS NOT NULL
+    AND (g."gstPaymentId" IS NOT NULL OR g."gstBankTransferId" IS NOT NULL)
     AND g."deletedAt" IS NULL
 ), 0)`;
 

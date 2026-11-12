@@ -108,7 +108,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
          AND ${scopeOn('i')}
          AND NOT EXISTS (
-           SELECT 1 FROM book_payments b WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL
+           SELECT 1 FROM book_payments b WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL AND b."sourceType" <> 'GST_RELEASE'
          )`,
     listSql: `
       SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
@@ -120,7 +120,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        WHERE i."deletedAt" IS NULL AND i."approvalStatus" = 'APPROVED'
          AND ${scopeOn('i')}
          AND NOT EXISTS (
-           SELECT 1 FROM book_payments b WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL
+           SELECT 1 FROM book_payments b WHERE b."invoiceId" = i."id" AND b."deletedAt" IS NULL AND b."sourceType" <> 'GST_RELEASE'
          )
        ORDER BY i."approvalAt" ASC NULLS LAST
        LIMIT $2`,

@@ -52,6 +52,13 @@ export interface PaymentAdvicePdfData {
    * instead. Null for the ordinary invoice route.
    */
   advanceNumber?: string | null;
+  /**
+   * GST_RELEASE: the advice pays out an invoice's held GST (no TDS, no holds) — it shows a GST
+   * release summary instead of the invoice summary. Omitted for invoice / advance payments.
+   */
+  paymentType?: 'GST_RELEASE';
+  /** GST rate of the invoice, shown on a GST release. */
+  gstPercentage?: number | null;
 }
 
 @Injectable()
@@ -237,6 +244,11 @@ export class PaymentAdvicePdfService {
     const netAmount = grossAmount - totalDeduction;
 
     const inWords = this.numberToWords(d.transferAmount);
+    const isGstRelease = d.paymentType === 'GST_RELEASE';
+    const gstRateText =
+      d.gstPercentage !== null && d.gstPercentage !== undefined
+        ? `${Number(d.gstPercentage)}%`
+        : '-';
 
     // ── Left info column ─────────────────────────────────
     const leftRows: string[] = [];
@@ -296,6 +308,11 @@ export class PaymentAdvicePdfService {
       );
       rightRows.push(
         `<tr><td class="lbl">Payment Type</td><td class="sep">:</td><td class="val">Advance Payment</td></tr>`,
+      );
+    }
+    if (isGstRelease) {
+      rightRows.push(
+        `<tr><td class="lbl">Payment Type</td><td class="sep">:</td><td class="val">GST Release</td></tr>`,
       );
     }
     rightRows.push(
@@ -464,11 +481,41 @@ export class PaymentAdvicePdfService {
   <!-- ── Greeting & Payment Message ────────────────────── -->
   <div class="greeting">Dear SIR / MADAM,</div>
   <div class="payment-msg">
-    This is to inform you that payment has been released for
+    ${
+      isGstRelease
+        ? `This is to inform you that the GST withheld on the invoice below has been released for`
+        : `This is to inform you that payment has been released for`
+    }
     <span class="amount-highlight">${fmt(d.transferAmount)}</span>
     (${inWords}).
   </div>
 
+  ${
+    isGstRelease
+      ? `
+  <!-- ── GST Release Summary ───────────────────────────── -->
+  <div class="section-label">GST Release Summary</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Invoice Reference</th>
+        <th>Invoice Date</th>
+        <th class="r">Taxable Amount (Rs.)</th>
+        <th class="r">GST Rate</th>
+        <th class="r">GST Released (Rs.)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${d.invoiceNumber ?? '-'}</td>
+        <td>${fmtDate(d.invoiceDate)}</td>
+        <td class="r">${fmtN(taxableAmount)}</td>
+        <td class="r">${gstRateText}</td>
+        <td class="r">${fmtN(d.transferAmount)}</td>
+      </tr>
+    </tbody>
+  </table>`
+      : `
   <!-- ── Invoice Summary ───────────────────────────────── -->
   <div class="section-label">Invoice Summary</div>
   <table>
@@ -494,7 +541,8 @@ export class PaymentAdvicePdfService {
 
   ${deductionTableHtml}
 
-  ${holdSection}
+  ${holdSection}`
+  }
 
   <!-- ── Footer ─────────────────────────────────────────── -->
   <div class="footer">
