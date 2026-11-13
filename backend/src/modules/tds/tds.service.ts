@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { DataSource, IsNull, Not, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { TdsRepository } from './tds.repository';
 import { GetTdsRegisterDto, CreateTdsPaymentDto } from './dto';
 import { TDS_ERRORS, TDS_RESPONSES } from './constants/tds.constants';
@@ -66,6 +66,7 @@ export class TdsService {
       vendorId,
       contractorId,
       isVerified,
+      challanStatus,
       dateFrom,
       dateTo,
       sortField = DefaultPaginationValues.SORT_FIELD,
@@ -74,9 +75,24 @@ export class TdsService {
       pageSize = DefaultPaginationValues.PAGE_SIZE,
     } = query;
 
+    // Only vendor TDS goes on a challan; contractor TDS is deposited by the client. A challan
+    // filter that contradicts the party filter matches nothing.
+    const challanSide =
+      challanStatus === 'NOT_APPLICABLE'
+        ? PartyType.SALE
+        : challanStatus
+        ? PartyType.PURCHASE
+        : undefined;
+    if (challanSide && partyType && partyType !== challanSide) {
+      return { records: [], totalRecords: 0 };
+    }
+
     const where: any = { deletedAt: IsNull() };
     if (siteId) where.siteId = siteId;
     if (partyType) where.partyType = partyType;
+    if (challanSide) where.partyType = challanSide;
+    if (challanStatus === 'PENDING') where.tdsPaymentId = IsNull();
+    if (challanStatus === 'DEPOSITED') where.tdsPaymentId = Not(IsNull());
     if (month) where.invoiceMonth = month;
     if (financialYear) where.financialYear = financialYear;
     if (vendorId) where.vendorId = vendorId;

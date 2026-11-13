@@ -12,6 +12,9 @@ import {
 import { Type } from 'class-transformer';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 
+export const TDS_CHALLAN_FILTERS = ['PENDING', 'DEPOSITED', 'NOT_APPLICABLE'] as const;
+export type TdsChallanFilter = (typeof TDS_CHALLAN_FILTERS)[number];
+
 export class GetTdsRegisterDto {
   @ApiPropertyOptional({ description: 'Filter by site ID' })
   @IsUUID()
@@ -47,6 +50,16 @@ export class GetTdsRegisterDto {
   @IsIn(['true', 'false'])
   @IsOptional()
   isVerified?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Challan: PENDING (vendor TDS not yet deposited), DEPOSITED (on a challan), ' +
+      'NOT_APPLICABLE (contractor TDS — the client deposits it)',
+    enum: TDS_CHALLAN_FILTERS,
+  })
+  @IsIn(TDS_CHALLAN_FILTERS)
+  @IsOptional()
+  challanStatus?: TdsChallanFilter;
 
   @ApiPropertyOptional({ description: 'Date range start — invoice date (ISO, e.g. 2026-04-01)' })
   @IsDateString()

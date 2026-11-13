@@ -4,9 +4,10 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { DataSource, IsNull, Not, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { GstRepository } from './gst.repository';
 import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
+import { GstSettlementFilter } from './dto/get-gst-register.dto';
 import { GST_ERRORS, GST_RESPONSES } from './constants/gst.constants';
 import { GST_QUERIES } from './queries/gst.queries';
 import { PartyType, getFinancialYear } from 'src/modules/common/financials/financial.constants';
@@ -46,6 +47,29 @@ export class GstService {
     private readonly dataSource: DataSource,
   ) {}
 
+  /**
+   * Narrows the register to one stage of held-GST settlement — the same states the summary shows.
+   * SETTLED is either a GST bank transfer or a legacy direct record, so it becomes an OR.
+   */
+  private withSettlementFilter(base: any, status?: GstSettlementFilter): any {
+    const unsettled = { gstPaymentId: IsNull(), gstBankTransferId: IsNull() };
+    switch (status) {
+      case 'NOT_HELD':
+        return { ...base, isGstHold: false };
+      case 'PENDING':
+        return { ...base, isGstHold: true, ...unsettled, gstBookPaymentId: IsNull() };
+      case 'IN_PROCESS':
+        return { ...base, isGstHold: true, ...unsettled, gstBookPaymentId: Not(IsNull()) };
+      case 'SETTLED':
+        return [
+          { ...base, isGstHold: true, gstBankTransferId: Not(IsNull()) },
+          { ...base, isGstHold: true, gstPaymentId: Not(IsNull()) },
+        ];
+      default:
+        return base;
+    }
+  }
+
   async findAllRegisterEntries(query: GetGstRegisterDto) {
     const {
       siteId,
@@ -55,6 +79,7 @@ export class GstService {
       vendorId,
       contractorId,
       isVerified,
+      settlementStatus,
       dateFrom,
       dateTo,
       sortField = DefaultPaginationValues.SORT_FIELD,
@@ -63,17 +88,18 @@ export class GstService {
       pageSize = DefaultPaginationValues.PAGE_SIZE,
     } = query;
 
-    const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
-    if (partyType) where.partyType = partyType;
-    if (month) where.invoiceMonth = month;
-    if (financialYear) where.financialYear = financialYear;
-    if (vendorId) where.vendorId = vendorId;
-    if (contractorId) where.contractorId = contractorId;
-    if (isVerified !== undefined) where.isVerified = Equal(isVerified === 'true');
-    if (dateFrom && dateTo) where.invoice = { invoiceDate: Between(dateFrom, dateTo) };
-    else if (dateFrom) where.invoice = { invoiceDate: MoreThanOrEqual(dateFrom) };
-    else if (dateTo) where.invoice = { invoiceDate: LessThanOrEqual(dateTo) };
+    const base: any = { deletedAt: IsNull() };
+    if (siteId) base.siteId = siteId;
+    if (partyType) base.partyType = partyType;
+    if (month) base.invoiceMonth = month;
+    if (financialYear) base.financialYear = financialYear;
+    if (vendorId) base.vendorId = vendorId;
+    if (contractorId) base.contractorId = contractorId;
+    if (isVerified !== undefined) base.isVerified = Equal(isVerified === 'true');
+    if (dateFrom && dateTo) base.invoice = { invoiceDate: Between(dateFrom, dateTo) };
+    else if (dateFrom) base.invoice = { invoiceDate: MoreThanOrEqual(dateFrom) };
+    else if (dateTo) base.invoice = { invoiceDate: LessThanOrEqual(dateTo) };
+    const where = this.withSettlementFilter(base, settlementStatus);
 
     const [records, totalRecords] = await Promise.all([
       this.gstRepository.findAllRegisterEntries({
