@@ -536,15 +536,17 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
 
   // ── missing files ──
   //
-  // A No-JMC entry stands for the absence of a JMC, so there is no certificate behind it. An
-  // uploaded JMC carries its file from the start, so in practice this lists generated JMCs whose
-  // signed copy has not come back yet — and a JMC cannot be approved until it does.
+  // Only a generated JMC (contractor side) is created without its file: its signed copy comes back
+  // later, and the JMC cannot be approved until it does. A vendor JMC is created with the file, and
+  // a No-JMC entry has no certificate at all.
   {
     key: 'jmc-file-missing',
     group: 'jmc',
     label: 'JMC generated, signed copy not uploaded',
     hint: 'Get the generated JMC signed and upload it — it cannot be approved without the signed copy.',
     severity: 'problem',
+    // Only contractor JMCs are generated; a vendor JMC is created with its signed copy attached.
+    parties: ['CONTRACTOR'],
     listSql: `
       SELECT j."id", COALESCE(NULLIF(j."jmcNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
              NULL::numeric AS amount, j."createdAt" AS "since",
@@ -553,6 +555,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
         FROM jmcs j
         LEFT JOIN sites s ON s."id" = j."siteId"
        WHERE j."deletedAt" IS NULL
+         AND j."partyType" = 'SALE'
          AND COALESCE(j."isNoJmc", false) = false
          AND (j."fileKey" IS NULL OR j."fileKey" = '')
          AND ${scopeOn('j')}
