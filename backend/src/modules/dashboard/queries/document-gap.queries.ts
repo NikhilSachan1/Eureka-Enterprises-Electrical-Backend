@@ -43,7 +43,7 @@ export interface DocumentGapDef {
 export type GapParty = 'CONTRACTOR' | 'VENDOR';
 
 /** Document a gap belongs to, in chain order: PO → JMC → site report → invoice → payment. */
-export type GapGroup = 'po' | 'jmc' | 'report' | 'invoice' | 'payment' | 'advance' | 'gst' | 'tds';
+export type GapGroup = 'po' | 'jmc' | 'report' | 'payment' | 'advance' | 'gst' | 'tds';
 
 export interface GapText {
   label: string;
@@ -558,36 +558,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
          AND (j."fileKey" IS NULL OR j."fileKey" = '')
          AND ${scopeOn('j')}
        ORDER BY j."createdAt" ASC
-       LIMIT $2`,
-  },
-  {
-    key: 'invoice-file-missing',
-    group: 'invoice',
-    label: 'Invoice with no document uploaded',
-    hint: 'Upload the invoice document.',
-    sideText: {
-      VENDOR: {
-        label: 'Invoice with no document uploaded',
-        hint: 'Upload the vendor’s invoice.',
-      },
-      CONTRACTOR: {
-        label: 'Invoice with no document uploaded',
-        hint: 'Upload the invoice sent to the client.',
-      },
-    },
-    severity: 'problem',
-    listSql: `
-      SELECT i."id", COALESCE(NULLIF(i."invoiceNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
-             i."totalAmount" AS amount, i."createdAt" AS "since",
-             EXTRACT(DAY FROM NOW() - i."createdAt")::int AS "ageDays",
-             ${partyTypeOf('i')}
-        FROM site_invoices i
-        LEFT JOIN sites s ON s."id" = i."siteId"
-       WHERE i."deletedAt" IS NULL
-         AND i."invoiceNumber" IS NOT NULL
-         AND (i."fileKey" IS NULL OR i."fileKey" = '')
-         AND ${scopeOn('i')}
-       ORDER BY i."createdAt" ASC
        LIMIT $2`,
   },
   defineGap({
