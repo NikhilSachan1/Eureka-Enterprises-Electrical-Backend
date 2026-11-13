@@ -54,6 +54,8 @@ type Runner = DataSource | EntityManager;
 
 const toIsoDate = (value: unknown): string | null => {
   if (!value) return null;
+  // Already a calendar date ('YYYY-MM-DD' from TO_CHAR) — use it as is, no timezone involved.
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = value instanceof Date ? value : new Date(String(value));
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 };
@@ -71,7 +73,9 @@ export async function loadInvoiceTaxStatus(
       `
         SELECT g."invoiceId", g."id", g."gstAmount", g."isGstHold", g."isVerified",
                g."gstPaymentId", g."gstBookPaymentId", g."gstBankTransferId",
-               COALESCE(bt."transferDate", gp."paymentDate") AS "paymentDate"
+               -- Read the DATE as text: the driver turns a DATE into midnight in the server's
+               -- timezone, and converting that to an ISO string shifts it a day back east of UTC.
+               TO_CHAR(COALESCE(bt."transferDate", gp."paymentDate"), 'YYYY-MM-DD') AS "paymentDate"
         FROM gst_register_entries g
         LEFT JOIN gst_payments gp ON gp."id" = g."gstPaymentId"
         LEFT JOIN bank_transfers bt ON bt."id" = g."gstBankTransferId" AND bt."deletedAt" IS NULL
@@ -87,7 +91,7 @@ export async function loadInvoiceTaxStatus(
                COALESCE(SUM(t."tdsAmount") FILTER (WHERE t."isVerified" = true), 0)        AS "verifiedAmount",
                BOOL_AND(t."tdsPaymentId" IS NOT NULL)                            AS "isDeposited",
                BOOL_AND(t."isVerified")                                          AS "isVerified",
-               MAX(tp."paymentDate")                                             AS "lastDepositedAt"
+               TO_CHAR(MAX(tp."paymentDate"), 'YYYY-MM-DD')                      AS "lastDepositedAt"
         FROM tds_register_entries t
         LEFT JOIN tds_payments tp ON tp."id" = t."tdsPaymentId"
         WHERE t."invoiceId" = ANY($1::uuid[]) AND t."deletedAt" IS NULL
