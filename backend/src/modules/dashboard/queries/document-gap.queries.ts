@@ -42,8 +42,20 @@ export interface DocumentGapDef {
 
 export type GapParty = 'CONTRACTOR' | 'VENDOR';
 
-/** Document a gap belongs to, in chain order: PO → JMC → site report → invoice → payment. */
-export type GapGroup = 'po' | 'jmc' | 'report' | 'payment' | 'advance' | 'gst' | 'tds';
+/**
+ * The document that is missing — the next step nobody has taken — in chain order. A PO approved
+ * with no JMC is a JMC gap; a booking with no transfer is a bank-transfer gap.
+ */
+export type GapGroup =
+  | 'po'
+  | 'jmc'
+  | 'report'
+  | 'invoice'
+  | 'book-payment'
+  | 'bank-transfer'
+  | 'advance'
+  | 'gst'
+  | 'tds';
 
 export interface GapText {
   label: string;
@@ -172,7 +184,7 @@ const ADVANCE_OPEN = `a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
 export const DOCUMENT_GAPS: DocumentGapDef[] = [
   {
     key: 'po-without-jmc',
-    group: 'po',
+    group: 'jmc',
     label: 'PO approved, no JMC raised',
     hint: 'Raise the JMC, or mark it as a No-JMC purchase order.',
     severity: 'problem',
@@ -195,7 +207,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // is the step that is stuck — counted below, not here.
   defineGap({
     key: 'jmc-without-invoice',
-    group: 'jmc',
+    group: 'invoice',
     label: 'JMC approved, no invoice raised',
     hint: 'Raise the invoice against this JMC.',
     severity: 'problem',
@@ -250,7 +262,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // still to book: net payable less advances settled against it less bookings already made.
   defineGap({
     key: 'invoice-not-booked',
-    group: 'payment',
+    group: 'book-payment',
     label: 'Invoice approved, not booked for payment',
     hint: 'Create the book payment so it can be paid.',
     severity: 'problem',
@@ -271,7 +283,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'invoice-partially-booked',
-    group: 'payment',
+    group: 'book-payment',
     label: 'Invoice partly booked, balance not booked',
     hint: 'Book the remaining amount of the invoice.',
     severity: 'problem',
@@ -295,7 +307,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // received".
   defineGap({
     key: 'contractor-payment-pending',
-    group: 'payment',
+    group: 'bank-transfer',
     label: 'Invoice approved, payment not received',
     hint: 'Follow up with the client, then record the bank transfer.',
     severity: 'problem',
@@ -314,7 +326,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'contractor-payment-partial',
-    group: 'payment',
+    group: 'bank-transfer',
     label: 'Invoice partly received, balance not received',
     hint: 'Follow up with the client for the balance, then record the bank transfer.',
     severity: 'problem',
@@ -335,7 +347,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // below, worded for what they are, so counting them here as well would show them twice.
   {
     key: 'booked-not-transferred',
-    group: 'payment',
+    group: 'bank-transfer',
     label: 'Book payment approved, money not transferred',
     hint: 'Record the bank transfer, or put it on a payment sheet.',
     severity: 'problem',
@@ -364,7 +376,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // gap, because each one needs a different person to act.
   defineGap({
     key: 'advance-not-paid',
-    group: 'advance',
+    group: 'bank-transfer',
     label: 'Advance approved, money not transferred',
     hint: 'Pay the advance from a payment sheet or record its bank transfer.',
     severity: 'problem',
@@ -433,7 +445,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'gst-release-pending',
-    group: 'gst',
+    group: 'book-payment',
     label: 'Held GST verified, release not booked',
     hint: 'Book the GST release from the GST summary.',
     severity: 'problem',
@@ -450,7 +462,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'gst-release-not-transferred',
-    group: 'gst',
+    group: 'bank-transfer',
     label: 'GST release booked, money not transferred',
     hint: 'Pay the GST release from a payment sheet or record its bank transfer.',
     severity: 'problem',
@@ -470,7 +482,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'gst-receipt-pending',
-    group: 'gst',
+    group: 'bank-transfer',
     label: 'Held GST not yet received from the client',
     hint: 'Once the client pays the withheld GST, mark it received in the GST summary.',
     severity: 'problem',
@@ -571,7 +583,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // "invoice raised but advance not adjusted" problem above.
   defineGap({
     key: 'advance-not-settled',
-    group: 'advance',
+    group: 'invoice',
     label: 'Advance paid, invoice awaited',
     hint: 'Settle the advance once the vendor raises the invoice.',
     severity: 'info',
