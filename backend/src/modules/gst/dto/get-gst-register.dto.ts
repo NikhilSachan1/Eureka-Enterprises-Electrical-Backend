@@ -12,6 +12,9 @@ import {
 import { Type } from 'class-transformer';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 
+export const GST_SETTLEMENT_FILTERS = ['NOT_HELD', 'PENDING', 'IN_PROCESS', 'SETTLED'] as const;
+export type GstSettlementFilter = (typeof GST_SETTLEMENT_FILTERS)[number];
+
 export class GetGstRegisterDto {
   @ApiPropertyOptional({ description: 'Filter by site ID' })
   @IsUUID()
@@ -47,6 +50,16 @@ export class GetGstRegisterDto {
   @IsIn(['true', 'false'])
   @IsOptional()
   isVerified?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Held GST settlement: NOT_HELD (moved with the invoice payment), PENDING (to release / ' +
+      'receive), IN_PROCESS (release booked, transfer not done), SETTLED (released / received)',
+    enum: GST_SETTLEMENT_FILTERS,
+  })
+  @IsIn(GST_SETTLEMENT_FILTERS)
+  @IsOptional()
+  settlementStatus?: GstSettlementFilter;
 
   @ApiPropertyOptional({ description: 'Date range start — invoice date (ISO, e.g. 2026-04-01)' })
   @IsDateString()
