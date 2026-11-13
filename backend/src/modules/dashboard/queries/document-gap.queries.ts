@@ -536,14 +536,14 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
 
   // ── missing files ──
   //
-  // A system-generated document has no file to upload and never will, so counting it would make
-  // the list permanently wrong. A No-JMC entry is the same: it stands for the absence of a JMC,
-  // so there is no certificate behind it.
+  // A No-JMC entry stands for the absence of a JMC, so there is no certificate behind it. An
+  // uploaded JMC carries its file from the start, so in practice this lists generated JMCs whose
+  // signed copy has not come back yet — and a JMC cannot be approved until it does.
   {
     key: 'jmc-file-missing',
     group: 'jmc',
-    label: 'JMC with no document uploaded',
-    hint: 'Upload the signed JMC.',
+    label: 'JMC generated, signed copy not uploaded',
+    hint: 'Get the generated JMC signed and upload it — it cannot be approved without the signed copy.',
     severity: 'problem',
     listSql: `
       SELECT j."id", COALESCE(NULLIF(j."jmcNumber", ''), '(no number)') AS "documentNumber", s."name" AS "siteName",
@@ -554,7 +554,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
         LEFT JOIN sites s ON s."id" = j."siteId"
        WHERE j."deletedAt" IS NULL
          AND COALESCE(j."isNoJmc", false) = false
-         AND COALESCE(j."isSystemGenerated", false) = false
          AND (j."fileKey" IS NULL OR j."fileKey" = '')
          AND ${scopeOn('j')}
        ORDER BY j."createdAt" ASC
