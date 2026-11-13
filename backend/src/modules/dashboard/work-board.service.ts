@@ -240,6 +240,8 @@ export class WorkBoardService {
         const byParty = { contractor: side('CONTRACTOR'), vendor: side('VENDOR') };
         return {
           key: gap.key,
+          /** The document it belongs to (po, jmc, report, invoice, payment, advance, gst, tds). */
+          group: gap.group,
           label: gap.label,
           hint: gap.hint,
           severity: gap.severity,

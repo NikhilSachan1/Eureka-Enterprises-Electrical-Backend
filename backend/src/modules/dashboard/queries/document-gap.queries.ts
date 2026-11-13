@@ -15,6 +15,8 @@
 
 export interface DocumentGapDef {
   key: string;
+  /** The document the gap belongs to; the dashboard lists gaps under it. */
+  group: GapGroup;
   label: string;
   /** What the reader should do about it. */
   hint: string;
@@ -40,6 +42,9 @@ export interface DocumentGapDef {
 
 export type GapParty = 'CONTRACTOR' | 'VENDOR';
 
+/** Document a gap belongs to, in chain order: PO → JMC → site report → invoice → payment. */
+export type GapGroup = 'po' | 'jmc' | 'report' | 'invoice' | 'payment' | 'advance' | 'gst' | 'tds';
+
 export interface GapText {
   label: string;
   hint: string;
@@ -64,6 +69,7 @@ const partyTypeOf = (alias: string) =>
  */
 const defineGap = (g: {
   key: string;
+  group: GapGroup;
   label: string;
   hint: string;
   severity: 'problem' | 'info';
@@ -76,6 +82,7 @@ const defineGap = (g: {
   sideText?: DocumentGapDef['sideText'];
 }): DocumentGapDef => ({
   key: g.key,
+  group: g.group,
   label: g.label,
   hint: g.hint,
   severity: g.severity,
@@ -165,6 +172,7 @@ const ADVANCE_OPEN = `a."deletedAt" IS NULL AND a."approvalStatus" = 'APPROVED'
 export const DOCUMENT_GAPS: DocumentGapDef[] = [
   {
     key: 'po-without-jmc',
+    group: 'po',
     label: 'PO approved, no JMC raised',
     hint: 'Raise the JMC, or mark it as a No-JMC purchase order.',
     severity: 'problem',
@@ -187,6 +195,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // is the step that is stuck — counted below, not here.
   defineGap({
     key: 'jmc-without-invoice',
+    group: 'jmc',
     label: 'JMC approved, no invoice raised',
     hint: 'Raise the invoice against this JMC.',
     severity: 'problem',
@@ -207,6 +216,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'jmc-without-report',
+    group: 'report',
     label: 'JMC approved, site report not added',
     hint: 'Add the site report, or mark it as no report.',
     sideText: {
@@ -240,6 +250,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // still to book: net payable less advances settled against it less bookings already made.
   defineGap({
     key: 'invoice-not-booked',
+    group: 'payment',
     label: 'Invoice approved, not booked for payment',
     hint: 'Create the book payment so it can be paid.',
     severity: 'problem',
@@ -260,6 +271,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'invoice-partially-booked',
+    group: 'payment',
     label: 'Invoice partly booked, balance not booked',
     hint: 'Book the remaining amount of the invoice.',
     severity: 'problem',
@@ -283,6 +295,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // received".
   defineGap({
     key: 'contractor-payment-pending',
+    group: 'payment',
     label: 'Invoice approved, payment not received',
     hint: 'Follow up with the client, then record the bank transfer.',
     severity: 'problem',
@@ -301,6 +314,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'contractor-payment-partial',
+    group: 'payment',
     label: 'Invoice partly received, balance not received',
     hint: 'Follow up with the client for the balance, then record the bank transfer.',
     severity: 'problem',
@@ -321,6 +335,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // below, worded for what they are, so counting them here as well would show them twice.
   {
     key: 'booked-not-transferred',
+    group: 'payment',
     label: 'Book payment approved, money not transferred',
     hint: 'Record the bank transfer, or put it on a payment sheet.',
     severity: 'problem',
@@ -349,6 +364,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // gap, because each one needs a different person to act.
   defineGap({
     key: 'advance-not-paid',
+    group: 'advance',
     label: 'Advance approved, money not transferred',
     hint: 'Pay the advance from a payment sheet or record its bank transfer.',
     severity: 'problem',
@@ -367,6 +383,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'advance-invoice-not-adjusted',
+    group: 'advance',
     label: 'Advance paid, invoice raised but advance not adjusted',
     hint: 'Settle the advance against the vendor invoice on the same PO.',
     severity: 'problem',
@@ -393,6 +410,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // received from the client as a GST bank transfer.
   defineGap({
     key: 'gst-not-verified',
+    group: 'gst',
     label: 'GST not verified on the portal',
     hint: 'Check GSTR-2B (vendor) / GSTR-1 (contractor) and verify the entry in the GST summary.',
     sideText: {
@@ -415,6 +433,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'gst-release-pending',
+    group: 'gst',
     label: 'Held GST verified, release not booked',
     hint: 'Book the GST release from the GST summary.',
     severity: 'problem',
@@ -431,6 +450,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'gst-release-not-transferred',
+    group: 'gst',
     label: 'GST release booked, money not transferred',
     hint: 'Pay the GST release from a payment sheet or record its bank transfer.',
     severity: 'problem',
@@ -450,6 +470,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'gst-receipt-pending',
+    group: 'gst',
     label: 'Held GST not yet received from the client',
     hint: 'Once the client pays the withheld GST, mark it received in the GST summary.',
     severity: 'problem',
@@ -471,6 +492,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // client deducts and deposits, and we check the credit in Form 26AS.
   defineGap({
     key: 'tds-challan-pending',
+    group: 'tds',
     label: 'TDS deducted, challan not recorded',
     hint: 'Deposit the TDS and record the challan in the TDS summary.',
     severity: 'problem',
@@ -486,6 +508,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   }),
   defineGap({
     key: 'tds-not-verified',
+    group: 'tds',
     label: 'TDS not verified in 26Q / Form 26AS',
     hint: 'Vendor: verify once filed in 26Q. Contractor: verify the credit in Form 26AS.',
     sideText: {
@@ -518,6 +541,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // so there is no certificate behind it.
   {
     key: 'jmc-file-missing',
+    group: 'jmc',
     label: 'JMC with no document uploaded',
     hint: 'Upload the signed JMC.',
     severity: 'problem',
@@ -538,6 +562,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   },
   {
     key: 'invoice-file-missing',
+    group: 'invoice',
     label: 'Invoice with no document uploaded',
     hint: 'Upload the invoice document.',
     sideText: {
@@ -567,6 +592,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   },
   defineGap({
     key: 'advance-file-missing',
+    group: 'advance',
     label: 'Advance with no document uploaded',
     hint: 'Upload the vendor’s advance request / proforma.',
     severity: 'problem',
@@ -591,6 +617,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // "invoice raised but advance not adjusted" problem above.
   defineGap({
     key: 'advance-not-settled',
+    group: 'advance',
     label: 'Advance paid, invoice awaited',
     hint: 'Settle the advance once the vendor raises the invoice.',
     severity: 'info',
@@ -615,6 +642,7 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
   // would train people to ignore the list.
   {
     key: 'po-under-invoiced',
+    group: 'po',
     label: 'PO not fully invoiced',
     hint: 'Normal while work is in progress — shown so nothing is forgotten.',
     severity: 'info',
