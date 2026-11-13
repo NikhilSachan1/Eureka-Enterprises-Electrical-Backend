@@ -562,24 +562,6 @@ export const DOCUMENT_GAPS: DocumentGapDef[] = [
        ORDER BY j."createdAt" ASC
        LIMIT $2`,
   },
-  defineGap({
-    key: 'advance-file-missing',
-    group: 'advance',
-    label: 'Advance with no document uploaded',
-    hint: 'Upload the vendor’s advance request / proforma.',
-    severity: 'problem',
-    from: `
-      FROM advance_payments a
-      LEFT JOIN sites s ON s."id" = a."siteId"
-     WHERE a."deletedAt" IS NULL AND a."approvalStatus" <> 'REJECTED'
-       AND (a."fileKey" IS NULL OR a."fileKey" = '')
-       AND ${scopeOn('a')}`,
-    id: 'a."id"',
-    documentNumber: 'a."advanceNumber"',
-    amount: 'a."amount"',
-    since: 'a."createdAt"',
-    partyType: `'VENDOR'`,
-  }),
 
   // ── reported, not flagged ──
   //
