@@ -801,38 +801,27 @@ export class DashboardService {
     const infoDate = new Date(today);
     infoDate.setDate(today.getDate() + DASHBOARD_CONSTANTS.ALERT_INFO_DAYS);
 
-    const [cards, vehicleDocs, vehicleService, assetCalibration, assetWarranty] = await Promise.all(
-      [
-        userId
-          ? Promise.resolve([])
-          : this.executeQuery(
-              queries.getExpiringCardsQuery(
-                this.formatDate(warningDate),
-                this.formatDate(infoDate),
-              ),
-            ),
-        this.executeQuery(
-          queries.getExpiringVehicleDocsQuery(
-            this.formatDate(warningDate),
-            this.formatDate(infoDate),
-            userId,
+    const [cards, vehicleDocs, vehicleService, assetCalibration] = await Promise.all([
+      userId
+        ? Promise.resolve([])
+        : this.executeQuery(
+            queries.getExpiringCardsQuery(this.formatDate(warningDate), this.formatDate(infoDate)),
           ),
+      this.executeQuery(
+        queries.getExpiringVehicleDocsQuery(
+          this.formatDate(warningDate),
+          this.formatDate(infoDate),
+          userId,
         ),
-        this.executeQuery(queries.getVehicleServiceDueQuery(1000, userId)),
-        this.executeQuery(
-          queries.getAssetCalibrationDueQuery(
-            this.formatDate(warningDate),
-            this.formatDate(infoDate),
-          ),
+      ),
+      this.executeQuery(queries.getVehicleServiceDueQuery(1000, userId)),
+      this.executeQuery(
+        queries.getAssetCalibrationDueQuery(
+          this.formatDate(warningDate),
+          this.formatDate(infoDate),
         ),
-        this.executeQuery(
-          queries.getAssetWarrantyExpiryQuery(
-            this.formatDate(warningDate),
-            this.formatDate(infoDate),
-          ),
-        ),
-      ],
-    );
+      ),
+    ]);
 
     const critical: AlertItem[] = [];
     const warning: AlertItem[] = [];
@@ -958,36 +947,6 @@ export class DashboardService {
       }
     }
 
-    // Process asset warranty
-    let warrantyExpired = 0,
-      warrantyExpiringSoon = 0;
-    for (const asset of assetWarranty) {
-      const alert: AlertItem = {
-        type: AlertType.ASSET_WARRANTY,
-        id: asset.id,
-        message: `Asset ${asset.assetName} (${asset.assetCode}) warranty ${
-          asset.severity === 'expired' ? 'has expired' : 'expiring soon'
-        }`,
-        severity:
-          asset.severity === 'expired'
-            ? AlertSeverity.CRITICAL
-            : asset.severity === 'warning'
-            ? AlertSeverity.WARNING
-            : AlertSeverity.INFO,
-        data: asset,
-      };
-      if (asset.severity === 'expired') {
-        critical.push(alert);
-        warrantyExpired++;
-      } else if (asset.severity === 'warning') {
-        warning.push(alert);
-        warrantyExpiringSoon++;
-      } else {
-        info.push(alert);
-        warrantyExpiringSoon++;
-      }
-    }
-
     // Lost assets count (status = LOST on active version)
     const lostCountRow = await this.dataSource.query(
       `SELECT COUNT(*)::int as count
@@ -1009,7 +968,6 @@ export class DashboardService {
         vehicleDocExpiry: { expired: vehicleDocExpired, expiringSoon: vehicleDocExpiringSoon },
         vehicleServiceDue: { overdue: serviceOverdue, dueSoon: serviceDueSoon },
         assetCalibration: { overdue: calibrationOverdue, dueSoon: calibrationDueSoon },
-        assetWarranty: { expired: warrantyExpired, expiringSoon: warrantyExpiringSoon },
         lostAssets: { total: lostAssetsTotal },
         total: { critical: critical.length, warning: warning.length, info: info.length },
       },
