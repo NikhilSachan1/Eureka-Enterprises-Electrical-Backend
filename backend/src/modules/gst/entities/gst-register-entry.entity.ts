@@ -6,12 +6,19 @@ import { ContractorEntity } from 'src/modules/contractors/entities/contractor.en
 import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { UserEntity } from 'src/modules/users/entities/user.entity';
 import { GstPaymentEntity } from './gst-payment.entity';
+import type { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
+import type { BankTransferEntity } from 'src/modules/bank-transfers/entities/bank-transfer.entity';
 
 /**
  * GST Register Entry — projected from invoices at approval time (§5.1.13)
  *
- * Sale side: gstType = GST-1 (output tax), no verify flow
- * Purchase side: gstType = GST-3B (input tax), with verify/revert/release flow
+ * Sale side: gstType = GST-1 (output tax). Verify = our GSTR-1 reflects the invoice.
+ *   Held GST is withheld by the client and later RECEIVED from them.
+ * Purchase side: gstType = GST-3B (input tax). Verify = invoice appears in our GSTR-2B.
+ *   Held GST is withheld by us and RELEASED to the vendor once verified.
+ *
+ * Every entry is created pending — portal verification applies whether or not GST was held.
+ * Only held entries are settled (gstPaymentId); un-held GST moved with the invoice payment.
  */
 @Entity('gst_register_entries')
 @Index('IDX_GST_REG_INVOICE', ['invoiceId'], { unique: true })
@@ -69,7 +76,11 @@ export class GstRegisterEntryEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   gstAmount: number;
 
-  // Verification (Purchase side only; Sale stays false per BRD §5)
+  // Snapshot of invoice.isGstHold at approval. true → amount is settled via the GST register.
+  @Column({ type: 'boolean', default: true })
+  isGstHold: boolean;
+
+  // Portal verification (GSTR-2B for purchase, GSTR-1 for sale)
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
 
@@ -98,11 +109,27 @@ export class GstRegisterEntryEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   verifyRemarks: string | null;
 
-  // Set once entry is included in a released GST payment
+  // Legacy direct settlement (recorded before GST moved through book payment / bank transfer)
   @Column({ type: 'uuid', nullable: true })
   gstPaymentId: string | null;
 
   @ManyToOne(() => GstPaymentEntity, { nullable: true })
   @JoinColumn({ name: 'gstPaymentId' })
   gstPayment: GstPaymentEntity | null;
+
+  // PURCHASE: GST release booked → "release in process" until its bank transfer goes out
+  @Column({ type: 'uuid', nullable: true })
+  gstBookPaymentId: string | null;
+
+  @ManyToOne('BookPaymentEntity', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'gstBookPaymentId' })
+  gstBookPayment: BookPaymentEntity | null;
+
+  // The bank transfer that moved the held GST (release to vendor / receipt from client) → settled
+  @Column({ type: 'uuid', nullable: true })
+  gstBankTransferId: string | null;
+
+  @ManyToOne('BankTransferEntity', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'gstBankTransferId' })
+  gstBankTransfer: BankTransferEntity | null;
 }

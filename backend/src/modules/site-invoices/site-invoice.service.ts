@@ -38,6 +38,8 @@ import {
   deleteTdsRegisterEntryForInvoiceQuery,
 } from './queries/site-invoice.queries';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
+import { loadInvoiceTaxStatus } from 'src/modules/common/financials/tax-register-status.helper';
+import { buildInvoicePaymentSummary } from 'src/modules/common/financials/invoice-payment-summary.helper';
 import {
   checkSiteCreateAccess,
   resolveReadableSiteFilter,
@@ -422,9 +424,13 @@ export class SiteInvoiceService {
 
     // One query for the whole page, grouped by invoice, so the breakdown is available on the list
     // as well as the detail without an N+1.
-    const settlementRows = await this.advanceRepository.findSettlementsByInvoiceIds(
-      records.map((r) => r.id),
-    );
+    const [settlementRows, taxStatusByInvoice] = await Promise.all([
+      this.advanceRepository.findSettlementsByInvoiceIds(records.map((r) => r.id)),
+      loadInvoiceTaxStatus(
+        this.dataSource,
+        records.map((r) => r.id),
+      ),
+    ]);
     const settlementsByInvoice = new Map<string, ReturnType<typeof mapAdvanceSettlement>[]>();
     for (const row of settlementRows) {
       const list = settlementsByInvoice.get(row.invoiceId) ?? [];
@@ -461,9 +467,13 @@ export class SiteInvoiceService {
             : null;
         }
 
+        const taxStatus = taxStatusByInvoice.get(inv.id);
         return {
           ...inv,
           advanceSettlements: settlementsByInvoice.get(inv.id) ?? [],
+          gstStatus: taxStatus?.gstStatus ?? null,
+          tdsStatus: taxStatus?.tdsStatus ?? null,
+          paymentSummary: buildInvoicePaymentSummary(inv, taxStatus),
           createdByUser: formatUser(inv.createdByUser),
           updatedByUser: formatUser(inv.updatedByUser),
           approvalByUser: formatUser(inv.approvalByUser),
@@ -498,11 +508,18 @@ export class SiteInvoiceService {
     // Which advances covered this invoice and how much each contributed. `advanceSettledAmount`
     // on the invoice is their sum; this is the breakdown behind it, in the order settlement
     // consumed them (oldest advance first).
-    const rows = await this.advanceRepository.findSettlementsByInvoiceIds([invoice.id]);
+    const [rows, taxStatusByInvoice] = await Promise.all([
+      this.advanceRepository.findSettlementsByInvoiceIds([invoice.id]),
+      loadInvoiceTaxStatus(this.dataSource, [invoice.id]),
+    ]);
+    const taxStatus = taxStatusByInvoice.get(invoice.id);
 
     return {
       ...invoice,
       advanceSettlements: rows.map(mapAdvanceSettlement),
+      gstStatus: taxStatus?.gstStatus ?? null,
+      tdsStatus: taxStatus?.tdsStatus ?? null,
+      paymentSummary: buildInvoicePaymentSummary(invoice, taxStatus),
       createdByUser: formatUser(invoice.createdByUser),
       updatedByUser: formatUser(invoice.updatedByUser),
       approvalByUser: formatUser(invoice.approvalByUser),
@@ -666,8 +683,8 @@ export class SiteInvoiceService {
     const financialYear = getFinancialYear(invoiceDate);
     const gstType = inv.partyType === PartyType.PURCHASE ? GstType.GST_3B : GstType.GST_1;
 
-    // isGstHold=true → entry stays pending (isVerified=false); false → auto-verified on approval
-    const isVerified = !inv.isGstHold;
+    // Always pending: portal verification is needed whether or not GST was held. The hold flag
+    // only decides whether the amount is later settled through the GST register.
     await em.query(insertGstRegisterEntryQuery, [
       inv.id,
       inv.siteId,
@@ -679,7 +696,7 @@ export class SiteInvoiceService {
       gstType,
       Number(inv.taxableAmount),
       Number(inv.gstAmount),
-      isVerified,
+      Boolean(inv.isGstHold),
     ]);
   }
 
@@ -804,7 +821,8 @@ export class SiteInvoiceService {
         // immutable and cannot be re-projected with edited amounts.
         const gstPaid = await em.query(
           `SELECT 1 FROM gst_register_entries
-           WHERE "invoiceId" = $1 AND "gstPaymentId" IS NOT NULL
+           WHERE "invoiceId" = $1
+             AND ("gstPaymentId" IS NOT NULL OR "gstBookPaymentId" IS NOT NULL OR "gstBankTransferId" IS NOT NULL)
            LIMIT 1`,
           [id],
         );
@@ -937,9 +955,15 @@ export class SiteInvoiceService {
    */
   async getDropdown(
     siteId: string,
-    forDocument: 'book-payment' | 'bank-transfer',
+    requestedFor: 'book-payment' | 'bank-transfer' | undefined,
     partyTypeOverride?: 'PURCHASE' | 'SALE',
   ) {
+    // A vendor invoice asked for with no `forDocument` (the payment request form) ends up as a
+    // book payment once the request is approved, so it is measured like one: net payable less
+    // advances settled and bookings already made. Falling through to the sale arithmetic ignored
+    // the advances and showed a fully-settled invoice as still owing.
+    const forDocument =
+      requestedFor ?? (partyTypeOverride === 'PURCHASE' ? 'book-payment' : 'bank-transfer');
     const partyType = partyTypeOverride ?? (forDocument === 'book-payment' ? 'PURCHASE' : 'SALE');
 
     const isPurchaseBankTransfer = forDocument === 'bank-transfer' && partyType === 'PURCHASE';

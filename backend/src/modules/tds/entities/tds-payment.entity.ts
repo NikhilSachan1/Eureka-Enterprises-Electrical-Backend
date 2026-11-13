@@ -6,7 +6,9 @@ import { VendorEntity } from 'src/modules/vendors/entities/vendor.entity';
 import { FinancialApprovalStatus } from 'src/modules/common/financials/financial.constants';
 
 /**
- * TDS Payment — both SALE and PURCHASE sides, monthly release (§5.1.16)
+ * TDS Challan — PURCHASE side: TDS we deducted from vendors and deposited with the government
+ * (ITNS 281). One challan may cover several vendors, in which case vendorId is null.
+ * SALE-side rows are legacy only: on sales the client deposits the TDS and we verify 26AS.
  * No payment advice reference generated (BRD §11 confirmed-7).
  */
 @Entity('tds_payments')
@@ -49,6 +51,7 @@ export class TdsPaymentEntity extends BaseEntity {
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   netAmount: number;
 
+  // UTR / reference number of the challan payment — identifies the challan
   @Column({ type: 'varchar', length: 100 })
   utrNumber: string;
 

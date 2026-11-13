@@ -3,20 +3,21 @@
  */
 
 /**
- * Upsert a GST register entry for an approved invoice.
+ * Insert a GST register entry for an approved invoice.
  *
- * ON CONFLICT ("invoiceId", "financialYear"):
- *   - If the entry is NOT yet verified and NOT yet linked to a GST payment:
- *     update the amounts and month/year (invoice may have been edited after
- *     the first approval).
- *   - If already verified or paid: do nothing (amounts are locked in).
+ * Always created pending (isVerified=false): the GST portal has to be checked whether or not the
+ * GST was held. `isGstHold` ($11) is snapshotted so the register knows whether the amount is to be
+ * settled through it (held) or already moved with the invoice payment (not held).
+ *
+ * ON CONFLICT DO NOTHING — a verified or settled entry survives the pre-insert delete and keeps
+ * its locked-in amounts.
  */
 export const insertGstRegisterEntryQuery = `
   INSERT INTO gst_register_entries
     (id, "invoiceId", "siteId", "partyType", "contractorId", "vendorId",
      "invoiceMonth", "financialYear", "gstType", "taxableAmount", "gstAmount",
-     "isVerified", "createdAt", "updatedAt")
-  VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+     "isGstHold", "isVerified", "createdAt", "updatedAt")
+  VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, NOW(), NOW())
   ON CONFLICT DO NOTHING
 `;
 
@@ -31,6 +32,8 @@ export const deleteGstRegisterEntryForInvoiceQuery = `
   WHERE "invoiceId" = $1
     AND "isVerified" = false
     AND "gstPaymentId" IS NULL
+    AND "gstBookPaymentId" IS NULL
+    AND "gstBankTransferId" IS NULL
 `;
 
 /**

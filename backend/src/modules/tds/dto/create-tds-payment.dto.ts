@@ -1,9 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsDateString, IsString, IsOptional, IsArray, ArrayMinSize } from 'class-validator';
+import {
+  IsUUID,
+  IsDateString,
+  IsString,
+  IsOptional,
+  IsArray,
+  ArrayMinSize,
+  IsNotEmpty,
+  MaxLength,
+} from 'class-validator';
 
+/**
+ * Record a TDS challan deposited with the government — PURCHASE side only.
+ * The challan is identified by the UTR / reference number of its payment.
+ */
 export class CreateTdsPaymentDto {
   @ApiProperty({
-    description: 'TDS register entry IDs to release (bulk selection)',
+    description: 'PURCHASE-side TDS register entry IDs covered by this challan',
     type: [String],
     example: ['uuid1', 'uuid2'],
   })
@@ -12,20 +25,22 @@ export class CreateTdsPaymentDto {
   @IsUUID('4', { each: true })
   entryIds: string[];
 
-  @ApiProperty({ description: 'UTR number' })
+  @ApiProperty({ description: 'UTR / reference number of the challan payment' })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   utrNumber: string;
 
-  @ApiProperty({ description: 'Payment date' })
+  @ApiProperty({ description: 'Date of deposit' })
   @IsDateString()
   paymentDate: string;
 
-  @ApiPropertyOptional({ description: 'Proof file S3 key' })
+  @ApiPropertyOptional({ description: 'Challan proof file S3 key' })
   @IsString()
   @IsOptional()
   fileKey?: string;
 
-  @ApiPropertyOptional({ description: 'Proof file name' })
+  @ApiPropertyOptional({ description: 'Challan proof file name' })
   @IsString()
   @IsOptional()
   fileName?: string;

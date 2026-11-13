@@ -113,12 +113,14 @@ export class BookPaymentRepository {
    * Sum of paymentTotalAmount for a given invoice (PURCHASE side).
    * TDS is now at invoice level — paymentTotalAmount = taxableAmount - pro-rata TDS.
    * Ceiling check: Σ(paymentTotalAmount) ≤ invoice.taxableAmount − invoice.tdsAmount.
+   * GST releases are outside that ceiling (the held GST is settled through the GST register).
    */
   async sumByInvoice(invoiceId: string, em?: EntityManager): Promise<number> {
     const result = await this.repo(em)
       .createQueryBuilder('bp')
       .select('COALESCE(SUM(bp."paymentTotalAmount"), 0)', 'total')
       .where('bp."invoiceId" = :invoiceId', { invoiceId })
+      .andWhere(`bp."sourceType" <> 'GST_RELEASE'`)
       .andWhere('bp."deletedAt" IS NULL')
       .getRawOne();
     return Number(result?.total ?? 0);

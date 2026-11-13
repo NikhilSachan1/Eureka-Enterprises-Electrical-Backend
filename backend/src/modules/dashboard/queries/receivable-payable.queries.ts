@@ -7,7 +7,7 @@
  *
  * ## What "still outstanding" means
  *
- *     totalAmount − tdsAmount − advanceSettledAmount − paidTotal
+ *     totalAmount − tdsAmount − advanceSettledAmount − paidTotal − heldGstSettled
  *
  * Each term earns its place:
  *
@@ -22,6 +22,10 @@
  *   link to a *book payment* for purchases, not to the invoice, so joining transfers to invoices
  *   reads zero for every vendor bill. The rollup is right in both directions, and matches the
  *   transfers exactly wherever the two can be compared.
+ * - **`heldGstSettled`** is held GST settled through the GST register — released to the vendor
+ *   or received from the client. It never passes through `paidTotal` (the payment ceiling on a
+ *   held invoice is taxable − TDS), so without it a held invoice would show its GST as owed
+ *   forever. Until it is settled the held GST rightly stays in the balance.
  *
  * Clamped at zero **per invoice**, not on the total: one over-paid row would otherwise quietly
  * cancel out real debt somewhere else. Dev has exactly such a row — ₹2,00,000 recorded against an
@@ -31,12 +35,25 @@
  * obligation either way; it is reported separately rather than dropped, so nothing is invisible.
  */
 
+/** Held GST on one invoice already settled via the GST register. Expects the invoice as `i`. */
+const HELD_GST_SETTLED = `COALESCE((
+  SELECT SUM(g."gstAmount")
+  FROM gst_register_entries g
+  WHERE g."invoiceId" = i."id"
+    AND g."isGstHold" = true
+    AND (g."gstPaymentId" IS NOT NULL OR g."gstBankTransferId" IS NOT NULL)
+    AND g."deletedAt" IS NULL
+), 0)`;
+
+/** Money settled on one invoice: payments plus held GST settled separately. */
+const SETTLED = `(COALESCE(i."paidTotal", 0) + ${HELD_GST_SETTLED})`;
+
 /** Cash still to move on one invoice. Expects the invoice aliased as `i`. */
 const OUTSTANDING = `GREATEST(
   i."totalAmount"
     - COALESCE(i."tdsAmount", 0)
     - COALESCE(i."advanceSettledAmount", 0)
-    - COALESCE(i."paidTotal", 0),
+    - ${SETTLED},
   0
 )`;
 
@@ -53,7 +70,7 @@ export const receivablePayableTotalsQuery = `
     COALESCE(SUM(i."totalAmount"), 0)::float AS invoiced,
     COALESCE(SUM(COALESCE(i."tdsAmount", 0)), 0)::float AS tds,
     COALESCE(SUM(COALESCE(i."advanceSettledAmount", 0)), 0)::float AS "advanceSettled",
-    COALESCE(SUM(COALESCE(i."paidTotal", 0)), 0)::float AS settled,
+    COALESCE(SUM(${SETTLED}), 0)::float AS settled,
     COALESCE(SUM(${OUTSTANDING}), 0)::float AS outstanding,
     COALESCE(MAX(EXTRACT(DAY FROM NOW() - i."invoiceDate")) FILTER (WHERE ${OUTSTANDING} > 0), 0)::int
       AS "oldestDays"
@@ -80,7 +97,7 @@ export const outstandingByPartyQuery = `
     COALESCE(c."name", v."name", 'Unnamed') AS "partyName",
     COUNT(*)::int AS "invoiceCount",
     COALESCE(SUM(i."totalAmount"), 0)::float AS invoiced,
-    COALESCE(SUM(COALESCE(i."paidTotal", 0)), 0)::float AS settled,
+    COALESCE(SUM(${SETTLED}), 0)::float AS settled,
     COALESCE(SUM(${OUTSTANDING}), 0)::float AS outstanding,
     COALESCE(MAX(EXTRACT(DAY FROM NOW() - i."invoiceDate")), 0)::int AS "oldestDays"
   FROM site_invoices i
@@ -133,7 +150,7 @@ export const partyInvoiceListQuery = `
     i."totalAmount"::float AS "totalAmount",
     COALESCE(i."tdsAmount", 0)::float AS tds,
     COALESCE(i."advanceSettledAmount", 0)::float AS "advanceSettled",
-    COALESCE(i."paidTotal", 0)::float AS settled,
+    ${SETTLED}::float AS settled,
     ${OUTSTANDING}::float AS outstanding,
     EXTRACT(DAY FROM NOW() - i."invoiceDate")::int AS "ageDays"
   FROM site_invoices i

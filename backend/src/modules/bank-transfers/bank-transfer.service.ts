@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   DataSource,
+  EntityManager,
   IsNull,
   ILike,
   In,
@@ -19,7 +20,13 @@ import {
 import { BankTransferRepository } from './bank-transfer.repository';
 import { BankTransferEntity } from './entities/bank-transfer.entity';
 import { CreateBankTransferDto, UpdateBankTransferDto, GetBankTransferDto } from './dto';
-import { BANK_TRANSFER_ERRORS, BANK_TRANSFER_RESPONSES } from './constants/bank-transfer.constants';
+import {
+  BANK_TRANSFER_ERRORS,
+  BANK_TRANSFER_RESPONSES,
+  BankTransferPaymentType,
+} from './constants/bank-transfer.constants';
+import { BookPaymentSourceType } from 'src/modules/book-payments/constants/book-payment.constants';
+import type { PaymentAdvicePdfData } from 'src/modules/payment-advices/payment-advice-pdf.service';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
@@ -57,6 +64,27 @@ const onInvoice = (condition: WhereObject): WhereObject[] => [
   { invoice: condition },
   { bookPayment: { invoice: condition } },
 ];
+
+/**
+ * Payment-advice fields for a GST release: the advice carries only the held GST of the invoice —
+ * no TDS, no holds — and says so. Spread over the regular advice data.
+ */
+const gstReleaseAdviceOverrides = (
+  invoice: SiteInvoiceEntity | null,
+  gstAmount: number,
+): Partial<PaymentAdvicePdfData> => ({
+  paymentType: 'GST_RELEASE',
+  taxableAmount: Number(invoice?.taxableAmount ?? 0),
+  gstAmount,
+  gstPercentage:
+    invoice?.gstPercentage !== undefined && invoice?.gstPercentage !== null
+      ? Number(invoice.gstPercentage)
+      : null,
+  tdsDeductionAmount: 0,
+  gstHoldAmount: 0,
+  paymentHoldAmount: 0,
+  paymentHoldReason: null,
+});
 
 @Injectable()
 export class BankTransferService {
@@ -176,6 +204,62 @@ export class BankTransferService {
   }
 
   /**
+   * SALE side: the client pays the GST it had withheld on one of our invoices. Runs inside the
+   * GST service's transaction, which has already checked the entry (held, not yet received).
+   * Recorded as a GST bank transfer — outside the invoice's payment ceiling and paidTotal; the
+   * caller links it to the GST register entry, which is what marks the GST received.
+   */
+  async recordGstReceiptWithin(
+    em: EntityManager,
+    params: {
+      invoiceId: string;
+      gstAmount: number;
+      utrNumber: string;
+      transferDate: string;
+      proofFileKey?: string | null;
+      proofFileName?: string | null;
+      remarks?: string | null;
+      createdBy: string;
+    },
+  ): Promise<BankTransferEntity> {
+    const invoice = await em
+      .getRepository(SiteInvoiceEntity)
+      .findOne({ where: { id: params.invoiceId, deletedAt: IsNull() } });
+    if (!invoice) throw new NotFoundException(BANK_TRANSFER_ERRORS.INVOICE_NOT_FOUND);
+    if (invoice.partyType !== PartyType.SALE) {
+      throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_NOT_SALE_SIDE);
+    }
+    if (invoice.approvalStatus !== FinancialApprovalStatus.APPROVED) {
+      throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_NOT_APPROVED);
+    }
+
+    return await this.bankTransferRepository.create(
+      {
+        partyType: PartyType.SALE,
+        paymentType: BankTransferPaymentType.GST,
+        invoiceId: invoice.id,
+        bookPaymentId: null,
+        siteId: invoice.siteId,
+        contractorId: invoice.contractorId,
+        vendorId: null,
+        poId: invoice.poId,
+        utrNumber: params.utrNumber,
+        transferDate: new Date(params.transferDate),
+        transferAmount: Number(Number(params.gstAmount).toFixed(2)),
+        financialYear: getFinancialYear(params.transferDate),
+        proofFileKey: params.proofFileKey ?? null,
+        proofFileName: params.proofFileName ?? null,
+        remarks: params.remarks ?? null,
+        approvalStatus: FinancialApprovalStatus.APPROVED,
+        approvalBy: params.createdBy,
+        approvalAt: new Date(),
+        createdBy: params.createdBy,
+      },
+      em,
+    );
+  }
+
+  /**
    * PURCHASE side: transfer linked to book payment (1:1), exact amount match.
    * Auto-generates a payment advice in the same transaction.
    */
@@ -209,10 +293,13 @@ export class BankTransferService {
 
       const financialYear = getFinancialYear(dto.transferDate);
       const paidFromAccountId = await this.validatePaidFromAccount(dto.paidFromAccountId);
+      // Held GST released to the vendor — outside invoice / PO paidTotal, settled via the register.
+      const isGstRelease = bp.sourceType === BookPaymentSourceType.GST_RELEASE;
 
       const created = await this.bankTransferRepository.create(
         {
           partyType: PartyType.PURCHASE,
+          paymentType: isGstRelease ? BankTransferPaymentType.GST : BankTransferPaymentType.REGULAR,
           invoiceId: null,
           bookPaymentId: dto.bookPaymentId,
           siteId: bp.siteId,
@@ -239,22 +326,39 @@ export class BankTransferService {
       // Mark book payment as having a transfer
       await this.bookPaymentService.markHasTransfer(bp.id, true, em);
 
-      // Get invoice for paidTotal rollup
-      const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
-        where: { id: bp.invoiceId, deletedAt: IsNull() },
-      });
-      if (invoice) {
-        await em
-          .getRepository(SiteInvoiceEntity)
-          .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` });
-      }
+      if (isGstRelease) {
+        // The GST entry booked against this payment is now released.
+        await em.query(
+          `UPDATE gst_register_entries
+              SET "gstBankTransferId" = $1, "updatedAt" = NOW()
+            WHERE "gstBookPaymentId" = $2 AND "deletedAt" IS NULL`,
+          [created.id, bp.id],
+        );
+      } else {
+        // Only an invoice booking rolls up onto an invoice. An advance booking has no invoice
+        // (invoiceId is null), and TypeORM drops a null condition from `where` — so looking it up
+        // returned an arbitrary invoice and this transfer was added to that invoice's paidTotal.
+        if (bp.invoiceId) {
+          const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
+            where: { id: bp.invoiceId, deletedAt: IsNull() },
+          });
+          if (invoice) {
+            await em
+              .getRepository(SiteInvoiceEntity)
+              .update(
+                { id: invoice.id },
+                { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` },
+              );
+          }
+        }
 
-      // Update PO paidTotal
-      await this.purchaseOrderService.adjustRollups(
-        bp.poId,
-        { paidTotal: dto.transferAmount, lastPaymentAt: new Date() },
-        em,
-      );
+        // Update PO paidTotal
+        await this.purchaseOrderService.adjustRollups(
+          bp.poId,
+          { paidTotal: dto.transferAmount, lastPaymentAt: new Date() },
+          em,
+        );
+      }
 
       // Fetch vendor, site, invoice/advance, and PO details for PDF. An advance-backed booking has
       // no invoice — the advance takes its place on the document.
@@ -326,6 +430,7 @@ export class BankTransferService {
             : null,
           poNumber: poForPdf?.poNumber ?? null,
           advanceNumber: advanceForPdf?.advanceNumber ?? null,
+          ...(isGstRelease ? gstReleaseAdviceOverrides(invoiceForPdf, Number(bp.gstAmount)) : {}),
         },
         new Date(dto.transferDate),
       );
@@ -531,8 +636,18 @@ export class BankTransferService {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_PURCHASE);
       }
 
+      const isGstPayment = bt.paymentType === BankTransferPaymentType.GST;
+      // A GST payment always moves the full held GST of its invoice.
+      if (
+        isGstPayment &&
+        dto.transferAmount !== undefined &&
+        Number(dto.transferAmount) !== Number(bt.transferAmount)
+      ) {
+        throw new BadRequestException(BANK_TRANSFER_ERRORS.CANNOT_CHANGE_AMOUNT_GST);
+      }
+
       // SALE side: re-check ceiling if transferAmount changed
-      if (bt.partyType === PartyType.SALE && dto.transferAmount !== undefined) {
+      if (bt.partyType === PartyType.SALE && !isGstPayment && dto.transferAmount !== undefined) {
         const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
           where: { id: bt.invoiceId, deletedAt: IsNull() },
         });
@@ -646,6 +761,9 @@ export class BankTransferService {
             ? String(invoiceForPdf.invoiceDate).split('T')[0]
             : null,
           poNumber: poForPdf?.poNumber ?? null,
+          ...(bp?.sourceType === BookPaymentSourceType.GST_RELEASE
+            ? gstReleaseAdviceOverrides(invoiceForPdf, Number(bp.gstAmount))
+            : {}),
         });
       }
 
@@ -675,6 +793,23 @@ export class BankTransferService {
       // Reverse rollups
       const poRollbackAmount = Number(bt.transferAmount);
 
+      if (bt.paymentType === BankTransferPaymentType.GST) {
+        // A GST payment never touched paidTotal. Its GST entry goes back a step: "release in
+        // process" while the GST book payment still exists (purchase), "receipt pending" (sale).
+        if (bt.bookPaymentId) {
+          await this.bookPaymentService.markHasTransfer(bt.bookPaymentId, false, em);
+        }
+        await em.query(
+          `UPDATE gst_register_entries
+              SET "gstBankTransferId" = NULL, "updatedAt" = NOW()
+            WHERE "gstBankTransferId" = $1`,
+          [id],
+        );
+        await this.bankTransferRepository.update({ id }, { deletedBy }, em);
+        await this.bankTransferRepository.softDelete({ id }, em);
+        return { message: BANK_TRANSFER_RESPONSES.DELETED };
+      }
+
       if (bt.partyType === PartyType.SALE && bt.invoiceId) {
         await em
           .getRepository(SiteInvoiceEntity)
@@ -685,7 +820,9 @@ export class BankTransferService {
         const bp = await em.getRepository(BookPaymentEntity).findOne({
           where: { id: bt.bookPaymentId },
         });
-        if (bp) {
+        // Same as on create: an advance booking has no invoice to take the amount back from, and
+        // updating by a null id would not be limited to one invoice.
+        if (bp?.invoiceId) {
           await em
             .getRepository(SiteInvoiceEntity)
             .update({ id: bp.invoiceId }, { paidTotal: () => `"paidTotal" - ${poRollbackAmount}` });

@@ -8,7 +8,15 @@ import {
   paymentSheetFlowQuery,
   paymentSheetStageCountsQuery,
 } from './queries/approval-queue.queries';
-import { DOCUMENT_GAPS, findGap } from './queries/document-gap.queries';
+import {
+  DOCUMENT_GAPS,
+  findGap,
+  gapCountsSql,
+  gapListSql,
+  GapParty,
+  gapParties,
+  gapTextFor,
+} from './queries/document-gap.queries';
 import {
   outstandingByPartyQuery,
   partyInvoiceListQuery,
@@ -42,6 +50,14 @@ export interface ApprovalQueue {
   oldestDays: number;
   /** Whether this reader can clear this queue at all. */
   iApprove: boolean;
+  /**
+   * Project documents only: `pending` and `raisedByMe` split by side. Null for queues that have no
+   * contractor / vendor side (leave, attendance, …).
+   */
+  byParty: {
+    contractor: { pending: number; raisedByMe: number };
+    vendor: { pending: number; raisedByMe: number };
+  } | null;
 }
 
 export interface PaymentSheetStage {
@@ -127,6 +143,18 @@ export class WorkBoardService {
         raisedByMe: Number(row.raisedByMe ?? 0),
         oldestDays: Number(row.oldestDays ?? 0),
         iApprove,
+        byParty: def.party
+          ? {
+              contractor: {
+                pending: Number(row.contractorPending ?? 0),
+                raisedByMe: Number(row.contractorRaisedByMe ?? 0),
+              },
+              vendor: {
+                pending: Number(row.vendorPending ?? 0),
+                raisedByMe: Number(row.vendorRaisedByMe ?? 0),
+              },
+            }
+          : null,
       };
     });
 
@@ -200,27 +228,47 @@ export class WorkBoardService {
   async getDocumentGaps(scopeUserId: string | null) {
     const results = await Promise.all(
       DOCUMENT_GAPS.map(async (gap) => {
-        const [row] = await this.rows<any>(gap.countSql, [scopeUserId]);
+        const rows = await this.rows<any>(gapCountsSql(gap), [scopeUserId, null]);
+        const side = (party: GapParty) => {
+          const row = rows.find((r) => r.partyType === party);
+          return {
+            ...gapTextFor(gap, party),
+            count: Number(row?.count ?? 0),
+            oldestDays: Number(row?.oldestDays ?? 0),
+          };
+        };
+        const byParty = { contractor: side('CONTRACTOR'), vendor: side('VENDOR') };
         return {
           key: gap.key,
+          /** The missing document it belongs to (po, jmc, report, invoice, book-payment, bank-transfer, advance, gst, tds). */
+          group: gap.group,
           label: gap.label,
           hint: gap.hint,
           severity: gap.severity,
-          count: Number(row?.count ?? 0),
-          oldestDays: Number(row?.oldestDays ?? 0),
+          /** The sides this gap can occur on; the dashboard shows it only under those. */
+          parties: gapParties(gap),
+          count: byParty.contractor.count + byParty.vendor.count,
+          oldestDays: Math.max(byParty.contractor.oldestDays, byParty.vendor.oldestDays),
+          byParty,
         };
       }),
     );
 
     const problems = results.filter((r) => r.severity === 'problem');
+    const sideTotals = (side: 'contractor' | 'vendor') => ({
+      problems: problems.reduce((sum, r) => sum + r.byParty[side].count, 0),
+      oldestDays: problems.reduce((max, r) => Math.max(max, r.byParty[side].oldestDays), 0),
+    });
     return {
       scope: scopeUserId === null ? 'all' : 'mine',
       totals: {
         problems: problems.reduce((sum, r) => sum + r.count, 0),
         /** The longest anything has been stuck, which is what makes a count worth acting on. */
         oldestDays: problems.reduce((max, r) => Math.max(max, r.oldestDays), 0),
+        contractor: sideTotals('contractor'),
+        vendor: sideTotals('vendor'),
       },
-      gaps: results.filter((r) => r.severity === 'problem'),
+      gaps: problems,
       info: results.filter((r) => r.severity === 'info'),
     };
   }
@@ -307,19 +355,21 @@ export class WorkBoardService {
   }
 
   /** The rows behind one gap, so a count can be acted on rather than just read. */
-  async getDocumentGapList(key: string, scopeUserId: string | null) {
+  async getDocumentGapList(key: string, scopeUserId: string | null, party: GapParty | null = null) {
     const gap = findGap(key);
     if (!gap) {
       throw new NotFoundException(
         `Unknown document gap "${key}". Known: ${DOCUMENT_GAPS.map((g) => g.key).join(', ')}`,
       );
     }
-    const items = await this.rows<any>(gap.listSql, [scopeUserId, GAP_LIST_LIMIT]);
+    const items = await this.rows<any>(gapListSql(gap), [scopeUserId, null, party, GAP_LIST_LIMIT]);
+    const text = party ? gapTextFor(gap, party) : { label: gap.label, hint: gap.hint };
     return {
       key: gap.key,
-      label: gap.label,
-      hint: gap.hint,
+      label: text.label,
+      hint: text.hint,
       severity: gap.severity,
+      party,
       items,
       /** True when there are more than this page shows — go to the real screen for the rest. */
       truncated: items.length === GAP_LIST_LIMIT,

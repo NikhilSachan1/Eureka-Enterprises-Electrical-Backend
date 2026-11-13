@@ -494,6 +494,8 @@ export const NotificationEvents = {
       route: k.route,
       data: { expired: p.expired, expiringSoon: p.expiringSoon, scope: p.scope },
       dedupeKey: `${k.category}:${p.scope}:${istDateKey()}`,
+      // Daily expiry digests stay in the bell (and email) — no phone push.
+      push: false,
     };
   },
 

@@ -1,9 +1,18 @@
-import { Controller, Get, Param, Query, Request, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Query,
+  Request,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { DashboardService } from './dashboard.service';
 import { WorkBoardService } from './work-board.service';
 import { GetDashboardDto } from './dto/dashboard.dto';
+import { GapParty } from './queries/document-gap.queries';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('JWT-auth')
@@ -262,11 +271,23 @@ export class DashboardController {
     summary: 'The documents behind one gap',
     description:
       'Document number, site, amount, how many days it has been stuck, and `partyType` ' +
-      '(`CONTRACTOR` or `VENDOR`). Capped; `truncated` says when there are more and the real ' +
-      'screen should be used.',
+      '(`CONTRACTOR` or `VENDOR`). `?party=CONTRACTOR|VENDOR` lists one side only. Capped; ' +
+      '`truncated` says when there are more and the real screen should be used.',
   })
-  async getDocumentGapList(@Param() params: { key: string }, @Request() req: any) {
-    return await this.workBoardService.getDocumentGapList(params.key, this.scopeOf(req));
+  async getDocumentGapList(
+    @Param() params: { key: string },
+    @Query('party') party: string | undefined,
+    @Request() req: any,
+  ) {
+    const side = party?.trim().toUpperCase();
+    if (side && side !== 'CONTRACTOR' && side !== 'VENDOR') {
+      throw new BadRequestException('party must be CONTRACTOR or VENDOR');
+    }
+    return await this.workBoardService.getDocumentGapList(
+      params.key,
+      this.scopeOf(req),
+      (side as GapParty | undefined) ?? null,
+    );
   }
 
   @Get('receivables-payables')

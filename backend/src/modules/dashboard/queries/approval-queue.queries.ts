@@ -36,11 +36,18 @@ export interface ApprovalQueueDef {
   permission: string | null;
   /** Extra conditions this table needs for a row to count as live. */
   liveCondition?: string;
+  /**
+   * Project documents only: `split` reads the side off the row's `partyType` (SALE = contractor,
+   * PURCHASE = vendor); `VENDOR` is for tables that exist only on the purchase side. Omitted for
+   * queues that have no contractor / vendor side at all (leave, attendance, …).
+   */
+  party?: 'split' | 'VENDOR';
 }
 
 export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   {
     key: 'purchase-orders',
+    party: 'split',
     label: 'Purchase Orders',
     table: 'purchase_orders',
     pendingValue: 'PENDING',
@@ -49,6 +56,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'jmcs',
+    party: 'split',
     label: 'JMCs',
     table: 'jmcs',
     pendingValue: 'PENDING',
@@ -57,6 +65,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'invoices',
+    party: 'split',
     label: 'Invoices',
     table: 'site_invoices',
     pendingValue: 'PENDING',
@@ -65,6 +74,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'book-payments',
+    party: 'VENDOR',
     label: 'Book Payments',
     table: 'book_payments',
     pendingValue: 'PENDING',
@@ -73,6 +83,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'advance-payments',
+    party: 'VENDOR',
     label: 'Advance Payments',
     table: 'advance_payments',
     pendingValue: 'PENDING',
@@ -81,6 +92,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'site-reports',
+    party: 'split',
     label: 'Site Reports',
     table: 'site_reports',
     pendingValue: 'PENDING',
@@ -126,6 +138,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'payment-requests',
+    party: 'VENDOR',
     label: 'Payment Requests',
     table: 'payment_requests',
     statusColumn: 'status',
@@ -135,6 +148,7 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
   },
   {
     key: 'bank-transfers',
+    party: 'split',
     label: 'Bank Transfers',
     table: 'bank_transfers',
     pendingValue: 'PENDING',
@@ -159,17 +173,32 @@ export const APPROVAL_QUEUES: ApprovalQueueDef[] = [
  * `oldestDays` is the age of the longest-waiting row in the queue, which is what turns a count
  * into something worth acting on: eight pending POs matter differently when the oldest is two
  * weeks old.
+ *
+ * Project-document queues are also counted per side (`contractorPending`, `vendorPending` and the
+ * matching `…RaisedByMe`), so the dashboard can show contractor and vendor approvals apart.
  */
 export const approvalQueueCountsQuery = APPROVAL_QUEUES.map((q) => {
   const live = ['"deletedAt" IS NULL', q.liveCondition].filter(Boolean).join(' AND ');
   const pending = `"${q.statusColumn ?? 'approvalStatus'}" = '${q.pendingValue}'`;
   const inScope = `($1::uuid IS NULL OR "${q.raisedByColumn}" = $1::uuid)`;
+  const raisedByMe = `"${q.raisedByColumn}" = $2::uuid`;
+  const isSide = (side: 'SALE' | 'PURCHASE') => {
+    if (q.party === 'split') return `"partyType" = '${side}'`;
+    if (q.party === 'VENDOR') return side === 'PURCHASE' ? 'true' : 'false';
+    return 'false';
+  };
+  const sideCount = (side: 'SALE' | 'PURCHASE', who: string) =>
+    `COUNT(*) FILTER (WHERE ${pending} AND ${who} AND ${isSide(side)})::int`;
   return `
   SELECT
     '${q.key}'::text AS key,
     COUNT(*) FILTER (WHERE ${inScope})::int AS total,
     COUNT(*) FILTER (WHERE ${pending} AND ${inScope})::int AS pending,
-    COUNT(*) FILTER (WHERE ${pending} AND "${q.raisedByColumn}" = $2::uuid)::int AS "raisedByMe",
+    COUNT(*) FILTER (WHERE ${pending} AND ${raisedByMe})::int AS "raisedByMe",
+    ${sideCount('SALE', inScope)} AS "contractorPending",
+    ${sideCount('PURCHASE', inScope)} AS "vendorPending",
+    ${sideCount('SALE', raisedByMe)} AS "contractorRaisedByMe",
+    ${sideCount('PURCHASE', raisedByMe)} AS "vendorRaisedByMe",
     COALESCE(
       MAX(EXTRACT(DAY FROM NOW() - "createdAt")) FILTER (WHERE ${pending} AND ${inScope}), 0
     )::int AS "oldestDays"

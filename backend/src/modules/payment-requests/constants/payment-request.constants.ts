@@ -14,6 +14,9 @@ export const PAYMENT_REQUEST_ERRORS = {
   NOT_PENDING_DELETE:
     'Only a PENDING payment request can be deleted — this one is already {status}.',
   NOTHING_TO_UPDATE: 'Provide at least one field to update.',
+  INVOICE_FULLY_COVERED:
+    'This invoice is already fully covered by advances and bookings — nothing is left to request.',
+  EXCEEDS_UNBOOKED: 'Requested amount is more than the invoice still has to book (₹{amount}).',
 };
 
 export const PAYMENT_REQUEST_RESPONSES = {

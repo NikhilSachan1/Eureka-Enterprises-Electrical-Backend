@@ -103,9 +103,11 @@ export class NotificationService {
       );
       if (!rows.length) return;
 
-      void this.pushRows(rows, { ...input, title, message, referenceId }).catch((error) =>
-        this.logger.warn(`Push fan-out failed: ${error?.message ?? error}`),
-      );
+      if (input.push !== false) {
+        void this.pushRows(rows, { ...input, title, message, referenceId }).catch((error) =>
+          this.logger.warn(`Push fan-out failed: ${error?.message ?? error}`),
+        );
+      }
       if (input.email) {
         void this.emailRows(rows, { ...input, title, message, referenceId }).catch((error) =>
           this.logger.warn(`Notification email failed: ${error?.message ?? error}`),
