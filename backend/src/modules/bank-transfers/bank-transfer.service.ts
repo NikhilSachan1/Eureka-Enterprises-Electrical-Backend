@@ -335,14 +335,21 @@ export class BankTransferService {
           [created.id, bp.id],
         );
       } else {
-        // Get invoice for paidTotal rollup
-        const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
-          where: { id: bp.invoiceId, deletedAt: IsNull() },
-        });
-        if (invoice) {
-          await em
-            .getRepository(SiteInvoiceEntity)
-            .update({ id: invoice.id }, { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` });
+        // Only an invoice booking rolls up onto an invoice. An advance booking has no invoice
+        // (invoiceId is null), and TypeORM drops a null condition from `where` — so looking it up
+        // returned an arbitrary invoice and this transfer was added to that invoice's paidTotal.
+        if (bp.invoiceId) {
+          const invoice = await em.getRepository(SiteInvoiceEntity).findOne({
+            where: { id: bp.invoiceId, deletedAt: IsNull() },
+          });
+          if (invoice) {
+            await em
+              .getRepository(SiteInvoiceEntity)
+              .update(
+                { id: invoice.id },
+                { paidTotal: () => `"paidTotal" + ${dto.transferAmount}` },
+              );
+          }
         }
 
         // Update PO paidTotal
@@ -813,7 +820,9 @@ export class BankTransferService {
         const bp = await em.getRepository(BookPaymentEntity).findOne({
           where: { id: bt.bookPaymentId },
         });
-        if (bp) {
+        // Same as on create: an advance booking has no invoice to take the amount back from, and
+        // updating by a null id would not be limited to one invoice.
+        if (bp?.invoiceId) {
           await em
             .getRepository(SiteInvoiceEntity)
             .update({ id: bp.invoiceId }, { paidTotal: () => `"paidTotal" - ${poRollbackAmount}` });
