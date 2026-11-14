@@ -27,3 +27,6 @@ export * from './employee-analytics.dto';
 
 // Vehicle/Fleet Analytics
 export * from './vehicle-analytics.dto';
+
+// Project list P&L summary
+export * from './sites-profitability-summary.dto';

@@ -2252,6 +2252,123 @@ export const getFuelExpenseByEmployeeQuery = (
   };
 };
 
+// ── Project list P&L summary (many sites, set-based) ─────────────────────────
+//
+// Same figures as getSiteFinancialDetail with no date filter, for many sites in four queries:
+// revenue / vendor cost on taxable value (+ freelancer GST), payroll at company cost pro-rated to
+// the site's dates, site expenses and fuel. Keep these in step with the single-site queries.
+
+/** Approved invoices per site: revenue, vendor cost and GST that gives no credit. */
+export const getSitesInvoiceSummaryQuery = (siteIds: string[]) => ({
+  query: `
+    SELECT
+      i."siteId",
+      COALESCE(SUM(i."taxableAmount") FILTER (WHERE i."partyType" = 'SALE'), 0)::numeric      as revenue,
+      COALESCE(SUM(i."taxableAmount") FILTER (WHERE i."partyType" = 'PURCHASE'), 0)::numeric  as "vendorTaxable",
+      COALESCE(SUM(COALESCE(i."gstAmount", 0)) FILTER (
+        WHERE i."partyType" = 'PURCHASE' AND v."vendorType" = 'FREELANCER'
+      ), 0)::numeric                                                                          as "nonCreditableGst",
+      COUNT(*) FILTER (WHERE i."partyType" = 'SALE')::int                                     as "salesInvoiceCount"
+    FROM site_invoices i
+    JOIN purchase_orders po ON po.id = i."poId" AND po."deletedAt" IS NULL
+    LEFT JOIN vendors v ON v.id = i."vendorId"
+    WHERE i."siteId" = ANY($1::uuid[])
+      AND i."approvalStatus" = 'APPROVED'
+      AND i."deletedAt" IS NULL
+    GROUP BY i."siteId"
+  `,
+  params: [siteIds],
+});
+
+/** Payroll at company cost (gross − LOP + employer PF), pro-rated to allocation and site dates. */
+export const getSitesPayrollSummaryQuery = (siteIds: string[]) => ({
+  query: `
+    SELECT
+      sa."siteId",
+      COALESCE(SUM(
+        (p."grossEarnings" - COALESCE(p."lopDeduction", 0) + COALESCE(p."employerPf", 0)) * (
+          GREATEST(0,
+            LEAST(
+              COALESCE(sa."deallocatedAt",
+                (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date),
+              (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date,
+              COALESCE(s."endDate", CURRENT_DATE)
+            )
+            -
+            GREATEST(sa."allocatedAt", make_date(p.year, p.month, 1), s."startDate")
+            + 1
+          )::numeric
+          / EXTRACT(DAY FROM
+              (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')
+            )::numeric
+        )
+      ), 0)::numeric as total
+    FROM payroll p
+    JOIN site_allocations sa ON sa."userId" = p."userId"
+    JOIN sites s ON s.id = sa."siteId" AND s."deletedAt" IS NULL
+    WHERE p."deletedAt" IS NULL
+      AND sa."siteId" = ANY($1::uuid[])
+      AND sa."deletedAt" IS NULL
+      AND p.status IN ('PAID', 'APPROVED')
+      AND make_date(p.year, p.month, 1) <= COALESCE(sa."deallocatedAt", CURRENT_DATE)
+      AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= sa."allocatedAt"
+      AND make_date(p.year, p.month, 1) <= COALESCE(s."endDate", CURRENT_DATE)
+      AND (DATE_TRUNC('month', make_date(p.year, p.month, 1)) + INTERVAL '1 month - 1 day')::date >= s."startDate"
+    GROUP BY sa."siteId"
+  `,
+  params: [siteIds],
+});
+
+/** Approved site expenses: tagged to the site, or claimed by its staff while allocated there. */
+export const getSitesExpenseSummaryQuery = (siteIds: string[]) => ({
+  query: `
+    SELECT s.id as "siteId", COALESCE(SUM(e.amount), 0)::numeric as total
+    FROM unnest($1::uuid[]) AS s(id)
+    JOIN expenses e
+      ON e."deletedAt" IS NULL
+     AND e."approvalStatus" = 'approved'
+     AND e."transactionType" = 'debit'
+     AND e."isActive" = true
+     ${EXCLUDED_EXPENSE_CATEGORIES_SQL}
+     AND (
+       e."siteId" = s.id
+       OR EXISTS (
+         SELECT 1 FROM site_allocations sa2
+         WHERE sa2."userId" = e."userId"
+           AND sa2."siteId" = s.id
+           AND sa2."deletedAt" IS NULL
+           AND e."expenseDate"::date >= sa2."allocatedAt"
+           AND (sa2."deallocatedAt" IS NULL OR e."expenseDate"::date <= sa2."deallocatedAt")
+       )
+     )
+    GROUP BY s.id
+  `,
+  params: [siteIds],
+});
+
+/** Approved fuel filled by site staff while allocated to the site. */
+export const getSitesFuelSummaryQuery = (siteIds: string[]) => ({
+  query: `
+    SELECT s.id as "siteId", COALESCE(SUM(fe."fuelAmount"), 0)::numeric as total
+    FROM unnest($1::uuid[]) AS s(id)
+    JOIN fuel_expenses fe
+      ON fe."deletedAt" IS NULL
+     AND fe."approvalStatus" = 'approved'
+     AND fe."transactionType" = 'debit'
+     AND fe."isActive" = true
+     AND EXISTS (
+       SELECT 1 FROM site_allocations sa
+       WHERE sa."userId" = fe."userId"
+         AND sa."siteId" = s.id
+         AND sa."deletedAt" IS NULL
+         AND fe."fillDate"::date >= sa."allocatedAt"
+         AND (sa."deallocatedAt" IS NULL OR fe."fillDate"::date <= sa."deallocatedAt")
+     )
+    GROUP BY s.id
+  `,
+  params: [siteIds],
+});
+
 // ── Payment (bank_transfers) ──────────────────────────────────────────────────
 
 /** Bank transfer totals for SALE and PURCHASE sides. */

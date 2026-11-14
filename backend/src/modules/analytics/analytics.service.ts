@@ -1451,6 +1451,57 @@ export class AnalyticsService {
     }
   }
 
+  /**
+   * P&L summary for many projects at once (project list). Four set-based queries for all sites,
+   * same basis as getSiteFinancialDetail with no date filter: revenue and vendor cost on taxable
+   * value (freelancer GST stays in cost), payroll at company cost, site expenses and fuel.
+   */
+  async getSitesProfitabilitySummary(siteIds: string[]) {
+    const ids = [...new Set(siteIds)];
+    const [invoiceRows, payrollRows, expenseRows, fuelRows] = await Promise.all([
+      this.executeQuery(queries.getSitesInvoiceSummaryQuery(ids)),
+      this.executeQuery(queries.getSitesPayrollSummaryQuery(ids)),
+      this.executeQuery(queries.getSitesExpenseSummaryQuery(ids)),
+      this.executeQuery(queries.getSitesFuelSummaryQuery(ids)),
+    ]);
+
+    const num = (value: unknown): number => parseFloat(String(value ?? '0')) || 0;
+    const round2 = (value: number): number => Math.round(value * 100) / 100;
+    const bySite = <T extends { siteId: string }>(rows: T[]) =>
+      new Map(rows.map((row) => [row.siteId, row]));
+    const invoices = bySite(invoiceRows);
+    const payroll = bySite(payrollRows);
+    const expenses = bySite(expenseRows);
+    const fuel = bySite(fuelRows);
+
+    return {
+      items: ids.map((siteId) => {
+        const inv = invoices.get(siteId);
+        const revenue = round2(num(inv?.revenue));
+        const vendorCost = round2(num(inv?.vendorTaxable) + num(inv?.nonCreditableGst));
+        const employeeCost = round2(num(payroll.get(siteId)?.total));
+        const operationalExpense = round2(
+          num(expenses.get(siteId)?.total) + num(fuel.get(siteId)?.total),
+        );
+        const totalProjectCost = round2(vendorCost + employeeCost + operationalExpense);
+        const netProfit = round2(revenue - totalProjectCost);
+        return {
+          siteId,
+          revenue,
+          vendorCost,
+          employeeCost,
+          operationalExpense,
+          totalProjectCost,
+          grossProfit: round2(revenue - vendorCost),
+          netProfit,
+          profitMarginPercentage:
+            revenue > 0 ? Math.round((netProfit / revenue) * 100 * 100) / 100 : 0,
+          salesInvoiceCount: parseInt(inv?.salesInvoiceCount ?? '0') || 0,
+        };
+      }),
+    };
+  }
+
   // ==================== HELPER METHODS ====================
 
   /**
