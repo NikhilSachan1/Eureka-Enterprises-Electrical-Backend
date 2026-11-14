@@ -1161,21 +1161,22 @@ export class AnalyticsService {
   // ==================== SITE FINANCIAL DETAIL (New Profitability) ====================
 
   /**
-   * GET /analytics/profitability/detail?siteId=
+   * Site financial detail for the profitability page.
    *
-   * Returns:
-   *   metaSummary      — SALE PO/invoice totals + PURCHASE PO/invoice totals, per-invoice lists
-   *   expenseSummary   — employee cost (payroll), regular expense, fuel expense
-   *   paymentSummary   — received vs invoiced (SALE) + paid vs invoiced (PURCHASE)
-   *   profitabilitySummary — revenue, project cost, gross/net profit, margins
+   * Basis (kept deliberately simple so every figure can be traced to invoices):
+   *  - Revenue and vendor cost are on TAXABLE value. GST is not income or cost: output GST on sales
+   *    goes to the government and input GST on purchases comes back as credit. A freelancer
+   *    (non-GST-registered) vendor's GST, if any, gives no credit, so it stays in vendor cost.
+   *  - Receivable / payable are what moves through the bank: invoice total less TDS (TDS goes to the
+   *    government, not to / from the party), less what has been settled against the invoice.
+   *  - Employee cost is payroll at company cost (gross − LOP + employer PF), pro-rated to the site.
    */
   async getSiteFinancialDetail(siteId: string, startDate?: string, endDate?: string) {
     try {
       const [
         salePoResult,
         purchasePoResult,
-        salesInvoiceListResult,
-        purchaseInvoiceListResult,
+        invoiceRows,
         payrollByEmployeeResult,
         payrollTotalResult,
         opExpTotalResult,
@@ -1183,13 +1184,11 @@ export class AnalyticsService {
         opExpByCategoryResult,
         fuelTotalResult,
         fuelByEmployeeResult,
-        invoiceTotalsResult,
         bankTransferTotalsResult,
       ] = await Promise.all([
         this.executeQuery(queries.getSalesPOSummaryQuery(siteId)),
         this.executeQuery(queries.getPurchasePOSummaryQuery(siteId)),
-        this.executeQuery(queries.getSalesInvoiceListQuery(siteId)),
-        this.executeQuery(queries.getPurchaseInvoiceListQuery(siteId)),
+        this.executeQuery(queries.getSiteInvoiceFinancialsQuery(siteId)),
         this.executeQuery(queries.getSitePayrollByEmployeeDetailQuery(siteId, startDate, endDate)),
         this.executeQuery(queries.getSitePayrollTotalCostQuery(siteId, startDate, endDate)),
         this.executeQuery(queries.getOpExpenseTotalQuery(siteId, startDate, endDate)),
@@ -1199,153 +1198,187 @@ export class AnalyticsService {
         this.executeQuery(queries.getOpExpenseByCategoryQuery(siteId, startDate, endDate)),
         this.executeQuery(queries.getFuelExpenseTotalQuery(siteId, startDate, endDate)),
         this.executeQuery(queries.getFuelExpenseByEmployeeQuery(siteId, startDate, endDate)),
-        this.executeQuery(queries.getInvoiceTotalsBySideQuery(siteId)),
         this.executeQuery(queries.getBankTransferTotalsBySideQuery(siteId)),
       ]);
 
-      // ── PO summaries ─────────────────────────────────────────────────────────
+      const num = (value: unknown): number => parseFloat(String(value ?? '0')) || 0;
+      const round2 = (value: number): number => Math.round(value * 100) / 100;
+      const pct = (part: number, whole: number): number =>
+        whole > 0 ? Math.round((part / whole) * 100 * 100) / 100 : 0;
+
+      // ── PO summaries (PO values include GST, like the invoice totals they are compared with) ──
       const salePO = salePoResult[0] || {};
       const purchPO = purchasePoResult[0] || {};
-
-      const totalSalesPOValue = parseFloat(salePO.totalSalesPOValue ?? '0') || 0;
+      const totalSalesPOValue = num(salePO.totalSalesPOValue);
       const totalSalesPOCount = parseInt(salePO.totalSalesPOCount ?? '0') || 0;
-      const totalPurchasePOValue = parseFloat(purchPO.totalPurchasePOValue ?? '0') || 0;
+      const totalPurchasePOValue = num(purchPO.totalPurchasePOValue);
       const totalPurchasePOCount = parseInt(purchPO.totalPurchasePOCount ?? '0') || 0;
 
-      // ── Invoice counts / totals ───────────────────────────────────────────────
-      const inv = invoiceTotalsResult[0] || {};
-      const totalSalesInvoicedAmount = parseFloat(inv.saleTotalInvoiced ?? '0') || 0;
-      const totalSalesInvoiceCount = parseInt(inv.salesInvoiceCount ?? '0') || 0;
-      const totalVendorInvoicedAmount = parseFloat(inv.purchaseTotalInvoiced ?? '0') || 0;
-      const totalVendorInvoiceCount = parseInt(inv.vendorInvoiceCount ?? '0') || 0;
+      // ── Invoices, one row each, with what has been settled against them ──────────────────────
+      const invoices = invoiceRows.map((r: any) => {
+        const taxableAmount = num(r.taxableAmount);
+        const gstAmount = num(r.gstAmount);
+        const tdsAmount = num(r.tdsAmount);
+        const invoiceAmount = num(r.totalAmount);
+        const netAmount = round2(invoiceAmount - tdsAmount);
+        const paidAmount = round2(num(r.paidAmount) + num(r.gstSettledAmount));
+        const advanceAdjustedAmount = num(r.advanceAdjustedAmount);
+        const isFreelancer = r.vendorType === 'FREELANCER';
+        return {
+          partyType: r.partyType as 'SALE' | 'PURCHASE',
+          invoiceNumber: r.invoiceNumber as string,
+          invoiceDate: r.invoiceDate as string,
+          poNumber: r.poNumber as string,
+          partyName: r.partyName as string,
+          vendorType: (r.vendorType as string | null) ?? null,
+          isGstHold: !!r.isGstHold,
+          taxableAmount,
+          gstAmount,
+          tdsAmount,
+          invoiceAmount,
+          netAmount,
+          paidAmount,
+          advanceAdjustedAmount,
+          outstandingAmount: Math.max(0, round2(netAmount - paidAmount - advanceAdjustedAmount)),
+          /** GST that comes back as input credit (none from a freelancer). */
+          creditableGstAmount: r.partyType === 'PURCHASE' && isFreelancer ? 0 : gstAmount,
+        };
+      });
+      const sum = (rows: typeof invoices, key: keyof (typeof invoices)[number]): number =>
+        round2(rows.reduce((total, row) => total + (row[key] as number), 0));
 
-      const salesUnbilledAmount = Math.max(0, totalSalesPOValue - totalSalesInvoicedAmount);
+      const saleInvoices = invoices.filter((i) => i.partyType === 'SALE');
+      const purchaseInvoices = invoices.filter((i) => i.partyType === 'PURCHASE');
+
+      const totalSalesInvoicedAmount = sum(saleInvoices, 'invoiceAmount');
+      const totalSalesTaxableAmount = sum(saleInvoices, 'taxableAmount');
+      const totalSalesGstAmount = sum(saleInvoices, 'gstAmount');
+      const totalSalesTdsAmount = sum(saleInvoices, 'tdsAmount');
+
+      const totalVendorInvoicedAmount = sum(purchaseInvoices, 'invoiceAmount');
+      const totalVendorTaxableAmount = sum(purchaseInvoices, 'taxableAmount');
+      const totalVendorGstAmount = sum(purchaseInvoices, 'gstAmount');
+      const totalVendorTdsAmount = sum(purchaseInvoices, 'tdsAmount');
+      const inputGstCredit = sum(purchaseInvoices, 'creditableGstAmount');
+      const nonCreditableGstAmount = round2(totalVendorGstAmount - inputGstCredit);
+
+      const salesUnbilledAmount = Math.max(0, round2(totalSalesPOValue - totalSalesInvoicedAmount));
       const pendingVendorBillingAmount = Math.max(
         0,
-        totalPurchasePOValue - totalVendorInvoicedAmount,
+        round2(totalPurchasePOValue - totalVendorInvoicedAmount),
       );
-      const billingCompletionPercentage =
-        totalSalesPOValue > 0
-          ? Math.round((totalSalesInvoicedAmount / totalSalesPOValue) * 100 * 100) / 100
-          : 0;
-      const purchaseBillingCompletionPercentage =
-        totalPurchasePOValue > 0
-          ? Math.round((totalVendorInvoicedAmount / totalPurchasePOValue) * 100 * 100) / 100
-          : 0;
 
-      // ── Sales invoice list ────────────────────────────────────────────────────
-      const salesInvoiceList = salesInvoiceListResult.map((r: any) => ({
-        invoiceNumber: r.invoiceNumber as string,
-        invoiceDate: r.invoiceDate as string,
-        poNumber: r.poNumber as string,
-        clientName: r.clientName as string,
-        invoiceAmount: parseFloat(r.invoiceAmount) || 0,
-      }));
+      const toListItem = (i: (typeof invoices)[number]) => ({
+        invoiceNumber: i.invoiceNumber,
+        invoiceDate: i.invoiceDate,
+        poNumber: i.poNumber,
+        taxableAmount: i.taxableAmount,
+        gstAmount: i.gstAmount,
+        tdsAmount: i.tdsAmount,
+        invoiceAmount: i.invoiceAmount,
+        netAmount: i.netAmount,
+        settledAmount: round2(i.paidAmount + i.advanceAdjustedAmount),
+        outstandingAmount: i.outstandingAmount,
+        isGstHold: i.isGstHold,
+      });
 
-      // ── Purchase invoice list ─────────────────────────────────────────────────
-      const purchaseInvoiceList = purchaseInvoiceListResult.map((r: any) => ({
-        invoiceNumber: r.invoiceNumber as string,
-        invoiceDate: r.invoiceDate as string,
-        poNumber: r.poNumber as string,
-        vendorName: r.vendorName as string,
-        invoiceAmount: parseFloat(r.invoiceAmount) || 0,
-      }));
-
-      // ── Employee cost (payroll) ───────────────────────────────────────────────
-      const totalEmployeeCost = parseFloat(payrollTotalResult[0]?.total ?? '0') || 0;
-
+      // ── Employee cost (payroll at company cost) ──────────────────────────────────────────────
+      const totalEmployeeCost = num(payrollTotalResult[0]?.total);
       const employeeCostWise = payrollByEmployeeResult.map((r: any) => {
-        const allocatedAmount = parseFloat(r.allocatedAmount) || 0;
+        const allocatedAmount = num(r.allocatedAmount);
         const workingDays = parseInt(r.workingDays) || 0;
-        const perDayCost =
-          workingDays > 0 ? Math.round((allocatedAmount / workingDays) * 100) / 100 : 0;
         return {
           employeeName: r.employeeName as string,
           employeeCode: r.employeeCode as string,
           workingDays,
-          perDayCost,
+          perDayCost: workingDays > 0 ? round2(allocatedAmount / workingDays) : 0,
           allocatedAmount,
         };
       });
 
-      // ── Regular operational expense ───────────────────────────────────────────
-      const totalRegularExpense = parseFloat(opExpTotalResult[0]?.total ?? '0') || 0;
-
+      // ── Operational expense ──────────────────────────────────────────────────────────────────
+      const totalRegularExpense = num(opExpTotalResult[0]?.total);
       const regularExpenseByEmpCat = opExpByEmpCatResult.map((r: any) => ({
         employeeName: r.employeeName as string,
         employeeCode: r.employeeCode as string,
         expenseType: r.expenseType as string,
-        expenseAmount: parseFloat(r.expenseAmount) || 0,
+        expenseAmount: num(r.expenseAmount),
       }));
-
       const regularExpenseByCategory = opExpByCategoryResult.map((r: any) => ({
         categoryName: r.categoryName as string,
-        amount: parseFloat(r.amount) || 0,
+        amount: num(r.amount),
       }));
-
-      // ── Fuel expense ──────────────────────────────────────────────────────────
-      const totalFuelExpense = parseFloat(fuelTotalResult[0]?.total ?? '0') || 0;
-
+      const totalFuelExpense = num(fuelTotalResult[0]?.total);
       const fuelByEmployee = fuelByEmployeeResult.map((r: any) => ({
         employeeName: r.employeeName as string,
         employeeCode: r.employeeCode as string,
         vehicleNumber: r.vehicleNumber as string,
-        expenseAmount: parseFloat(r.expenseAmount) || 0,
+        expenseAmount: num(r.expenseAmount),
       }));
+      const totalOperationalExpense = round2(totalRegularExpense + totalFuelExpense);
 
-      const totalOperationalExpense = totalRegularExpense + totalFuelExpense;
-
-      // ── Payment summary ───────────────────────────────────────────────────────
+      // ── Payments: what moves through the bank ────────────────────────────────────────────────
       const bt = bankTransferTotalsResult[0] || {};
-      const totalPaymentReceived = parseFloat(bt.saleTransferred ?? '0') || 0;
-      const totalPaymentPaid = parseFloat(bt.purchaseTransferred ?? '0') || 0;
-
-      const outstandingReceivableAmount = Math.max(
+      const salesNetReceivable = sum(saleInvoices, 'netAmount');
+      const salesReceived = sum(saleInvoices, 'paidAmount');
+      const salesAdvanceAdjusted = sum(saleInvoices, 'advanceAdjustedAmount');
+      const purchaseNetPayable = sum(purchaseInvoices, 'netAmount');
+      const purchasePaid = sum(purchaseInvoices, 'paidAmount');
+      const purchaseAdvanceAdjusted = sum(purchaseInvoices, 'advanceAdjustedAmount');
+      // Advance money already sent to vendors but not yet adjusted against any invoice.
+      const purchaseAdvanceUnadjusted = Math.max(
         0,
-        totalSalesInvoicedAmount - totalPaymentReceived,
+        round2(num(bt.purchaseTransferred) - purchasePaid - purchaseAdvanceAdjusted),
       );
-      const outstandingPayableAmount = Math.max(0, totalVendorInvoicedAmount - totalPaymentPaid);
 
-      // ── Profitability ─────────────────────────────────────────────────────────
-      // Revenue = total sales invoiced (what clients owe us)
-      const revenue = totalSalesInvoicedAmount;
-      const vendorCost = totalVendorInvoicedAmount;
-      const employeeCostForProfit = totalEmployeeCost;
-      const operationalExpenseForProfit = totalOperationalExpense;
+      // ── Profitability (taxable basis) ────────────────────────────────────────────────────────
+      const revenue = totalSalesTaxableAmount;
+      const vendorCost = round2(totalVendorTaxableAmount + nonCreditableGstAmount);
+      const totalProjectCost = round2(vendorCost + totalEmployeeCost + totalOperationalExpense);
+      const grossProfit = round2(revenue - vendorCost);
+      const netProfit = round2(revenue - totalProjectCost);
 
-      const totalProjectCost = vendorCost + employeeCostForProfit + operationalExpenseForProfit;
-      const grossProfit = revenue - totalProjectCost;
-      const netProfit = grossProfit; // same until overhead tracking is added
-      const profitMarginPercentage =
-        revenue > 0 ? Math.round((netProfit / revenue) * 100 * 100) / 100 : 0;
-      const expenseRatioPercentage =
-        revenue > 0 ? Math.round((totalProjectCost / revenue) * 100 * 100) / 100 : 0;
-
-      // ── Final response ────────────────────────────────────────────────────────
       return {
         metaSummary: {
           salesSummary: {
             totalSalesPOValue,
             totalSalesPOCount,
             totalSalesInvoicedAmount,
-            totalSalesInvoiceCount,
+            totalSalesTaxableAmount,
+            totalSalesGstAmount,
+            totalSalesTdsAmount,
+            totalSalesInvoiceCount: saleInvoices.length,
             salesUnbilledAmount,
-            billingCompletionPercentage,
+            billingCompletionPercentage: pct(totalSalesInvoicedAmount, totalSalesPOValue),
             salesInvoiceSummary: {
               totalSalesInvoiceAmount: totalSalesInvoicedAmount,
-              invoiceSummary: salesInvoiceList,
+              invoiceSummary: saleInvoices.map((i) => ({
+                ...toListItem(i),
+                clientName: i.partyName,
+              })),
             },
           },
           purchaseSummary: {
             totalPurchasePOValue,
             totalPurchasePOCount,
             totalVendorInvoicedAmount,
-            totalVendorInvoiceCount,
+            totalVendorTaxableAmount,
+            totalVendorGstAmount,
+            totalVendorTdsAmount,
+            nonCreditableGstAmount,
+            totalVendorInvoiceCount: purchaseInvoices.length,
             pendingVendorBillingAmount,
-            purchaseBillingCompletionPercentage,
+            purchaseBillingCompletionPercentage: pct(
+              totalVendorInvoicedAmount,
+              totalPurchasePOValue,
+            ),
             vendorInvoiceSummary: {
               totalVendorInvoiceAmount: totalVendorInvoicedAmount,
-              invoiceSummary: purchaseInvoiceList,
+              invoiceSummary: purchaseInvoices.map((i) => ({
+                ...toListItem(i),
+                vendorName: i.partyName,
+                vendorType: i.vendorType,
+              })),
             },
           },
         },
@@ -1372,28 +1405,44 @@ export class AnalyticsService {
         paymentSummary: {
           salesPaymentSummary: {
             totalInvoicedAmount: totalSalesInvoicedAmount,
-            totalPaymentReceived,
-            outstandingReceivableAmount,
+            tdsDeductedAmount: totalSalesTdsAmount,
+            netReceivableAmount: salesNetReceivable,
+            totalPaymentReceived: salesReceived,
+            advanceAdjustedAmount: salesAdvanceAdjusted,
+            outstandingReceivableAmount: sum(saleInvoices, 'outstandingAmount'),
           },
           purchasePaymentSummary: {
             totalVendorInvoiceAmount: totalVendorInvoicedAmount,
-            totalPaymentPaid,
-            outstandingPayableAmount,
+            tdsDeductedAmount: totalVendorTdsAmount,
+            netPayableAmount: purchaseNetPayable,
+            totalPaymentPaid: purchasePaid,
+            advanceAdjustedAmount: purchaseAdvanceAdjusted,
+            advanceUnadjustedAmount: purchaseAdvanceUnadjusted,
+            outstandingPayableAmount: sum(purchaseInvoices, 'outstandingAmount'),
           },
         },
 
         profitabilitySummary: {
+          /** Revenue and costs exclude GST — see the method comment. */
+          basis: 'EXCLUDING_GST' as const,
           revenue,
           projectCost: {
             vendorCost,
-            employeeCost: employeeCostForProfit,
-            operationalExpense: operationalExpenseForProfit,
+            employeeCost: totalEmployeeCost,
+            operationalExpense: totalOperationalExpense,
             totalProjectCost,
           },
+          gstSummary: {
+            outputGst: totalSalesGstAmount,
+            inputGstCredit,
+            nonCreditableGst: nonCreditableGstAmount,
+            netGstPayable: round2(totalSalesGstAmount - inputGstCredit),
+          },
           grossProfit,
+          grossMarginPercentage: pct(grossProfit, revenue),
           netProfit,
-          profitMarginPercentage,
-          expenseRatioPercentage,
+          profitMarginPercentage: pct(netProfit, revenue),
+          expenseRatioPercentage: pct(totalProjectCost, revenue),
         },
       };
     } catch (error) {

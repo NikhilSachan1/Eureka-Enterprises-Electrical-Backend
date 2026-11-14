@@ -1904,46 +1904,52 @@ export const getPurchasePOSummaryQuery = (siteId: string) => ({
   params: [siteId],
 });
 
-// ── Invoice Lists ─────────────────────────────────────────────────────────────
+// ── Invoices ─────────────────────────────────────────────────────────────────
 
-/** Individual SALE invoices (APPROVED) with PO number and client (contractor) name. */
-export const getSalesInvoiceListQuery = (siteId: string) => ({
+/**
+ * Every APPROVED invoice of the site (both sides) with its tax split and what has been settled
+ * against it. The service derives revenue / cost (on taxable value), receivable / payable (net of
+ * TDS) and the GST position from these rows.
+ *
+ * Settled against an invoice:
+ *  - paidAmount             — regular transfers rolled up on the invoice (`paidTotal`)
+ *  - gstSettledAmount       — held GST moved by a GST transfer: contractor receipts carry the
+ *                             invoice id; vendor releases reach it through their GST_RELEASE booking
+ *  - advanceAdjustedAmount  — advance settled against the invoice
+ */
+export const getSiteInvoiceFinancialsQuery = (siteId: string) => ({
   query: `
     SELECT
-      si."invoiceNumber",
-      TO_CHAR(si."invoiceDate", 'YYYY-MM-DD') as "invoiceDate",
+      i."partyType",
+      i."invoiceNumber",
+      TO_CHAR(i."invoiceDate", 'YYYY-MM-DD')          as "invoiceDate",
       po."poNumber",
-      COALESCE(c.name, 'Unknown') as "clientName",
-      si."totalAmount"::numeric   as "invoiceAmount"
-    FROM site_invoices si
-    JOIN purchase_orders po ON si."poId" = po.id AND po."deletedAt" IS NULL
-    LEFT JOIN contractors c ON si."contractorId" = c.id AND c."deletedAt" IS NULL
-    WHERE si."siteId" = $1
-      AND si."partyType" = 'SALE'
-      AND si."approvalStatus" = 'APPROVED'
-      AND si."deletedAt" IS NULL
-    ORDER BY si."invoiceDate" DESC
-  `,
-  params: [siteId],
-});
-
-/** Individual PURCHASE invoices (APPROVED) with PO number and vendor name. */
-export const getPurchaseInvoiceListQuery = (siteId: string) => ({
-  query: `
-    SELECT
-      si."invoiceNumber",
-      TO_CHAR(si."invoiceDate", 'YYYY-MM-DD') as "invoiceDate",
-      po."poNumber",
-      COALESCE(v.name, 'Unknown') as "vendorName",
-      si."totalAmount"::numeric   as "invoiceAmount"
-    FROM site_invoices si
-    JOIN purchase_orders po ON si."poId" = po.id AND po."deletedAt" IS NULL
-    LEFT JOIN vendors v ON si."vendorId" = v.id AND v."deletedAt" IS NULL
-    WHERE si."siteId" = $1
-      AND si."partyType" = 'PURCHASE'
-      AND si."approvalStatus" = 'APPROVED'
-      AND si."deletedAt" IS NULL
-    ORDER BY si."invoiceDate" DESC
+      COALESCE(c.name, v.name, 'Unknown')            as "partyName",
+      v."vendorType",
+      i."isGstHold",
+      COALESCE(i."taxableAmount", 0)::numeric           as "taxableAmount",
+      COALESCE(i."gstAmount", 0)::numeric               as "gstAmount",
+      COALESCE(i."tdsAmount", 0)::numeric               as "tdsAmount",
+      COALESCE(i."totalAmount", 0)::numeric             as "totalAmount",
+      COALESCE(i."paidTotal", 0)::numeric               as "paidAmount",
+      COALESCE(i."advanceSettledAmount", 0)::numeric    as "advanceAdjustedAmount",
+      COALESCE(gst.amount, 0)::numeric                  as "gstSettledAmount"
+    FROM site_invoices i
+    JOIN purchase_orders po ON po.id = i."poId" AND po."deletedAt" IS NULL
+    LEFT JOIN contractors c ON c.id = i."contractorId"
+    LEFT JOIN vendors v     ON v.id = i."vendorId"
+    LEFT JOIN LATERAL (
+      SELECT SUM(bt."transferAmount") as amount
+        FROM bank_transfers bt
+        LEFT JOIN book_payments bp ON bp.id = bt."bookPaymentId"
+       WHERE bt."deletedAt" IS NULL
+         AND bt."paymentType" = 'GST'
+         AND COALESCE(bt."invoiceId", bp."invoiceId") = i.id
+    ) gst ON true
+    WHERE i."siteId" = $1
+      AND i."approvalStatus" = 'APPROVED'
+      AND i."deletedAt" IS NULL
+    ORDER BY i."invoiceDate" DESC
   `,
   params: [siteId],
 });
@@ -1952,6 +1958,8 @@ export const getPurchaseInvoiceListQuery = (siteId: string) => ({
 
 /**
  * Pro-rated payroll per employee — includes allocatedAmount, workingDays, perDayCost.
+ * Cost to the company per month: gross earnings − LOP + employer PF (deductions such as TDS / employee
+ * PF are still the company's money, paid to the government instead of the employee).
  * workingDays = sum of pro-rated allocation days within each payroll month's window.
  */
 export const getSitePayrollByEmployeeDetailQuery = (
@@ -1975,7 +1983,7 @@ export const getSitePayrollByEmployeeDetailQuery = (
         )                        as "employeeName",
         u."employeeId"::text     as "employeeCode",
         COALESCE(SUM(
-          p."netPayable" * (
+          (p."grossEarnings" - COALESCE(p."lopDeduction", 0) + COALESCE(p."employerPf", 0)) * (
             GREATEST(0,
               LEAST(
                 COALESCE(sa."deallocatedAt",
@@ -2032,7 +2040,8 @@ export const getSitePayrollByEmployeeDetailQuery = (
 };
 
 /**
- * Pro-rated payroll total for a site (all employees allocated to this site).
+ * Pro-rated payroll total for a site (all employees allocated to this site), at company cost
+ * (gross earnings − LOP + employer PF).
  */
 export const getSitePayrollTotalCostQuery = (
   siteId: string,
@@ -2049,7 +2058,7 @@ export const getSitePayrollTotalCostQuery = (
         WHERE id = $1 AND "deletedAt" IS NULL
       )
       SELECT COALESCE(SUM(
-        p."netPayable" * (
+        (p."grossEarnings" - COALESCE(p."lopDeduction", 0) + COALESCE(p."employerPf", 0)) * (
           GREATEST(0,
             LEAST(
               COALESCE(sa."deallocatedAt",
@@ -2244,22 +2253,6 @@ export const getFuelExpenseByEmployeeQuery = (
 };
 
 // ── Payment (bank_transfers) ──────────────────────────────────────────────────
-
-/** Invoice totals for both SALE and PURCHASE sides (APPROVED invoices only). */
-export const getInvoiceTotalsBySideQuery = (siteId: string) => ({
-  query: `
-    SELECT
-      COALESCE(SUM(CASE WHEN si."partyType" = 'SALE'     THEN si."totalAmount" ELSE 0 END), 0)::numeric as "saleTotalInvoiced",
-      COUNT(CASE WHEN si."partyType" = 'SALE'     THEN 1 END)::int as "salesInvoiceCount",
-      COALESCE(SUM(CASE WHEN si."partyType" = 'PURCHASE' THEN si."totalAmount" ELSE 0 END), 0)::numeric as "purchaseTotalInvoiced",
-      COUNT(CASE WHEN si."partyType" = 'PURCHASE' THEN 1 END)::int as "vendorInvoiceCount"
-    FROM site_invoices si
-    WHERE si."siteId" = $1
-      AND si."approvalStatus" = 'APPROVED'
-      AND si."deletedAt" IS NULL
-  `,
-  params: [siteId],
-});
 
 /** Bank transfer totals for SALE and PURCHASE sides. */
 export const getBankTransferTotalsBySideQuery = (siteId: string) => ({
