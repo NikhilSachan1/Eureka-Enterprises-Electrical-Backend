@@ -23,7 +23,14 @@ import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-pa
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
-import { BookPaymentSourceType } from './constants/book-payment.constants';
+import { BookPaymentSourceType, PaymentTypeFilter } from './constants/book-payment.constants';
+
+/** The booking source each "payment type" filter value stands for. */
+const BOOKING_SOURCE_BY_PAYMENT_TYPE: Record<PaymentTypeFilter, BookPaymentSourceType> = {
+  [PaymentTypeFilter.INVOICE]: BookPaymentSourceType.INVOICE,
+  [PaymentTypeFilter.ADVANCE]: BookPaymentSourceType.ADVANCE,
+  [PaymentTypeFilter.GST]: BookPaymentSourceType.GST_RELEASE,
+};
 import { PurchaseOrderService } from 'src/modules/purchase-orders/purchase-order.service';
 import {
   PartyType,
@@ -432,6 +439,8 @@ export class BookPaymentService {
       search,
       poNumber,
       invoiceNumber,
+      paymentType,
+      hasTransfer,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -440,6 +449,8 @@ export class BookPaymentService {
 
     const where: any = { deletedAt: IsNull() };
     if (invoiceId) where.invoiceId = invoiceId;
+    if (paymentType) where.sourceType = BOOKING_SOURCE_BY_PAYMENT_TYPE[paymentType];
+    if (hasTransfer !== undefined) where.hasTransfer = hasTransfer;
     if (companyId?.length) where.site = { companyId: In(companyId) };
     const siteIds = await resolveReadableSiteFilter(this.dataSource, userId, activeRole, siteId);
     if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
@@ -450,22 +461,40 @@ export class BookPaymentService {
     else if (dateFrom) where.bookingDate = MoreThanOrEqual(dateFrom);
     else if (dateTo) where.bookingDate = LessThanOrEqual(dateTo);
     if (search) where.remarks = ILike(`%${search}%`);
+    // Invoice-backed bookings reach the PO through invoice → JMC → PO, advance bookings through
+    // advance → PO. The number search matches either the invoice number or the advance number,
+    // so it is an OR of the two routes (TypeORM: an array of where-objects).
+    let finalWhere: any = where;
     if (invoiceNumber || poNumber) {
-      const invCond: any = {};
-      if (invoiceNumber) invCond.invoiceNumber = ILike(`%${invoiceNumber}%`);
-      if (poNumber) invCond.jmc = { po: { poNumber: ILike(`%${poNumber}%`) } };
-      where.invoice = invCond;
+      const term = invoiceNumber ? ILike(`%${invoiceNumber}%`) : undefined;
+      const po = poNumber ? { poNumber: ILike(`%${poNumber}%`) } : undefined;
+      finalWhere = [
+        {
+          ...where,
+          invoice: {
+            ...(term ? { invoiceNumber: term } : {}),
+            ...(po ? { jmc: { po } } : {}),
+          },
+        },
+        {
+          ...where,
+          advancePayment: {
+            ...(term ? { advanceNumber: term } : {}),
+            ...(po ? { po } : {}),
+          },
+        },
+      ];
     }
 
     const [records, totalRecords] = await Promise.all([
       this.bookPaymentRepository.findAll({
-        where,
+        where: finalWhere,
         order: { [sortField]: sortOrder as SortOrder },
         skip: (page - 1) * pageSize,
         take: pageSize,
         relations: BOOK_PAYMENT_READ_RELATIONS,
       }),
-      this.bookPaymentRepository.count({ where }),
+      this.bookPaymentRepository.count({ where: finalWhere }),
     ]);
 
     return {

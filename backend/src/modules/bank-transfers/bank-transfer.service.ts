@@ -25,7 +25,10 @@ import {
   BANK_TRANSFER_RESPONSES,
   BankTransferPaymentType,
 } from './constants/bank-transfer.constants';
-import { BookPaymentSourceType } from 'src/modules/book-payments/constants/book-payment.constants';
+import {
+  BookPaymentSourceType,
+  PaymentTypeFilter,
+} from 'src/modules/book-payments/constants/book-payment.constants';
 import type { PaymentAdvicePdfData } from 'src/modules/payment-advices/payment-advice-pdf.service';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
@@ -463,6 +466,7 @@ export class BankTransferService {
       paidFromAccountId,
       paidFromAccountName,
       hasPaidFromAccount,
+      paymentType,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -502,8 +506,8 @@ export class BankTransferService {
       );
     }
 
-    // `search` is the single free-text box: UTR number, payment-advice reference, or invoice
-    // number (either route). TypeORM ANDs the keys within one where-object, so an OR has to be an
+    // `search` is the single free-text box: UTR number, payment-advice reference, invoice number
+    // (either route) or advance number (an advance booking's transfer). TypeORM ANDs the keys within one where-object, so an OR has to be an
     // array of objects — and every other filter is copied into each branch, otherwise it silently
     // stops applying to part of the union.
     if (search) {
@@ -512,6 +516,22 @@ export class BankTransferService {
         { utrNumber: term },
         { paymentAdvice: { referenceNumber: term } },
         ...onInvoice({ invoiceNumber: term }),
+        { bookPayment: { advancePayment: { advanceNumber: term } } },
+      ]);
+    }
+
+    // Payment type: GST transfers carry paymentType GST; the rest are told apart by their
+    // booking. A SALE receipt has no booking and is always an invoice payment.
+    if (paymentType === PaymentTypeFilter.GST) {
+      branches = this.expand(branches, [{ paymentType: 'GST' }]);
+    } else if (paymentType === PaymentTypeFilter.ADVANCE) {
+      branches = this.expand(branches, [
+        { paymentType: 'REGULAR', bookPayment: { sourceType: BookPaymentSourceType.ADVANCE } },
+      ]);
+    } else if (paymentType === PaymentTypeFilter.INVOICE) {
+      branches = this.expand(branches, [
+        { paymentType: 'REGULAR', bookPaymentId: IsNull() },
+        { paymentType: 'REGULAR', bookPayment: { sourceType: BookPaymentSourceType.INVOICE } },
       ]);
     }
 
