@@ -100,6 +100,9 @@ export class LeaveApplicationResponseDto {
 
   @ApiProperty({ type: UserInfoDto, nullable: true })
   createdByUser: UserInfoDto | null;
+
+  @ApiProperty({ nullable: true, description: 'Shared by the days of one leave submission' })
+  applicationGroupId?: string | null;
 }
 
 export class LeaveGroupDto {
