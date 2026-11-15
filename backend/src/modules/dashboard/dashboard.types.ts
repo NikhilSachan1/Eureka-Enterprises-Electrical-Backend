@@ -274,7 +274,6 @@ export interface AlertsData {
     vehicleDocExpiry: { expired: number; expiringSoon: number };
     vehicleServiceDue: { overdue: number; dueSoon: number };
     assetCalibration: { overdue: number; dueSoon: number };
-    assetWarranty: { expired: number; expiringSoon: number };
     lostAssets: { total: number };
     total: { critical: number; warning: number; info: number };
   };

@@ -726,34 +726,6 @@ export const getAssetCalibrationDueQuery = (
   params: [warningDate, infoDate, userId],
 });
 
-export const getAssetWarrantyExpiryQuery = (
-  warningDate: string,
-  infoDate: string,
-  userId: string | null = null,
-) => ({
-  query: `
-    SELECT
-      av.id,
-      av."name" as "assetName",
-      am."assetId" as "assetCode",
-      av."warrantyEndDate" as "warrantyExpiryDate",
-      CASE
-        WHEN av."warrantyEndDate" < CURRENT_DATE THEN 'expired'
-        WHEN av."warrantyEndDate" <= $1::date THEN 'warning'
-        ELSE 'info'
-      END as "severity"
-    FROM asset_versions av
-    JOIN asset_masters am ON am.id = av."assetMasterId"
-    WHERE av."warrantyEndDate" IS NOT NULL
-      AND av."warrantyEndDate" <= $2::date
-      AND av."isActive" = true
-      AND av."deletedAt" IS NULL
-      AND ($3::uuid IS NULL OR av."assignedTo" = $3::uuid)
-    ORDER BY av."warrantyEndDate" ASC
-  `,
-  params: [warningDate, infoDate, userId],
-});
-
 // ==================== Payroll Queries ====================
 
 export const getPayrollTrendQuery = (months = 6) => ({

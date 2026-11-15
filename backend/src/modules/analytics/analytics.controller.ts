@@ -14,6 +14,7 @@ import {
   GetVehicleAnalyticsDto,
   GetSiteHealthDto,
   GetSiteTimelineDto,
+  GetSitesProfitabilitySummaryDto,
 } from './dto';
 
 // Constants
@@ -63,6 +64,21 @@ export class AnalyticsController {
    * Operational Expense, Vendor/Contractor Invoice Summaries, Payment Summary, Profitability.
    * Must be declared BEFORE the generic `profitability` route to prevent NestJS ambiguity.
    */
+  /**
+   * P&L summary for several projects in one call (project list column): revenue, cost, net
+   * profit and margin per site, on the same basis as the detail endpoint.
+   * Must be declared BEFORE the generic `profitability` route.
+   */
+  @Get('profitability/summary')
+  @ApiOperation({
+    summary: 'P&L summary for several projects',
+    description:
+      'Returns revenue (taxable), project cost, net profit and margin for each requested siteId — same basis as profitability/detail with no date filter. Accepts ?siteId[]=uuid1&siteId[]=uuid2 (max 100).',
+  })
+  async getSitesProfitabilitySummary(@Query() dto: GetSitesProfitabilitySummaryDto) {
+    return await this.analyticsService.getSitesProfitabilitySummary(dto.siteId);
+  }
+
   @Get('profitability/detail')
   @ApiOperation({
     summary: 'Get detailed site financial summary (new format)',

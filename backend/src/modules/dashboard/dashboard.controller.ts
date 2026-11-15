@@ -52,7 +52,7 @@ export class DashboardController {
 
   @Get('alerts')
   @ApiOperation({
-    summary: 'Get top alerts (cards, vehicle docs, vehicle service, asset calibration/warranty)',
+    summary: 'Get top alerts (cards, vehicle docs, vehicle service, asset calibration)',
   })
   async getAlerts(@Request() req: any) {
     return await this.dashboardService.getAlerts(this.scopeOf(req));

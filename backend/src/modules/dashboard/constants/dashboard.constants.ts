@@ -33,7 +33,6 @@ export enum AlertType {
   VEHICLE_DOC_EXPIRY = 'vehicleDocExpiry',
   VEHICLE_SERVICE_DUE = 'vehicleServiceDue',
   ASSET_CALIBRATION = 'assetCalibration',
-  ASSET_WARRANTY = 'assetWarranty',
   MISSING_CONFIG = 'missingConfig',
 }
 
