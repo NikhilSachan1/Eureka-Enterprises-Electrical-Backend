@@ -89,7 +89,7 @@ export class LeaveApplicationsController {
   @ApiOperation({
     summary: 'Get leave applications grouped per submission',
     description:
-      'One row per leave submission (apply / force) with all its days; each day keeps its own approval status. Paginated per application.',
+      'One row per leave submission (apply / force) with its days that match the filters; each day keeps its own approval status. Paginated per application.',
   })
   async getLeaveApplicationGroups(@Query() filters: GetLeaveApplicationsDto) {
     return this.leaveApplicationsService.getLeaveApplicationGroups(filters);
