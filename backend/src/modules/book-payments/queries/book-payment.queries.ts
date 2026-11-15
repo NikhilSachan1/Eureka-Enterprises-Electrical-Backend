@@ -42,7 +42,9 @@ export const buildVendorListQuery = (filters: GetVendorListQueryDto) => {
       THEN COALESCE(inv."taxableAmount"::numeric, 0) - COALESCE(inv."tdsAmount"::numeric, 0)
       ELSE COALESCE(inv."taxableAmount"::numeric, 0) + COALESCE(inv."gstAmount"::numeric, 0) - COALESCE(inv."tdsAmount"::numeric, 0)
     END)`;
-  const invPendingToBook = `(${invNetPayable} - COALESCE(inv."bookedTotal"::numeric, 0))`;
+  // Same ceiling as creating a booking: advances settled against the invoice were already paid,
+  // so only net payable − settled advance − booked is left to book.
+  const invPendingToBook = `(${invNetPayable} - COALESCE(inv."advanceSettledAmount"::numeric, 0) - COALESCE(inv."bookedTotal"::numeric, 0))`;
 
   // ── Join fragments ──
   // LEFT on the invoice: an advance-backed booking has no invoiceId, and an inner join

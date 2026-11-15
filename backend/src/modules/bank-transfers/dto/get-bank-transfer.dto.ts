@@ -12,6 +12,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
+import { PaymentTypeFilter } from 'src/modules/book-payments/constants/book-payment.constants';
 
 function toArray(value: unknown): string[] | undefined {
   if (value === undefined || value === null) return undefined;
@@ -83,7 +84,7 @@ export class GetBankTransferDto {
 
   @ApiPropertyOptional({
     description:
-      'Free-text search — matches UTR number, payment-advice reference number, or invoice number',
+      'Free-text search — matches UTR number, payment-advice reference number, invoice number or advance number',
   })
   @IsString()
   @IsOptional()
@@ -124,6 +125,15 @@ export class GetBankTransferDto {
   @Min(1)
   @IsOptional()
   pageSize?: number;
+
+  @ApiPropertyOptional({
+    enum: PaymentTypeFilter,
+    description:
+      'INVOICE = invoice payment, ADVANCE = advance (vendor), GST = held GST released / received',
+  })
+  @IsEnum(PaymentTypeFilter)
+  @IsOptional()
+  paymentType?: PaymentTypeFilter;
 
   @ApiPropertyOptional({ description: 'Filter by the paying company bank account id' })
   @IsUUID()
