@@ -84,6 +84,17 @@ export class LeaveApplicationsController {
     return this.leaveApplicationsService.getLeaveApplications(filters);
   }
 
+  @Get('groups')
+  @UseInterceptors(LeaveUserInterceptor)
+  @ApiOperation({
+    summary: 'Get leave applications grouped per submission',
+    description:
+      'One row per leave submission (apply / force) with its days that match the filters; each day keeps its own approval status. Paginated per application.',
+  })
+  async getLeaveApplicationGroups(@Query() filters: GetLeaveApplicationsDto) {
+    return this.leaveApplicationsService.getLeaveApplicationGroups(filters);
+  }
+
   @Post('approval')
   @ApiOperation({
     summary: 'Approve leave applications',

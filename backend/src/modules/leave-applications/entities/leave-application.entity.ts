@@ -45,6 +45,11 @@ export class LeaveApplicationsEntity extends BaseEntity {
   @Column({ type: 'varchar' })
   approvalReason: string;
 
+  /** Shared by every day row of one leave submission (apply / force). */
+  @Index('IDX_LEAVE_APPLICATIONS_APPLICATION_GROUP_ID')
+  @Column({ type: 'uuid', nullable: true })
+  applicationGroupId: string | null;
+
   // Relations
   @Index('IDX_LEAVE_APPLICATIONS_USER_ID')
   @ManyToOne(() => UserEntity, (user) => user.id, {

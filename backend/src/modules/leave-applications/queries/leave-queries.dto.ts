@@ -2,25 +2,8 @@ import { GetLeaveApplicationsDto } from '../dto';
 import { LEAVE_APPLICATION_SORTABLE_FIELDS } from '../constants/leave-application.constants';
 import { getUserSelectFields } from 'src/utils/utility/utility.service';
 
-export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto) => {
-  const {
-    userIds,
-    startDate,
-    endDate,
-    date,
-    search,
-    approvalStatuses,
-    leaveTypes,
-    page = 1,
-    pageSize = 10,
-    sortField,
-    sortOrder,
-    grouped,
-  } = filters;
-
-  // Base query with joins
-  let query = `
-    SELECT
+/** Columns of one leave day row, with its employee, approver and creator. */
+export const LEAVE_APPLICATION_COLUMNS = `
         la."id",
         la."userId",
         la."leaveConfigId",
@@ -39,17 +22,41 @@ export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto)
         la."updatedAt",
         la."createdBy",
         la."updatedBy",
+        la."applicationGroupId",
         -- User information (id, firstName, lastName, email, employeeId)
         ${getUserSelectFields('u')},
         u."contactNumber",
         -- Approver information (id, firstName, lastName, email, employeeId with prefix)
         ${getUserSelectFields('approver', 'approvalBy')},
         -- Created by (id, firstName, lastName, email, employeeId with prefix)
-        ${getUserSelectFields('creator', 'createdBy')}
+        ${getUserSelectFields('creator', 'createdBy')}`;
+
+export const LEAVE_APPLICATION_FROM = `
     FROM leave_applications la
     INNER JOIN users u ON la."userId" = u."id"
     LEFT JOIN users approver ON la."approvalBy" = approver."id"
-    LEFT JOIN users creator ON la."createdBy" = creator."id"
+    LEFT JOIN users creator ON la."createdBy" = creator."id"`;
+
+export const buildLeaveApplicationListQuery = (filters: GetLeaveApplicationsDto) => {
+  const {
+    userIds,
+    startDate,
+    endDate,
+    date,
+    search,
+    approvalStatuses,
+    leaveTypes,
+    page = 1,
+    pageSize = 10,
+    sortField,
+    sortOrder,
+    grouped,
+  } = filters;
+
+  // Base query with joins
+  let query = `
+    SELECT ${LEAVE_APPLICATION_COLUMNS}
+    ${LEAVE_APPLICATION_FROM}
   `;
 
   // WHERE conditions
