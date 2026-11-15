@@ -1,6 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsOptional, IsArray, IsUUID, IsString, IsInt, Min, IsDateString } from 'class-validator';
+import {
+  IsOptional,
+  IsArray,
+  IsUUID,
+  IsString,
+  IsInt,
+  Min,
+  IsDateString,
+  IsEnum,
+  IsBoolean,
+} from 'class-validator';
+import { PaymentTypeFilter } from '../constants/book-payment.constants';
 
 function toArray(value: unknown): string[] | undefined {
   if (value === undefined || value === null) return undefined;
@@ -53,6 +64,27 @@ export class GetBookPaymentDto {
   @IsDateString()
   dateTo?: string;
 
+  @ApiPropertyOptional({
+    enum: PaymentTypeFilter,
+    description: 'INVOICE = invoice payment, ADVANCE = advance, GST = held GST release',
+  })
+  @IsEnum(PaymentTypeFilter)
+  @IsOptional()
+  paymentType?: PaymentTypeFilter;
+
+  @ApiPropertyOptional({
+    description: 'true = bank transfer done for the booking; false = transfer still pending',
+  })
+  @Transform(({ value, key, obj }) => {
+    const raw = obj?.[key] ?? value;
+    if (raw === false || raw === 'false') return false;
+    if (raw === true || raw === 'true') return true;
+    return undefined;
+  })
+  @IsBoolean()
+  @IsOptional()
+  hasTransfer?: boolean;
+
   @ApiPropertyOptional({ description: 'Search by remarks' })
   @IsString()
   @IsOptional()
@@ -64,7 +96,7 @@ export class GetBookPaymentDto {
   poNumber?: string;
 
   @ApiPropertyOptional({
-    description: 'Search by parent invoice number (partial, case-insensitive)',
+    description: 'Search by invoice number or advance number (partial, case-insensitive)',
   })
   @IsString()
   @IsOptional()

@@ -66,6 +66,16 @@ export const BOOK_PAYMENT_RESPONSES = {
  * INVOICE is the default so every row that predates advance payments reads correctly — all of them
  * were invoice-backed, since nothing else was possible.
  */
+/**
+ * List filter "payment type", the same for bookings and bank transfers: an invoice payment, an
+ * advance, or held GST (released to a vendor / received from a client).
+ */
+export enum PaymentTypeFilter {
+  INVOICE = 'INVOICE',
+  ADVANCE = 'ADVANCE',
+  GST = 'GST',
+}
+
 export enum BookPaymentSourceType {
   INVOICE = 'INVOICE',
   ADVANCE = 'ADVANCE',
