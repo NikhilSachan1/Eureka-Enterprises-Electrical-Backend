@@ -822,7 +822,8 @@ export class LeaveApplicationsService {
   /**
    * Leave applications, one per submission: the day rows that were applied (or forced) together,
    * with their own approval status each. Pagination and the count are per application; an
-   * application is listed when any of its days matches the filters, and always with all its days.
+   * application is listed when any of its days matches the filters, with only the matching days
+   * (e.g. an "approved" filter shows the approved days of each application).
    * Stats stay per day (the same numbers as the day list).
    */
   async getLeaveApplicationGroups(filters: GetLeaveApplicationsDto): Promise<{
@@ -840,11 +841,9 @@ export class LeaveApplicationsService {
     ]);
 
     const groupIds: string[] = pageRows.map((row: { groupId: string }) => row.groupId);
-    const dayRows = groupIds.length
-      ? await this.leaveApplicationsRepository.rawQuery(
-          buildLeaveGroupRecordsQuery(groupIds).query,
-          buildLeaveGroupRecordsQuery(groupIds).params,
-        )
+    const daysQuery = groupIds.length ? buildLeaveGroupRecordsQuery(groupIds, filters) : null;
+    const dayRows = daysQuery
+      ? await this.leaveApplicationsRepository.rawQuery(daysQuery.query, daysQuery.params)
       : [];
 
     const daysByGroup = new Map<string, LeaveApplicationResponseDto[]>();

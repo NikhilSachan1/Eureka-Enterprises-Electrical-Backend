@@ -15,13 +15,16 @@ const LEAVE_GROUP_SORT: Record<string, string> = {
   lastName: 'MIN(u."lastName")',
 };
 
-/** Day-level filters (same rules as the day list). An application matches when any day does. */
+/**
+ * Day-level filters (same rules as the day list). An application matches when any day does.
+ * `params` may already hold leading values; placeholders continue after them.
+ */
 const buildLeaveDayConditions = (
   filters: GetLeaveApplicationsDto,
-): { where: string; params: unknown[] } => {
+  params: unknown[] = [],
+): { conditions: string[]; where: string; params: unknown[] } => {
   const { userIds, startDate, endDate, date, search, approvalStatuses, leaveTypes } = filters;
   const conditions: string[] = [];
-  const params: unknown[] = [];
   const next = (value: unknown): string => {
     params.push(value);
     return `$${params.length}`;
@@ -50,7 +53,11 @@ const buildLeaveDayConditions = (
     )`);
   }
 
-  return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
+  return {
+    conditions,
+    where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '',
+    params,
+  };
 };
 
 /** Applications having at least one day that matches the filters. */
@@ -92,14 +99,24 @@ export const buildLeaveGroupCountQuery = (filters: GetLeaveApplicationsDto) => {
   };
 };
 
-/** Every day of the given applications (all days, not only the matching ones). */
-export const buildLeaveGroupRecordsQuery = (groupIds: string[]) => ({
-  query: `
-    SELECT ${LEAVE_APPLICATION_COLUMNS},
-           ${LEAVE_GROUP_KEY} AS "groupId"
-    ${LEAVE_APPLICATION_FROM}
-     WHERE ${LEAVE_GROUP_KEY} = ANY($1::uuid[])
-     ORDER BY la."fromDate" ASC
-  `,
-  params: [groupIds],
-});
+/**
+ * The days of the given applications that match the filters — e.g. with an "approved" filter only
+ * the approved days, so an application's counts and dates describe what the filter asked for.
+ */
+export const buildLeaveGroupRecordsQuery = (
+  groupIds: string[],
+  filters: GetLeaveApplicationsDto,
+) => {
+  const { conditions, params } = buildLeaveDayConditions(filters, [groupIds]);
+  const where = [`${LEAVE_GROUP_KEY} = ANY($1::uuid[])`, ...conditions].join(' AND ');
+  return {
+    query: `
+      SELECT ${LEAVE_APPLICATION_COLUMNS},
+             ${LEAVE_GROUP_KEY} AS "groupId"
+      ${LEAVE_APPLICATION_FROM}
+       WHERE ${where}
+       ORDER BY la."fromDate" ASC
+    `,
+    params,
+  };
+};
