@@ -20,12 +20,17 @@ const APPROVAL_COUNTS = (alias: string): string => `
   COUNT(*) FILTER (WHERE ${alias}."approvalStatus" = 'PENDING')::int      AS pending,
   COUNT(*) FILTER (WHERE ${alias}."approvalStatus" = 'REJECTED')::int     AS rejected`;
 
+/** Open unlock requests: set on request, cleared when the request is approved or rejected. */
+const UNLOCK_REQUESTS = (alias: string): string =>
+  `COUNT(*) FILTER (WHERE ${alias}."unlockRequestedAt" IS NOT NULL)::int AS "unlockRequests"`;
+
 const ZERO_APPROVALS = { total: 0, approved: 0, pending: 0, rejected: 0 };
 
 /**
- * Counts and amounts for the workspace document tabs: approvals for every document, plus what
- * matters for each — JMC signed copies, invoice settlement, bookings awaiting transfer, advance
- * balance. With no filter the figures cover every site the user can read.
+ * Counts for the workspace document tabs: the approval split of each document, its open unlock
+ * requests, and what is still owed on it — JMC signed copies, invoices with GST / TDS / payment
+ * not settled, bookings with the bank transfer pending, advances not fully adjusted. With no filter the
+ * figures cover every site the user can read.
  */
 @Injectable()
 export class DocumentMetricsService {
@@ -57,12 +62,12 @@ export class DocumentMetricsService {
     const [po, jmc, report, invoice, bookPayment, advance] = await Promise.all([
       run(
         { alias: 'po', dateColumn: 'poDate', hasContractor: true, hasPartyType: true },
-        APPROVAL_COUNTS('po'),
+        `${APPROVAL_COUNTS('po')}, ${UNLOCK_REQUESTS('po')}`,
         'purchase_orders po',
       ),
       run(
         { alias: 'j', dateColumn: 'jmcDate', hasContractor: true, hasPartyType: true },
-        `${APPROVAL_COUNTS('j')},
+        `${APPROVAL_COUNTS('j')}, ${UNLOCK_REQUESTS('j')},
          -- Generated contractor JMCs whose signed copy is still not uploaded.
          COUNT(*) FILTER (
            WHERE j."partyType" = 'SALE'
@@ -73,22 +78,42 @@ export class DocumentMetricsService {
       ),
       run(
         { alias: 'r', dateColumn: 'reportDate', hasContractor: true, hasPartyType: true },
-        APPROVAL_COUNTS('r'),
+        `COUNT(*)::int AS total, ${UNLOCK_REQUESTS('r')}`,
         'site_reports r',
       ),
       run(
         { alias: 'i', dateColumn: 'invoiceDate', hasContractor: true, hasPartyType: true },
-        `${APPROVAL_COUNTS('i')},
-         COALESCE(SUM(i."taxableAmount") FILTER (WHERE i."approvalStatus" = 'APPROVED'), 0)::numeric AS "taxableAmount",
-         COALESCE(SUM(i."gstAmount") FILTER (WHERE i."approvalStatus" = 'APPROVED'), 0)::numeric     AS "gstAmount",
-         COALESCE(SUM(i."totalAmount") FILTER (WHERE i."approvalStatus" = 'APPROVED'), 0)::numeric   AS "invoiceAmount",
-         COALESCE(SUM(st.settled) FILTER (WHERE i."approvalStatus" = 'APPROVED'), 0)::numeric        AS "settledAmount",
-         COALESCE(SUM(GREATEST(
-           COALESCE(i."totalAmount", 0) - COALESCE(i."tdsAmount", 0) - st.settled, 0
-         )) FILTER (WHERE i."approvalStatus" = 'APPROVED'), 0)::numeric                              AS "outstandingAmount",
-         COUNT(*) FILTER (WHERE i."approvalStatus" = 'APPROVED' AND i."isGstHold")::int              AS "gstHoldCount"`,
-        // Settled against an invoice: regular transfers, held GST moved later, advance adjusted.
+        `${APPROVAL_COUNTS('i')}, ${UNLOCK_REQUESTS('i')},
+         COUNT(*) FILTER (WHERE i."approvalStatus" = 'APPROVED' AND tax.gst_open)::int AS "gstPendingCount",
+         COUNT(*) FILTER (WHERE i."approvalStatus" = 'APPROVED' AND tax.tds_open)::int AS "tdsPendingCount",
+         COUNT(*) FILTER (
+           WHERE i."approvalStatus" = 'APPROVED'
+             AND COALESCE(i."totalAmount", 0) - COALESCE(i."tdsAmount", 0) - st.settled > 0.5
+         )::int AS "paymentPendingCount"`,
+        // GST open: not matched on the portal, or held GST not yet moved.
+        // TDS open: contractor — not verified in 26AS; vendor — challan not deposited or 26Q not filed.
+        // Payment open: total − TDS still more than what was settled (transfers, held GST moved
+        // later, advance adjusted).
         `site_invoices i
+         CROSS JOIN LATERAL (
+           SELECT
+             EXISTS (
+               SELECT 1 FROM gst_register_entries g
+                WHERE g."invoiceId" = i.id AND g."deletedAt" IS NULL AND g."gstAmount" > 0
+                  AND (
+                    NOT COALESCE(g."isVerified", false)
+                    OR (g."isGstHold" AND g."gstPaymentId" IS NULL AND g."gstBankTransferId" IS NULL)
+                  )
+             ) AS gst_open,
+             EXISTS (
+               SELECT 1 FROM tds_register_entries t
+                WHERE t."invoiceId" = i.id AND t."deletedAt" IS NULL AND t."tdsAmount" > 0
+                  AND (
+                    NOT COALESCE(t."isVerified", false)
+                    OR (t."partyType" = 'PURCHASE' AND t."tdsPaymentId" IS NULL)
+                  )
+             ) AS tds_open
+         ) tax
          CROSS JOIN LATERAL (
            SELECT COALESCE(i."paidTotal", 0) + COALESCE(i."advanceSettledAmount", 0) + COALESCE((
              SELECT SUM(bt."transferAmount")
@@ -102,33 +127,24 @@ export class DocumentMetricsService {
       ),
       run(
         { alias: 'bp', dateColumn: 'bookingDate', hasContractor: false, hasPartyType: false },
-        `${APPROVAL_COUNTS('bp')},
-         COALESCE(SUM(bp."paymentTotalAmount") FILTER (WHERE bp."approvalStatus" = 'APPROVED'), 0)::numeric AS "bookedAmount",
+        // Approved bookings still waiting for their bank transfer.
+        `COUNT(*)::int AS total, ${UNLOCK_REQUESTS('bp')},
          COUNT(*) FILTER (
            WHERE bp."approvalStatus" = 'APPROVED' AND NOT COALESCE(bp."hasTransfer", false)
-         )::int AS "awaitingTransferCount",
-         COALESCE(SUM(bp."paymentTotalAmount" - COALESCE(bp."paymentHoldAmount", 0)) FILTER (
-           WHERE bp."approvalStatus" = 'APPROVED' AND NOT COALESCE(bp."hasTransfer", false)
-         ), 0)::numeric AS "awaitingTransferAmount",
-         COALESCE(SUM(bp."paymentHoldAmount") FILTER (WHERE bp."approvalStatus" = 'APPROVED'), 0)::numeric AS "holdAmount"`,
+         )::int AS "transferPendingCount"`,
         'book_payments bp',
       ),
       run(
         { alias: 'a', dateColumn: 'advanceDate', hasContractor: false, hasPartyType: false },
+        // Approved advances with part of their amount not yet adjusted against an invoice.
         `${APPROVAL_COUNTS('a')},
-         COALESCE(SUM(a.amount) FILTER (WHERE a."approvalStatus" = 'APPROVED'), 0)::numeric AS "advanceAmount",
-         COALESCE(SUM(paid.amount) FILTER (WHERE a."approvalStatus" = 'APPROVED'), 0)::numeric AS "paidAmount",
-         COALESCE(SUM(GREATEST(a.amount - COALESCE(a."settledAmount", 0), 0)) FILTER (
-           WHERE a."approvalStatus" = 'APPROVED'
+         COUNT(*) FILTER (
+           WHERE a."approvalStatus" = 'APPROVED' AND a.amount - COALESCE(a."settledAmount", 0) > 0.5
+         )::int AS "unadjustedCount",
+         COALESCE(SUM(a.amount - COALESCE(a."settledAmount", 0)) FILTER (
+           WHERE a."approvalStatus" = 'APPROVED' AND a.amount - COALESCE(a."settledAmount", 0) > 0.5
          ), 0)::numeric AS "unadjustedAmount"`,
-        // Paid = bank transfers of the bookings raised against the advance.
-        `advance_payments a
-         CROSS JOIN LATERAL (
-           SELECT COALESCE(SUM(bt."transferAmount"), 0) AS amount
-             FROM book_payments abp
-             JOIN bank_transfers bt ON bt."bookPaymentId" = abp.id AND bt."deletedAt" IS NULL
-            WHERE abp."advancePaymentId" = a.id AND abp."deletedAt" IS NULL
-         ) paid`,
+        'advance_payments a',
       ),
     ]);
 
@@ -140,29 +156,28 @@ export class DocumentMetricsService {
     });
 
     return {
-      po: counts(po),
-      jmc: { ...counts(jmc), signedCopyMissing: this.int(jmc?.signedCopyMissing) },
-      report: counts(report),
+      po: { ...counts(po), unlockRequests: this.int(po?.unlockRequests) },
+      jmc: {
+        ...counts(jmc),
+        unlockRequests: this.int(jmc?.unlockRequests),
+        signedCopyMissing: this.int(jmc?.signedCopyMissing),
+      },
+      report: { total: this.int(report?.total), unlockRequests: this.int(report?.unlockRequests) },
       invoice: {
         ...counts(invoice),
-        taxableAmount: this.num(invoice?.taxableAmount),
-        gstAmount: this.num(invoice?.gstAmount),
-        invoiceAmount: this.num(invoice?.invoiceAmount),
-        settledAmount: this.num(invoice?.settledAmount),
-        outstandingAmount: this.num(invoice?.outstandingAmount),
-        gstHoldCount: this.int(invoice?.gstHoldCount),
+        unlockRequests: this.int(invoice?.unlockRequests),
+        gstPendingCount: this.int(invoice?.gstPendingCount),
+        tdsPendingCount: this.int(invoice?.tdsPendingCount),
+        paymentPendingCount: this.int(invoice?.paymentPendingCount),
       },
       bookPayment: {
-        ...counts(bookPayment),
-        bookedAmount: this.num(bookPayment?.bookedAmount),
-        awaitingTransferCount: this.int(bookPayment?.awaitingTransferCount),
-        awaitingTransferAmount: this.num(bookPayment?.awaitingTransferAmount),
-        holdAmount: this.num(bookPayment?.holdAmount),
+        total: this.int(bookPayment?.total),
+        unlockRequests: this.int(bookPayment?.unlockRequests),
+        transferPendingCount: this.int(bookPayment?.transferPendingCount),
       },
       advance: {
         ...counts(advance),
-        advanceAmount: this.num(advance?.advanceAmount),
-        paidAmount: this.num(advance?.paidAmount),
+        unadjustedCount: this.int(advance?.unadjustedCount),
         unadjustedAmount: this.num(advance?.unadjustedAmount),
       },
     };
@@ -224,26 +239,18 @@ export class DocumentMetricsService {
 
   private empty() {
     return {
-      po: { ...ZERO_APPROVALS },
-      jmc: { ...ZERO_APPROVALS, signedCopyMissing: 0 },
-      report: { ...ZERO_APPROVALS },
+      po: { ...ZERO_APPROVALS, unlockRequests: 0 },
+      jmc: { ...ZERO_APPROVALS, unlockRequests: 0, signedCopyMissing: 0 },
+      report: { total: 0, unlockRequests: 0 },
       invoice: {
         ...ZERO_APPROVALS,
-        taxableAmount: 0,
-        gstAmount: 0,
-        invoiceAmount: 0,
-        settledAmount: 0,
-        outstandingAmount: 0,
-        gstHoldCount: 0,
+        unlockRequests: 0,
+        gstPendingCount: 0,
+        tdsPendingCount: 0,
+        paymentPendingCount: 0,
       },
-      bookPayment: {
-        ...ZERO_APPROVALS,
-        bookedAmount: 0,
-        awaitingTransferCount: 0,
-        awaitingTransferAmount: 0,
-        holdAmount: 0,
-      },
-      advance: { ...ZERO_APPROVALS, advanceAmount: 0, paidAmount: 0, unadjustedAmount: 0 },
+      bookPayment: { total: 0, unlockRequests: 0, transferPendingCount: 0 },
+      advance: { ...ZERO_APPROVALS, unadjustedCount: 0, unadjustedAmount: 0 },
     };
   }
 
