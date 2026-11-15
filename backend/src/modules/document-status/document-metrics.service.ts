@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { DocumentStatusPartyType } from './dto/get-document-status.dto';
-import { GetDocumentMetricsDto } from './dto/get-document-metrics.dto';
+import { DocumentMetricsDoc, GetDocumentMetricsDto } from './dto/get-document-metrics.dto';
 
 /** Columns a document table has, so each filter is applied only where it makes sense. */
 interface ScopeSpec {
@@ -45,10 +45,15 @@ export class DocumentMetricsService {
       query.siteId,
     );
     if (siteIds?.length === 0) {
-      return this.empty();
+      const empty = this.empty();
+      return query.doc ? { [query.doc]: empty[query.doc] } : empty;
     }
 
-    const run = async (spec: ScopeSpec, select: string, from: string) => {
+    // A tab asks for its own document only (`doc`); skip every other query.
+    const run = async (doc: DocumentMetricsDoc, spec: ScopeSpec, select: string, from: string) => {
+      if (query.doc && query.doc !== doc) {
+        return null;
+      }
       const scope = this.scope(spec, query, siteIds);
       if (!scope) {
         return null;
@@ -62,11 +67,13 @@ export class DocumentMetricsService {
 
     const [po, jmc, report, invoice, bookPayment, advance, gst, tds] = await Promise.all([
       run(
+        DocumentMetricsDoc.PO,
         { alias: 'po', dateExpr: `po."poDate"`, hasContractor: true, hasPartyType: true },
         `${APPROVAL_COUNTS('po')}, ${UNLOCK_REQUESTS('po')}`,
         'purchase_orders po',
       ),
       run(
+        DocumentMetricsDoc.JMC,
         { alias: 'j', dateExpr: `j."jmcDate"`, hasContractor: true, hasPartyType: true },
         `${APPROVAL_COUNTS('j')}, ${UNLOCK_REQUESTS('j')},
          -- Generated contractor JMCs whose signed copy is still not uploaded.
@@ -78,11 +85,13 @@ export class DocumentMetricsService {
         'jmcs j',
       ),
       run(
+        DocumentMetricsDoc.REPORT,
         { alias: 'r', dateExpr: `r."reportDate"`, hasContractor: true, hasPartyType: true },
         `COUNT(*)::int AS total, ${UNLOCK_REQUESTS('r')}`,
         'site_reports r',
       ),
       run(
+        DocumentMetricsDoc.INVOICE,
         { alias: 'i', dateExpr: `i."invoiceDate"`, hasContractor: true, hasPartyType: true },
         `${APPROVAL_COUNTS('i')}, ${UNLOCK_REQUESTS('i')},
          COUNT(*) FILTER (WHERE i."approvalStatus" = 'APPROVED' AND tax.gst_open)::int AS "gstPendingCount",
@@ -127,6 +136,7 @@ export class DocumentMetricsService {
          ) st`,
       ),
       run(
+        DocumentMetricsDoc.BOOK_PAYMENT,
         { alias: 'bp', dateExpr: `bp."bookingDate"`, hasContractor: false, hasPartyType: false },
         // Approved bookings still waiting for their bank transfer.
         `COUNT(*)::int AS total, ${UNLOCK_REQUESTS('bp')},
@@ -136,6 +146,7 @@ export class DocumentMetricsService {
         'book_payments bp',
       ),
       run(
+        DocumentMetricsDoc.ADVANCE,
         { alias: 'a', dateExpr: `a."advanceDate"`, hasContractor: false, hasPartyType: false },
         // Approved advances with part of their amount not yet adjusted against an invoice.
         `${APPROVAL_COUNTS('a')},
@@ -148,6 +159,7 @@ export class DocumentMetricsService {
         'advance_payments a',
       ),
       run(
+        DocumentMetricsDoc.GST,
         // GST register entries carry no date of their own: filter on their invoice date.
         {
           alias: 'g',
@@ -176,6 +188,7 @@ export class DocumentMetricsService {
         'gst_register_entries g',
       ),
       run(
+        DocumentMetricsDoc.TDS,
         {
           alias: 't',
           dateExpr: `(SELECT ti."invoiceDate" FROM site_invoices ti WHERE ti.id = t."invoiceId")`,
@@ -202,7 +215,7 @@ export class DocumentMetricsService {
       rejected: this.int(row?.rejected),
     });
 
-    return {
+    const metrics = {
       po: { ...counts(po), unlockRequests: this.int(po?.unlockRequests) },
       jmc: {
         ...counts(jmc),
@@ -245,6 +258,8 @@ export class DocumentMetricsService {
         challanPendingAmount: this.num(tds?.challanPendingAmount),
       },
     };
+
+    return query.doc ? { [query.doc]: metrics[query.doc] } : metrics;
   }
 
   /**
