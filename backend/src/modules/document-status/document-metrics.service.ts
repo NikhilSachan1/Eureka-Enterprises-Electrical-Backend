@@ -7,7 +7,8 @@ import { GetDocumentMetricsDto } from './dto/get-document-metrics.dto';
 /** Columns a document table has, so each filter is applied only where it makes sense. */
 interface ScopeSpec {
   alias: string;
-  dateColumn: string;
+  /** SQL for the document date the date filter applies to. */
+  dateExpr: string;
   /** Contractor-side column exists (SALE documents). */
   hasContractor: boolean;
   /** Has a partyType column; when absent the table is PURCHASE-only. */
@@ -59,14 +60,14 @@ export class DocumentMetricsService {
       return row ?? null;
     };
 
-    const [po, jmc, report, invoice, bookPayment, advance] = await Promise.all([
+    const [po, jmc, report, invoice, bookPayment, advance, gst, tds] = await Promise.all([
       run(
-        { alias: 'po', dateColumn: 'poDate', hasContractor: true, hasPartyType: true },
+        { alias: 'po', dateExpr: `po."poDate"`, hasContractor: true, hasPartyType: true },
         `${APPROVAL_COUNTS('po')}, ${UNLOCK_REQUESTS('po')}`,
         'purchase_orders po',
       ),
       run(
-        { alias: 'j', dateColumn: 'jmcDate', hasContractor: true, hasPartyType: true },
+        { alias: 'j', dateExpr: `j."jmcDate"`, hasContractor: true, hasPartyType: true },
         `${APPROVAL_COUNTS('j')}, ${UNLOCK_REQUESTS('j')},
          -- Generated contractor JMCs whose signed copy is still not uploaded.
          COUNT(*) FILTER (
@@ -77,12 +78,12 @@ export class DocumentMetricsService {
         'jmcs j',
       ),
       run(
-        { alias: 'r', dateColumn: 'reportDate', hasContractor: true, hasPartyType: true },
+        { alias: 'r', dateExpr: `r."reportDate"`, hasContractor: true, hasPartyType: true },
         `COUNT(*)::int AS total, ${UNLOCK_REQUESTS('r')}`,
         'site_reports r',
       ),
       run(
-        { alias: 'i', dateColumn: 'invoiceDate', hasContractor: true, hasPartyType: true },
+        { alias: 'i', dateExpr: `i."invoiceDate"`, hasContractor: true, hasPartyType: true },
         `${APPROVAL_COUNTS('i')}, ${UNLOCK_REQUESTS('i')},
          COUNT(*) FILTER (WHERE i."approvalStatus" = 'APPROVED' AND tax.gst_open)::int AS "gstPendingCount",
          COUNT(*) FILTER (WHERE i."approvalStatus" = 'APPROVED' AND tax.tds_open)::int AS "tdsPendingCount",
@@ -126,7 +127,7 @@ export class DocumentMetricsService {
          ) st`,
       ),
       run(
-        { alias: 'bp', dateColumn: 'bookingDate', hasContractor: false, hasPartyType: false },
+        { alias: 'bp', dateExpr: `bp."bookingDate"`, hasContractor: false, hasPartyType: false },
         // Approved bookings still waiting for their bank transfer.
         `COUNT(*)::int AS total, ${UNLOCK_REQUESTS('bp')},
          COUNT(*) FILTER (
@@ -135,7 +136,7 @@ export class DocumentMetricsService {
         'book_payments bp',
       ),
       run(
-        { alias: 'a', dateColumn: 'advanceDate', hasContractor: false, hasPartyType: false },
+        { alias: 'a', dateExpr: `a."advanceDate"`, hasContractor: false, hasPartyType: false },
         // Approved advances with part of their amount not yet adjusted against an invoice.
         `${APPROVAL_COUNTS('a')},
          COUNT(*) FILTER (
@@ -145,6 +146,52 @@ export class DocumentMetricsService {
            WHERE a."approvalStatus" = 'APPROVED' AND a.amount - COALESCE(a."settledAmount", 0) > 0.5
          ), 0)::numeric AS "unadjustedAmount"`,
         'advance_payments a',
+      ),
+      run(
+        // GST register entries carry no date of their own: filter on their invoice date.
+        {
+          alias: 'g',
+          dateExpr: `(SELECT gi."invoiceDate" FROM site_invoices gi WHERE gi.id = g."invoiceId")`,
+          hasContractor: true,
+          hasPartyType: true,
+        },
+        `COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE COALESCE(g."isVerified", false))::int AS verified,
+         COUNT(*) FILTER (WHERE NOT COALESCE(g."isVerified", false))::int AS "verificationPending",
+         -- Held GST: PENDING → IN_PROCESS (release booked, not transferred) → SETTLED.
+         COUNT(*) FILTER (
+           WHERE g."isGstHold" AND g."gstPaymentId" IS NULL AND g."gstBankTransferId" IS NULL
+             AND g."gstBookPaymentId" IS NULL
+         )::int AS "holdPending",
+         COUNT(*) FILTER (
+           WHERE g."isGstHold" AND g."gstPaymentId" IS NULL AND g."gstBankTransferId" IS NULL
+             AND g."gstBookPaymentId" IS NOT NULL
+         )::int AS "holdInProcess",
+         COUNT(*) FILTER (
+           WHERE g."isGstHold" AND (g."gstPaymentId" IS NOT NULL OR g."gstBankTransferId" IS NOT NULL)
+         )::int AS "holdSettled",
+         COALESCE(SUM(g."gstAmount") FILTER (
+           WHERE g."isGstHold" AND g."gstPaymentId" IS NULL AND g."gstBankTransferId" IS NULL
+         ), 0)::numeric AS "holdPendingAmount"`,
+        'gst_register_entries g',
+      ),
+      run(
+        {
+          alias: 't',
+          dateExpr: `(SELECT ti."invoiceDate" FROM site_invoices ti WHERE ti.id = t."invoiceId")`,
+          hasContractor: true,
+          hasPartyType: true,
+        },
+        // Verified: 26Q (vendor) / 26AS (contractor). Challan: vendor TDS we deposit.
+        `COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE COALESCE(t."isVerified", false))::int AS verified,
+         COUNT(*) FILTER (WHERE NOT COALESCE(t."isVerified", false))::int AS "verificationPending",
+         COUNT(*) FILTER (WHERE t."partyType" = 'PURCHASE' AND t."tdsPaymentId" IS NOT NULL)::int AS "challanDeposited",
+         COUNT(*) FILTER (WHERE t."partyType" = 'PURCHASE' AND t."tdsPaymentId" IS NULL)::int AS "challanPending",
+         COALESCE(SUM(t."tdsAmount") FILTER (
+           WHERE t."partyType" = 'PURCHASE' AND t."tdsPaymentId" IS NULL
+         ), 0)::numeric AS "challanPendingAmount"`,
+        'tds_register_entries t',
       ),
     ]);
 
@@ -179,6 +226,23 @@ export class DocumentMetricsService {
         ...counts(advance),
         unadjustedCount: this.int(advance?.unadjustedCount),
         unadjustedAmount: this.num(advance?.unadjustedAmount),
+      },
+      gst: {
+        total: this.int(gst?.total),
+        verified: this.int(gst?.verified),
+        verificationPending: this.int(gst?.verificationPending),
+        holdPending: this.int(gst?.holdPending),
+        holdInProcess: this.int(gst?.holdInProcess),
+        holdSettled: this.int(gst?.holdSettled),
+        holdPendingAmount: this.num(gst?.holdPendingAmount),
+      },
+      tds: {
+        total: this.int(tds?.total),
+        verified: this.int(tds?.verified),
+        verificationPending: this.int(tds?.verificationPending),
+        challanDeposited: this.int(tds?.challanDeposited),
+        challanPending: this.int(tds?.challanPending),
+        challanPendingAmount: this.num(tds?.challanPendingAmount),
       },
     };
   }
@@ -228,10 +292,10 @@ export class DocumentMetricsService {
       where.push(`${t}."vendorId" = ANY(${add(query.vendorId)}::uuid[])`);
     }
     if (query.dateFrom) {
-      where.push(`${t}."${spec.dateColumn}"::date >= ${add(query.dateFrom)}::date`);
+      where.push(`(${spec.dateExpr})::date >= ${add(query.dateFrom)}::date`);
     }
     if (query.dateTo) {
-      where.push(`${t}."${spec.dateColumn}"::date <= ${add(query.dateTo)}::date`);
+      where.push(`(${spec.dateExpr})::date <= ${add(query.dateTo)}::date`);
     }
 
     return { where: where.join(' AND '), params };
@@ -251,6 +315,23 @@ export class DocumentMetricsService {
       },
       bookPayment: { total: 0, unlockRequests: 0, transferPendingCount: 0 },
       advance: { ...ZERO_APPROVALS, unadjustedCount: 0, unadjustedAmount: 0 },
+      gst: {
+        total: 0,
+        verified: 0,
+        verificationPending: 0,
+        holdPending: 0,
+        holdInProcess: 0,
+        holdSettled: 0,
+        holdPendingAmount: 0,
+      },
+      tds: {
+        total: 0,
+        verified: 0,
+        verificationPending: 0,
+        challanDeposited: 0,
+        challanPending: 0,
+        challanPendingAmount: 0,
+      },
     };
   }
 
