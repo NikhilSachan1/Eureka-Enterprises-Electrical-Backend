@@ -1,3 +1,4 @@
+import { buildAuditTrail } from 'src/utils/audit-trail/audit-trail.util';
 import {
   Injectable,
   NotFoundException,
@@ -122,8 +123,35 @@ export class TdsService {
       relations: [...TdsService.ENTRY_RELATIONS, 'verifiedByUser'],
     });
     if (!entry) throw new NotFoundException(TDS_ERRORS.ENTRY_NOT_FOUND);
+
+    // Who did what on this entry, oldest first.
+    const isPurchase = entry.partyType === PartyType.PURCHASE;
+    const auditTrail = await buildAuditTrail(this.dataSource, [
+      isPurchase &&
+        !!entry.tdsPayment && {
+          action: 'TDS challan recorded',
+          userId: entry.tdsPayment.createdBy,
+          date: entry.tdsPayment.createdAt,
+          notes: entry.tdsPayment.remarks,
+        },
+      entry.isVerified && {
+        action: isPurchase ? 'Verified in 26Q' : 'Verified in Form 26AS',
+        userId: entry.verifiedBy,
+        date: entry.verifiedAt,
+        notes: entry.verifyRemarks,
+      },
+      !entry.isVerified &&
+        !!entry.revertReason && {
+          action: 'Verification reverted',
+          userId: entry.updatedBy,
+          date: entry.updatedAt,
+          notes: entry.revertReason,
+        },
+    ]);
+
     return {
       ...entry,
+      auditTrail,
       verifiedByUser: entry.verifiedByUser
         ? {
             id: entry.verifiedByUser.id,
