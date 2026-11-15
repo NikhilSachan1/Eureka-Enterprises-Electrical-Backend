@@ -54,6 +54,13 @@ import {
   buildLeaveApplicationStatsQuery,
   buildUniqueUserIdsQuery,
 } from './queries/leave-queries.dto';
+import {
+  buildLeaveGroupCountQuery,
+  buildLeaveGroupPageQuery,
+  buildLeaveGroupRecordsQuery,
+} from './queries/leave-group.queries';
+import { LeaveApplicationGroupResponse } from './leave-applications.types';
+import { randomUUID } from 'crypto';
 import { UserService } from '../users/user.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { AttendanceStatus, AttendanceType } from '../attendance/constants/attendance.constants';
@@ -523,8 +530,11 @@ export class LeaveApplicationsService {
           }
         }
 
+        // Every day of this submission belongs to one application.
+        const applicationGroupId = randomUUID();
         const leaveApplicationPromises = dateRange.map((date) => {
           const leaveApplicationData = {
+            applicationGroupId,
             userId,
             leaveType,
             leaveCategory,
@@ -673,8 +683,11 @@ export class LeaveApplicationsService {
       );
 
       await this.dataSource.transaction(async (entityManager) => {
+        // Every day of this submission belongs to one application.
+        const applicationGroupId = randomUUID();
         const leaveApplicationPromises = applicableDates.map((date) => {
           const leaveApplicationData = {
+            applicationGroupId,
             userId,
             leaveType,
             leaveCategory,
@@ -775,19 +788,131 @@ export class LeaveApplicationsService {
     // Build all queries
     const { query, params } = buildLeaveApplicationListQuery(filters);
     const { query: countQuery, params: countParams } = buildLeaveApplicationCountQuery(filters);
-    const { query: statsQuery, params: statsParams } = buildLeaveApplicationStatsQuery(filters);
-    const { query: uniqueUsersQuery, params: uniqueUsersParams } = buildUniqueUserIdsQuery(filters);
 
     // Execute all queries in parallel
-    const [records, totalRecordsResult, statsResults, uniqueUserResults] = await Promise.all([
+    const [records, totalRecordsResult, stats] = await Promise.all([
       this.leaveApplicationsRepository.rawQuery(query, params),
       this.leaveApplicationsRepository.rawQuery(countQuery, countParams),
-      this.leaveApplicationsRepository.rawQuery(statsQuery, statsParams),
-      this.leaveApplicationsRepository.rawQuery(uniqueUsersQuery, uniqueUsersParams),
+      this.getLeaveListStats(filters),
     ]);
 
     const transformedRecords = this.transformLeaveApplicationRecords(records);
     const totalRecords = totalRecordsResult[0]?.total || 0;
+
+    const grouped = filters.grouped === 'true';
+
+    if (grouped) {
+      const isSingleUser = filters.userIds && filters.userIds.length === 1;
+      const groupedRecords = this.groupLeaveApplications(transformedRecords, isSingleUser);
+
+      return {
+        stats,
+        groupedRecords,
+        totalRecords: parseInt(totalRecords),
+      };
+    }
+
+    return {
+      stats,
+      records: transformedRecords,
+      totalRecords: parseInt(totalRecords),
+    };
+  }
+
+  /**
+   * Leave applications, one per submission: the day rows that were applied (or forced) together,
+   * with their own approval status each. Pagination and the count are per application; an
+   * application is listed when any of its days matches the filters, and always with all its days.
+   * Stats stay per day (the same numbers as the day list).
+   */
+  async getLeaveApplicationGroups(filters: GetLeaveApplicationsDto): Promise<{
+    records: LeaveApplicationGroupResponse[];
+    totalRecords: number;
+    stats: Awaited<ReturnType<LeaveApplicationsService['getLeaveListStats']>>;
+  }> {
+    const page = buildLeaveGroupPageQuery(filters);
+    const count = buildLeaveGroupCountQuery(filters);
+
+    const [pageRows, countRows, stats] = await Promise.all([
+      this.leaveApplicationsRepository.rawQuery(page.query, page.params),
+      this.leaveApplicationsRepository.rawQuery(count.query, count.params),
+      this.getLeaveListStats(filters),
+    ]);
+
+    const groupIds: string[] = pageRows.map((row: { groupId: string }) => row.groupId);
+    const dayRows = groupIds.length
+      ? await this.leaveApplicationsRepository.rawQuery(
+          buildLeaveGroupRecordsQuery(groupIds).query,
+          buildLeaveGroupRecordsQuery(groupIds).params,
+        )
+      : [];
+
+    const daysByGroup = new Map<string, LeaveApplicationResponseDto[]>();
+    dayRows.forEach((row: { groupId: string }, index: number) => {
+      const [day] = this.transformLeaveApplicationRecords([dayRows[index]]);
+      const list = daysByGroup.get(row.groupId) ?? [];
+      list.push(day);
+      daysByGroup.set(row.groupId, list);
+    });
+
+    const records = groupIds
+      .map((groupId) => this.toLeaveApplicationGroup(groupId, daysByGroup.get(groupId) ?? []))
+      .filter((group): group is LeaveApplicationGroupResponse => group !== null);
+
+    return { records, totalRecords: countRows[0]?.total ?? 0, stats };
+  }
+
+  /** One application from its day rows (already sorted by date). */
+  private toLeaveApplicationGroup(
+    groupId: string,
+    days: LeaveApplicationResponseDto[],
+  ): LeaveApplicationGroupResponse | null {
+    const [first] = days;
+    if (!first) return null;
+    const last = days[days.length - 1];
+
+    const statusCounts = { pending: 0, approved: 0, rejected: 0, cancelled: 0 };
+    days.forEach((day) => {
+      const key = String(day.approvalStatus).toLowerCase() as keyof typeof statusCounts;
+      if (key in statusCounts) statusCounts[key] += 1;
+    });
+    const statuses = new Set(days.map((day) => day.approvalStatus));
+
+    const createdAt = days.reduce(
+      (earliest, day) => (new Date(day.createdAt) < new Date(earliest) ? day.createdAt : earliest),
+      first.createdAt,
+    );
+
+    return {
+      groupId,
+      userId: first.userId,
+      user: first.user,
+      leaveType: first.leaveType,
+      leaveCategory: first.leaveCategory,
+      leaveApplicationType: first.leaveApplicationType,
+      entrySourceType: first.entrySourceType,
+      reason: first.reason,
+      fromDate: first.fromDate,
+      toDate: last.toDate,
+      dayCount: days.length,
+      // One status when every day agrees, otherwise "mixed" (see statusCounts).
+      approvalStatus: statuses.size === 1 ? first.approvalStatus : 'mixed',
+      statusCounts,
+      createdAt,
+      createdByUser: first.createdByUser,
+      records: days,
+    };
+  }
+
+  /** Approval counts (per day) and the leave balance of the employees in the result. */
+  private async getLeaveListStats(filters: GetLeaveApplicationsDto) {
+    const { query: statsQuery, params: statsParams } = buildLeaveApplicationStatsQuery(filters);
+    const { query: uniqueUsersQuery, params: uniqueUsersParams } = buildUniqueUserIdsQuery(filters);
+
+    const [statsResults, uniqueUserResults] = await Promise.all([
+      this.leaveApplicationsRepository.rawQuery(statsQuery, statsParams),
+      this.leaveApplicationsRepository.rawQuery(uniqueUsersQuery, uniqueUsersParams),
+    ]);
 
     // Get unique user IDs: prefer from filtered results, fallback to filter's userIds
     const uniqueUserIds =
@@ -809,26 +934,7 @@ export class LeaveApplicationsService {
     }
 
     const transformedLeaveBalances = this.transformLeaveBalanceRecords(leaveBalances);
-    const stats = this.calculateStatsFromResults(statsResults, transformedLeaveBalances);
-
-    const grouped = filters.grouped === 'true';
-
-    if (grouped) {
-      const isSingleUser = filters.userIds && filters.userIds.length === 1;
-      const groupedRecords = this.groupLeaveApplications(transformedRecords, isSingleUser);
-
-      return {
-        stats,
-        groupedRecords,
-        totalRecords: parseInt(totalRecords),
-      };
-    }
-
-    return {
-      stats,
-      records: transformedRecords,
-      totalRecords: parseInt(totalRecords),
-    };
+    return this.calculateStatsFromResults(statsResults, transformedLeaveBalances);
   }
 
   private groupLeaveApplications(
@@ -994,6 +1100,7 @@ export class LeaveApplicationsService {
         updatedAt: leaveApplication.updatedAt,
         createdBy: leaveApplication.createdBy,
         entrySourceType: leaveApplication.entrySourceType,
+        applicationGroupId: leaveApplication.applicationGroupId ?? null,
         approvalByUser: leaveApplication.approvalBy
           ? {
               id: leaveApplication.approvalBy,
