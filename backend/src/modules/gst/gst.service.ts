@@ -14,6 +14,7 @@ import { PartyType, getFinancialYear } from 'src/modules/common/financials/finan
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { BookPaymentService } from 'src/modules/book-payments/book-payment.service';
 import { BankTransferService } from 'src/modules/bank-transfers/bank-transfer.service';
+import { buildAuditTrail } from 'src/utils/audit-trail/audit-trail.util';
 
 /** Relations that show how an entry's held GST was settled. */
 const GST_SETTLEMENT_RELATIONS = [
@@ -140,8 +141,49 @@ export class GstService {
       ],
     });
     if (!entry) throw new NotFoundException(GST_ERRORS.ENTRY_NOT_FOUND);
+
+    // Who did what on this entry, oldest first.
+    const isPurchase = entry.partyType === PartyType.PURCHASE;
+    const moved = isPurchase ? 'GST released to vendor' : 'GST received from client';
+    const auditTrail = await buildAuditTrail(this.dataSource, [
+      entry.isVerified && {
+        action: isPurchase ? 'Verified in GSTR-2B' : 'Verified in GSTR-1',
+        userId: entry.verifiedBy,
+        date: entry.verifiedAt,
+        notes: entry.verifyRemarks,
+      },
+      !entry.isVerified &&
+        !!entry.revertReason && {
+          action: 'Verification reverted',
+          userId: entry.updatedBy,
+          date: entry.updatedAt,
+          notes: entry.revertReason,
+        },
+      !!entry.gstBookPayment && {
+        action: 'GST release booked',
+        userId: entry.gstBookPayment.createdBy,
+        date: entry.gstBookPayment.createdAt,
+        notes: entry.gstBookPayment.remarks,
+      },
+      !!entry.gstBankTransfer && {
+        action: moved,
+        userId: entry.gstBankTransfer.createdBy,
+        date: entry.gstBankTransfer.createdAt,
+        notes: entry.gstBankTransfer.remarks,
+      },
+      // Legacy: settled directly, before GST moved through book payment / bank transfer.
+      !entry.gstBankTransfer &&
+        !!entry.gstPayment && {
+          action: moved,
+          userId: entry.gstPayment.createdBy,
+          date: entry.gstPayment.createdAt,
+          notes: entry.gstPayment.remarks,
+        },
+    ]);
+
     return {
       ...entry,
+      auditTrail,
       verifiedByUser: entry.verifiedByUser
         ? {
             id: entry.verifiedByUser.id,
