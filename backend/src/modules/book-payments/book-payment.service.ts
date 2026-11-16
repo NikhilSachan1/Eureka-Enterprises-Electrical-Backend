@@ -39,7 +39,7 @@ import {
 } from 'src/modules/common/financials/financial.constants';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { UnlockRequestDto } from 'src/modules/purchase-orders/dto/approval.dto';
-import { formatInr } from 'src/modules/common/financials/amount-format.helper';
+import { formatInr, roundInr } from 'src/modules/common/financials/amount-format.helper';
 import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
 
 /**
@@ -146,7 +146,7 @@ export class BookPaymentService {
       // once when the advance went out, and again as a booking against the full invoice.
       const advanceSettled = Number(invoice.advanceSettledAmount ?? 0);
       const existingBooked = await this.bookPaymentRepository.sumByInvoice(dto.invoiceId, em);
-      const remaining = invoiceNetPayable - advanceSettled - existingBooked;
+      const remaining = roundInr(invoiceNetPayable - advanceSettled - existingBooked);
       if (remaining <= 0) {
         throw new BadRequestException(
           BOOK_PAYMENT_ERRORS.INVOICE_FULLY_BOOKED.replace(
@@ -158,7 +158,7 @@ export class BookPaymentService {
         );
       }
 
-      const transferAmount = Number(dto.transferAmount);
+      const transferAmount = roundInr(Number(dto.transferAmount));
       if (transferAmount > remaining) {
         throw new BadRequestException(
           BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED_DETAIL.replace(
@@ -291,7 +291,7 @@ export class BookPaymentService {
 
       const advanceAmount = Number(advance.amount);
       const existingBooked = await this.bookPaymentRepository.sumByAdvance(advance.id, em);
-      const remaining = advanceAmount - existingBooked;
+      const remaining = roundInr(advanceAmount - existingBooked);
       if (remaining <= 0) {
         throw new BadRequestException(
           BOOK_PAYMENT_ERRORS.ADVANCE_FULLY_BOOKED.replace('{advanceNumber}', advance.advanceNumber)
@@ -300,7 +300,7 @@ export class BookPaymentService {
         );
       }
 
-      const transferAmount = Number(dto.transferAmount);
+      const transferAmount = roundInr(Number(dto.transferAmount));
       if (transferAmount > remaining) {
         throw new BadRequestException(
           BOOK_PAYMENT_ERRORS.ADVANCE_CEILING_EXCEEDED.replace(
@@ -576,7 +576,7 @@ export class BookPaymentService {
         const advanceSettled = Number(invoice.advanceSettledAmount ?? 0);
         const existingBooked = await this.bookPaymentRepository.sumByInvoice(bp.invoiceId, em);
         const adjustedBooked = existingBooked - oldTransferAmount + newTransferAmount;
-        if (adjustedBooked + advanceSettled > invoiceNetPayable) {
+        if (roundInr(adjustedBooked + advanceSettled) > roundInr(invoiceNetPayable)) {
           throw new BadRequestException(BOOK_PAYMENT_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 

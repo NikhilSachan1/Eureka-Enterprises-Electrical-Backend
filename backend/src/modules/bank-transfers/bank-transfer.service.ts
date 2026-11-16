@@ -32,6 +32,7 @@ import {
 import type { PaymentAdvicePdfData } from 'src/modules/payment-advices/payment-advice-pdf.service';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
+import { roundInr } from 'src/modules/common/financials/amount-format.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
 import { AdvancePaymentEntity } from 'src/modules/advance-payments/entities/advance-payment.entity';
 import { BookPaymentEntity } from 'src/modules/book-payments/entities/book-payment.entity';
@@ -156,7 +157,7 @@ export class BankTransferService {
           Number(invoice.gstAmount ?? 0) -
           Number(invoice.tdsAmount ?? 0);
       const existingPaid = await this.bankTransferRepository.sumByInvoice(dto.invoiceId, em);
-      if (existingPaid + dto.transferAmount > invoiceNetPayable) {
+      if (roundInr(existingPaid + Number(dto.transferAmount)) > roundInr(invoiceNetPayable)) {
         throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
       }
 
@@ -687,7 +688,7 @@ export class BankTransferService {
 
         const existingPaid = await this.bankTransferRepository.sumByInvoice(bt.invoiceId, em);
         const adjustedPaid = existingPaid - oldTransfer + newTransfer;
-        if (adjustedPaid > invoiceNetPayable) {
+        if (roundInr(adjustedPaid) > roundInr(invoiceNetPayable)) {
           throw new BadRequestException(BANK_TRANSFER_ERRORS.INVOICE_CEILING_EXCEEDED);
         }
 

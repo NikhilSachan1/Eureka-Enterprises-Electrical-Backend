@@ -48,7 +48,7 @@ import { JmcEntity } from 'src/modules/jmc/entities/jmc.entity';
 import { SiteReportEntity } from 'src/modules/site-reports/entities/site-report.entity';
 import { PurchaseOrderRepository } from 'src/modules/purchase-orders/purchase-order.repository';
 import { AdvancePaymentRepository } from 'src/modules/advance-payments/advance-payment.repository';
-import { formatInr } from 'src/modules/common/financials/amount-format.helper';
+import { formatInr, roundInr } from 'src/modules/common/financials/amount-format.helper';
 import {
   PartyType,
   FinancialApprovalStatus,
@@ -626,7 +626,7 @@ export class SiteInvoiceService {
       const po = await this.poRepository.findOneForUpdate(inv.poId, em);
       if (!po) throw new NotFoundException(FINANCIAL_ERRORS.PARENT_NOT_FOUND);
       const newInvoicedTotal = Number(po.invoicedTotal) + Number(inv.totalAmount);
-      if (newInvoicedTotal > Number(po.totalAmount)) {
+      if (roundInr(newInvoicedTotal) > roundInr(Number(po.totalAmount))) {
         throw new BadRequestException(FINANCIAL_ERRORS.PO_CEILING_EXCEEDED);
       }
 
@@ -941,7 +941,7 @@ export class SiteInvoiceService {
     const existing = Number(sumRow?.existing ?? 0);
     const poTotal = Number(poRow.totalAmount);
 
-    if (existing + Number(newTotal) > poTotal) {
+    if (roundInr(existing + Number(newTotal)) > roundInr(poTotal)) {
       throw new BadRequestException(INVOICE_ERRORS.PO_CEILING_EXCEEDED_ON_SAVE);
     }
   }
