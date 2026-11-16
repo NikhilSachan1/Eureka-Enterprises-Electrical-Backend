@@ -12,10 +12,13 @@ export const TDS_ERRORS = {
   ALREADY_IN_CHALLAN: (invoiceNumber: string) =>
     `TDS on invoice ${invoiceNumber} is already included in a deposited challan.`,
   MIXED_SITE: 'All selected entries must belong to the same site.',
+  CHALLAN_HAS_VERIFIED_ENTRIES: (invoiceNumbers: string) =>
+    `Revert the 26Q verification of invoice ${invoiceNumbers} before reverting this challan.`,
 };
 
 export const TDS_RESPONSES = {
   ENTRY_VERIFIED: 'TDS register entry verified successfully.',
   ENTRY_REVERTED: 'TDS register entry verification reverted.',
   CHALLAN_RECORDED: 'TDS challan recorded successfully.',
+  CHALLAN_REVERTED: 'TDS challan reverted. Its entries are back to challan pending.',
 };

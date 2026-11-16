@@ -304,6 +304,55 @@ export class TdsService {
   }
 
   /**
+   * Revert a recorded challan — the whole challan, since it is one deposit under one UTR.
+   * Every entry in it must be un-verified first (26Q needs the challan). The entries go back to
+   * challan pending, which is what lets their invoices be unlocked; the challan is soft-deleted
+   * with who reverted it, when and why.
+   */
+  async revertPayment(id: string, revertedBy: string, reason: string) {
+    return await this.dataSource.transaction(async (em) => {
+      const payment = await this.tdsRepository.findOnePayment(
+        { where: { id, deletedAt: IsNull() }, lock: { mode: 'pessimistic_write' } },
+        em,
+      );
+      if (!payment) throw new NotFoundException(TDS_ERRORS.PAYMENT_NOT_FOUND);
+
+      const entries: { invoiceNumber: string | null; invoiceId: string; isVerified: boolean }[] =
+        await em.query(
+          `SELECT e."invoiceId", e."isVerified", i."invoiceNumber"
+             FROM tds_register_entries e
+             LEFT JOIN site_invoices i ON i.id = e."invoiceId"
+            WHERE e."tdsPaymentId" = $1 AND e."deletedAt" IS NULL`,
+          [id],
+        );
+      const verified = entries.filter((e) => e.isVerified);
+      if (verified.length > 0) {
+        throw new BadRequestException(
+          TDS_ERRORS.CHALLAN_HAS_VERIFIED_ENTRIES(
+            verified.map((e) => e.invoiceNumber ?? e.invoiceId).join(', '),
+          ),
+        );
+      }
+
+      await em.query(
+        `UPDATE tds_register_entries
+            SET "tdsPaymentId" = NULL, "updatedBy" = $2, "updatedAt" = NOW()
+          WHERE "tdsPaymentId" = $1 AND "deletedAt" IS NULL`,
+        [id, revertedBy],
+      );
+      await em.query(
+        `UPDATE tds_payments
+            SET "revertReason" = $2, "revertedAt" = NOW(), "revertedBy" = $3,
+                "deletedBy" = $3, "deletedAt" = NOW(), "updatedBy" = $3, "updatedAt" = NOW()
+          WHERE id = $1`,
+        [id, reason.trim(), revertedBy],
+      );
+
+      return { message: TDS_RESPONSES.CHALLAN_REVERTED, entriesCount: entries.length };
+    });
+  }
+
+  /**
    * Get TDS challans list.
    */
   async findAllPayments(siteId?: string, partyType?: PartyType) {
