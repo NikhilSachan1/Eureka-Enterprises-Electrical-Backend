@@ -32,4 +32,6 @@ export interface OverallSiteStats {
   completedSites: number;
   activeSites: number;
   inactiveSites: number;
+  /** Sites per site type value (a site with several types counts under each). */
+  siteTypeCounts: Record<string, number>;
 }
