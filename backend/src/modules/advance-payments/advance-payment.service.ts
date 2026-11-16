@@ -32,7 +32,7 @@ import {
   checkSiteCreateAccess,
   resolveReadableSiteFilter,
 } from 'src/modules/common/financials/site-access.helper';
-import { formatInr } from 'src/modules/common/financials/amount-format.helper';
+import { formatInr, roundInr } from 'src/modules/common/financials/amount-format.helper';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/utility.constants';
 import { RejectDto } from 'src/modules/purchase-orders/dto/approval.dto';
@@ -139,9 +139,9 @@ export class AdvancePaymentService {
     );
     const poTotal = Number(po.totalAmount ?? 0);
     const invoiced = Number(po.invoicedTotal ?? 0);
-    const available = poTotal - invoiced - alreadyAdvanced;
+    const available = roundInr(poTotal - invoiced - alreadyAdvanced);
 
-    if (amount > available) {
+    if (roundInr(amount) > available) {
       throw new BadRequestException(
         ADVANCE_PAYMENT_ERRORS.EXCEEDS_PO_LIMIT.replace('{requested}', formatInr(amount))
           .replace('{poTotal}', formatInr(poTotal))
