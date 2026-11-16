@@ -43,6 +43,7 @@ import {
 import {
   getSiteHealthScoresQuery,
   getOverallSiteStatsQuery,
+  getSiteTypeCountsQuery,
   getAllocatedEmployeesBySitesQuery,
 } from './queries/site.queries';
 import { OverallSiteStats, AllocatedEmployee, SiteAllocationInfo } from './site.types';
@@ -400,8 +401,16 @@ export class SiteService {
    */
   private async getOverallSiteStats(siteIds?: string[]): Promise<OverallSiteStats> {
     const { query, params } = getOverallSiteStatsQuery(siteIds);
-    const result = await this.dataSource.query(query, params);
+    const typeCountsQuery = getSiteTypeCountsQuery(siteIds);
+    const [result, typeRows] = await Promise.all([
+      this.dataSource.query(query, params),
+      this.dataSource.query(typeCountsQuery.query, typeCountsQuery.params),
+    ]);
     const row = result[0] || {};
+    const siteTypeCounts: Record<string, number> = {};
+    for (const typeRow of typeRows) {
+      siteTypeCounts[typeRow.siteType] = parseInt(typeRow.count) || 0;
+    }
 
     return {
       totalSites: parseInt(row.totalSites) || 0,
@@ -412,6 +421,7 @@ export class SiteService {
       completedSites: parseInt(row.completedSites) || 0,
       activeSites: parseInt(row.activeSites) || 0,
       inactiveSites: parseInt(row.inactiveSites) || 0,
+      siteTypeCounts,
     };
   }
 
