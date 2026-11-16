@@ -69,4 +69,14 @@ export class TdsPaymentEntity extends BaseEntity {
 
   @Column({ type: 'varchar', length: 20, default: FinancialApprovalStatus.APPROVED })
   approvalStatus: string;
+
+  // Set when an admin reverts the challan; the row is then soft-deleted.
+  @Column({ type: 'text', nullable: true })
+  revertReason: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  revertedAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  revertedBy: string | null;
 }
