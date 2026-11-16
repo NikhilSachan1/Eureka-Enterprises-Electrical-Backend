@@ -156,6 +156,7 @@ export class AuthService {
       profilePicture: profilePicture || null,
       roles,
       activeRole: defaultActiveRole,
+      isSystemUser: await this.isSystemUser(id),
       expiresIn: Environments.JWT_AUTH_TOKEN_EXPIRY,
       userId: id,
     };
@@ -403,9 +404,19 @@ export class AuthService {
       profilePicture: target.profilePicture || null,
       roles,
       activeRole,
+      isSystemUser: await this.isSystemUser(target.id),
       expiresIn: IMPERSONATION_ACCESS_TOKEN_EXPIRY,
       userId: target.id,
     };
+  }
+
+  /** `isSystemUser` is not selected by default; login-only accounts get no "My Profile". */
+  private async isSystemUser(userId: string): Promise<boolean> {
+    const user = await this.userService.findOneOrFail({
+      where: { id: userId },
+      select: { id: true, isSystemUser: true },
+    });
+    return user.isSystemUser === true;
   }
 
   async forgetPassword(emailId: string) {

@@ -57,7 +57,10 @@ describe('AuthService impersonation', () => {
     };
 
     service = new AuthService(
-      { findOne: jest.fn(async ({ id }) => users[id] ?? null) } as any,
+      {
+        findOne: jest.fn(async ({ id }) => users[id] ?? null),
+        findOneOrFail: jest.fn(async ({ where: { id } }) => users[id]),
+      } as any,
       jwtService,
       {} as any,
       {} as any,
