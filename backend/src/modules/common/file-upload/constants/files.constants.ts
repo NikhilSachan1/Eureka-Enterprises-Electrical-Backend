@@ -20,6 +20,22 @@ export const ALLOWED_FILE_TYPES = [
   'application/gzip',
   'application/x-tar',
   'application/x-bzip2',
+  // My Files only (see the orgFiles categories below): more image formats, RTF, Excel, PowerPoint
+  ...[
+    'image/gif',
+    'image/heic',
+    'image/heif',
+    'image/svg+xml',
+    'image/webp',
+    'image/bmp',
+    'image/x-ms-bmp',
+    'application/rtf',
+    'text/rtf',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ],
 ];
 
 export const ALLOWED_MIME_TYPES: { [key: string]: string[] } = {
@@ -44,6 +60,29 @@ export const ALLOWED_MIME_TYPES: { [key: string]: string[] } = {
     'application/x-tar',
     'application/x-bzip2',
   ],
+  // Every image format My Files accepts. Kept apart from `image` so other upload slots
+  // (profile picture, expenses, ...) still take only JPEG / PNG.
+  imageAll: [
+    'image/jpeg',
+    'image/png',
+    'image/jpg',
+    'image/gif',
+    'image/heic',
+    'image/heif',
+    'image/svg+xml',
+    'image/webp',
+    'image/bmp',
+    'image/x-ms-bmp',
+  ],
+  rtf: ['application/rtf', 'text/rtf'],
+  spreadsheet: [
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ],
+  presentation: [
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ],
 };
 
 export const ALLOWED_FILE_CATEGORY = {
@@ -56,6 +95,10 @@ export const ALLOWED_FILE_CATEGORY = {
   HTML: 'html',
   WORD: 'word',
   ARCHIVE: 'archive',
+  IMAGE_ALL: 'imageAll',
+  RTF: 'rtf',
+  SPREADSHEET: 'spreadsheet',
+  PRESENTATION: 'presentation',
 };
 
 export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
@@ -80,6 +123,20 @@ export const ALLOWED_MAX_FILE_SIZE: { [key: string]: number } = {
   'application/gzip': 500 * 1024 * 1024,
   'application/x-tar': 500 * 1024 * 1024,
   'application/x-bzip2': 500 * 1024 * 1024,
+  // My Files formats — 10 MB, the same limit the upload form applies
+  'image/gif': 10 * 1024 * 1024,
+  'image/heic': 10 * 1024 * 1024,
+  'image/heif': 10 * 1024 * 1024,
+  'image/svg+xml': 10 * 1024 * 1024,
+  'image/webp': 10 * 1024 * 1024,
+  'image/bmp': 10 * 1024 * 1024,
+  'image/x-ms-bmp': 10 * 1024 * 1024,
+  'application/rtf': 10 * 1024 * 1024,
+  'text/rtf': 10 * 1024 * 1024,
+  'application/vnd.ms-excel': 10 * 1024 * 1024,
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 10 * 1024 * 1024,
+  'application/vnd.ms-powerpoint': 10 * 1024 * 1024,
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 10 * 1024 * 1024,
 };
 
 export const FILE_LIMIT = {
@@ -126,16 +183,18 @@ export const FIELD_FORMATS: { [key: string]: string[] } = {
   vehicleLogStartOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogEndOdometer: [ALLOWED_FILE_CATEGORY.IMAGE],
   vehicleLogOther: [ALLOWED_FILE_CATEGORY.IMAGE, ALLOWED_FILE_CATEGORY.PDF],
-  // The org file manager ("My Files") is a general document store, not a document-type-specific
-  // attachment slot, so Word documents belong here alongside PDFs and images.
+  // The org file manager ("My Files") is a general document store. Same list as the frontend
+  // upload form (APP_CONFIG.MEDIA_CONFIG image / pdf / document / spreadsheet / presentation):
+  // images, PDF, Word, TXT, RTF, CSV, Excel and PowerPoint.
   orgFiles: [
-    ALLOWED_FILE_CATEGORY.IMAGE,
+    ALLOWED_FILE_CATEGORY.IMAGE_ALL,
     ALLOWED_FILE_CATEGORY.PDF,
-    ALLOWED_FILE_CATEGORY.TXT,
-    ALLOWED_FILE_CATEGORY.CSV,
-    ALLOWED_FILE_CATEGORY.JSON,
-    ALLOWED_FILE_CATEGORY.HTML,
     ALLOWED_FILE_CATEGORY.WORD,
+    ALLOWED_FILE_CATEGORY.TXT,
+    ALLOWED_FILE_CATEGORY.RTF,
+    ALLOWED_FILE_CATEGORY.CSV,
+    ALLOWED_FILE_CATEGORY.SPREADSHEET,
+    ALLOWED_FILE_CATEGORY.PRESENTATION,
   ],
 };
 

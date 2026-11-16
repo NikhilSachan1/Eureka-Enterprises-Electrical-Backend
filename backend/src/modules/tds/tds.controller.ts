@@ -61,6 +61,19 @@ export class TdsController {
     return this.tdsService.releasePayment(dto, userId);
   }
 
+  @Post('payments/:id/revert')
+  @RequiredPermission('financials.tds.revert-challan')
+  @ApiOperation({
+    summary: 'Revert a recorded TDS challan (its entries must not be verified in 26Q)',
+  })
+  revertPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser('id') userId: string,
+    @Body() dto: RevertEntryDto,
+  ) {
+    return this.tdsService.revertPayment(id, userId, dto.reason);
+  }
+
   @Get('payments')
   @RequiredPermission('financials.tds.view-list')
   @ApiOperation({ summary: 'List TDS challans' })

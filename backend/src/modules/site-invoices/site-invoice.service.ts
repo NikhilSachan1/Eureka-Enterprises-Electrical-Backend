@@ -1036,20 +1036,24 @@ export class SiteInvoiceService {
           paidTotal: Number(r.paidTotal),
           advanceSettledAmount: Number(r.advanceSettledAmount ?? 0),
           isGstHold: r.isGstHold ?? false,
-          remaining: isPurchaseBankTransfer
-            ? Number(r.bookedTotal) - Number(r.paidTotal)
-            : forDocument === 'book-payment'
-            ? // Same arithmetic as BookPaymentService.create's ceiling: an advance settled against
-              // this invoice has already paid that part, so it is not left to book.
-              (r.isGstHold
-                ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
-                : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
-              Number(r.advanceSettledAmount ?? 0) -
-              Number(r.bookedTotal)
-            : (r.isGstHold
-                ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
-                : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
-              Number(r.paidTotal),
+          // Rounded to paise: the raw float difference (e.g. 16285.399999999994) was pre-filled
+          // into the form and compared against the server's ceiling.
+          remaining: roundInr(
+            isPurchaseBankTransfer
+              ? Number(r.bookedTotal) - Number(r.paidTotal)
+              : forDocument === 'book-payment'
+              ? // Same arithmetic as BookPaymentService.create's ceiling: an advance settled against
+                // this invoice has already paid that part, so it is not left to book.
+                (r.isGstHold
+                  ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
+                  : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+                Number(r.advanceSettledAmount ?? 0) -
+                Number(r.bookedTotal)
+              : (r.isGstHold
+                  ? Number(r.taxableAmount) - Number(r.tdsAmount ?? 0)
+                  : Number(r.taxableAmount) + Number(r.gstAmount ?? 0) - Number(r.tdsAmount ?? 0)) -
+                Number(r.paidTotal),
+          ),
           approvalStatus: r.approvalStatus,
         },
       })),
