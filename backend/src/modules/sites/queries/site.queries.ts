@@ -66,6 +66,21 @@ export const getOverallSiteStatsQuery = (siteIds?: string[]) => ({
 });
 
 /**
+ * Sites per site type (a site with several types counts under each).
+ * Pass siteIds to count only those sites; omit it to count every site.
+ */
+export const getSiteTypeCountsQuery = (siteIds?: string[]) => ({
+  query: `
+    SELECT site_type AS "siteType", COUNT(*) AS "count"
+    FROM sites, jsonb_array_elements_text(COALESCE("siteTypes", '[]'::jsonb)) AS site_type
+    WHERE "deletedAt" IS NULL
+    ${siteIds ? 'AND id = ANY($1::uuid[])' : ''}
+    GROUP BY site_type
+  `,
+  params: siteIds ? [siteIds] : [],
+});
+
+/**
  * Get health scores for multiple sites in a single query
  * Returns siteId, healthScore, and healthGrade for each site
  */
