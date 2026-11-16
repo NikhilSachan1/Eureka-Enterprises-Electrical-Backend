@@ -182,6 +182,8 @@ export class BankTransferService {
           approvalStatus: FinancialApprovalStatus.APPROVED,
           approvalBy: createdBy,
           approvalAt: new Date(),
+          // Like every transfer: locked on creation, an admin unlocks it to edit / delete.
+          isLocked: true,
           createdBy,
           paidFromAccountId,
         },
@@ -256,6 +258,7 @@ export class BankTransferService {
         approvalStatus: FinancialApprovalStatus.APPROVED,
         approvalBy: params.createdBy,
         approvalAt: new Date(),
+        isLocked: true,
         createdBy: params.createdBy,
       },
       em,
