@@ -74,3 +74,10 @@ storage
 # Runtime cache
 
 .cache
+
+# Local-only files kept out of the build context (not needed to build or run;
+# samples, data snapshots and secrets must not reach any image layer)
+
+secrets
+scripts
+db_metadata.txt
