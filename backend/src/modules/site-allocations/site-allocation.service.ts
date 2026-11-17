@@ -15,7 +15,12 @@ import {
   GetSiteAllocationDto,
   GetEmployeeOverviewDto,
   ManageSiteAllocationDto,
+  GetAllocationSummaryDto,
 } from './dto';
+import {
+  employeeAllocationSummaryQuery,
+  projectAllocationSummaryQuery,
+} from './queries/allocation-summary.queries';
 import {
   overlappingAllocationsQuery,
   openEndedAllocationsBeforeQuery,
@@ -197,6 +202,72 @@ export class SiteAllocationService {
       closed.siteName,
     ).replace('{date}', closed.closedOn.toISOString().slice(0, 10));
     return { ...base, message: `${(base as any).message ?? ''}${note}`.trim() };
+  }
+
+  /**
+   * Allocation history per employee: one row per employee with an allocation in scope,
+   * with where they are now, their projects and days in the period. Paged on the server.
+   */
+  async getEmployeeSummary(
+    options: GetAllocationSummaryDto,
+    requesterId: string,
+    activeRole?: string,
+  ) {
+    return this.runSummary(employeeAllocationSummaryQuery, options, requesterId, activeRole);
+  }
+
+  /**
+   * Allocation history per project: one row per project with an allocation in scope, with how
+   * many people are on it now and in total. Paged on the server.
+   */
+  async getProjectSummary(
+    options: GetAllocationSummaryDto,
+    requesterId: string,
+    activeRole?: string,
+  ) {
+    return this.runSummary(projectAllocationSummaryQuery, options, requesterId, activeRole);
+  }
+
+  private async runSummary(
+    query: string,
+    options: GetAllocationSummaryDto,
+    requesterId: string,
+    activeRole?: string,
+  ) {
+    const {
+      siteId,
+      periodFrom,
+      periodTo,
+      search,
+      page = DefaultPaginationValues.PAGE,
+      pageSize = DefaultPaginationValues.PAGE_SIZE,
+    } = options;
+
+    // Readable sites for "right now" figures; the scope also narrows to the requested project.
+    const readableSiteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      requesterId,
+      activeRole,
+    );
+    const scopedSiteIds = siteId
+      ? await resolveReadableSiteFilter(this.dataSource, requesterId, activeRole, [siteId])
+      : readableSiteIds;
+    if (scopedSiteIds?.length === 0) return this.utilityService.listResponse([], 0);
+
+    const term = search?.trim();
+    const rows: Array<Record<string, unknown> & { totalRecords: number }> =
+      await this.dataSource.query(query, [
+        scopedSiteIds,
+        periodFrom ?? null,
+        periodTo ?? null,
+        term ? `%${term}%` : null,
+        pageSize,
+        (page - 1) * pageSize,
+        readableSiteIds,
+      ]);
+
+    // Every row carries the total (window count), so it also reaches the client per row.
+    return this.utilityService.listResponse(rows, rows[0]?.totalRecords ?? 0);
   }
 
   async findAll(options: GetSiteAllocationDto, requesterId: string, activeRole?: string) {
