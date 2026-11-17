@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsUUID, IsString, IsBoolean, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
@@ -46,4 +46,20 @@ export class GetSiteAllocationDto extends BaseGetDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   includeUser?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Start of a period (YYYY-MM-DD): only allocations active on any day from this date are returned',
+  })
+  @IsOptional()
+  @IsDateString()
+  periodFrom?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'End of a period (YYYY-MM-DD): only allocations active on any day up to this date are returned',
+  })
+  @IsOptional()
+  @IsDateString()
+  periodTo?: string;
 }
