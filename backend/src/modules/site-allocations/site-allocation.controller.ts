@@ -17,6 +17,7 @@ import {
   GetSiteAllocationDto,
   GetEmployeeOverviewDto,
   ManageSiteAllocationDto,
+  GetAllocationSummaryDto,
 } from './dto';
 
 @ApiTags('Site Allocations')
@@ -49,6 +50,32 @@ export class SiteAllocationController {
     @Query() query: GetSiteAllocationDto,
   ) {
     return this.siteAllocationService.findAll(query, userId, activeRole);
+  }
+
+  @Get('summary/employees')
+  @ApiOperation({
+    summary: 'Allocation summary per employee',
+    description:
+      'One row per employee with an allocation in scope (site, period, search): where they are now, how many projects and days. Paged on the server.',
+  })
+  async getEmployeeSummary(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetAllocationSummaryDto,
+  ) {
+    return this.siteAllocationService.getEmployeeSummary(query, userId, activeRole);
+  }
+
+  @Get('summary/projects')
+  @ApiOperation({
+    summary: 'Allocation summary per project',
+    description:
+      'One row per project with an allocation in scope (site, period, search): people on it now and in total, first allocation and last change. Paged on the server.',
+  })
+  async getProjectSummary(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetAllocationSummaryDto,
+  ) {
+    return this.siteAllocationService.getProjectSummary(query, userId, activeRole);
   }
 
   @Get('employees')
