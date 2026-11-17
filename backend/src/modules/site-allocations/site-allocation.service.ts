@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, ILike, In, FindOneOptions } from 'typeorm';
+import { DataSource, IsNull, ILike, In, FindOneOptions, LessThanOrEqual, Raw } from 'typeorm';
 import { SiteAllocationRepository } from './site-allocation.repository';
 import { SiteAllocationEntity } from './entities/site-allocation.entity';
 import {
@@ -208,6 +208,8 @@ export class SiteAllocationService {
       isCurrentlyAllocated,
       includeSite,
       includeUser,
+      periodFrom,
+      periodTo,
       sortField = DefaultPaginationValues.SORT_FIELD,
       sortOrder = DefaultPaginationValues.SORT_ORDER,
       page = DefaultPaginationValues.PAGE,
@@ -241,6 +243,17 @@ export class SiteAllocationService {
 
     if (isCurrentlyAllocated !== undefined) {
       where.isCurrentlyAllocated = isCurrentlyAllocated;
+    }
+
+    // Allocations that overlap the period: started by its end, and still running or
+    // ended on or after its start. Answers "who was where between these dates".
+    if (periodTo) {
+      where.allocatedAt = LessThanOrEqual(periodTo);
+    }
+    if (periodFrom) {
+      where.deallocatedAt = Raw((alias) => `(${alias} IS NULL OR ${alias} >= :periodFrom)`, {
+        periodFrom,
+      });
     }
 
     // Who allocated it and who last changed it (a deallocation is a change) — always included.
