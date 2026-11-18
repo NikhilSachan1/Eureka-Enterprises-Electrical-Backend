@@ -4,7 +4,20 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, Not, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  Not,
+  Equal,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  In,
+} from 'typeorm';
+import {
+  assertCanReadSite,
+  resolveReadableSiteFilter,
+} from 'src/modules/common/financials/site-access.helper';
 import { GstRepository } from './gst.repository';
 import { GetGstRegisterDto, CreateGstPaymentDto, GetGstSummaryDto } from './dto';
 import { GstSettlementFilter } from './dto/get-gst-register.dto';
@@ -71,7 +84,7 @@ export class GstService {
     }
   }
 
-  async findAllRegisterEntries(query: GetGstRegisterDto) {
+  async findAllRegisterEntries(query: GetGstRegisterDto, userId: string, activeRole?: string) {
     const {
       siteId,
       partyType,
@@ -90,7 +103,14 @@ export class GstService {
     } = query;
 
     const base: any = { deletedAt: IsNull() };
-    if (siteId) base.siteId = siteId;
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) base.siteId = In(siteIds);
     if (partyType) base.partyType = partyType;
     if (month) base.invoiceMonth = month;
     if (financialYear) base.financialYear = financialYear;
@@ -367,8 +387,9 @@ export class GstService {
   /**
    * Get GST summary per BRD §5.3.
    */
-  async getSummary(query: GetGstSummaryDto) {
+  async getSummary(query: GetGstSummaryDto, userId: string, activeRole?: string) {
     const { siteId, financialYear } = query;
+    if (siteId) await assertCanReadSite(this.dataSource, userId, activeRole, siteId);
     const fy = financialYear ?? getFinancialYear();
 
     const result = await this.dataSource.query(GST_QUERIES.GST_SUMMARY, [siteId, fy]);
@@ -384,9 +405,18 @@ export class GstService {
     vendorId?: string,
     partyType?: string,
     contractorId?: string,
+    userId?: string,
+    activeRole?: string,
   ) {
     const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return [];
+    if (siteIds) where.siteId = In(siteIds);
     if (vendorId) where.vendorId = vendorId;
     if (partyType) where.partyType = partyType;
     if (contractorId) where.contractorId = contractorId;

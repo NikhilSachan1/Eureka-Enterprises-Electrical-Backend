@@ -5,7 +5,17 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, IsNull, Not, Equal, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  Not,
+  Equal,
+  Between,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  In,
+} from 'typeorm';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { TdsRepository } from './tds.repository';
 import { GetTdsRegisterDto, CreateTdsPaymentDto } from './dto';
 import { TDS_ERRORS, TDS_RESPONSES } from './constants/tds.constants';
@@ -58,7 +68,7 @@ export class TdsService {
     'tdsPayment',
   ];
 
-  async findAllRegisterEntries(query: GetTdsRegisterDto) {
+  async findAllRegisterEntries(query: GetTdsRegisterDto, userId: string, activeRole?: string) {
     const {
       siteId,
       partyType,
@@ -89,7 +99,14 @@ export class TdsService {
     }
 
     const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (partyType) where.partyType = partyType;
     if (challanSide) where.partyType = challanSide;
     if (challanStatus === 'PENDING') where.tdsPaymentId = IsNull();
@@ -355,9 +372,21 @@ export class TdsService {
   /**
    * Get TDS challans list.
    */
-  async findAllPayments(siteId?: string, partyType?: PartyType) {
+  async findAllPayments(
+    siteId?: string,
+    partyType?: PartyType,
+    userId?: string,
+    activeRole?: string,
+  ) {
     const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return [];
+    if (siteIds) where.siteId = In(siteIds);
     if (partyType) where.partyType = partyType;
 
     return await this.tdsRepository.findAllPayments({

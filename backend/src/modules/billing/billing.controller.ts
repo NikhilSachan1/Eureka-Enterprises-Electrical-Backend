@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 import { BillingService } from './billing.service';
 import { GetPoSummaryDto, GetSiteSummaryDto, GetSiteClosingReadinessDto } from './dto';
+import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 
 @ApiTags('Billing')
 @ApiBearerAuth('JWT-auth')
@@ -13,21 +14,33 @@ export class BillingController {
   @Get('po-summary')
   @RequiredPermission('financials.billing.view-list')
   @ApiOperation({ summary: 'Get PO-wise summary per BRD §8' })
-  getPoSummary(@Query() dto: GetPoSummaryDto) {
-    return this.billingService.getPoSummary(dto);
+  getPoSummary(
+    @Query() dto: GetPoSummaryDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.billingService.getPoSummary(dto, { userId, activeRole });
   }
 
   @Get('site-summary')
   @RequiredPermission('financials.billing.view-list')
   @ApiOperation({ summary: 'Get site-level summary aggregated across all POs' })
-  getSiteSummary(@Query() dto: GetSiteSummaryDto) {
-    return this.billingService.getSiteSummary(dto);
+  getSiteSummary(
+    @Query() dto: GetSiteSummaryDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.billingService.getSiteSummary(dto, { userId, activeRole });
   }
 
   @Get('site-closing-readiness')
   @RequiredPermission('financials.billing.view-list')
   @ApiOperation({ summary: 'Get site closing readiness per BRD §9' })
-  getSiteClosingReadiness(@Query() dto: GetSiteClosingReadinessDto) {
-    return this.billingService.getSiteClosingReadiness(dto);
+  getSiteClosingReadiness(
+    @Query() dto: GetSiteClosingReadinessDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.billingService.getSiteClosingReadiness(dto, { userId, activeRole });
   }
 }
