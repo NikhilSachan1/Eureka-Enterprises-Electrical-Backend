@@ -22,7 +22,7 @@ export class TdsController {
   }
 
   @Get('register/:id')
-  @RequiredPermission('financials.tds.view-list')
+  @RequiredPermission('financials.tds.view-detail')
   @ApiOperation({ summary: 'Get a single TDS register entry by ID' })
   findRegisterEntryById(@Param('id', ParseUUIDPipe) id: string) {
     return this.tdsService.findRegisterEntryById(id);

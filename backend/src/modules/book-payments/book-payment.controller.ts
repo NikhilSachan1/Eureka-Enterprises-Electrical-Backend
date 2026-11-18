@@ -86,7 +86,7 @@ export class BookPaymentController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.book-payments.view-list')
+  @RequiredPermission('financials.book-payments.view-detail')
   @ApiOperation({ summary: 'Get a single book payment by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.bookPaymentService.findById(id);
@@ -111,7 +111,7 @@ export class BookPaymentController {
   }
 
   @Post(':id/unlock-request')
-  @RequiredPermission('financials.book-payments.update')
+  @RequiredPermission('financials.book-payments.unlock')
   @ApiOperation({ summary: 'Request unlock for an approved+locked book payment' })
   requestUnlock(
     @Param('id', ParseUUIDPipe) id: string,
@@ -122,14 +122,14 @@ export class BookPaymentController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.book-payments.unlock')
+  @RequiredPermission('financials.book-payments.unlock-grant')
   @ApiOperation({ summary: 'Grant unlock request — admin (book payment becomes editable)' })
   grantUnlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bookPaymentService.grantUnlock(id, userId);
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.book-payments.unlock')
+  @RequiredPermission('financials.book-payments.unlock-request-reject')
   @ApiOperation({ summary: 'Reject unlock request — admin (book payment stays locked)' })
   rejectUnlock(@Param('id', ParseUUIDPipe) id: string, @GetUser('id') userId: string) {
     return this.bookPaymentService.rejectUnlock(id, userId);

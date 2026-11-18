@@ -19,6 +19,7 @@ import {
 
 // Constants
 import { ANALYTICS_RESPONSES } from './constants/analytics.constants';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 /**
  * Analytics Controller
@@ -46,6 +47,7 @@ export class AnalyticsController {
    * Get executive dashboard with high-level summary
    * Provides overview of sites, financials, and alerts
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('dashboard')
   @ApiOperation({
     summary: 'Get executive dashboard',
@@ -69,6 +71,7 @@ export class AnalyticsController {
    * profit and margin per site, on the same basis as the detail endpoint.
    * Must be declared BEFORE the generic `profitability` route.
    */
+  @RequiredAnyPermission('project.profitability')
   @Get('profitability/summary')
   @ApiOperation({
     summary: 'P&L summary for several projects',
@@ -79,6 +82,7 @@ export class AnalyticsController {
     return await this.analyticsService.getSitesProfitabilitySummary(dto.siteId);
   }
 
+  @RequiredAnyPermission('project.profitability')
   @Get('profitability/detail')
   @ApiOperation({
     summary: 'Get detailed site financial summary (new format)',
@@ -96,6 +100,7 @@ export class AnalyticsController {
   /**
    * Unified profitability endpoint — filter by siteId, companyId, contractorId, or none (all sites)
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('profitability')
   @ApiOperation({
     summary: 'Profitability — site / company / contractor level',
@@ -112,6 +117,7 @@ export class AnalyticsController {
   /**
    * Get profitability comparison for all sites
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('sites/profitability')
   @ApiOperation({
     summary: 'Get all sites profitability',
@@ -126,6 +132,7 @@ export class AnalyticsController {
   /**
    * Get detailed profitability for a specific site
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('sites/:siteId/profitability')
   @ApiOperation({
     summary: 'Get site profitability details',
@@ -147,6 +154,7 @@ export class AnalyticsController {
   /**
    * Get invoice aging report
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('invoices/aging')
   @ApiOperation({
     summary: 'Get invoice aging report',
@@ -163,6 +171,7 @@ export class AnalyticsController {
   /**
    * Get analytics for all contractors
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('contractors')
   @ApiOperation({
     summary: 'Get all contractors analytics',
@@ -177,6 +186,7 @@ export class AnalyticsController {
   /**
    * Get detailed analytics for a specific contractor
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('contractors/:contractorId')
   @ApiOperation({
     summary: 'Get contractor analytics details',
@@ -195,6 +205,7 @@ export class AnalyticsController {
   /**
    * Get detailed analytics for a specific employee
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('employees/:employeeId')
   @ApiOperation({
     summary: 'Get employee analytics details',
@@ -216,6 +227,7 @@ export class AnalyticsController {
   /**
    * Get fleet overview (all vehicles)
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('vehicles')
   @ApiOperation({
     summary: 'Get fleet overview',
@@ -230,6 +242,7 @@ export class AnalyticsController {
   /**
    * Get detailed analytics for a specific vehicle
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('vehicles/:vehicleId')
   @ApiOperation({
     summary: 'Get vehicle analytics details',
@@ -251,6 +264,7 @@ export class AnalyticsController {
   /**
    * Get health score for a specific site
    */
+  @RequiredAnyPermission('financials.universal-view')
   @Get('sites/:siteId/health')
   @ApiOperation({
     summary: 'Get site health score',
@@ -272,6 +286,7 @@ export class AnalyticsController {
   /**
    * Get timeline of events for a specific site
    */
+  @RequiredAnyPermission('project.timeline')
   @Get('sites/:siteId/timeline')
   @ApiOperation({
     summary: 'Get site timeline',
