@@ -21,7 +21,7 @@ export class GstController {
   }
 
   @Get('register/:id')
-  @RequiredPermission('financials.gst.view-list')
+  @RequiredPermission('financials.gst.view-detail')
   @ApiOperation({ summary: 'Get a single GST register entry by ID' })
   findRegisterEntryById(@Param('id', ParseUUIDPipe) id: string) {
     return this.gstService.findRegisterEntryById(id);

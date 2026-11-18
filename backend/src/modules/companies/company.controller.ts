@@ -20,6 +20,7 @@ import {
   FILE_UPLOAD_FOLDER_NAMES,
   FIELD_NAMES,
 } from '../common/file-upload/constants/files.constants';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Companies')
 @ApiBearerAuth('JWT-auth')
@@ -27,6 +28,7 @@ import {
 export class CompanyController {
   constructor(private readonly companyService: CompanyService) {}
 
+  @RequiredAnyPermission('company.add')
   @Post()
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.COMPANY_LOGO, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
@@ -67,6 +69,7 @@ export class CompanyController {
     return await this.companyService.findById(id, includeChildren);
   }
 
+  @RequiredAnyPermission('company.view-list', 'company.view-detail')
   @Get(':id/hierarchy')
   @ApiOperation({
     summary: 'Get company hierarchy',
@@ -77,6 +80,7 @@ export class CompanyController {
     return await this.companyService.getHierarchy(id);
   }
 
+  @RequiredAnyPermission('company.edit', 'company.change-status')
   @Patch(':id')
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.COMPANY_LOGO, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
@@ -97,6 +101,7 @@ export class CompanyController {
     return await this.companyService.update(id, updateCompanyDto, updatedBy, logoKey);
   }
 
+  @RequiredAnyPermission('company.delete')
   @Delete()
   @ApiOperation({
     summary: 'Bulk delete companies',
@@ -110,6 +115,7 @@ export class CompanyController {
     return await this.companyService.bulkDelete(bulkDeleteDto.companyIds, deletedBy);
   }
 
+  @RequiredAnyPermission('company.delete')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a company',
@@ -122,6 +128,7 @@ export class CompanyController {
     return await this.companyService.remove(id, deletedBy);
   }
 
+  @RequiredAnyPermission('company.delete')
   @Post(':id/restore')
   @ApiOperation({
     summary: 'Restore a deleted company',

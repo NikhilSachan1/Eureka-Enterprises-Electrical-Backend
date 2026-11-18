@@ -20,6 +20,7 @@ import {
   RejectDto,
   UnlockRequestDto,
 } from 'src/modules/purchase-orders/dto/approval.dto';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('JMCs')
 @ApiBearerAuth('JWT-auth')
@@ -31,7 +32,7 @@ export class JmcController {
   ) {}
 
   @Post()
-  @RequiredPermission('financials.jmcs.create')
+  @RequiredAnyPermission('financials.jmcs.create', 'financials.jmcs.generate')
   @ApiOperation({
     summary: 'Create a JMC against an APPROVED PO',
     description:
@@ -72,6 +73,11 @@ export class JmcController {
     return await this.jmcService.getDropdown(siteId, partyType, forDocument, poId);
   }
 
+  @RequiredAnyPermission(
+    'financials.jmcs.create',
+    'financials.jmcs.generate',
+    'financials.jmcs.update',
+  )
   @Get('items/suggestions')
   @ApiOperation({
     summary: 'Global JMC item-name suggestions (typeahead)',
@@ -92,12 +98,13 @@ export class JmcController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.jmcs.view-list')
+  @RequiredPermission('financials.jmcs.view-detail')
   @ApiOperation({ summary: 'Get a JMC by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.jmcService.findById(id);
   }
 
+  @RequiredAnyPermission('financials.jmcs.view-list')
   @Get(':id/pdf')
   @ApiOperation({
     summary: 'Download URL for the system-generated JMC PDF',
@@ -121,6 +128,7 @@ export class JmcController {
     return result;
   }
 
+  @RequiredPermission('financials.jmcs.upload-signed-copy')
   @Patch(':id/upload')
   @ApiOperation({
     summary: 'Attach the signed JMC copy to an existing record',
@@ -161,7 +169,7 @@ export class JmcController {
   }
 
   @Post(':id/reject')
-  @RequiredPermission('financials.jmcs.approve')
+  @RequiredPermission('financials.jmcs.revert')
   async reject(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
@@ -173,7 +181,7 @@ export class JmcController {
   }
 
   @Post(':id/unlock-request')
-  @RequiredPermission('financials.jmcs.update')
+  @RequiredPermission('financials.jmcs.unlock')
   async requestUnlock(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: requestedBy } }: { user: { id: string } },
@@ -185,7 +193,7 @@ export class JmcController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.jmcs.unlock')
+  @RequiredPermission('financials.jmcs.unlock-grant')
   async grantUnlock(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: grantedBy } }: { user: { id: string } },
@@ -197,7 +205,7 @@ export class JmcController {
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.jmcs.unlock')
+  @RequiredPermission('financials.jmcs.unlock-request-reject')
   @ApiOperation({ summary: 'Reject unlock request — admin (JMC stays locked)' })
   async rejectUnlock(
     @Param('id', ParseUUIDPipe) id: string,

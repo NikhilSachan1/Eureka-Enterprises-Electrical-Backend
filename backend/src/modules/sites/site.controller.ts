@@ -20,6 +20,7 @@ import {
   UpdateSiteStatusDto,
   BulkDeleteSiteDto,
 } from './dto';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Sites')
 @ApiBearerAuth('JWT-auth')
@@ -27,6 +28,7 @@ import {
 export class SiteController {
   constructor(private readonly siteService: SiteService) {}
 
+  @RequiredAnyPermission('project.add')
   @Post()
   @ApiOperation({
     summary: 'Create a new site',
@@ -67,6 +69,7 @@ export class SiteController {
     return await this.siteService.getSiteActivity(query, req.user.id, req.user.activeRole);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.edit')
   @Get(':id')
   @ApiOperation({
     summary: 'Get a site by ID',
@@ -76,6 +79,7 @@ export class SiteController {
     return await this.siteService.findById(id);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get(':id/contractors')
   @ApiOperation({
     summary: 'Get contractors for a site',
@@ -85,6 +89,7 @@ export class SiteController {
     return await this.siteService.getContractors(id);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get(':id/status-history')
   @ApiOperation({
     summary: 'Get site status history',
@@ -95,6 +100,7 @@ export class SiteController {
     return await this.siteService.getStatusHistory(id);
   }
 
+  @RequiredAnyPermission('project.edit', 'financials.site-vendors.assign')
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a site',
@@ -108,6 +114,7 @@ export class SiteController {
     return await this.siteService.update(id, updateSiteDto, updatedBy);
   }
 
+  @RequiredAnyPermission('project.change-status')
   @Patch(':id/status')
   @ApiOperation({
     summary: 'Update site status',
@@ -121,6 +128,7 @@ export class SiteController {
     return await this.siteService.updateStatus(id, updateStatusDto, updatedBy);
   }
 
+  @RequiredAnyPermission('project.delete')
   @Delete()
   @ApiOperation({
     summary: 'Bulk delete sites',
@@ -134,6 +142,7 @@ export class SiteController {
     return await this.siteService.bulkDelete(bulkDeleteDto.siteIds, deletedBy);
   }
 
+  @RequiredAnyPermission('project.delete')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a site',
@@ -147,6 +156,7 @@ export class SiteController {
     return await this.siteService.remove(id, deletedBy);
   }
 
+  @RequiredAnyPermission('project.delete')
   @Post(':id/restore')
   @ApiOperation({
     summary: 'Restore a deleted site',
@@ -156,6 +166,18 @@ export class SiteController {
     return await this.siteService.restore(id);
   }
 
+  @RequiredAnyPermission(
+    'project.workspace',
+    'project.allocate-deallocate-employee',
+    'project.dsr.add',
+    'project.dsr.force',
+    'financials.purchase-orders.create',
+    'financials.jmcs.create',
+    'financials.invoices.create',
+    'financials.site-reports.create',
+    'financials.book-payments.create',
+    'financials.bank-transfers.create',
+  )
   @Get(':id/overview')
   @ApiOperation({
     summary: 'Site overview',

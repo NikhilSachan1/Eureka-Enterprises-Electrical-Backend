@@ -19,6 +19,7 @@ import {
   ManageSiteAllocationDto,
   GetAllocationSummaryDto,
 } from './dto';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Site Allocations')
 @ApiBearerAuth('JWT-auth')
@@ -26,6 +27,7 @@ import {
 export class SiteAllocationController {
   constructor(private readonly siteAllocationService: SiteAllocationService) {}
 
+  @RequiredAnyPermission('project.allocate-deallocate-employee')
   @Post('manage')
   @ApiOperation({
     summary: 'Manage site allocations (bulk allocate & deallocate)',
@@ -39,6 +41,7 @@ export class SiteAllocationController {
     return this.siteAllocationService.manage(manageDto, userId);
   }
 
+  @RequiredAnyPermission('project.allocation-history.view-list')
   @Get()
   @ApiOperation({
     summary: 'Get all site allocations',
@@ -52,6 +55,7 @@ export class SiteAllocationController {
     return this.siteAllocationService.findAll(query, userId, activeRole);
   }
 
+  @RequiredAnyPermission('project.allocation-history.view-list')
   @Get('summary/employees')
   @ApiOperation({
     summary: 'Allocation summary per employee',
@@ -65,6 +69,7 @@ export class SiteAllocationController {
     return this.siteAllocationService.getEmployeeSummary(query, userId, activeRole);
   }
 
+  @RequiredAnyPermission('project.allocation-history.view-list')
   @Get('summary/projects')
   @ApiOperation({
     summary: 'Allocation summary per project',
@@ -78,6 +83,7 @@ export class SiteAllocationController {
     return this.siteAllocationService.getProjectSummary(query, userId, activeRole);
   }
 
+  @RequiredAnyPermission('project.workforce-allocation.view-list')
   @Get('employees')
   @ApiOperation({
     summary: 'Employee allocation overview (Free/Allocated) with stats',
@@ -90,6 +96,10 @@ export class SiteAllocationController {
     return this.siteAllocationService.getEmployeeOverview(query);
   }
 
+  @RequiredAnyPermission(
+    'project.workforce-allocation.view-list',
+    'project.allocation-history.view-list',
+  )
   @Get('user/:userId')
   @ApiOperation({
     summary: 'Get allocations by user ID',
@@ -100,6 +110,10 @@ export class SiteAllocationController {
     return this.siteAllocationService.getAllocationsByUserId(userId);
   }
 
+  @RequiredAnyPermission(
+    'project.workforce-allocation.view-list',
+    'project.allocation-history.view-list',
+  )
   @Get('user/:userId/current')
   @ApiOperation({
     summary: 'Get current allocation by user ID',
@@ -109,6 +123,10 @@ export class SiteAllocationController {
     return this.siteAllocationService.getCurrentAllocationByUserId(userId);
   }
 
+  @RequiredAnyPermission(
+    'project.workforce-allocation.view-list',
+    'project.allocation-history.view-list',
+  )
   @Get('site/:siteId')
   @ApiOperation({
     summary: 'Get allocations by site ID',
@@ -123,6 +141,10 @@ export class SiteAllocationController {
     return this.siteAllocationService.getAllocationsBySiteId(siteId, onlyCurrentAllocations);
   }
 
+  @RequiredAnyPermission(
+    'project.workforce-allocation.view-list',
+    'project.allocation-history.view-list',
+  )
   @Get(':id')
   @ApiOperation({
     summary: 'Get a site allocation by ID',
@@ -133,6 +155,7 @@ export class SiteAllocationController {
     return this.siteAllocationService.findById(id);
   }
 
+  @RequiredAnyPermission('project.allocate-deallocate-employee')
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a site allocation',
@@ -147,6 +170,7 @@ export class SiteAllocationController {
     return this.siteAllocationService.update(id, updateDto, userId);
   }
 
+  @RequiredAnyPermission('project.allocate-deallocate-employee')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a site allocation that should never have existed',

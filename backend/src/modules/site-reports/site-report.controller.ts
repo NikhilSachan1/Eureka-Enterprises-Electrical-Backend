@@ -72,7 +72,7 @@ export class SiteReportController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.site-reports.view-list')
+  @RequiredPermission('financials.site-reports.view-detail')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.reportService.findById(id);
   }
@@ -102,7 +102,7 @@ export class SiteReportController {
   }
 
   @Post(':id/unlock-request')
-  @RequiredPermission('financials.site-reports.update')
+  @RequiredPermission('financials.site-reports.unlock')
   @ApiOperation({ summary: 'Request unlock for an approved+locked site report' })
   async requestUnlock(
     @Param('id', ParseUUIDPipe) id: string,
@@ -115,7 +115,7 @@ export class SiteReportController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.site-reports.unlock')
+  @RequiredPermission('financials.site-reports.unlock-grant')
   @ApiOperation({ summary: 'Grant unlock request — admin (report becomes editable)' })
   async grantUnlock(
     @Param('id', ParseUUIDPipe) id: string,
@@ -128,7 +128,7 @@ export class SiteReportController {
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.site-reports.unlock')
+  @RequiredPermission('financials.site-reports.unlock-request-reject')
   @ApiOperation({ summary: 'Reject unlock request — admin (report stays locked)' })
   async rejectUnlock(
     @Param('id', ParseUUIDPipe) id: string,

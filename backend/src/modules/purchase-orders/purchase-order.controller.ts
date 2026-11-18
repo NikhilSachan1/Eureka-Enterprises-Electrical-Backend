@@ -23,6 +23,7 @@ import {
   UnlockRequestDto,
   PoItemSuggestionDto,
 } from './dto';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Purchase Orders')
 @ApiBearerAuth('JWT-auth')
@@ -34,7 +35,7 @@ export class PurchaseOrderController {
   ) {}
 
   @Post()
-  @RequiredPermission('financials.purchase-orders.create')
+  @RequiredAnyPermission('financials.purchase-orders.create', 'financials.purchase-orders.generate')
   @ApiOperation({ summary: 'Create a Purchase Order' })
   async create(
     @Request()
@@ -107,7 +108,7 @@ export class PurchaseOrderController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.purchase-orders.view-list')
+  @RequiredPermission('financials.purchase-orders.view-detail')
   @ApiOperation({ summary: 'Get a PO by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.poService.findById(id);
@@ -163,7 +164,7 @@ export class PurchaseOrderController {
   }
 
   @Post(':id/reject')
-  @RequiredPermission('financials.purchase-orders.approve')
+  @RequiredPermission('financials.purchase-orders.revert')
   @ApiOperation({ summary: 'Reject a PO (admin)' })
   async reject(
     @Param('id', ParseUUIDPipe) id: string,
@@ -176,7 +177,7 @@ export class PurchaseOrderController {
   }
 
   @Post(':id/unlock-request')
-  @RequiredPermission('financials.purchase-orders.update')
+  @RequiredPermission('financials.purchase-orders.unlock')
   @ApiOperation({ summary: 'Request unlock on an approved PO' })
   async requestUnlock(
     @Param('id', ParseUUIDPipe) id: string,
@@ -189,7 +190,7 @@ export class PurchaseOrderController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.purchase-orders.unlock')
+  @RequiredPermission('financials.purchase-orders.unlock-grant')
   @ApiOperation({ summary: 'Grant unlock — admin (resets to PENDING)' })
   async grantUnlock(
     @Param('id', ParseUUIDPipe) id: string,
@@ -202,7 +203,7 @@ export class PurchaseOrderController {
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.purchase-orders.unlock')
+  @RequiredPermission('financials.purchase-orders.unlock-request-reject')
   @ApiOperation({ summary: 'Reject unlock request — admin (document stays locked)' })
   async rejectUnlock(
     @Param('id', ParseUUIDPipe) id: string,
