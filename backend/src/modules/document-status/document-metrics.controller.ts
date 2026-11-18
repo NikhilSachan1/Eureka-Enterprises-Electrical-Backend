@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { DocumentMetricsService } from './document-metrics.service';
 import { GetDocumentMetricsDto } from './dto/get-document-metrics.dto';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 /**
  * Document metrics for the workspace tabs. Kept apart from DocumentStatusController, whose
@@ -15,6 +16,16 @@ import { GetDocumentMetricsDto } from './dto/get-document-metrics.dto';
 export class DocumentMetricsController {
   constructor(private readonly documentMetricsService: DocumentMetricsService) {}
 
+  @RequiredAnyPermission(
+    'financials.purchase-orders.view-list',
+    'financials.jmcs.view-list',
+    'financials.site-reports.view-list',
+    'financials.invoices.view-list',
+    'financials.book-payments.view-list',
+    'financials.advance-payments.view-list',
+    'financials.gst.view-list',
+    'financials.tds.view-list',
+  )
   @Get()
   @ApiOperation({
     summary: 'Document counts and amounts for the workspace tabs',

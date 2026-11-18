@@ -21,6 +21,7 @@ import {
   FIELD_NAMES,
 } from '../common/file-upload/constants/files.constants';
 import { DsrUserInterceptor } from './interceptors/dsr-user.interceptor';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Daily Status Reports')
 @ApiBearerAuth('JWT-auth')
@@ -28,6 +29,7 @@ import { DsrUserInterceptor } from './interceptors/dsr-user.interceptor';
 export class DsrController {
   constructor(private readonly dsrService: DsrService) {}
 
+  @RequiredAnyPermission('project.dsr.add')
   @Post()
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.DSR_FILES, maxCount: 5 }]))
   @ApiConsumes('multipart/form-data')
@@ -46,6 +48,7 @@ export class DsrController {
     return await this.dsrService.create(createDto, userId, uploadedFiles.fileKeys);
   }
 
+  @RequiredAnyPermission('project.dsr.force')
   @Post('force')
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.DSR_FILES, maxCount: 5 }]))
   @ApiConsumes('multipart/form-data')
@@ -64,6 +67,7 @@ export class DsrController {
     return await this.dsrService.forceCreate(forceDto, userId, role, uploadedFiles.fileKeys);
   }
 
+  @RequiredAnyPermission('project.dsr.view-list')
   @Get()
   @UseInterceptors(DsrUserInterceptor)
   @ApiOperation({
@@ -77,6 +81,7 @@ export class DsrController {
     return await this.dsrService.findAll(query, userId, activeRole);
   }
 
+  @RequiredAnyPermission('project.dsr.view-detail', 'project.dsr.view-list', 'project.dsr.edit')
   @Get(':id')
   @ApiOperation({
     summary: 'Get a DSR by ID',
@@ -86,6 +91,7 @@ export class DsrController {
     return await this.dsrService.findById(id);
   }
 
+  @RequiredAnyPermission('project.dsr.view-detail', 'project.dsr.view-list', 'project.dsr.edit')
   @Get(':id/history')
   @ApiOperation({
     summary: 'Get DSR edit history',
@@ -96,6 +102,7 @@ export class DsrController {
     return await this.dsrService.getEditHistory(id);
   }
 
+  @RequiredAnyPermission('project.dsr.view-detail', 'project.dsr.view-list', 'project.dsr.edit')
   @Get(':id/versions')
   @ApiOperation({
     summary: 'Get DSR version history',
@@ -106,6 +113,7 @@ export class DsrController {
     return await this.dsrService.getVersionHistory(id);
   }
 
+  @RequiredAnyPermission('project.dsr.view-detail', 'project.dsr.view-list', 'project.dsr.edit')
   @Get(':id/files')
   @ApiOperation({
     summary: 'Get DSR files',
@@ -115,6 +123,7 @@ export class DsrController {
     return await this.dsrService.getFiles(id);
   }
 
+  @RequiredAnyPermission('project.dsr.edit')
   @Patch(':id')
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.DSR_FILES, maxCount: 5 }]))
   @ApiConsumes('multipart/form-data')
@@ -134,6 +143,7 @@ export class DsrController {
     return await this.dsrService.update(id, updateDto, updatedBy, uploadedFiles.fileKeys);
   }
 
+  @RequiredAnyPermission('project.dsr.delete')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a DSR entry',
@@ -146,6 +156,7 @@ export class DsrController {
     return await this.dsrService.remove(id, deletedBy);
   }
 
+  @RequiredAnyPermission('project.dsr.edit', 'project.dsr.delete')
   @Delete('files/:fileId')
   @ApiOperation({
     summary: 'Delete a DSR file',

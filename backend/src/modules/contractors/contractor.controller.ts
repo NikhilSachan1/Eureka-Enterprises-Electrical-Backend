@@ -18,6 +18,7 @@ import {
   GetContractorDto,
   BulkDeleteContractorDto,
 } from './dto';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 @ApiTags('Contractors')
 @ApiBearerAuth('JWT-auth')
@@ -25,6 +26,7 @@ import {
 export class ContractorController {
   constructor(private readonly contractorService: ContractorService) {}
 
+  @RequiredAnyPermission('contractor.add')
   @Post()
   @ApiOperation({
     summary: 'Create a contractor',
@@ -55,6 +57,7 @@ export class ContractorController {
     return await this.contractorService.findById(id);
   }
 
+  @RequiredAnyPermission('contractor.edit', 'contractor.change-status')
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a contractor',
@@ -68,6 +71,7 @@ export class ContractorController {
     return await this.contractorService.update(id, updateContractorDto, updatedBy);
   }
 
+  @RequiredAnyPermission('contractor.delete')
   @Delete()
   @ApiOperation({
     summary: 'Bulk delete contractors',
@@ -81,6 +85,7 @@ export class ContractorController {
     return await this.contractorService.bulkDelete(bulkDeleteDto.contractorIds, deletedBy);
   }
 
+  @RequiredAnyPermission('contractor.delete')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a contractor',
@@ -93,6 +98,7 @@ export class ContractorController {
     return await this.contractorService.remove(id, deletedBy);
   }
 
+  @RequiredAnyPermission('contractor.delete')
   @Post(':id/restore')
   @ApiOperation({
     summary: 'Restore a deleted contractor',

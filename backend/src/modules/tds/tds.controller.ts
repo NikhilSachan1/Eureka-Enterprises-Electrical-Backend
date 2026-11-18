@@ -17,12 +17,16 @@ export class TdsController {
   @Get('register')
   @RequiredPermission('financials.tds.view-list')
   @ApiOperation({ summary: 'List TDS register entries with filters' })
-  findAllRegisterEntries(@Query() query: GetTdsRegisterDto) {
-    return this.tdsService.findAllRegisterEntries(query);
+  findAllRegisterEntries(
+    @Query() query: GetTdsRegisterDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.tdsService.findAllRegisterEntries(query, userId, activeRole);
   }
 
   @Get('register/:id')
-  @RequiredPermission('financials.tds.view-list')
+  @RequiredPermission('financials.tds.view-detail')
   @ApiOperation({ summary: 'Get a single TDS register entry by ID' })
   findRegisterEntryById(@Param('id', ParseUUIDPipe) id: string) {
     return this.tdsService.findRegisterEntryById(id);
@@ -77,7 +81,12 @@ export class TdsController {
   @Get('payments')
   @RequiredPermission('financials.tds.view-list')
   @ApiOperation({ summary: 'List TDS challans' })
-  findAllPayments(@Query('siteId') siteId?: string, @Query('partyType') partyType?: PartyType) {
-    return this.tdsService.findAllPayments(siteId, partyType);
+  findAllPayments(
+    @Query('siteId') siteId?: string,
+    @Query('partyType') partyType?: PartyType,
+    @GetUser('id') userId?: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.tdsService.findAllPayments(siteId, partyType, userId, activeRole);
   }
 }

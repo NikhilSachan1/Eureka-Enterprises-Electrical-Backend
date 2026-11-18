@@ -16,7 +16,7 @@ interface DocumentConfig {
   /** An extra LEFT JOIN aliased `x`, when the number lives on another table. */
   extraJoin?: string;
   approvePermission: string;
-  /** Absent for documents with no lock / unlock flow. */
+  /** Who is told about an unlock request: holders of the "grant unlock" key. Absent for documents with no lock / unlock flow. */
   unlockPermission?: string;
   category: string;
   referenceType: string;
@@ -32,7 +32,7 @@ const DOCUMENTS: Record<DocumentKind, DocumentConfig> = {
     table: 'purchase_orders',
     numberSql: 'd."poNumber"',
     approvePermission: 'financials.purchase-orders.approve',
-    unlockPermission: 'financials.purchase-orders.unlock',
+    unlockPermission: 'financials.purchase-orders.unlock-grant',
     category: C.PURCHASE_ORDER,
     referenceType: 'purchase_order',
     route: '/purchase-orders',
@@ -42,7 +42,7 @@ const DOCUMENTS: Record<DocumentKind, DocumentConfig> = {
     table: 'jmcs',
     numberSql: 'd."jmcNumber"',
     approvePermission: 'financials.jmcs.approve',
-    unlockPermission: 'financials.jmcs.unlock',
+    unlockPermission: 'financials.jmcs.unlock-grant',
     category: C.JMC,
     referenceType: 'jmc',
     route: '/jmcs',
@@ -52,7 +52,7 @@ const DOCUMENTS: Record<DocumentKind, DocumentConfig> = {
     table: 'site_reports',
     numberSql: 'd."reportNumber"',
     approvePermission: 'financials.site-reports.approve',
-    unlockPermission: 'financials.site-reports.unlock',
+    unlockPermission: 'financials.site-reports.unlock-grant',
     category: C.SITE_REPORT,
     referenceType: 'site_report',
     route: '/site-reports',
@@ -63,7 +63,7 @@ const DOCUMENTS: Record<DocumentKind, DocumentConfig> = {
     table: 'site_invoices',
     numberSql: 'd."invoiceNumber"',
     approvePermission: 'financials.invoices.approve',
-    unlockPermission: 'financials.invoices.unlock',
+    unlockPermission: 'financials.invoices.unlock-grant',
     category: C.SITE_INVOICE,
     referenceType: 'site_invoice',
     route: '/site-invoices',

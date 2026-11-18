@@ -25,13 +25,14 @@ import {
   FILE_UPLOAD_FOLDER_NAMES,
   FIELD_NAMES,
 } from '../common/file-upload/constants/files.constants';
+import { RequiredAnyPermission } from 'src/modules/auth/decorators/required-permission.decorator';
 
 /**
  * Site Documents Controller - Repurposed for non-financial documents only.
- * 
+ *
  * Financial documents (PO, INVOICE) have been moved to dedicated modules:
  * - /purchase-orders, /site-invoices, /bank-transfers, etc.
- * 
+ *
  * This controller now handles miscellaneous site documents like:
  * - Contracts, work orders, completion certificates
  * - Photos, inspection reports, etc.
@@ -42,6 +43,7 @@ import {
 export class SiteDocumentController {
   constructor(private readonly siteDocumentService: SiteDocumentService) {}
 
+  @RequiredAnyPermission('project.edit')
   @Post()
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SITE_DOCUMENT_FILES, maxCount: 10 }]))
   @ApiConsumes('multipart/form-data')
@@ -61,6 +63,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.create(createDto, createdBy, fileKey);
   }
 
+  @RequiredAnyPermission('project.edit')
   @Post('bulk')
   @UseInterceptors(
     FileFieldsInterceptor([
@@ -92,6 +95,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.bulkCreate(bulkDto, createdBy, fileKeys);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get()
   @ApiOperation({
     summary: 'Get all site documents',
@@ -102,6 +106,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.findAll(query);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get('site/:siteId')
   @ApiOperation({
     summary: 'Get documents by site ID',
@@ -115,6 +120,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.getDocumentsBySite(siteId, query);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get('contractor/:contractorId')
   @ApiOperation({
     summary: 'Get documents by contractor ID',
@@ -128,6 +134,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.getDocumentsByContractor(contractorId, query);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get('vendor/:vendorId')
   @ApiOperation({
     summary: 'Get documents by vendor ID',
@@ -141,6 +148,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.getDocumentsByVendor(vendorId, query);
   }
 
+  @RequiredAnyPermission('project.view-detail', 'project.workspace')
   @Get(':id')
   @ApiOperation({
     summary: 'Get a site document by ID',
@@ -151,6 +159,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.findById(id);
   }
 
+  @RequiredAnyPermission('project.edit')
   @Patch(':id')
   @UseInterceptors(FileFieldsInterceptor([{ name: FIELD_NAMES.SITE_DOCUMENT_FILES, maxCount: 1 }]))
   @ApiConsumes('multipart/form-data')
@@ -171,6 +180,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.update(id, updateDto, updatedBy, fileKey);
   }
 
+  @RequiredAnyPermission('project.edit')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a site document',
@@ -184,6 +194,7 @@ export class SiteDocumentController {
     return await this.siteDocumentService.remove(id, deletedBy);
   }
 
+  @RequiredAnyPermission('project.edit')
   @Post(':id/restore')
   @ApiOperation({
     summary: 'Restore a deleted site document',

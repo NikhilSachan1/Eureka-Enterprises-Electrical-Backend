@@ -43,7 +43,7 @@ export class BankTransferController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.bank-transfers.view-list')
+  @RequiredPermission('financials.bank-transfers.view-detail')
   @ApiOperation({ summary: 'Get a single bank transfer by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.bankTransferService.findById(id);

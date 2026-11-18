@@ -76,7 +76,7 @@ export class SiteInvoiceController {
   }
 
   @Get(':id')
-  @RequiredPermission('financials.invoices.view-list')
+  @RequiredPermission('financials.invoices.view-detail')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.invoiceService.findById(id);
   }
@@ -118,7 +118,7 @@ export class SiteInvoiceController {
   }
 
   @Post(':id/reject')
-  @RequiredPermission('financials.invoices.approve')
+  @RequiredPermission('financials.invoices.revert')
   async reject(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: rejectedBy } }: { user: { id: string } },
@@ -173,7 +173,7 @@ export class SiteInvoiceController {
   }
 
   @Post(':id/unlock-request')
-  @RequiredPermission('financials.invoices.update')
+  @RequiredPermission('financials.invoices.unlock')
   async requestUnlock(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: requestedBy } }: { user: { id: string } },
@@ -185,7 +185,7 @@ export class SiteInvoiceController {
   }
 
   @Post(':id/unlock-grant')
-  @RequiredPermission('financials.invoices.unlock')
+  @RequiredPermission('financials.invoices.unlock-grant')
   async grantUnlock(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() { user: { id: grantedBy } }: { user: { id: string } },
@@ -197,7 +197,7 @@ export class SiteInvoiceController {
   }
 
   @Post(':id/unlock-reject')
-  @RequiredPermission('financials.invoices.unlock')
+  @RequiredPermission('financials.invoices.unlock-request-reject')
   @ApiOperation({ summary: 'Reject unlock request — admin (invoice stays locked)' })
   async rejectUnlock(
     @Param('id', ParseUUIDPipe) id: string,

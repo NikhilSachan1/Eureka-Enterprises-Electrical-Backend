@@ -1,5 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { assertCanReadSite } from 'src/modules/common/financials/site-access.helper';
+
+/** Who asked, for API calls; absent when the system calls (e.g. closing a site), which skips the site check. */
+export interface BillingRequester {
+  userId: string;
+  activeRole?: string;
+}
 import { BILLING_QUERIES } from './queries/billing.queries';
 import {
   BILLING_ERRORS,
@@ -13,12 +20,22 @@ import { ClosingCondition, ClosingReadiness } from './billing.types';
 export class BillingService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async getPoSummary(dto: GetPoSummaryDto) {
+  private async assertRequesterCanReadSite(
+    requester: BillingRequester | undefined,
+    siteId: string,
+  ): Promise<void> {
+    if (requester) {
+      await assertCanReadSite(this.dataSource, requester.userId, requester.activeRole, siteId);
+    }
+  }
+
+  async getPoSummary(dto: GetPoSummaryDto, requester?: BillingRequester) {
     const result = await this.dataSource.query(BILLING_QUERIES.PO_SUMMARY, [dto.poId]);
     if (!result || result.length === 0) {
       throw new NotFoundException(BILLING_ERRORS.PO_NOT_FOUND);
     }
     const r = result[0];
+    await this.assertRequesterCanReadSite(requester, r.siteId);
     const gstInvoiced = Number(r.gstInvoiced);
     const gstHeld = Number(r.gstHeld);
     const gstPaid = Number(r.gstPaid);
@@ -97,7 +114,8 @@ export class BillingService {
     };
   }
 
-  async getSiteSummary(dto: GetSiteSummaryDto) {
+  async getSiteSummary(dto: GetSiteSummaryDto, requester?: BillingRequester) {
+    await this.assertRequesterCanReadSite(requester, dto.siteId);
     const rows = await this.dataSource.query(BILLING_QUERIES.SITE_SUMMARY, [dto.siteId]);
 
     if (dto.partyType) {
@@ -109,7 +127,11 @@ export class BillingService {
     };
   }
 
-  async getSiteClosingReadiness(dto: GetSiteClosingReadinessDto): Promise<ClosingReadiness> {
+  async getSiteClosingReadiness(
+    dto: GetSiteClosingReadinessDto,
+    requester?: BillingRequester,
+  ): Promise<ClosingReadiness> {
+    await this.assertRequesterCanReadSite(requester, dto.siteId);
     const conditions: ClosingCondition[] = [];
 
     // Condition 1: Every party has at least one approved PO

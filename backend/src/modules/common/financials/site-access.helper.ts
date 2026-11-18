@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { Roles } from 'src/modules/roles/constants/role.constants';
 
@@ -5,8 +6,9 @@ import { Roles } from 'src/modules/roles/constants/role.constants';
 export const PROJECT_MANAGER_SITE_ROLE = 'Project Manager';
 
 /**
- * Office roles that can create financial docs for any site without a current
- * site_allocation — mirrors site listing ADMIN_ROLES in SiteService.
+ * Office roles that can create and read financial docs for any site without a current
+ * site_allocation — mirrors site listing ADMIN_ROLES in SiteService. ACCOUNTS is here because
+ * the accounts team works on every project's GST, TDS, payments and documents.
  */
 export const SITE_ACCESS_BYPASS_ROLES: readonly string[] = [
   Roles.SUPER_ADMIN,
@@ -14,6 +16,7 @@ export const SITE_ACCESS_BYPASS_ROLES: readonly string[] = [
   Roles.MANAGER,
   Roles.OPERATION_MANAGER,
   Roles.HR,
+  Roles.ACCOUNTS,
 ];
 
 export interface SiteAccessResult {
@@ -135,4 +138,20 @@ export async function resolveReadableSiteFilter(
   const readable = await getReadableSiteIds(db, userId, activeRole);
   if (readable === null) return requested;
   return requested ? requested.filter((id) => readable.includes(id)) : readable;
+}
+
+/**
+ * For APIs about one site (a site's GST summary, billing summary, closing readiness): refuses
+ * when the user may not read that site's documents. Office roles always pass.
+ */
+export async function assertCanReadSite(
+  db: DataSource | EntityManager,
+  userId: string,
+  activeRole: string | undefined,
+  siteId: string,
+): Promise<void> {
+  const readable = await getReadableSiteIds(db, userId, activeRole);
+  if (readable !== null && !readable.includes(siteId)) {
+    throw new ForbiddenException(SITE_ACCESS_REASONS.NOT_ALLOCATED);
+  }
 }

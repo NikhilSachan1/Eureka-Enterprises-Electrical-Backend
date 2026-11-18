@@ -13,7 +13,7 @@ import { RolePermissionEntity } from 'src/modules/role-permissions/entities/role
 import { UserPermissionEntity } from 'src/modules/user-permissions/entities/user-permission.entity';
 import { RoleEntity } from 'src/modules/roles/entities/role.entity';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { PERMISSIONS_KEY } from '../decorators/required-permission.decorator';
+import { ANY_PERMISSIONS_KEY, PERMISSIONS_KEY } from '../decorators/required-permission.decorator';
 import { UserFromRequest } from '../auth.types';
 
 /**
@@ -51,6 +51,15 @@ export class PermissionsGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    // @RequiredAnyPermission: at least one of the keys (checked first, on its own).
+    const anyOf = this.reflector.getAllAndOverride<string[]>(ANY_PERMISSIONS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (anyOf && anyOf.length > 0) {
+      await this.assertAnyPermission(context.switchToHttp().getRequest().user, anyOf);
+    }
 
     const required = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
       context.getHandler(),
@@ -115,9 +124,7 @@ export class PermissionsGuard implements CanActivate {
     for (const perm of permissions) {
       const override = overrideMap.get(perm.id);
       if (override === false) {
-        throw new ForbiddenException(
-          `Permission explicitly denied for this user: ${perm.name}`,
-        );
+        throw new ForbiddenException(`Permission explicitly denied for this user: ${perm.name}`);
       }
       if (override === true) continue;
       if (rolePermSet.has(perm.id)) continue;
@@ -125,5 +132,64 @@ export class PermissionsGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  /**
+   * Passes when the user holds at least one of the keys, through the active role or a user
+   * grant, and that key is not explicitly denied for the user. Unregistered keys are ignored;
+   * with none registered the request is refused.
+   */
+  private async assertAnyPermission(
+    user: UserFromRequest | undefined,
+    keys: string[],
+  ): Promise<void> {
+    if (!user) throw new UnauthorizedException();
+
+    const permissions = await this.permissionRepo.find({
+      where: { name: In(keys), deletedAt: IsNull() },
+    });
+    if (permissions.length === 0) {
+      throw new ForbiddenException(
+        `Required permission(s) not registered in the system: ${keys.join(', ')}`,
+      );
+    }
+
+    const activeRole = await this.roleRepo.findOne({
+      where: { name: user.activeRole, deletedAt: IsNull() },
+    });
+    if (!activeRole) {
+      throw new ForbiddenException(`Active role not recognised: ${user.activeRole}`);
+    }
+
+    const permIds = permissions.map((p) => p.id);
+    const [userOverrides, rolePerms] = await Promise.all([
+      this.userPermRepo.find({
+        where: { userId: user.id, permissionId: In(permIds), deletedAt: IsNull() },
+      }),
+      this.rolePermRepo.find({
+        where: {
+          roleId: activeRole.id,
+          permissionId: In(permIds),
+          isActive: true,
+          deletedAt: IsNull(),
+        },
+      }),
+    ]);
+
+    const overrideMap = new Map<string, boolean>(
+      userOverrides.map((o) => [o.permissionId, o.isGranted]),
+    );
+    const rolePermSet = new Set<string>(rolePerms.map((r) => r.permissionId));
+
+    const holdsOne = permissions.some((perm) => {
+      const override = overrideMap.get(perm.id);
+      if (override === false) return false;
+      return override === true || rolePermSet.has(perm.id);
+    });
+    if (!holdsOne) {
+      throw new ForbiddenException(
+        `Missing permission: one of ${[...new Set(permissions.map((p) => p.name))].join(', ')}`,
+      );
+    }
   }
 }
