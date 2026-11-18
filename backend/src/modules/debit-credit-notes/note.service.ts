@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { IsNull, ILike } from 'typeorm';
+import { DataSource, IsNull, ILike, In } from 'typeorm';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { NoteRepository } from './note.repository';
 import { DebitNoteEntity } from './entities/debit-note.entity';
 import { CreditNoteEntity } from './entities/credit-note.entity';
@@ -13,7 +14,10 @@ import { DefaultPaginationValues, SortOrder } from 'src/utils/utility/constants/
 
 @Injectable()
 export class NoteService {
-  constructor(private readonly noteRepository: NoteRepository) {}
+  constructor(
+    private readonly noteRepository: NoteRepository,
+    private readonly dataSource: DataSource,
+  ) {}
 
   async create(dto: CreateNoteDto, createdBy: string) {
     if (dto.noteSide === NoteSide.SALE) {
@@ -63,7 +67,7 @@ export class NoteService {
     return { message: NOTE_RESPONSES.CREDIT_NOTE_CREATED, id: creditNote.id };
   }
 
-  async findAll(query: GetNoteDto) {
+  async findAll(query: GetNoteDto, userId: string, activeRole?: string) {
     const {
       noteSide,
       siteId,
@@ -76,9 +80,24 @@ export class NoteService {
       pageSize = DefaultPaginationValues.PAGE_SIZE,
     } = query;
 
+    // Sites the requester may read, narrowed to the requested one.
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) {
+      return {
+        records: [],
+        totalRecords: 0,
+        noteSide: noteSide === NoteSide.SALE ? NoteSide.SALE : NoteSide.PURCHASE,
+      };
+    }
+
     if (noteSide === NoteSide.SALE) {
       return this.findAllDebitNotes({
-        siteId,
+        siteIds,
         contractorId,
         search,
         sortField,
@@ -88,7 +107,7 @@ export class NoteService {
       });
     } else {
       return this.findAllCreditNotes({
-        siteId,
+        siteIds,
         vendorId,
         search,
         sortField,
@@ -100,7 +119,8 @@ export class NoteService {
   }
 
   private async findAllDebitNotes(params: {
-    siteId?: string;
+    /** Sites the requester may read; null = every site. */
+    siteIds?: string[] | null;
     contractorId?: string;
     search?: string;
     sortField: string;
@@ -109,7 +129,7 @@ export class NoteService {
     pageSize: number;
   }) {
     const where: any = { deletedAt: IsNull() };
-    if (params.siteId) where.siteId = params.siteId;
+    if (params.siteIds) where.siteId = In(params.siteIds);
     if (params.contractorId) where.contractorId = params.contractorId;
     if (params.search) where.remarks = ILike(`%${params.search}%`);
 
@@ -128,7 +148,8 @@ export class NoteService {
   }
 
   private async findAllCreditNotes(params: {
-    siteId?: string;
+    /** Sites the requester may read; null = every site. */
+    siteIds?: string[] | null;
     vendorId?: string;
     search?: string;
     sortField: string;
@@ -137,7 +158,7 @@ export class NoteService {
     pageSize: number;
   }) {
     const where: any = { deletedAt: IsNull() };
-    if (params.siteId) where.siteId = params.siteId;
+    if (params.siteIds) where.siteId = In(params.siteIds);
     if (params.vendorId) where.vendorId = params.vendorId;
     if (params.search) where.remarks = ILike(`%${params.search}%`);
 

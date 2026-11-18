@@ -16,8 +16,12 @@ export class GstController {
   @Get('register')
   @RequiredPermission('financials.gst.view-list')
   @ApiOperation({ summary: 'List GST register entries with filters' })
-  findAllRegisterEntries(@Query() query: GetGstRegisterDto) {
-    return this.gstService.findAllRegisterEntries(query);
+  findAllRegisterEntries(
+    @Query() query: GetGstRegisterDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.gstService.findAllRegisterEntries(query, userId, activeRole);
   }
 
   @Get('register/:id')
@@ -70,14 +74,27 @@ export class GstController {
     @Query('vendorId') vendorId?: string,
     @Query('partyType') partyType?: string,
     @Query('contractorId') contractorId?: string,
+    @GetUser('id') userId?: string,
+    @GetUser('activeRole') activeRole?: string,
   ) {
-    return this.gstService.findAllPayments(siteId, vendorId, partyType, contractorId);
+    return this.gstService.findAllPayments(
+      siteId,
+      vendorId,
+      partyType,
+      contractorId,
+      userId,
+      activeRole,
+    );
   }
 
   @Get('summary')
   @RequiredPermission('financials.gst.view-list')
   @ApiOperation({ summary: 'Get GST summary per BRD §5.3' })
-  getSummary(@Query() query: GetGstSummaryDto) {
-    return this.gstService.getSummary(query);
+  getSummary(
+    @Query() query: GetGstSummaryDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.gstService.getSummary(query, userId, activeRole);
   }
 }

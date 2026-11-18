@@ -36,8 +36,12 @@ export class NoteController {
   @ApiOperation({
     summary: 'List notes by side (SALE: debit notes, PURCHASE: credit notes)',
   })
-  findAll(@Query() query: GetNoteDto) {
-    return this.noteService.findAll(query);
+  findAll(
+    @Query() query: GetNoteDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.noteService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

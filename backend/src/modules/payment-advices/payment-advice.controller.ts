@@ -14,8 +14,12 @@ export class PaymentAdviceController {
   @Get()
   @RequiredPermission('financials.payment-advices.view-list')
   @ApiOperation({ summary: 'List payment advices with filters and pagination' })
-  findAll(@Query() query: GetPaymentAdviceDto) {
-    return this.paymentAdviceService.findAll(query);
+  findAll(
+    @Query() query: GetPaymentAdviceDto,
+    @GetUser('id') userId: string,
+    @GetUser('activeRole') activeRole?: string,
+  ) {
+    return this.paymentAdviceService.findAll(query, userId, activeRole);
   }
 
   @Get(':id')

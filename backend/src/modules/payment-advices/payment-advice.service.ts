@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { DataSource, IsNull, ILike, EntityManager } from 'typeorm';
+import { DataSource, IsNull, ILike, EntityManager, In } from 'typeorm';
+import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { MailerService } from '@nestjs-modules/mailer';
 import { PaymentAdviceRepository } from './payment-advice.repository';
 import { PaymentAdvicePdfService, PaymentAdvicePdfData } from './payment-advice-pdf.service';
@@ -119,7 +120,7 @@ export class PaymentAdviceService {
     });
   }
 
-  async findAll(query: GetPaymentAdviceDto) {
+  async findAll(query: GetPaymentAdviceDto, userId: string, activeRole?: string) {
     const {
       siteId,
       vendorId,
@@ -132,7 +133,14 @@ export class PaymentAdviceService {
     } = query;
 
     const where: any = { deletedAt: IsNull() };
-    if (siteId) where.siteId = siteId;
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return { records: [], totalRecords: 0 };
+    if (siteIds) where.siteId = In(siteIds);
     if (vendorId) where.vendorId = vendorId;
     if (financialYear) where.financialYear = financialYear;
     if (search) where.referenceNumber = ILike(`%${search}%`);
