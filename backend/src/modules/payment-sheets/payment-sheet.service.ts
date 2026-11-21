@@ -229,6 +229,33 @@ export class PaymentSheetService {
     );
   }
 
+  /** Employee expense/fuel lines may be paid above their pending; the excess goes out as advance. */
+  private allowsExcessOverPending(item: PaymentSheetItemEntity): boolean {
+    return (
+      item.beneficiaryType === BeneficiaryType.USER &&
+      (item.sourceType === PaymentSourceType.EXPENSE ||
+        item.sourceType === PaymentSourceType.FUEL_EXPENSE)
+    );
+  }
+
+  /**
+   * The part of the line that must still be backed by live pending. On an employee line only the
+   * share up to pendingSnapshot settles dues; anything above it is advance and needs no backing.
+   */
+  private pendingBackedAmount(item: PaymentSheetItemEntity, amount: number): number {
+    if (this.isAdvanceLine(item)) return 0;
+    if (this.allowsExcessOverPending(item)) {
+      return Math.min(amount, Number(item.pendingSnapshot));
+    }
+    return amount;
+  }
+
+  /** Amount above pendingSnapshot on an employee settlement line (0 when none). */
+  private excessOverPending(item: PaymentSheetItemEntity, amount: number): number {
+    if (this.isAdvanceLine(item) || !this.allowsExcessOverPending(item)) return 0;
+    return Math.max(0, Number((amount - Number(item.pendingSnapshot)).toFixed(2)));
+  }
+
   private assertAdvanceAmountsSet(items: PaymentSheetItemEntity[]) {
     const hasUnsetAdvance = items.some(
       (i) =>
@@ -1255,10 +1282,12 @@ export class PaymentSheetService {
         }
       }
 
-      // Never exceed current live pending. An advance is not backed by pending, so it has no cap.
-      if (!this.isAdvanceLine(item)) {
+      // The pending-backed part may never exceed live pending. An advance — a 0-balance line, or
+      // the excess above pending on an employee line — is not backed by pending, so it has no cap.
+      const backed = this.pendingBackedAmount(item, newAmount);
+      if (backed > 0) {
         const livePending = await this.computeLivePending(item, em);
-        if (newAmount > livePending + 0.01) {
+        if (backed > livePending + 0.01) {
           throw new BadRequestException(PAYMENT_SHEET_ERRORS.AMOUNT_EXCEEDS_PENDING);
         }
       }
@@ -1642,14 +1671,19 @@ export class PaymentSheetService {
       throw new BadRequestException(PAYMENT_SHEET_ERRORS.ITEM_NOT_PENDING);
     }
     const amount = Number(item.currentAmount);
-    if (!this.isAdvanceLine(item)) {
+    // Guards against dues settled elsewhere since the line was added (double payment).
+    const backed = this.pendingBackedAmount(item, amount);
+    if (backed > 0) {
       const livePending = await this.computeLivePending(item);
-      if (amount > livePending + 0.01) {
+      if (backed > livePending + 0.01) {
         throw new BadRequestException(PAYMENT_SHEET_ERRORS.PENDING_CONFLICT);
       }
     }
+    const excess = this.excessOverPending(item, amount);
     const defaultDescription = this.isAdvanceLine(item)
       ? `Advance paid via Payment Sheet ${sheet.sheetNumber}`
+      : excess > 0
+      ? `Settled via Payment Sheet ${sheet.sheetNumber} (includes advance of ${excess.toFixed(2)})`
       : `Settled via Payment Sheet ${sheet.sheetNumber}`;
 
     const traceRef = `PS:${sheet.sheetNumber}:${item.id}`;
@@ -1970,7 +2004,7 @@ export class PaymentSheetService {
         currentAmount: current,
         livePending,
         difference: Number((livePending - Number(item.pendingSnapshot)).toFixed(2)),
-        conflict: !this.isAdvanceLine(item) && current > livePending + 0.01,
+        conflict: this.pendingBackedAmount(item, current) > livePending + 0.01,
       });
     }
     return { sheetId: id, sheetNumber: sheet.sheetNumber, status: sheet.status, lines };
@@ -2099,17 +2133,20 @@ export class PaymentSheetService {
 
         // USER (expense / fuel)
         const live = await this.computeLivePending(item, em);
-        if (live <= 0) {
+        // Keep any typed excess over pending (advance) on top of the refreshed pending.
+        const excess = this.excessOverPending(item, prev);
+        if (live <= 0 && excess <= 0) {
           await this.removeLineOnSync(item, 'No pending remaining (synced)', user, em);
           removed.push({ itemId: item.id, reason: 'no pending remaining' });
           continue;
         }
-        if (Math.abs(live - prev) > 0.01) {
+        const target = Number((Math.max(0, live) + excess).toFixed(2));
+        if (Math.abs(target - prev) > 0.01) {
           await this.repo.updateItem(
             { id: item.id },
             {
-              currentAmount: live,
-              requestedAmount: live,
+              currentAmount: target,
+              requestedAmount: target,
               pendingSnapshot: live,
               updatedBy: user.id,
             },
@@ -2123,11 +2160,11 @@ export class PaymentSheetService {
             em,
             {
               previousAmount: prev,
-              newAmount: live,
+              newAmount: target,
               reason: 'Synced to latest pending',
             },
           );
-          updated.push({ itemId: item.id, previousAmount: prev, newAmount: live });
+          updated.push({ itemId: item.id, previousAmount: prev, newAmount: target });
         } else {
           await this.repo.updateItem({ id: item.id }, { pendingSnapshot: live }, em);
         }
