@@ -17,6 +17,9 @@ export const DATA_SYNC_SKIPPED_DATA_TABLES = [
 /** Left exactly as they are in UAT: UAT's schema history must keep matching UAT's schema. */
 export const DATA_SYNC_UNTOUCHED_TABLES = ['migrations'] as const;
 
+/** Masked emails keep their name and get this domain. `.test` is reserved: mail never delivers. */
+export const DATA_SYNC_EMAIL_DOMAIN = 'uat.test';
+
 /** Temporary objects that exist only inside the sync transaction. */
 export const DATA_SYNC_FDW_SERVER = 'data_sync_prod_source';
 export const DATA_SYNC_MIRROR_SCHEMA = 'data_sync_prod_mirror';

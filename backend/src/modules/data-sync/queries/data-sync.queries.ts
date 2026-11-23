@@ -1,4 +1,8 @@
-import { DATA_SYNC_FDW_SERVER, DATA_SYNC_MIRROR_SCHEMA } from '../constants/data-sync.constants';
+import {
+  DATA_SYNC_EMAIL_DOMAIN,
+  DATA_SYNC_FDW_SERVER,
+  DATA_SYNC_MIRROR_SCHEMA,
+} from '../constants/data-sync.constants';
 
 /**
  * DDL cannot take bind parameters, so the server / user-mapping statements are built by Postgres
@@ -81,38 +85,53 @@ export const resetOwnedSequencesSql = `
 `;
 
 /**
- * Masks contact details. Values are unique per table (row number spread by a prime, plus a random
- * offset $1 so they differ on every sync); empty values stay empty.
+ * Masks contact details; empty values stay empty.
+ *
+ * Emails keep their name and only lose the domain (nikhil@gmail.com → nikhil@uat.test), so
+ * everyone logs in to UAT with the same address after every sync. `.test` is reserved and never
+ * delivers mail. Two addresses with the same name get "+2", "+3" … (users.email is unique).
+ *
+ * Phones are unique per table: row number spread by a prime, plus a random offset $1.
  */
 const maskPhone = (column: string, prefix: string, prime: number) => `
   "${column}" = CASE WHEN NULLIF(x."${column}", '') IS NULL THEN x."${column}"
     ELSE '${prefix}' || lpad((n.rn * ${prime} + $1::int)::text, 9, '0') END`;
 
-const maskEmail = (label: string, width: number, keepEmpty: boolean) =>
-  keepEmpty
-    ? `email = CASE WHEN NULLIF(x.email, '') IS NULL THEN x.email
-        ELSE '${label}' || lpad(n.rn::text, ${width}, '0') || '@eureka-uat.test' END`
-    : `email = '${label}' || lpad(n.rn::text, ${width}, '0') || '@eureka-uat.test'`;
+const maskEmail = () => `
+  email = CASE WHEN NULLIF(x.email, '') IS NULL THEN x.email
+    ELSE split_part(x.email, '@', 1)
+      || CASE WHEN n.dup > 1 THEN '+' || n.dup ELSE '' END
+      || '@${DATA_SYNC_EMAIL_DOMAIN}' END`;
 
-const maskTable = (table: string, assignments: string[]) => `
-  WITH n AS (SELECT id, row_number() OVER (ORDER BY random()) AS rn FROM ${table})
+const maskTable = (table: string, assignments: string[], hasEmail: boolean) => `
+  WITH n AS (
+    SELECT id,
+      row_number() OVER (ORDER BY random()) AS rn
+      ${
+        hasEmail
+          ? `, row_number() OVER (PARTITION BY lower(split_part(email, '@', 1)) ORDER BY "createdAt", id) AS dup`
+          : ''
+      }
+    FROM ${table}
+  )
   UPDATE ${table} x SET ${assignments.join(',')}
   FROM n WHERE n.id = x.id
 `;
 
 export const maskContactDetailsSql = [
-  maskTable('users', [
-    maskEmail('user', 4, false),
-    maskPhone('contactNumber', '9', 7919),
-    maskPhone('emergencyContactNumber', '8', 7919),
-    maskPhone('whatsappNumber', '9', 7919),
-  ]),
-  maskTable('companies', [maskEmail('company', 3, true), maskPhone('contactNumber', '7', 7919)]),
-  maskTable('contractors', [
-    maskEmail('contractor', 3, true),
-    maskPhone('contactNumber', '7', 6007),
-  ]),
-  maskTable('vendors', [maskEmail('vendor', 4, true), maskPhone('contactNumber', '6', 7919)]),
-  maskTable('sites', [maskPhone('managerContact', '9', 4999)]),
-  maskTable('daily_status_reports', [maskPhone('reportingEngineerContact', '9', 3001)]),
+  maskTable(
+    'users',
+    [
+      maskEmail(),
+      maskPhone('contactNumber', '9', 7919),
+      maskPhone('emergencyContactNumber', '8', 7919),
+      maskPhone('whatsappNumber', '9', 7919),
+    ],
+    true,
+  ),
+  maskTable('companies', [maskEmail(), maskPhone('contactNumber', '7', 7919)], true),
+  maskTable('contractors', [maskEmail(), maskPhone('contactNumber', '7', 6007)], true),
+  maskTable('vendors', [maskEmail(), maskPhone('contactNumber', '6', 7919)], true),
+  maskTable('sites', [maskPhone('managerContact', '9', 4999)], false),
+  maskTable('daily_status_reports', [maskPhone('reportingEngineerContact', '9', 3001)], false),
 ];
