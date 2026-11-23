@@ -1306,7 +1306,7 @@ export class PaymentSheetService {
       // Prior-stage verifications are PRESERVED as the sheet advances (lead decision):
       // a later-stage edit does not wipe an earlier stage's sign-off. The editing
       // reviewer's own edit still counts as their verification for their stage.
-      // (Safe here because ADMIN_REVIEW is decrease-only, so a later edit can never
+      // (Safe here because HR_REVIEW and ADMIN_REVIEW are decrease-only, so a later edit can never
       // exceed what an earlier stage already approved.)
       await this.autoVerifyOnEdit(item, sheet, flow, user, em);
       await this.recomputeTotals(id, em);

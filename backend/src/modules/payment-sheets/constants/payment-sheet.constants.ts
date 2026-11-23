@@ -76,7 +76,7 @@ export const DEFAULT_APPROVAL_FLOW: ApprovalStageConfig[] = [
   {
     stage: PaymentSheetStage.HR_REVIEW,
     role: 'HR',
-    amountEdit: 'free',
+    amountEdit: 'decrease-only', // raising an amount is the Operation Manager's call
     addRemove: false,
     canReturn: true,
     canReject: true,

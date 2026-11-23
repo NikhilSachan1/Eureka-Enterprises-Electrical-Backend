@@ -48,6 +48,7 @@ import {
   CONFIGURATION_MODULES,
 } from 'src/utils/master-constants/master-constants';
 import { resolveReadableSiteFilter } from '../common/financials/site-access.helper';
+import { SYSTEM_USER_ID } from '../users/constants/user.constants';
 
 @Injectable()
 export class SiteAllocationService {
@@ -213,7 +214,18 @@ export class SiteAllocationService {
     requesterId: string,
     activeRole?: string,
   ) {
-    return this.runSummary(employeeAllocationSummaryQuery, options, requesterId, activeRole);
+    // No project chosen and every site readable: list every employee, free or not (the same
+    // people as the employee list). A viewer limited to some sites only sees people allocated there.
+    const readableSiteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      requesterId,
+      activeRole,
+    );
+    const listEveryone = !options.siteId && readableSiteIds === null;
+    return this.runSummary(employeeAllocationSummaryQuery, options, requesterId, activeRole, [
+      listEveryone,
+      SYSTEM_USER_ID,
+    ]);
   }
 
   /**
@@ -225,7 +237,10 @@ export class SiteAllocationService {
     requesterId: string,
     activeRole?: string,
   ) {
-    return this.runSummary(projectAllocationSummaryQuery, options, requesterId, activeRole);
+    // No project chosen: every project the viewer can read, staffed or not.
+    return this.runSummary(projectAllocationSummaryQuery, options, requesterId, activeRole, [
+      !options.siteId,
+    ]);
   }
 
   private async runSummary(
@@ -233,6 +248,8 @@ export class SiteAllocationService {
     options: GetAllocationSummaryDto,
     requesterId: string,
     activeRole?: string,
+    /** Parameters after the shared seven ($8 onwards), for queries that need more. */
+    extraParams: unknown[] = [],
   ) {
     const {
       siteId,
@@ -264,6 +281,7 @@ export class SiteAllocationService {
         pageSize,
         (page - 1) * pageSize,
         readableSiteIds,
+        ...extraParams,
       ]);
 
     // Every row carries the total (window count), so it also reaches the client per row.
