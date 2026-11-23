@@ -13,6 +13,7 @@
  * Employee query only:
  * - `$8` true to list every employee, allocated or not (no project chosen)
  * - `$9` the system bot's user id, never listed
+ * - `$10` one employee's id to list only them, NULL = everyone
  *
  * Project query only:
  * - `$8` true to list every project in scope, allocated or not (no project chosen)
@@ -34,9 +35,22 @@ const SCOPED_ALLOCATIONS = `
   )
 `;
 
+/**
+ * Last day of an allocation: its deallocation date; today while it runs. Old data has ended
+ * allocations without a deallocation date — their last change (the deallocation) stands in, else
+ * the start. The allocation drawers use the same rule, so their day counts match these.
+ */
+const allocationEnd = (alias: string): string => `
+  COALESCE(
+    ${alias}."deallocatedAt",
+    CASE WHEN ${alias}."isCurrentlyAllocated" THEN CURRENT_DATE ELSE ${alias}."updatedAt"::date END,
+    ${alias}."allocatedAt"
+  )
+`;
+
 const DAYS_IN_PERIOD = `
   GREATEST(
-    LEAST(COALESCE(sc."deallocatedAt", CURRENT_DATE), COALESCE($3::date, DATE '9999-12-31'))
+    LEAST(${allocationEnd('sc')}, COALESCE($3::date, DATE '9999-12-31'))
     - GREATEST(sc."allocatedAt", COALESCE($2::date, DATE '0001-01-01'))
     + 1,
     0
@@ -51,11 +65,14 @@ const LAST_CHANGE = `GREATEST(MAX(sc."allocatedAt"), MAX(sc."deallocatedAt"))`;
  * With `$8` (no project chosen) every employee is listed — the same people as the employee
  * list (not system users), active or archived, whether or not they were ever allocated — so a
  * free person shows with zero days. Otherwise only people with an allocation in scope are listed.
+ * Either way only employees are listed — a system user or a removed user who still has old
+ * allocations is left out, so the count matches the employee list.
  *
  * `freeDays`: days in the employee's working window with no allocation on any project. The window
  * runs from joining (else the first allocation) to exit (else today), clipped to the period. A day
  * on two projects counts once, and days on other projects are never free even when one project is
- * chosen. NULL when there is no start to count from.
+ * chosen. NULL when there is no start to count from. `freeFrom` / `freeTo` are that window, so the
+ * journey drawer counts free days over exactly the same days.
  */
 export const employeeAllocationSummaryQuery = `
   WITH ${SCOPED_ALLOCATIONS},
@@ -85,6 +102,8 @@ export const employeeAllocationSummaryQuery = `
       WHEN win.from_day IS NULL THEN NULL
       ELSE GREATEST((win.to_day - win.from_day + 1) - COALESCE(cov.days, 0), 0)
     END::int AS "freeDays",
+    to_char(win.from_day, 'YYYY-MM-DD') AS "freeFrom",
+    to_char(win.to_day, 'YYYY-MM-DD') AS "freeTo",
     COUNT(*) OVER ()::int AS "totalRecords"
   FROM people p
   INNER JOIN users u ON u.id = p.id
@@ -112,7 +131,7 @@ export const employeeAllocationSummaryQuery = `
     FROM site_allocations a,
       generate_series(
         GREATEST(a."allocatedAt", win.from_day),
-        LEAST(COALESCE(a."deallocatedAt", CURRENT_DATE), win.to_day),
+        LEAST(${allocationEnd('a')}, win.to_day),
         interval '1 day'
       ) d
     WHERE a."userId" = u.id AND a."deletedAt" IS NULL AND win.from_day IS NOT NULL
@@ -129,9 +148,15 @@ export const employeeAllocationSummaryQuery = `
       AND ca."isCurrentlyAllocated" = true
       AND ($7::uuid[] IS NULL OR ca."siteId" = ANY($7::uuid[]))
   ) cur ON true
-  WHERE $4::text IS NULL
-    OR (u."firstName" || ' ' || u."lastName") ILIKE $4::text
-    OR u."employeeId" ILIKE $4::text
+  WHERE u."deletedAt" IS NULL
+    AND u."isSystemUser" = false
+    AND u.id <> $9::uuid
+    AND ($10::uuid IS NULL OR u.id = $10::uuid)
+    AND (
+      $4::text IS NULL
+      OR (u."firstName" || ' ' || u."lastName") ILIKE $4::text
+      OR u."employeeId" ILIKE $4::text
+    )
   GROUP BY u.id, cur.sites, win.from_day, win.to_day, cov.days
   ORDER BY (cur.sites IS NOT NULL) DESC, (u."status" = 'ACTIVE') DESC, u."firstName", u."lastName"
   LIMIT $5 OFFSET $6
@@ -150,6 +175,7 @@ export const projectAllocationSummaryQuery = `
     s.name,
     s.city,
     s.state,
+    s.status,
     COUNT(sc.id)::int AS "allocationCount",
     COUNT(DISTINCT sc."userId")::int AS "totalPeople",
     COALESCE(cur.people, 0)::int AS "currentPeople",

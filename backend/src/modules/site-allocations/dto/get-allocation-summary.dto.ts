@@ -29,4 +29,9 @@ export class GetAllocationSummaryDto extends BaseGetDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Employee summary only: just this employee' })
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
 }

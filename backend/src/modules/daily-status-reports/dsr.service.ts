@@ -16,7 +16,14 @@ import {
 } from 'typeorm';
 import { DsrRepository } from './dsr.repository';
 import { DailyStatusReportEntity, DsrFileEntity, DsrEditHistoryEntity } from './entities';
-import { CreateDsrDto, ForceCreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
+import {
+  CreateDsrDto,
+  ForceCreateDsrDto,
+  UpdateDsrDto,
+  GetDsrDto,
+  GetDsrProjectSummaryDto,
+} from './dto';
+import { dsrProjectSummaryQuery } from './queries/dsr-summary.queries';
 import {
   DSR_ERRORS,
   DSR_RESPONSES,
@@ -269,6 +276,54 @@ export class DsrService {
       DsrEntityFields.DSR,
       DataSuccessOperationType.CREATE,
     );
+  }
+
+  /**
+   * DSR reporting per project: days someone was allocated, how many of them have a DSR, the
+   * missing ones, reporters and the last report. Every day is a working day. With no project and
+   * no dates every readable project is listed; otherwise only projects with an allocation or a
+   * DSR in scope. `userId` (forced for roles limited to their own DSRs) narrows the counts to one
+   * person. Paged on the server.
+   */
+  async getProjectSummary(
+    options: GetDsrProjectSummaryDto,
+    requesterId: string,
+    activeRole?: string,
+  ) {
+    const {
+      siteId,
+      periodFrom,
+      periodTo,
+      search,
+      userId,
+      page = DefaultPaginationValues.PAGE,
+      pageSize = DefaultPaginationValues.PAGE_SIZE,
+    } = options;
+
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      requesterId,
+      activeRole,
+      siteId ? [siteId] : undefined,
+    );
+    if (siteIds?.length === 0) return this.utilityService.listResponse([], 0);
+
+    const term = search?.trim();
+    const listEveryProject = !siteId && !periodFrom && !periodTo;
+    const rows: Array<Record<string, unknown> & { totalRecords: number }> =
+      await this.dataSource.query(dsrProjectSummaryQuery, [
+        siteIds,
+        periodFrom ?? null,
+        periodTo ?? null,
+        term ? `%${term}%` : null,
+        pageSize,
+        (page - 1) * pageSize,
+        listEveryProject,
+        userId ?? null,
+      ]);
+
+    // Every row carries the total (window count), so it also reaches the client per row.
+    return this.utilityService.listResponse(rows, rows[0]?.totalRecords ?? 0);
   }
 
   async findAll(options: GetDsrDto, requesterId: string, activeRole?: string) {

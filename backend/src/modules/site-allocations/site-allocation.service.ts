@@ -214,17 +214,19 @@ export class SiteAllocationService {
     requesterId: string,
     activeRole?: string,
   ) {
-    // No project chosen and every site readable: list every employee, free or not (the same
-    // people as the employee list). A viewer limited to some sites only sees people allocated there.
+    // No project, no dates and every site readable: list every employee, free or not (the same
+    // people as the employee list). With a project or a period, only people allocated in it.
+    // A viewer limited to some sites only sees people allocated there.
     const readableSiteIds = await resolveReadableSiteFilter(
       this.dataSource,
       requesterId,
       activeRole,
     );
-    const listEveryone = !options.siteId && readableSiteIds === null;
+    const listEveryone = !options.siteId && !hasPeriod(options) && readableSiteIds === null;
     return this.runSummary(employeeAllocationSummaryQuery, options, requesterId, activeRole, [
       listEveryone,
       SYSTEM_USER_ID,
+      options.userId ?? null,
     ]);
   }
 
@@ -237,9 +239,10 @@ export class SiteAllocationService {
     requesterId: string,
     activeRole?: string,
   ) {
-    // No project chosen: every project the viewer can read, staffed or not.
+    // No project and no dates: every project the viewer can read, staffed or not. With a
+    // project or a period, only projects with an allocation in it.
     return this.runSummary(projectAllocationSummaryQuery, options, requesterId, activeRole, [
-      !options.siteId,
+      !options.siteId && !hasPeriod(options),
     ]);
   }
 
@@ -946,4 +949,9 @@ export class SiteAllocationService {
       },
     };
   }
+}
+
+/** A date filter (start or end) is applied to the summary. */
+function hasPeriod({ periodFrom, periodTo }: GetAllocationSummaryDto): boolean {
+  return !!periodFrom || !!periodTo;
 }
