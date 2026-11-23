@@ -1,23 +1,23 @@
 import { Controller, Get, Post, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { Roles as RoleEnum } from '../roles/constants/role.constants';
+import { RequiredPermission } from '../auth/decorators/required-permission.decorator';
 import { DataSyncService } from './data-sync.service';
 
 @ApiTags('Data Sync')
 @ApiBearerAuth('JWT-auth')
 @Controller('data-sync')
-@Roles(RoleEnum.SUPER_ADMIN)
 export class DataSyncController {
   constructor(private readonly dataSyncService: DataSyncService) {}
 
   @Get('status')
+  @RequiredPermission('data-sync.view')
   @ApiOperation({ summary: 'Whether this server may pull prod data (UAT only)' })
   async getStatus() {
     return await this.dataSyncService.getStatus();
   }
 
   @Post('prod-to-uat')
+  @RequiredPermission('data-sync.run')
   @ApiOperation({
     summary: 'Replace UAT data with prod data',
     description:
