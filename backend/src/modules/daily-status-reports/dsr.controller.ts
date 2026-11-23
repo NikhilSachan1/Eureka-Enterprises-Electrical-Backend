@@ -14,7 +14,13 @@ import {
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { DsrService } from './dsr.service';
-import { CreateDsrDto, ForceCreateDsrDto, UpdateDsrDto, GetDsrDto } from './dto';
+import {
+  CreateDsrDto,
+  ForceCreateDsrDto,
+  UpdateDsrDto,
+  GetDsrDto,
+  GetDsrProjectSummaryDto,
+} from './dto';
 import { ValidateAndUploadFiles } from '../common/file-upload/decorator/file.decorator';
 import {
   FILE_UPLOAD_FOLDER_NAMES,
@@ -79,6 +85,22 @@ export class DsrController {
     @Query() query: GetDsrDto,
   ) {
     return await this.dsrService.findAll(query, userId, activeRole);
+  }
+
+  // Declared before ':id' so "summary" is not read as an id.
+  @RequiredAnyPermission('project.dsr.view-list')
+  @Get('summary/projects')
+  @UseInterceptors(DsrUserInterceptor)
+  @ApiOperation({
+    summary: 'DSR summary per project',
+    description:
+      'One row per project: days someone was allocated, days with a DSR, missing days, reporters and the last report. Roles limited to their own DSRs get their own figures. Paged on the server.',
+  })
+  async getProjectSummary(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetDsrProjectSummaryDto,
+  ) {
+    return await this.dsrService.getProjectSummary(query, userId, activeRole);
   }
 
   @RequiredAnyPermission('project.dsr.view-detail', 'project.dsr.view-list', 'project.dsr.edit')
