@@ -25,6 +25,9 @@ const OPTIONAL_ENV_KEYS = new Set([
   // Push credentials. Push is off unless PUSH_ENABLED=true and a usable key is set, and it says so
   // in the log — so a missing key must never stop the app booting.
   'FIREBASE_SERVICE_ACCOUNT_BASE64',
+  // Prod → UAT data sync is set only on the UAT server; everywhere else the sync just reports
+  // itself as unavailable, so a missing value must never stop the app booting.
+  'DATA_SYNC_SOURCE_DATABASE',
 ]);
 
 async function bootstrap() {
