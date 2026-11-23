@@ -86,6 +86,7 @@ import { TdsModule } from 'src/modules/tds/tds.module';
 import { BillingModule } from 'src/modules/billing/billing.module';
 import { DocumentStatusModule } from 'src/modules/document-status/document-status.module';
 import { PublicInfoModule } from 'src/modules/public-info/public-info.module';
+import { DataSyncModule } from 'src/modules/data-sync/data-sync.module';
 
 @Module({
   imports: [
@@ -172,6 +173,7 @@ import { PublicInfoModule } from 'src/modules/public-info/public-info.module';
     BillingModule,
     DocumentStatusModule,
     PublicInfoModule,
+    DataSyncModule,
   ],
   controllers: [AppController],
   providers: [
