@@ -19,7 +19,9 @@ import {
   UpdateSiteInvoiceDto,
   GetSiteInvoiceDto,
   SettleAdvanceDto,
+  GetInvoiceLedgerDto,
 } from './dto';
+import { InvoiceLedgerService } from './invoice-ledger.service';
 import {
   ApproveDto,
   RejectDto,
@@ -33,6 +35,7 @@ export class SiteInvoiceController {
   constructor(
     private readonly invoiceService: SiteInvoiceService,
     private readonly docs: DocumentNotifierService,
+    private readonly ledgerService: InvoiceLedgerService,
   ) {}
 
   @Post()
@@ -64,6 +67,22 @@ export class SiteInvoiceController {
     @Query('partyType') partyType?: 'PURCHASE' | 'SALE',
   ) {
     return await this.invoiceService.getDropdown(siteId, forDocument, partyType);
+  }
+
+  @Get('ledger')
+  @RequiredPermission('financials.invoices.view-list')
+  @ApiOperation({
+    summary: 'Invoice ledger — contractor (SALE) or vendor (PURCHASE)',
+    description:
+      'Invoice-wise ledger with CGST/SGST/IGST split, TDS, paid amount with transfer dates, ' +
+      'outstanding, FY and quarter. `totals` covers every row matching the filters. ' +
+      'Rejected invoices are excluded unless approvalStatus asks for them.',
+  })
+  async getLedger(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetInvoiceLedgerDto,
+  ) {
+    return await this.ledgerService.getLedger(query, userId, activeRole);
   }
 
   @Get()

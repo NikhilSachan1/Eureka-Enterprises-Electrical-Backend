@@ -4,6 +4,7 @@ import { SiteInvoiceController } from './site-invoice.controller';
 import { SiteInvoiceService } from './site-invoice.service';
 import { SiteInvoiceRepository } from './site-invoice.repository';
 import { SiteInvoiceEntity } from './entities/site-invoice.entity';
+import { InvoiceLedgerService } from './invoice-ledger.service';
 import { PurchaseOrderModule } from '../purchase-orders/purchase-order.module';
 import { AdvancePaymentModule } from '../advance-payments/advance-payment.module';
 
@@ -16,7 +17,7 @@ import { AdvancePaymentModule } from '../advance-payments/advance-payment.module
     AdvancePaymentModule,
   ],
   controllers: [SiteInvoiceController],
-  providers: [SiteInvoiceService, SiteInvoiceRepository],
+  providers: [SiteInvoiceService, SiteInvoiceRepository, InvoiceLedgerService],
   exports: [SiteInvoiceService, SiteInvoiceRepository],
 })
 export class SiteInvoiceModule {}
