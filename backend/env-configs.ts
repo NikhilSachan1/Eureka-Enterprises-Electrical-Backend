@@ -70,6 +70,12 @@ export const Environments = {
   WHATSAPP_ENABLED: process.env.WHATSAPP_ENABLED === 'true',
   WHATSAPP_MODE: process.env.WHATSAPP_MODE || 'sandbox', // 'sandbox' or 'production'
 
+  // Prod → UAT data sync. Only the UAT deployment sets DATA_SYNC_ENABLED=true, and the service
+  // also refuses unless the connected database name ends in "_uat". Prod lives on the same RDS
+  // instance with the same user, so only its database name is needed.
+  DATA_SYNC_ENABLED: process.env.DATA_SYNC_ENABLED === 'true',
+  DATA_SYNC_SOURCE_DATABASE: process.env.DATA_SYNC_SOURCE_DATABASE,
+
   // Push notifications, sent straight to Firebase Cloud Messaging (Android and web). Off unless
   // explicitly enabled, so a placeholder key is never used.
   PUSH_ENABLED: process.env.PUSH_ENABLED === 'true',
