@@ -10,6 +10,13 @@
  * - `$7` readable site ids for the "right now" figures, NULL = every site; these ignore the
  *   period and the requested project so they always show where people are today
  *
+ * Employee query only:
+ * - `$8` true to list every employee, allocated or not (no project chosen)
+ * - `$9` the system bot's user id, never listed
+ *
+ * Project query only:
+ * - `$8` true to list every project in scope, allocated or not (no project chosen)
+ *
  * Day counts are clipped to the period and run to today for an open allocation; a backwards range
  * (deallocatedAt < allocatedAt, which exists in old data) counts as zero days.
  * Dates are returned as `YYYY-MM-DD` text so no time zone can shift them.
@@ -38,22 +45,78 @@ const DAYS_IN_PERIOD = `
 
 const LAST_CHANGE = `GREATEST(MAX(sc."allocatedAt"), MAX(sc."deallocatedAt"))`;
 
-/** One row per employee with an allocation in scope; people on a project now come first. */
+/**
+ * One row per employee; people on a project now come first.
+ *
+ * With `$8` (no project chosen) every employee is listed — the same people as the employee
+ * list (not system users), active or archived, whether or not they were ever allocated — so a
+ * free person shows with zero days. Otherwise only people with an allocation in scope are listed.
+ *
+ * `freeDays`: days in the employee's working window with no allocation on any project. The window
+ * runs from joining (else the first allocation) to exit (else today), clipped to the period. A day
+ * on two projects counts once, and days on other projects are never free even when one project is
+ * chosen. NULL when there is no start to count from.
+ */
 export const employeeAllocationSummaryQuery = `
-  WITH ${SCOPED_ALLOCATIONS}
+  WITH ${SCOPED_ALLOCATIONS},
+  people AS (
+    SELECT DISTINCT sc."userId" AS id FROM scoped sc
+    UNION
+    SELECT u.id
+    FROM users u
+    WHERE $8::boolean
+      AND u."deletedAt" IS NULL
+      AND u."isSystemUser" = false
+      AND u.id <> $9::uuid
+  )
   SELECT
     u.id AS "userId",
     u."firstName",
     u."lastName",
     u."employeeId",
-    COUNT(*)::int AS "allocationCount",
+    u."status",
+    COUNT(sc.id)::int AS "allocationCount",
     COUNT(DISTINCT sc."siteId")::int AS "projectCount",
-    SUM(${DAYS_IN_PERIOD})::int AS "allocatedDays",
+    -- GREATEST skips NULLs, so a person with no allocation must be counted as 0 explicitly.
+    COALESCE(SUM(CASE WHEN sc.id IS NULL THEN 0 ELSE ${DAYS_IN_PERIOD} END), 0)::int AS "allocatedDays",
     to_char(${LAST_CHANGE}, 'YYYY-MM-DD') AS "lastChange",
     COALESCE(cur.sites, '[]'::jsonb) AS "currentSites",
+    CASE
+      WHEN win.from_day IS NULL THEN NULL
+      ELSE GREATEST((win.to_day - win.from_day + 1) - COALESCE(cov.days, 0), 0)
+    END::int AS "freeDays",
     COUNT(*) OVER ()::int AS "totalRecords"
-  FROM scoped sc
-  INNER JOIN users u ON u.id = sc."userId"
+  FROM people p
+  INNER JOIN users u ON u.id = p.id
+  LEFT JOIN scoped sc ON sc."userId" = u.id
+  -- The employee's working window, clipped to the period.
+  LEFT JOIN LATERAL (
+    SELECT
+      GREATEST(base.start_day, COALESCE($2::date, base.start_day)) AS from_day,
+      LEAST(
+        COALESCE(u."exitDate"::date, CURRENT_DATE),
+        CURRENT_DATE,
+        COALESCE($3::date, DATE '9999-12-31')
+      ) AS to_day
+    FROM (
+      SELECT COALESCE(
+        u."dateOfJoining"::date,
+        (SELECT MIN(fa."allocatedAt") FROM site_allocations fa
+          WHERE fa."userId" = u.id AND fa."deletedAt" IS NULL)
+      ) AS start_day
+    ) base
+  ) win ON true
+  -- Distinct days on any project inside the window.
+  LEFT JOIN LATERAL (
+    SELECT COUNT(DISTINCT d)::int AS days
+    FROM site_allocations a,
+      generate_series(
+        GREATEST(a."allocatedAt", win.from_day),
+        LEAST(COALESCE(a."deallocatedAt", CURRENT_DATE), win.to_day),
+        interval '1 day'
+      ) d
+    WHERE a."userId" = u.id AND a."deletedAt" IS NULL AND win.from_day IS NOT NULL
+  ) cov ON true
   LEFT JOIN LATERAL (
     SELECT jsonb_agg(
       jsonb_build_object('id', cs.id, 'name', cs.name, 'city', cs.city, 'state', cs.state)
@@ -69,12 +132,17 @@ export const employeeAllocationSummaryQuery = `
   WHERE $4::text IS NULL
     OR (u."firstName" || ' ' || u."lastName") ILIKE $4::text
     OR u."employeeId" ILIKE $4::text
-  GROUP BY u.id, cur.sites
-  ORDER BY (cur.sites IS NOT NULL) DESC, u."firstName", u."lastName"
+  GROUP BY u.id, cur.sites, win.from_day, win.to_day, cov.days
+  ORDER BY (cur.sites IS NOT NULL) DESC, (u."status" = 'ACTIVE') DESC, u."firstName", u."lastName"
   LIMIT $5 OFFSET $6
 `;
 
-/** One row per project with an allocation in scope; most recently changed first. */
+/**
+ * One row per project; most recently changed first, never-staffed projects last.
+ *
+ * With `$8` (no project chosen) every project in scope is listed, staffed or not; otherwise only
+ * projects with an allocation in scope.
+ */
 export const projectAllocationSummaryQuery = `
   WITH ${SCOPED_ALLOCATIONS}
   SELECT
@@ -82,14 +150,14 @@ export const projectAllocationSummaryQuery = `
     s.name,
     s.city,
     s.state,
-    COUNT(*)::int AS "allocationCount",
+    COUNT(sc.id)::int AS "allocationCount",
     COUNT(DISTINCT sc."userId")::int AS "totalPeople",
     COALESCE(cur.people, 0)::int AS "currentPeople",
     to_char(MIN(sc."allocatedAt"), 'YYYY-MM-DD') AS "firstAllocation",
     to_char(${LAST_CHANGE}, 'YYYY-MM-DD') AS "lastChange",
     COUNT(*) OVER ()::int AS "totalRecords"
-  FROM scoped sc
-  INNER JOIN sites s ON s.id = sc."siteId"
+  FROM sites s
+  LEFT JOIN scoped sc ON sc."siteId" = s.id
   LEFT JOIN LATERAL (
     SELECT COUNT(DISTINCT ca."userId") AS people
     FROM site_allocations ca
@@ -97,8 +165,11 @@ export const projectAllocationSummaryQuery = `
       AND ca."deletedAt" IS NULL
       AND ca."isCurrentlyAllocated" = true
   ) cur ON true
-  WHERE ($7::uuid[] IS NULL OR s.id = ANY($7::uuid[]))
+  WHERE s."deletedAt" IS NULL
+    AND ($1::uuid[] IS NULL OR s.id = ANY($1::uuid[]))
+    AND ($7::uuid[] IS NULL OR s.id = ANY($7::uuid[]))
     AND ($4::text IS NULL OR s.name ILIKE $4::text)
+    AND ($8::boolean OR sc.id IS NOT NULL)
   GROUP BY s.id, cur.people
   ORDER BY ${LAST_CHANGE} DESC NULLS LAST, s.name
   LIMIT $5 OFFSET $6
