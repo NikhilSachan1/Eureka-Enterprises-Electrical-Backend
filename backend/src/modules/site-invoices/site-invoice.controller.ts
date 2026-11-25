@@ -86,6 +86,34 @@ export class SiteInvoiceController {
     return await this.ledgerService.getLedger(query, PartyType.SALE, userId, activeRole);
   }
 
+  @Get('ledger/contractor/pdf')
+  @RequiredPermission('ledger.contractor.export')
+  @ApiOperation({
+    summary: 'Contractor ledger PDF',
+    description:
+      'Every SALE invoice matching the same filters as the contractor ledger (no paging), as a ' +
+      'landscape PDF with totals and the authorised signatory block. Returns a download URL.',
+  })
+  async getContractorLedgerPdf(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetInvoiceLedgerDto,
+  ) {
+    return await this.ledgerService.getLedgerPdf(query, PartyType.SALE, userId, activeRole);
+  }
+
+  @Get('ledger/vendor/pdf')
+  @RequiredPermission('ledger.vendor.export')
+  @ApiOperation({
+    summary: 'Vendor ledger PDF',
+    description: 'Same as the contractor ledger PDF, for vendor (PURCHASE) invoices.',
+  })
+  async getVendorLedgerPdf(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetInvoiceLedgerDto,
+  ) {
+    return await this.ledgerService.getLedgerPdf(query, PartyType.PURCHASE, userId, activeRole);
+  }
+
   @Get('ledger/vendor')
   @RequiredPermission('ledger.vendor.view')
   @ApiOperation({

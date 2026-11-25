@@ -24,6 +24,14 @@ export const LEDGER_AMOUNT_FIELDS = [
   'outstandingAmount',
 ] as const;
 
+/** Most invoices one PDF export may hold; past this the user narrows the filters. */
+export const LEDGER_PDF_MAX_ROWS = 2000;
+
+export const LEDGER_PDF_MESSAGES = {
+  NO_ROWS: 'No invoices match these filters, so there is nothing to export.',
+  TOO_MANY_ROWS: `More than ${LEDGER_PDF_MAX_ROWS} invoices match these filters. Narrow them (for example by financial year or project) and export again.`,
+} as const;
+
 /** Client sort fields → ledger CTE columns. Anything else sorts by invoice date, oldest first. */
 export const LEDGER_SORT_COLUMNS: Record<string, string> = {
   invoiceDate: '"invoiceDate"',
