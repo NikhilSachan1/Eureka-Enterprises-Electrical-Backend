@@ -11,7 +11,10 @@ import {
   LEDGER_AMOUNT_FIELDS as AMOUNT_FIELDS,
   LEDGER_SORT_COLUMNS,
 } from './constants/invoice-ledger.constants';
-import { invoiceLedgerPageQuery, invoiceLedgerTotalsQuery } from './queries/invoice-ledger.queries';
+import {
+  invoiceLedgerPageQuery,
+  invoiceLedgerSummaryQuery,
+} from './queries/invoice-ledger.queries';
 import { roundInr } from 'src/modules/common/financials/amount-format.helper';
 
 /** pg returns NUMERIC as a string; the API sends numbers rounded to paise. */
@@ -26,7 +29,13 @@ const toAmount = (value: unknown): number => roundInr(Number(value ?? 0) || 0);
 export class InvoiceLedgerService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async getLedger(query: GetInvoiceLedgerDto, userId: string, activeRole?: string) {
+  /** `partyType` comes from the route (contractor / vendor ledger), never from the query. */
+  async getLedger(
+    query: GetInvoiceLedgerDto,
+    partyType: PartyType,
+    userId: string,
+    activeRole?: string,
+  ) {
     const { page = DefaultPaginationValues.PAGE, pageSize = DefaultPaginationValues.PAGE_SIZE } =
       query;
 
@@ -37,7 +46,12 @@ export class InvoiceLedgerService {
       query.siteId,
     );
     if (siteIds?.length === 0) {
-      return { records: [], totalRecords: 0, totals: this.emptyTotals() };
+      return {
+        records: [],
+        totalRecords: 0,
+        totals: this.mapTotals(undefined),
+        insights: { byMonth: [], topParties: [] },
+      };
     }
 
     const params: unknown[] = [];
@@ -46,13 +60,13 @@ export class InvoiceLedgerService {
       return `$${params.length}`;
     };
 
-    const where = this.buildInvoiceWhere(query, siteIds, bind);
+    const where = this.buildInvoiceWhere(query, partyType, siteIds, bind);
     const ledgerWhere = this.buildLedgerWhere(query, bind);
     // Replacer functions, so `$n` placeholders are never read as replacement patterns.
     const fill = (sql: string) =>
       sql.replace('{where}', () => where).replace('{ledgerWhere}', () => ledgerWhere);
 
-    const totalsParams = [...params];
+    const summaryParams = [...params];
     const orderBy = this.buildOrderBy(query);
     const limit = bind(pageSize);
     const offset = bind((page - 1) * pageSize);
@@ -61,42 +75,54 @@ export class InvoiceLedgerService {
       .replace('{limit}', () => limit)
       .replace('{offset}', () => offset);
 
-    const [rows, [totalsRow]] = await Promise.all([
+    // Two statements: the page, and everything above the table (built from one filtered ledger).
+    const [rows, [summary]] = await Promise.all([
       this.dataSource.query(pageSql, params),
-      this.dataSource.query(fill(invoiceLedgerTotalsQuery), totalsParams),
+      this.dataSource.query(fill(invoiceLedgerSummaryQuery), summaryParams),
     ]);
+    const totals = summary?.totals as Record<string, unknown> | undefined;
 
     return {
       records: rows.map((row: Record<string, unknown>) => this.mapRow(row)),
-      totalRecords: Number(totalsRow?.totalRecords ?? 0),
-      totals: this.mapTotals(totalsRow),
+      totalRecords: Number(totals?.totalRecords ?? 0),
+      totals: this.mapTotals(totals),
+      insights: {
+        byMonth: (summary?.byMonth ?? []).map((m: Record<string, unknown>) => ({
+          month: m.month as string,
+          billed: toAmount(m.billed),
+          outstanding: toAmount(m.outstanding),
+        })),
+        topParties: (summary?.topParties ?? []).map((p: Record<string, unknown>) => ({
+          partyName: p.partyName as string,
+          count: Number(p.count),
+          outstanding: toAmount(p.outstanding),
+        })),
+      },
     };
   }
 
   private buildInvoiceWhere(
     query: GetInvoiceLedgerDto,
+    partyType: PartyType,
     siteIds: string[] | null,
     bind: (value: unknown) => string,
   ): string {
-    const conditions = ['i."deletedAt" IS NULL', `i."partyType" = ${bind(query.partyType)}`];
+    const conditions = ['i."deletedAt" IS NULL', `i."partyType" = ${bind(partyType)}`];
 
     if (siteIds) conditions.push(`i."siteId" = ANY(${bind(siteIds)}::uuid[])`);
     if (query.companyId?.length)
       conditions.push(`s."companyId" = ANY(${bind(query.companyId)}::uuid[])`);
 
     // A contractor filter only means something on the SALE side, a vendor filter on PURCHASE.
-    if (query.partyType === PartyType.SALE && query.contractorId?.length) {
+    if (partyType === PartyType.SALE && query.contractorId?.length) {
       conditions.push(`i."contractorId" = ANY(${bind(query.contractorId)}::uuid[])`);
     }
-    if (query.partyType === PartyType.PURCHASE && query.vendorId?.length) {
+    if (partyType === PartyType.PURCHASE && query.vendorId?.length) {
       conditions.push(`i."vendorId" = ANY(${bind(query.vendorId)}::uuid[])`);
     }
 
-    if (query.approvalStatus?.length) {
-      conditions.push(`i."approvalStatus" = ANY(${bind(query.approvalStatus)}::text[])`);
-    } else {
-      conditions.push(`i."approvalStatus" <> ${bind(FinancialApprovalStatus.REJECTED)}`);
-    }
+    // A rejected invoice was never billed; it has no place in the ledger.
+    conditions.push(`i."approvalStatus" <> ${bind(FinancialApprovalStatus.REJECTED)}`);
 
     if (query.financialYear) {
       const startYear = Number(query.financialYear.slice(0, 4));
@@ -107,12 +133,7 @@ export class InvoiceLedgerService {
     if (query.dateTo) conditions.push(`i."invoiceDate" <= ${bind(query.dateTo)}::date`);
 
     const search = query.search?.trim();
-    if (search) {
-      const term = bind(`%${search}%`);
-      conditions.push(
-        `(i."invoiceNumber" ILIKE ${term} OR po."poNumber" ILIKE ${term} OR j."jmcNumber" ILIKE ${term})`,
-      );
-    }
+    if (search) conditions.push(`i."invoiceNumber" ILIKE ${bind(`%${search}%`)}`);
 
     return conditions.join(' AND ');
   }
@@ -144,19 +165,14 @@ export class InvoiceLedgerService {
       ...amounts,
       gstPercentage: row.gstPercentage === null ? null : Number(row.gstPercentage),
       tdsPercentage: row.tdsPercentage === null ? null : Number(row.tdsPercentage),
-      payments: payments.map((p: { date: string; amount: unknown; utrNumber: string }) => ({
+      payments: payments.map((p: { date: string; amount: unknown }) => ({
         date: p.date,
         amount: toAmount(p.amount),
-        utrNumber: p.utrNumber,
       })),
     };
   }
 
   private mapTotals(row: Record<string, unknown> | undefined) {
     return Object.fromEntries(AMOUNT_FIELDS.map((key) => [key, toAmount(row?.[key])]));
-  }
-
-  private emptyTotals() {
-    return this.mapTotals(undefined);
   }
 }

@@ -1,9 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
-  IsEnum,
   IsIn,
   IsOptional,
   IsString,
@@ -11,10 +10,6 @@ import {
   Matches,
 } from 'class-validator';
 import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
-import {
-  FinancialApprovalStatus,
-  PartyType,
-} from 'src/modules/common/financials/financial.constants';
 import {
   LEDGER_PAYMENT_STATUSES,
   LEDGER_QUARTERS,
@@ -28,17 +23,10 @@ function toArray(value: unknown): string[] | undefined {
 }
 
 /**
- * Invoice ledger filters. One side at a time: SALE is the contractor ledger, PURCHASE the vendor
- * ledger. Rejected invoices are left out unless `approvalStatus` asks for them.
+ * Invoice ledger filters. The side comes from the route (contractor = SALE, vendor = PURCHASE),
+ * each with its own permission. Rejected invoices are always left out.
  */
 export class GetInvoiceLedgerDto extends BaseGetDto {
-  @ApiProperty({
-    enum: PartyType,
-    description: 'SALE = contractor ledger, PURCHASE = vendor ledger',
-  })
-  @IsEnum(PartyType)
-  partyType: PartyType;
-
   @ApiPropertyOptional({ type: [String], description: 'Filter by one or more company IDs' })
   @Transform(({ value }) => toArray(value))
   @IsOptional()
@@ -66,13 +54,6 @@ export class GetInvoiceLedgerDto extends BaseGetDto {
   @IsArray()
   @IsUUID('4', { each: true })
   vendorId?: string[];
-
-  @ApiPropertyOptional({ enum: FinancialApprovalStatus, isArray: true })
-  @Transform(({ value }) => toArray(value))
-  @IsOptional()
-  @IsArray()
-  @IsEnum(FinancialApprovalStatus, { each: true })
-  approvalStatus?: FinancialApprovalStatus[];
 
   @ApiPropertyOptional({ description: 'Indian financial year, e.g. 2023-24' })
   @IsOptional()
@@ -107,7 +88,7 @@ export class GetInvoiceLedgerDto extends BaseGetDto {
   @IsDateString()
   dateTo?: string;
 
-  @ApiPropertyOptional({ description: 'Invoice, PO or JMC number (partial, case-insensitive)' })
+  @ApiPropertyOptional({ description: 'Invoice number (partial, case-insensitive)' })
   @IsOptional()
   @IsString()
   search?: string;

@@ -22,6 +22,7 @@ import {
   GetInvoiceLedgerDto,
 } from './dto';
 import { InvoiceLedgerService } from './invoice-ledger.service';
+import { PartyType } from 'src/modules/common/financials/financial.constants';
 import {
   ApproveDto,
   RejectDto,
@@ -69,20 +70,33 @@ export class SiteInvoiceController {
     return await this.invoiceService.getDropdown(siteId, forDocument, partyType);
   }
 
-  @Get('ledger')
-  @RequiredPermission('financials.invoices.view-list')
+  @Get('ledger/contractor')
+  @RequiredPermission('ledger.contractor.view')
   @ApiOperation({
-    summary: 'Invoice ledger — contractor (SALE) or vendor (PURCHASE)',
+    summary: 'Contractor ledger — SALE invoices',
     description:
       'Invoice-wise ledger with CGST/SGST/IGST split, TDS, paid amount with transfer dates, ' +
       'outstanding, FY and quarter. `totals` covers every row matching the filters. ' +
-      'Rejected invoices are excluded unless approvalStatus asks for them.',
+      'Rejected invoices are always excluded. `insights` adds billed vs outstanding by month and the top 5 parties by outstanding.',
   })
-  async getLedger(
+  async getContractorLedger(
     @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
     @Query() query: GetInvoiceLedgerDto,
   ) {
-    return await this.ledgerService.getLedger(query, userId, activeRole);
+    return await this.ledgerService.getLedger(query, PartyType.SALE, userId, activeRole);
+  }
+
+  @Get('ledger/vendor')
+  @RequiredPermission('ledger.vendor.view')
+  @ApiOperation({
+    summary: 'Vendor ledger — PURCHASE invoices',
+    description: 'Same as the contractor ledger, for vendor (PURCHASE) invoices.',
+  })
+  async getVendorLedger(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetInvoiceLedgerDto,
+  ) {
+    return await this.ledgerService.getLedger(query, PartyType.PURCHASE, userId, activeRole);
   }
 
   @Get()
