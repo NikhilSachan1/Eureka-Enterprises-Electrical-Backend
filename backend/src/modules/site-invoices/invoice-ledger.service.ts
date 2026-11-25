@@ -153,7 +153,10 @@ export class InvoiceLedgerService {
     if (query.dateTo) conditions.push(`i."invoiceDate" <= ${bind(query.dateTo)}::date`);
 
     const search = query.search?.trim();
-    if (search) conditions.push(`i."invoiceNumber" ILIKE ${bind(`%${search}%`)}`);
+    if (search) {
+      const pattern = bind(`%${search}%`);
+      conditions.push(`(i."invoiceNumber" ILIKE ${pattern} OR po."poNumber" ILIKE ${pattern})`);
+    }
 
     return conditions.join(' AND ');
   }

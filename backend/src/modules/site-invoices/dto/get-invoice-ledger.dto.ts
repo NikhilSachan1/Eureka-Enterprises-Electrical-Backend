@@ -88,7 +88,7 @@ export class GetInvoiceLedgerDto extends BaseGetDto {
   @IsDateString()
   dateTo?: string;
 
-  @ApiPropertyOptional({ description: 'Invoice number (partial, case-insensitive)' })
+  @ApiPropertyOptional({ description: 'Invoice or PO number (partial, case-insensitive)' })
   @IsOptional()
   @IsString()
   search?: string;
