@@ -126,7 +126,8 @@ export const invoiceLedgerPageQuery = `
 /**
  * Everything above the table, in one statement so the filtered ledger is built once:
  * totals over every matching row, billed vs outstanding for the latest 12 invoice months
- * (oldest first), and the five contractors / vendors with the most outstanding.
+ * (oldest first), the five contractors / vendors with the most outstanding, invoice count per
+ * payment status, and outstanding aged by invoice date (0–30 / 31–60 / 61–90 / 90+ days).
  */
 export const invoiceLedgerSummaryQuery = `
   ${invoiceLedgerCte}
@@ -174,5 +175,37 @@ export const invoiceLedgerSummaryQuery = `
         ORDER BY SUM("outstandingAmount") DESC
         LIMIT 5
       ) p
-    ) AS "topParties"
+    ) AS "topParties",
+    (
+      SELECT COALESCE(json_agg(s), '[]'::json) FROM (
+        SELECT
+          "paymentStatus"                       AS "status",
+          COUNT(*)::int                         AS "count",
+          COALESCE(SUM("outstandingAmount"), 0) AS "outstanding"
+        FROM filtered
+        GROUP BY 1
+      ) s
+    ) AS "statusMix",
+    (
+      SELECT COALESCE(json_agg(a ORDER BY a."bucket"), '[]'::json) FROM (
+        SELECT
+          CASE
+            WHEN "invoiceDate" IS NULL               THEN 'UNDATED'
+            WHEN CURRENT_DATE - "invoiceDate" <= 30 THEN 'D0_30'
+            WHEN CURRENT_DATE - "invoiceDate" <= 60 THEN 'D31_60'
+            WHEN CURRENT_DATE - "invoiceDate" <= 90 THEN 'D61_90'
+            ELSE 'D90_PLUS'
+          END                                   AS "bucket",
+          COUNT(*)::int                         AS "count",
+          SUM("outstandingAmount")              AS "outstanding"
+        FROM filtered
+        WHERE "outstandingAmount" > 0
+        GROUP BY 1
+      ) a
+    ) AS "ageing",
+    (
+      SELECT MAX(CURRENT_DATE - "invoiceDate")
+        FROM filtered
+       WHERE "outstandingAmount" > 0
+    ) AS "oldestOutstandingDays"
 `;

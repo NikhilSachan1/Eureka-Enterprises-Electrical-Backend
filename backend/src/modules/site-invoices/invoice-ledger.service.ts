@@ -50,7 +50,13 @@ export class InvoiceLedgerService {
         records: [],
         totalRecords: 0,
         totals: this.mapTotals(undefined),
-        insights: { byMonth: [], topParties: [] },
+        insights: {
+          byMonth: [],
+          topParties: [],
+          statusMix: [],
+          ageing: [],
+          oldestOutstandingDays: null,
+        },
       };
     }
 
@@ -97,6 +103,20 @@ export class InvoiceLedgerService {
           count: Number(p.count),
           outstanding: toAmount(p.outstanding),
         })),
+        statusMix: (summary?.statusMix ?? []).map((s: Record<string, unknown>) => ({
+          status: s.status as string,
+          count: Number(s.count),
+          outstanding: toAmount(s.outstanding),
+        })),
+        ageing: (summary?.ageing ?? []).map((a: Record<string, unknown>) => ({
+          bucket: a.bucket as string,
+          count: Number(a.count),
+          outstanding: toAmount(a.outstanding),
+        })),
+        oldestOutstandingDays:
+          summary?.oldestOutstandingDays === null || summary?.oldestOutstandingDays === undefined
+            ? null
+            : Number(summary.oldestOutstandingDays),
       },
     };
   }
