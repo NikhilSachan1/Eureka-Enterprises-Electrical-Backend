@@ -34,6 +34,43 @@ export const importMirrorSchemaSql = [
 ];
 
 /**
+ * Permissions seeded by migrations that ran on UAT but not on prod yet. `migrations` is never
+ * synced, so those migrations will not run again — without this, a sync would silently delete the
+ * permission rows of every feature that is still only on UAT (and lock users out of it).
+ * Kept by name (ids differ between databases) in temp tables that vanish with the transaction.
+ */
+export const keepUatOnlyPermissionsSql = [
+  `CREATE TEMP TABLE data_sync_kept_permissions ON COMMIT DROP AS
+     SELECT p.name, p.module, p.label, p.description, p."isEditable", p."isDeletable", p.platform
+     FROM public.permissions p
+     WHERE p."deletedAt" IS NULL
+       AND NOT EXISTS (SELECT 1 FROM ${DATA_SYNC_MIRROR_SCHEMA}.permissions s WHERE s.name = p.name)`,
+  `CREATE TEMP TABLE data_sync_kept_role_permissions ON COMMIT DROP AS
+     SELECT r.name AS "roleName", p.name AS "permissionName"
+     FROM public.role_permissions rp
+     JOIN public.roles r ON r.id = rp."roleId"
+     JOIN public.permissions p ON p.id = rp."permissionId"
+     WHERE rp."deletedAt" IS NULL
+       AND p.name IN (SELECT name FROM data_sync_kept_permissions)`,
+];
+
+/** Puts the kept permissions and their role grants back after prod's rows are loaded. */
+export const restoreUatOnlyPermissionsSql = [
+  `INSERT INTO public.permissions (name, module, label, description, "isEditable", "isDeletable", platform)
+   SELECT k.name, k.module, k.label, k.description, k."isEditable", k."isDeletable", k.platform
+   FROM data_sync_kept_permissions k
+   WHERE NOT EXISTS (SELECT 1 FROM public.permissions p WHERE p.name = k.name)`,
+  `INSERT INTO public.role_permissions ("roleId", "permissionId")
+   SELECT r.id, p.id
+   FROM data_sync_kept_role_permissions k
+   JOIN public.roles r ON r.name = k."roleName" AND r."deletedAt" IS NULL
+   JOIN public.permissions p ON p.name = k."permissionName" AND p."deletedAt" IS NULL
+   ON CONFLICT DO NOTHING`,
+];
+
+export const countKeptPermissionsSql = `SELECT count(*)::int AS count FROM data_sync_kept_permissions`;
+
+/**
  * Top-level tables of UAT's public schema (partitions are filled through their parent), with the
  * quoted target name, the matching mirror table and the columns both sides share. `columns` is null
  * when prod has no such table. Generated columns are left for Postgres to compute.

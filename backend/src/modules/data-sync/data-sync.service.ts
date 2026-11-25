@@ -12,18 +12,22 @@ import {
 import {
   buildCreateFdwServerSql,
   buildCreateUserMappingSql,
+  countKeptPermissionsSql,
   dropSyncObjectsSql,
   importMirrorSchemaSql,
+  keepUatOnlyPermissionsSql,
   listSyncTablesSql,
   maskContactDetailsSql,
   resetOwnedSequencesSql,
+  restoreUatOnlyPermissionsSql,
 } from './queries/data-sync.queries';
 import { DataSyncStatus, SyncTableRow } from './types/data-sync.types';
 
 /**
  * Replaces UAT's data with prod's, in one transaction on the UAT database:
  *   1. prod's public schema is mounted read-only through postgres_fdw (same RDS instance);
- *   2. every UAT table except `migrations` is emptied;
+ *   2. every UAT table except `migrations` is emptied — permissions that exist only on UAT
+ *      (seeded by migrations prod has not run yet) are kept aside and put back afterwards;
  *   3. each table is refilled from prod — columns both sides share — except the log tables,
  *      which stay empty;
  *   4. emails / phone numbers are masked;
@@ -71,6 +75,8 @@ export class DataSyncService {
       const tables: SyncTableRow[] = await runner.query(listSyncTablesSql, [
         [...DATA_SYNC_UNTOUCHED_TABLES],
       ]);
+      for (const sql of keepUatOnlyPermissionsSql) await runner.query(sql);
+      const [{ count: permissionsKept }] = await runner.query(countKeptPermissionsSql);
       await runner.query(`TRUNCATE TABLE ${tables.map((t) => t.targetTable).join(', ')} CASCADE`);
 
       // Rows arrive in table-name order, not dependency order: skip FK triggers while loading.
@@ -98,6 +104,7 @@ export class DataSyncService {
       }
       await runner.query('SET LOCAL session_replication_role = origin');
 
+      for (const sql of restoreUatOnlyPermissionsSql) await runner.query(sql);
       await runner.query(resetOwnedSequencesSql);
       const offset = Math.floor(Math.random() * 900_000);
       for (const sql of maskContactDetailsSql) {
@@ -115,6 +122,8 @@ export class DataSyncService {
         rowsCopied,
         skippedTables: [...DATA_SYNC_SKIPPED_DATA_TABLES],
         missingInSource,
+        // Permissions from migrations that ran on UAT but not on prod yet, put back after the copy.
+        permissionsKept,
         durationMs: Date.now() - startedAt,
         finishedAt: new Date().toISOString(),
       };
