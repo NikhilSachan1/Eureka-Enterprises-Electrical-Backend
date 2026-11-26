@@ -29,6 +29,13 @@ export interface LedgerPdfRow {
   payments: { date: string; amount: number }[];
 }
 
+/** A built export, sent straight back to the browser. */
+export interface LedgerDocumentFile {
+  buffer: Buffer;
+  fileName: string;
+  contentType: string;
+}
+
 /** Optional amount columns in the PDF table; one left out when it would be all zero. */
 export interface LedgerPdfColumns {
   advance: boolean;

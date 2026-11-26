@@ -7,8 +7,7 @@ import { SiteInvoiceEntity } from './entities/site-invoice.entity';
 import { InvoiceLedgerService } from './invoice-ledger.service';
 import { PurchaseOrderModule } from '../purchase-orders/purchase-order.module';
 import { AdvancePaymentModule } from '../advance-payments/advance-payment.module';
-import { FilesModule } from 'src/modules/common/file-upload/files.module';
-import { InvoiceLedgerPdfService } from './invoice-ledger-pdf.service';
+import { InvoiceLedgerDocumentService } from './invoice-ledger-document.service';
 
 @Module({
   // AdvancePaymentModule for settlement on approval — it exports AdvancePaymentRepository for
@@ -17,14 +16,13 @@ import { InvoiceLedgerPdfService } from './invoice-ledger-pdf.service';
     TypeOrmModule.forFeature([SiteInvoiceEntity]),
     PurchaseOrderModule,
     AdvancePaymentModule,
-    FilesModule,
   ],
   controllers: [SiteInvoiceController],
   providers: [
     SiteInvoiceService,
     SiteInvoiceRepository,
     InvoiceLedgerService,
-    InvoiceLedgerPdfService,
+    InvoiceLedgerDocumentService,
   ],
   exports: [SiteInvoiceService, SiteInvoiceRepository],
 })
