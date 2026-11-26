@@ -181,6 +181,7 @@ export const invoiceLedgerSummaryQuery = `
         SELECT
           "paymentStatus"                       AS "status",
           COUNT(*)::int                         AS "count",
+          COALESCE(SUM("grossAmount"), 0)       AS "gross",
           COALESCE(SUM("outstandingAmount"), 0) AS "outstanding"
         FROM filtered
         GROUP BY 1

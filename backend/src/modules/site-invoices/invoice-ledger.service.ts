@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
   FinancialApprovalStatus,
@@ -9,8 +9,12 @@ import { DefaultPaginationValues } from 'src/utils/utility/constants/utility.con
 import { GetInvoiceLedgerDto } from './dto/get-invoice-ledger.dto';
 import {
   LEDGER_AMOUNT_FIELDS as AMOUNT_FIELDS,
+  LEDGER_PDF_MAX_ROWS,
+  LEDGER_PDF_MESSAGES,
   LEDGER_SORT_COLUMNS,
 } from './constants/invoice-ledger.constants';
+import { InvoiceLedgerPdfService } from './invoice-ledger-pdf.service';
+import { LedgerPdfRow } from './types/invoice-ledger-pdf.types';
 import {
   invoiceLedgerPageQuery,
   invoiceLedgerSummaryQuery,
@@ -27,7 +31,10 @@ const toAmount = (value: unknown): number => roundInr(Number(value ?? 0) || 0);
  */
 @Injectable()
 export class InvoiceLedgerService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly pdfService: InvoiceLedgerPdfService,
+  ) {}
 
   /** `partyType` comes from the route (contractor / vendor ledger), never from the query. */
   async getLedger(
@@ -60,32 +67,13 @@ export class InvoiceLedgerService {
       };
     }
 
-    const params: unknown[] = [];
-    const bind = (value: unknown) => {
-      params.push(value);
-      return `$${params.length}`;
-    };
-
-    const where = this.buildInvoiceWhere(query, partyType, siteIds, bind);
-    const ledgerWhere = this.buildLedgerWhere(query, bind);
-    // Replacer functions, so `$n` placeholders are never read as replacement patterns.
-    const fill = (sql: string) =>
-      sql.replace('{where}', () => where).replace('{ledgerWhere}', () => ledgerWhere);
-
-    const summaryParams = [...params];
-    const orderBy = this.buildOrderBy(query);
-    const limit = bind(pageSize);
-    const offset = bind((page - 1) * pageSize);
-    const pageSql = fill(invoiceLedgerPageQuery)
-      .replace('{orderBy}', () => orderBy)
-      .replace('{limit}', () => limit)
-      .replace('{offset}', () => offset);
-
-    // Two statements: the page, and everything above the table (built from one filtered ledger).
-    const [rows, [summary]] = await Promise.all([
-      this.dataSource.query(pageSql, params),
-      this.dataSource.query(fill(invoiceLedgerSummaryQuery), summaryParams),
-    ]);
+    const { rows, summary } = await this.runLedgerQueries(
+      query,
+      partyType,
+      siteIds,
+      pageSize,
+      (page - 1) * pageSize,
+    );
     const totals = summary?.totals as Record<string, unknown> | undefined;
 
     return {
@@ -106,6 +94,7 @@ export class InvoiceLedgerService {
         statusMix: (summary?.statusMix ?? []).map((s: Record<string, unknown>) => ({
           status: s.status as string,
           count: Number(s.count),
+          gross: toAmount(s.gross),
           outstanding: toAmount(s.outstanding),
         })),
         ageing: (summary?.ageing ?? []).map((a: Record<string, unknown>) => ({
@@ -119,6 +108,82 @@ export class InvoiceLedgerService {
             : Number(summary.oldestOutstandingDays),
       },
     };
+  }
+
+  /**
+   * The ledger as a PDF: every invoice matching the same filters as the page (no paging), with
+   * the totals. Returns a download URL like the payment sheet PDF does.
+   */
+  async getLedgerPdf(
+    query: GetInvoiceLedgerDto,
+    partyType: PartyType,
+    userId: string,
+    activeRole?: string,
+  ) {
+    const siteIds = await resolveReadableSiteFilter(
+      this.dataSource,
+      userId,
+      activeRole,
+      query.siteId,
+    );
+    if (siteIds?.length === 0) throw new BadRequestException(LEDGER_PDF_MESSAGES.NO_ROWS);
+
+    // One row past the cap tells "too many" apart from "exactly the cap".
+    const { rows, summary } = await this.runLedgerQueries(
+      query,
+      partyType,
+      siteIds,
+      LEDGER_PDF_MAX_ROWS + 1,
+      0,
+    );
+    if (!rows.length) throw new BadRequestException(LEDGER_PDF_MESSAGES.NO_ROWS);
+    if (rows.length > LEDGER_PDF_MAX_ROWS) {
+      throw new BadRequestException(LEDGER_PDF_MESSAGES.TOO_MANY_ROWS);
+    }
+
+    return await this.pdfService.generate({
+      partyType,
+      rows: rows.map((row: Record<string, unknown>) => this.mapRow(row)) as LedgerPdfRow[],
+      totals: this.mapTotals(summary?.totals),
+      generatedAt: new Date(),
+    });
+  }
+
+  /** One page of ledger rows (in the requested order) and the summary over every matching row. */
+  private async runLedgerQueries(
+    query: GetInvoiceLedgerDto,
+    partyType: PartyType,
+    siteIds: string[] | null,
+    limitRows: number,
+    offsetRows: number,
+  ) {
+    const params: unknown[] = [];
+    const bind = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    const where = this.buildInvoiceWhere(query, partyType, siteIds, bind);
+    const ledgerWhere = this.buildLedgerWhere(query, bind);
+    // Replacer functions, so `$n` placeholders are never read as replacement patterns.
+    const fill = (sql: string) =>
+      sql.replace('{where}', () => where).replace('{ledgerWhere}', () => ledgerWhere);
+
+    const summaryParams = [...params];
+    const orderBy = this.buildOrderBy(query);
+    const limit = bind(limitRows);
+    const offset = bind(offsetRows);
+    const pageSql = fill(invoiceLedgerPageQuery)
+      .replace('{orderBy}', () => orderBy)
+      .replace('{limit}', () => limit)
+      .replace('{offset}', () => offset);
+
+    // Two statements: the rows, and everything above the table (built from one filtered ledger).
+    const [rows, [summary]] = await Promise.all([
+      this.dataSource.query(pageSql, params),
+      this.dataSource.query(fill(invoiceLedgerSummaryQuery), summaryParams),
+    ]);
+    return { rows, summary };
   }
 
   private buildInvoiceWhere(
@@ -195,7 +260,7 @@ export class InvoiceLedgerService {
     };
   }
 
-  private mapTotals(row: Record<string, unknown> | undefined) {
+  private mapTotals(row: Record<string, unknown> | undefined): Record<string, number> {
     return Object.fromEntries(AMOUNT_FIELDS.map((key) => [key, toAmount(row?.[key])]));
   }
 }
