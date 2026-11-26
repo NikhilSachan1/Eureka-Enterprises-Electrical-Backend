@@ -31,12 +31,25 @@ export interface DirectSheetRecord {
   paidFromAccountId: string | null;
   utrNumber: string | null;
   remarks: string | null;
-  /** Vendor only: the book payment settled and the bank transfer that settled it. */
+  /** Vendor only: the book payment being settled. */
   bookPaymentId?: string;
-  bankTransferId?: string;
 }
 
 export interface DirectSheetResult {
   id: string;
   sheetNumber: string;
+}
+
+/** The sheet reserved before settling, so its number can go on the ledger entry. */
+export interface DirectSheetDraft extends DirectSheetResult {
+  itemId: string;
+  allocationId: string | null;
+}
+
+/** What the source module returned when it settled the payment. */
+export interface DirectSettlement {
+  /** Vendor only: the bank transfer created for the book payment. */
+  bankTransferId?: string;
+  /** Source module's own response, passed through to the caller (e.g. payment advice ids). */
+  response?: Record<string, unknown>;
 }

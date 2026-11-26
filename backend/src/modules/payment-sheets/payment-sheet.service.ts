@@ -41,6 +41,8 @@ import {
 import {
   DirectExpenseReimburseInput,
   DirectFuelReimburseInput,
+  DirectSettlement,
+  DirectSheetDraft,
   DirectSheetRecord,
   DirectSheetResult,
 } from './payment-sheet-direct.types';
@@ -263,6 +265,15 @@ export class PaymentSheetService {
   private excessOverPending(item: PaymentSheetItemEntity, amount: number): number {
     if (this.isAdvanceLine(item) || !this.allowsExcessOverPending(item)) return 0;
     return Math.max(0, Number((amount - Number(item.pendingSnapshot)).toFixed(2)));
+  }
+
+  /** Ledger text written on the settlement entry when a line is paid from a sheet. */
+  private settlementDescription(sheetNumber: string, isAdvance: boolean, excess: number): string {
+    if (isAdvance) return `Advance paid via Payment Sheet ${sheetNumber}`;
+    if (excess > 0) {
+      return `Settled via Payment Sheet ${sheetNumber} (includes advance of ${excess.toFixed(2)})`;
+    }
+    return `Settled via Payment Sheet ${sheetNumber}`;
   }
 
   private assertAdvanceAmountsSet(items: PaymentSheetItemEntity[]) {
@@ -1689,11 +1700,11 @@ export class PaymentSheetService {
       }
     }
     const excess = this.excessOverPending(item, amount);
-    const defaultDescription = this.isAdvanceLine(item)
-      ? `Advance paid via Payment Sheet ${sheet.sheetNumber}`
-      : excess > 0
-      ? `Settled via Payment Sheet ${sheet.sheetNumber} (includes advance of ${excess.toFixed(2)})`
-      : `Settled via Payment Sheet ${sheet.sheetNumber}`;
+    const defaultDescription = this.settlementDescription(
+      sheet.sheetNumber,
+      this.isAdvanceLine(item),
+      excess,
+    );
 
     const traceRef = `PS:${sheet.sheetNumber}:${item.id}`;
 
@@ -1991,66 +2002,63 @@ export class PaymentSheetService {
 
   // ─────────────────────────── direct pay (reimburse / bank transfer → auto sheet) ───────────────────────────
   //
-  // Reimburse and Bank Transfer can still be done from their own screens. These variants do the same
-  // settlement through the source module, then record it as a one-line, already-COMPLETED payment
-  // sheet so the payment is visible in the payment sheet register. The old endpoints are unchanged.
+  // Reimburse and Bank Transfer can still be done from their own screens. These variants record the
+  // payment on a one-line, COMPLETED payment sheet so it is visible in the payment sheet register.
+  // The old endpoints are unchanged.
   //
-  // Same non-atomic seam as payItem(): the source modules run their own transactions, so the
-  // settlement happens first and the sheet is written afterwards. If the sheet write fails the money
-  // is already recorded — the request still succeeds (a retry would pay twice) and the failure is
-  // logged and reported back as `paymentSheet: null`.
+  //   1. reserve  — sheet + PENDING line are written first, so the sheet number is known
+  //   2. settle   — through the source module, with "Settled via Payment Sheet <no>" on the entry,
+  //                 exactly like payItem() writes it
+  //   3. complete — line PAID, auto-approved trail, sheet COMPLETED
+  //
+  // Same non-atomic seam as payItem(): the source modules run their own transactions. If settling
+  // fails the reserved sheet is removed and the error goes back to the caller. If completing fails
+  // the money is already recorded, so the request still succeeds (a retry would pay twice); the
+  // reserved sheet stays with no current stage (nobody can act on it) and the failure is logged.
 
   async directExpenseReimburse(input: DirectExpenseReimburseInput, user: ActingUser) {
-    const pendingSnapshot = await this.readUserPending(PaymentSourceType.EXPENSE, input.userId);
-
-    await this.expenseService.createCreditExpense({ ...input, createdBy: user.id });
-
-    const paymentSheet = await this.recordDirectSheetSafely(
-      {
-        sourceType: PaymentSourceType.EXPENSE,
-        beneficiaryType: BeneficiaryType.USER,
-        userId: input.userId,
-        vendorId: null,
-        amount: Number(input.amount),
-        pendingSnapshot,
-        bankSnapshot: await this.userBankSnapshot(input.userId),
-        paidFromAccountId: input.paidFromAccountId ?? null,
-        utrNumber: input.transactionId ?? null,
-        remarks: input.description ?? null,
-      },
-      user,
+    const record = await this.userDirectRecord(
+      PaymentSourceType.EXPENSE,
+      input.userId,
+      Number(input.amount),
+      input,
     );
-    return this.directResponse(PAYMENT_SHEET_RESPONSES.DIRECT_EXPENSE_PAID, paymentSheet);
+    return this.runDirectPayment(
+      record,
+      user,
+      async (sheetNumber) => {
+        await this.expenseService.createCreditExpense({
+          ...input,
+          description: this.directSettlementText(sheetNumber, record, input.description),
+          createdBy: user.id,
+        });
+        return {};
+      },
+      PAYMENT_SHEET_RESPONSES.DIRECT_EXPENSE_PAID,
+    );
   }
 
   async directFuelReimburse(input: DirectFuelReimburseInput, user: ActingUser) {
-    const pendingSnapshot = await this.readUserPending(
+    const record = await this.userDirectRecord(
       PaymentSourceType.FUEL_EXPENSE,
       input.userId,
+      Number(input.fuelAmount),
+      input,
     );
-
-    await this.fuelService.createCreditFuelExpense({
-      ...input,
-      createdBy: user.id,
-      entrySourceType: input.sourceType,
-    });
-
-    const paymentSheet = await this.recordDirectSheetSafely(
-      {
-        sourceType: PaymentSourceType.FUEL_EXPENSE,
-        beneficiaryType: BeneficiaryType.USER,
-        userId: input.userId,
-        vendorId: null,
-        amount: Number(input.fuelAmount),
-        pendingSnapshot,
-        bankSnapshot: await this.userBankSnapshot(input.userId),
-        paidFromAccountId: input.paidFromAccountId ?? null,
-        utrNumber: input.transactionId ?? null,
-        remarks: input.description ?? null,
-      },
+    return this.runDirectPayment(
+      record,
       user,
+      async (sheetNumber) => {
+        await this.fuelService.createCreditFuelExpense({
+          ...input,
+          description: this.directSettlementText(sheetNumber, record, input.description),
+          createdBy: user.id,
+          entrySourceType: input.sourceType,
+        });
+        return {};
+      },
+      PAYMENT_SHEET_RESPONSES.DIRECT_FUEL_PAID,
     );
-    return this.directResponse(PAYMENT_SHEET_RESPONSES.DIRECT_FUEL_PAID, paymentSheet);
   }
 
   /** PURCHASE side only — a SALE transfer is money received, not a payment. */
@@ -2062,37 +2070,112 @@ export class PaymentSheetService {
     const bookPayment = (await this.repo.raw(query, params))?.[0];
     if (!bookPayment) throw new NotFoundException(PAYMENT_SHEET_ERRORS.BOOK_PAYMENT_NOT_FOUND);
 
-    // Validates the ceiling, creates the transfer and its payment advice — exactly as before.
-    const transfer = await this.bankTransferService.create(dto, user.id);
-
-    const paymentSheet = await this.recordDirectSheetSafely(
-      {
-        sourceType: PaymentSourceType.VENDOR_PAYMENT,
-        beneficiaryType: BeneficiaryType.VENDOR,
-        userId: null,
-        vendorId: bookPayment.vendorId,
-        amount: Number(dto.transferAmount),
-        pendingSnapshot: Number(bookPayment.transferable),
-        bankSnapshot: await this.vendorBankSnapshot(bookPayment.vendorId),
-        paidFromAccountId: dto.paidFromAccountId ?? null,
-        utrNumber: dto.utrNumber ?? null,
-        remarks: dto.remarks ?? null,
-        bookPaymentId: dto.bookPaymentId,
-        bankTransferId: transfer.id,
-      },
+    const record: DirectSheetRecord = {
+      sourceType: PaymentSourceType.VENDOR_PAYMENT,
+      beneficiaryType: BeneficiaryType.VENDOR,
+      userId: null,
+      vendorId: bookPayment.vendorId,
+      amount: Number(dto.transferAmount),
+      pendingSnapshot: Number(bookPayment.transferable),
+      bankSnapshot: await this.vendorBankSnapshot(bookPayment.vendorId),
+      paidFromAccountId: dto.paidFromAccountId ?? null,
+      utrNumber: dto.utrNumber ?? null,
+      remarks: this.userNote(dto.remarks),
+      bookPaymentId: dto.bookPaymentId,
+    };
+    return this.runDirectPayment(
+      record,
       user,
+      async (sheetNumber) => {
+        // Validates the ceiling, creates the transfer and its payment advice — exactly as before.
+        const transfer = await this.bankTransferService.create(
+          { ...dto, remarks: this.directSettlementText(sheetNumber, record, dto.remarks) },
+          user.id,
+        );
+        return { bankTransferId: transfer.id, response: transfer };
+      },
+      PAYMENT_SHEET_RESPONSES.DIRECT_TRANSFER_PAID,
     );
+  }
+
+  private async userDirectRecord(
+    sourceType: PaymentSourceType.EXPENSE | PaymentSourceType.FUEL_EXPENSE,
+    userId: string,
+    amount: number,
+    input: { paidFromAccountId?: string; transactionId?: string; description?: string },
+  ): Promise<DirectSheetRecord> {
     return {
-      ...transfer,
-      ...this.directResponse(PAYMENT_SHEET_RESPONSES.DIRECT_TRANSFER_PAID, paymentSheet),
+      sourceType,
+      beneficiaryType: BeneficiaryType.USER,
+      userId,
+      vendorId: null,
+      amount,
+      pendingSnapshot: await this.readUserPending(sourceType, userId),
+      bankSnapshot: await this.userBankSnapshot(userId),
+      paidFromAccountId: input.paidFromAccountId ?? null,
+      utrNumber: input.transactionId ?? null,
+      remarks: this.userNote(input.description),
     };
   }
 
-  private directResponse(message: string, paymentSheet: DirectSheetResult | null) {
+  private async runDirectPayment(
+    record: DirectSheetRecord,
+    user: ActingUser,
+    settle: (sheetNumber: string) => Promise<DirectSettlement>,
+    message: string,
+  ) {
+    const draft = await this.reserveDirectSheet(record, user);
+
+    let settled: DirectSettlement;
+    try {
+      settled = await settle(draft.sheetNumber);
+    } catch (e) {
+      await this.discardDirectSheet(draft, user).catch((err) =>
+        this.logger.error(`Could not remove reserved direct sheet ${draft.sheetNumber}: ${err}`),
+      );
+      throw e;
+    }
+
+    let paymentSheet: DirectSheetResult | null = { id: draft.id, sheetNumber: draft.sheetNumber };
+    try {
+      await this.completeDirectSheet(draft, record, settled, user);
+    } catch (e) {
+      this.logger.error(
+        `Direct ${record.sourceType} payment settled but sheet ${draft.sheetNumber} was not ` +
+          `completed (user=${record.userId ?? '-'}, vendor=${record.vendorId ?? '-'}, ` +
+          `amount=${record.amount}): ${e}`,
+      );
+      paymentSheet = null;
+    }
+
     return {
+      ...(settled.response ?? {}),
       message: paymentSheet ? message : PAYMENT_SHEET_RESPONSES.DIRECT_SHEET_FAILED,
       paymentSheet,
     };
+  }
+
+  /** The user's own note, minus the placeholder the reimburse form sends when it is empty. */
+  private userNote(note?: string | null): string | null {
+    const trimmed = note?.trim();
+    return trimmed && trimmed.toUpperCase() !== 'N/A' ? trimmed : null;
+  }
+
+  /** Same text payItem() writes on the entry, with the user's own note kept after it. */
+  private directSettlementText(
+    sheetNumber: string,
+    record: DirectSheetRecord,
+    note?: string | null,
+  ): string {
+    const isUser = record.beneficiaryType === BeneficiaryType.USER;
+    const isAdvance = isUser && record.pendingSnapshot <= 0;
+    const excess =
+      isUser && !isAdvance
+        ? Math.max(0, Number((record.amount - record.pendingSnapshot).toFixed(2)))
+        : 0;
+    const base = this.settlementDescription(sheetNumber, isAdvance, excess);
+    const own = this.userNote(note);
+    return own ? `${base} — ${own}` : base;
   }
 
   private async readUserPending(
@@ -2139,48 +2222,30 @@ export class PaymentSheetService {
       : null;
   }
 
-  private async recordDirectSheetSafely(
+  /**
+   * Step 1: sheet + PENDING line, so the sheet number exists before any money moves. No current
+   * stage, so no one can act on it while it is being settled.
+   */
+  private async reserveDirectSheet(
     record: DirectSheetRecord,
     user: ActingUser,
-  ): Promise<DirectSheetResult | null> {
-    try {
-      return await this.recordDirectSheet(record, user);
-    } catch (e) {
-      this.logger.error(
-        `Direct ${record.sourceType} payment settled but its payment sheet was not created ` +
-          `(user=${record.userId ?? '-'}, vendor=${record.vendorId ?? '-'}, amount=${
-            record.amount
-          }): ${e}`,
-      );
-      return null;
-    }
-  }
-
-  /** Writes a settled payment as a COMPLETED sheet with one PAID line, its history and stage log. */
-  private async recordDirectSheet(
-    record: DirectSheetRecord,
-    user: ActingUser,
-  ): Promise<DirectSheetResult> {
+  ): Promise<DirectSheetDraft> {
     return await this.dataSource.transaction(async (em) => {
-      const now = new Date();
-      const financialYear = getFinancialYear(now);
+      const financialYear = getFinancialYear(new Date());
       const sheetNumber = await this.generateSheetNumber(financialYear, em);
-      const remark = DIRECT_PAYMENT_SHEET.STAGE_REMARK[record.sourceType];
-
       const sheet = await this.repo.createSheet(
         {
           sheetNumber,
           title: DIRECT_PAYMENT_SHEET.TITLE[record.sourceType],
           remarks: record.remarks,
           financialYear,
-          status: PaymentSheetStatus.COMPLETED,
+          status: PaymentSheetStatus.PROCESSING,
           currentStage: null,
           createdBy: user.id,
           updatedBy: user.id,
         },
         em,
       );
-
       const item = await this.repo.createItem(
         {
           paymentSheetId: sheet.id,
@@ -2192,38 +2257,86 @@ export class PaymentSheetService {
           requestedAmount: record.amount,
           currentAmount: record.amount,
           bankSnapshot: record.bankSnapshot,
-          itemStatus: PaymentSheetItemStatus.PAID,
-          paidAmount: record.amount,
-          paidAt: now,
-          paidBy: user.id,
-          utrNumber: record.utrNumber,
-          paidFromAccountId: record.paidFromAccountId,
+          itemStatus: PaymentSheetItemStatus.PENDING,
           createdBy: user.id,
         },
         em,
       );
-
-      // Same paymentRef convention as payItem(): vendor → bank transfer id, user → trace ref.
-      const paymentRef = record.bankTransferId ?? `PS:${sheetNumber}:${item.id}`;
-      await this.repo.updateItem({ id: item.id }, { paymentRef }, em);
-
+      let allocationId: string | null = null;
       if (record.bookPaymentId) {
-        await this.repo.createAllocation(
+        const allocation = await this.repo.createAllocation(
           {
             itemId: item.id,
             bookPaymentId: record.bookPaymentId,
             allocatedAmount: record.amount,
-            bankTransferId: record.bankTransferId ?? null,
+            bankTransferId: null,
             createdBy: user.id,
           },
           em,
         );
+        allocationId = allocation.id;
+      }
+      return { id: sheet.id, sheetNumber, itemId: item.id, allocationId };
+    });
+  }
+
+  /** Settling failed — nothing was paid, so the reserved sheet is soft-deleted. */
+  private async discardDirectSheet(draft: DirectSheetDraft, user: ActingUser) {
+    await this.dataSource.transaction(async (em) => {
+      if (draft.allocationId) await this.repo.softDeleteAllocation({ id: draft.allocationId }, em);
+      await this.repo.softDeleteItem({ id: draft.itemId }, em);
+      await this.repo.updateSheet({ id: draft.id }, { deletedBy: user.id, updatedBy: user.id }, em);
+      await this.repo.softDeleteSheet({ id: draft.id }, em);
+    });
+  }
+
+  /** Step 3: line PAID, auto-approved trail, sheet COMPLETED. */
+  private async completeDirectSheet(
+    draft: DirectSheetDraft,
+    record: DirectSheetRecord,
+    settled: DirectSettlement,
+    user: ActingUser,
+  ) {
+    await this.dataSource.transaction(async (em) => {
+      const now = new Date();
+      // Same paymentRef convention as payItem(): vendor → bank transfer id, user → trace ref.
+      const paymentRef = settled.bankTransferId ?? `PS:${draft.sheetNumber}:${draft.itemId}`;
+
+      await this.repo.updateItem(
+        { id: draft.itemId },
+        {
+          itemStatus: PaymentSheetItemStatus.PAID,
+          paidAmount: record.amount,
+          paidAt: now,
+          paidBy: user.id,
+          paymentRef,
+          utrNumber: record.utrNumber,
+          paidFromAccountId: record.paidFromAccountId,
+          updatedBy: user.id,
+        },
+        em,
+      );
+      if (draft.allocationId && settled.bankTransferId) {
+        await this.repo.updateAllocation(
+          { id: draft.allocationId },
+          { bankTransferId: settled.bankTransferId },
+          em,
+        );
       }
 
-      await this.writeDirectTrail(sheet, item, record.amount, paymentRef, remark, user, now, em);
+      const sheet = await this.repo.findSheet({ where: { id: draft.id } }, em);
+      const item = await this.repo.findItem({ where: { id: draft.itemId } }, em);
+      if (!sheet || !item) throw new NotFoundException(PAYMENT_SHEET_ERRORS.NOT_FOUND);
 
-      await this.recomputeTotals(sheet.id, em);
-      return { id: sheet.id, sheetNumber };
+      const origin = DIRECT_PAYMENT_SHEET.STAGE_REMARK[record.sourceType];
+      await this.writeDirectTrail(sheet, item, record.amount, paymentRef, origin, user, now, em);
+
+      await this.repo.updateSheet(
+        { id: draft.id },
+        { status: PaymentSheetStatus.COMPLETED, currentStage: null, updatedBy: user.id },
+        em,
+      );
+      await this.recomputeTotals(draft.id, em);
     });
   }
 
