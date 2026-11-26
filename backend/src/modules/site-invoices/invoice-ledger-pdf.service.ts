@@ -194,6 +194,101 @@ export class InvoiceLedgerPdfService {
       </tr>`;
   }
 
+  /**
+   * Summary above the table, in two steps that read left to right, the way the page's statement
+   * does: (1) basic value plus each GST part gives the gross bill; (2) the gross bill less TDS,
+   * held GST, advance and what was paid gives the outstanding. Every line says whether it adds
+   * (+), deducts (−) or totals (=).
+   */
+  private summaryBlock(data: LedgerPdfData, paidLabel: string): string {
+    const t = data.totals;
+    const isVendor = data.partyType !== PartyType.SALE;
+    const share = (part: number, whole: number) =>
+      whole > 0 ? `${(Math.round((part / whole) * 1000) / 10).toLocaleString('en-IN')}%` : '—';
+
+    const gstHeld = Math.max(t.grossAmount - t.tdsAmount - t.netPayable, 0);
+    const advance = isVendor ? t.advanceAdjusted : 0;
+    // Outstanding never goes below zero per invoice, so an invoice paid above its net payable
+    // leaves a gap between "net − advance − paid" and the outstanding; it is shown, not hidden.
+    const excessPaid = t.outstandingAmount - (t.netPayable - advance - t.paidAmount);
+
+    const line = (
+      sign: string,
+      label: string,
+      value: number,
+      opts: { note?: string; cls?: string; tone?: string } = {},
+    ) => `
+      <tr class="${opts.cls ?? ''}">
+        <td class="sign">${sign}</td>
+        <td>${opts.tone ? `<i class="sw" style="background:${opts.tone}"></i>` : ''}${label}${
+      opts.note ? `<span class="calc-note">${this.esc(opts.note)}</span>` : ''
+    }</td>
+        <td class="r">${this.money(value)}</td>
+      </tr>`;
+
+    // Each GST part on its own line, then the GST total.
+    const gstParts = (
+      [
+        ['CGST', t.cgstAmount],
+        ['SGST', t.sgstAmount],
+        ['IGST', t.igstAmount],
+      ] as [string, number][]
+    ).filter(([, amount]) => amount > 0);
+
+    const billLines = [
+      line('', 'Basic value', t.taxableAmount),
+      ...gstParts.map(([label, amount]) => line('+', label, amount, { cls: 'part' })),
+      gstParts.length
+        ? line('', 'Total GST', t.gstAmount, { cls: 'group-total' })
+        : line('+', 'GST', t.gstAmount),
+      line('=', 'Gross bill', t.grossAmount, { cls: 'grand-total bill' }),
+    ].join('');
+
+    const settleLines = [
+      line('', 'Gross bill', t.grossAmount),
+      line('−', 'TDS deducted', t.tdsAmount, {
+        note: `${share(t.tdsAmount, t.taxableAmount)} of basic value`,
+        tone: '#4f46e5',
+      }),
+      gstHeld > 0.009
+        ? line('−', 'GST held', gstHeld, {
+            note: 'Paid once the GST return is filed',
+            tone: '#d97706',
+          })
+        : '',
+      line('=', 'Net payable', t.netPayable, { cls: 'sub-total' }),
+      isVendor
+        ? line('−', 'Advance adjusted', t.advanceAdjusted, {
+            note: `${share(t.advanceAdjusted, t.netPayable)} of net payable`,
+            tone: '#0284c7',
+          })
+        : '',
+      line('−', paidLabel, t.paidAmount, {
+        note: `${share(t.paidAmount, t.netPayable)} of net payable`,
+        tone: '#16a34a',
+      }),
+      excessPaid > 0.009
+        ? line('+', 'Paid above net payable on some invoices', excessPaid, {
+            note: 'Not counted against other invoices',
+          })
+        : '',
+      line('=', 'Outstanding', t.outstandingAmount, { cls: 'grand-total', tone: '#dc2626' }),
+    ].join('');
+
+    return `
+    <div class="summary">
+      <div class="panel">
+        <div class="panel-title"><span class="step">1</span>Gross bill <span class="hint">Amounts in ₹</span></div>
+        <table class="calc-table">${billLines}</table>
+      </div>
+      <div class="flow">→</div>
+      <div class="panel">
+        <div class="panel-title"><span class="step">2</span>How the outstanding is worked out <span class="hint">Amounts in ₹</span></div>
+        <table class="calc-table">${settleLines}</table>
+      </div>
+    </div>`;
+  }
+
   /** One total row after the last invoice (a <tfoot> would repeat on every page). */
   private totalRow(data: LedgerPdfData, cols: LedgerPdfColumns): string {
     const t = data.totals;
@@ -220,7 +315,6 @@ export class InvoiceLedgerPdfService {
     const title = isContractor ? 'CONTRACTOR LEDGER' : 'VENDOR LEDGER';
     const partyLabel = isContractor ? 'Contractor' : 'Vendor';
     const paidLabel = isContractor ? 'Received' : 'Paid';
-    const t = data.totals;
     const rows = data.rows;
 
     // Columns that would be all zero are left out, so the table keeps room for what matters.
@@ -258,13 +352,6 @@ export class InvoiceLedgerPdfService {
       .map((w) => `<col style="width:${((w / weightSum) * 100).toFixed(2)}%"/>`)
       .join('')}</colgroup>`;
 
-    const counts: Record<string, number> = { PAID: 0, PARTIAL: 0, UNPAID: 0 };
-    rows.forEach((r) => {
-      const key = String(r.paymentStatus).toUpperCase();
-      counts[key] = (counts[key] ?? 0) + 1;
-    });
-    const receivedShare =
-      t.netPayable > 0 ? Math.round((t.paidAmount / t.netPayable) * 1000) / 10 : 0;
     const company = PAYMENT_ADVICE_COMPANY_DETAILS;
 
     return `<!DOCTYPE html>
@@ -286,12 +373,26 @@ export class InvoiceLedgerPdfService {
   .header .doc-title { font-size: 15px; font-weight: bold; color: #1f3a5f; letter-spacing: 1px; }
   .header .doc-sub { font-size: 10px; color: #666; margin-top: 3px; }
 
-  /* Headline totals */
-  .cards { display: flex; gap: 8px; margin: 12px 0 4px; }
-  .card { flex: 1; border: 1px solid #d5dce5; border-top: 3px solid var(--tone); border-radius: 4px; padding: 8px 10px; background: #fbfcfd; }
-  .card .card-lbl { font-size: 8.5px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 700; }
-  .card .card-val { font-size: 14px; font-weight: bold; color: var(--tone); margin-top: 3px; }
-  .card .card-sub { font-size: 8.5px; color: #6b7280; margin-top: 2px; }
+  /* Summary — two calculation panels: gross bill, then how the outstanding is worked out */
+  .summary { display: flex; gap: 8px; margin: 12px 0 4px; align-items: stretch; page-break-inside: avoid; }
+  .panel { flex: 1; border: 1px solid #cfd6df; border-radius: 5px; padding: 8px 10px; background: #fff; }
+  .flow { display: flex; align-items: center; color: #94a3b8; font-size: 16px; font-weight: bold; }
+  .panel-title { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid #e2e6ec; font-size: 9px; font-weight: bold; color: #1f3a5f; text-transform: uppercase; letter-spacing: 0.4px; }
+  .panel-title .step { display: inline-block; width: 14px; height: 14px; line-height: 14px; text-align: center; border-radius: 50%; background: #1f3a5f; color: #fff; font-size: 8px; }
+  .panel-title .hint { margin-left: auto; font-size: 8px; font-weight: normal; color: #6b7280; text-transform: none; letter-spacing: 0; }
+  table.calc-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  table.calc-table td { padding: 4px 6px; vertical-align: top; }
+  table.calc-table td.sign { width: 14px; color: #6b7280; font-weight: bold; text-align: center; }
+  table.calc-table td.r { text-align: right; white-space: nowrap; font-weight: 600; }
+  table.calc-table .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; }
+  .calc-note { display: block; color: #6b7280; font-size: 7.6px; margin-top: 1px; padding-left: 12px; }
+  table.calc-table tr.part td { padding-top: 2px; padding-bottom: 2px; color: #6b7280; font-size: 8.4px; }
+  table.calc-table tr.part td:nth-child(2) { padding-left: 16px; }
+  table.calc-table tr.part td.r { font-weight: 500; }
+  table.calc-table tr.group-total td { border-top: 1px dashed #cbd5e1; color: #b45309; font-weight: bold; }
+  table.calc-table tr.sub-total td { border-top: 1px solid #94a3b8; font-weight: bold; color: #111; }
+  table.calc-table tr.grand-total td { border-top: 2px solid #1f3a5f; background: #fef2f2; color: #b91c1c; font-weight: bold; font-size: 10px; }
+  table.calc-table tr.grand-total.bill td { background: #f0fdfa; color: #0f766e; }
 
   .section-label { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 6px; font-weight: bold; font-size: 10.5px; color: #1f3a5f; text-transform: uppercase; letter-spacing: 0.4px; }
   .section-label span { font-weight: normal; font-size: 9px; color: #6b7280; text-transform: none; letter-spacing: 0; }
@@ -374,46 +475,7 @@ export class InvoiceLedgerPdfService {
     </div>
   </div>
 
-  <div class="cards">
-    <div class="card" style="--tone:#334155">
-      <div class="card-lbl">Invoices</div><div class="card-val">${rows.length}</div>
-      <div class="card-sub">${counts.PAID} paid · ${counts.PARTIAL} partial · ${
-      counts.UNPAID
-    } unpaid</div>
-    </div>
-    <div class="card" style="--tone:#0f766e">
-      <div class="card-lbl">Gross bill</div><div class="card-val">${this.money(t.grossAmount)}</div>
-      <div class="card-sub">Basic ${this.money(t.taxableAmount)} + GST ${this.money(
-      t.gstAmount,
-    )}</div>
-    </div>
-    <div class="card" style="--tone:#4338ca">
-      <div class="card-lbl">TDS</div>
-      <div class="card-val">${this.money(t.tdsAmount)}</div>
-      <div class="card-sub">Deducted on basic value</div>
-    </div>
-    ${
-      isContractor
-        ? ''
-        : `<div class="card" style="--tone:#0369a1">
-      <div class="card-lbl">Advance adjusted</div>
-      <div class="card-val">${this.money(t.advanceAdjusted)}</div>
-      <div class="card-sub">Settled against these bills</div>
-    </div>`
-    }
-    <div class="card" style="--tone:#15803d">
-      <div class="card-lbl">${paidLabel}</div><div class="card-val">${this.money(
-      t.paidAmount,
-    )}</div>
-      <div class="card-sub">${receivedShare}% of net payable ${this.money(t.netPayable)}</div>
-    </div>
-    <div class="card" style="--tone:#b91c1c">
-      <div class="card-lbl">Outstanding</div><div class="card-val">${this.money(
-        t.outstandingAmount,
-      )}</div>
-      <div class="card-sub">${counts.PARTIAL + counts.UNPAID} invoices pending</div>
-    </div>
-  </div>
+  ${this.summaryBlock(data, paidLabel)}
 
   <div class="section-label">${partyLabel} invoices <span>Amounts in ₹</span></div>
   <table class="items">
