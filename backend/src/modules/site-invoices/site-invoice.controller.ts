@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   Request,
+  Res,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -22,6 +23,9 @@ import {
   GetInvoiceLedgerDto,
 } from './dto';
 import { InvoiceLedgerService } from './invoice-ledger.service';
+import { LedgerExportFormat } from './constants/invoice-ledger.constants';
+import { LedgerDocumentFile } from './types/invoice-ledger-pdf.types';
+import { Response } from 'express';
 import { PartyType } from 'src/modules/common/financials/financial.constants';
 import {
   ApproveDto,
@@ -92,13 +96,49 @@ export class SiteInvoiceController {
     summary: 'Contractor ledger PDF',
     description:
       'Every SALE invoice matching the same filters as the contractor ledger (no paging), as a ' +
-      'landscape PDF with totals and the authorised signatory block. Returns a download URL.',
+      'landscape PDF with totals and the authorised signatory block. Sent as the response body.',
   })
   async getContractorLedgerPdf(
     @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
     @Query() query: GetInvoiceLedgerDto,
+    @Res() res: Response,
   ) {
-    return await this.ledgerService.getLedgerPdf(query, PartyType.SALE, userId, activeRole);
+    this.sendLedgerFile(
+      res,
+      await this.ledgerService.exportLedger(
+        query,
+        PartyType.SALE,
+        LedgerExportFormat.PDF,
+        userId,
+        activeRole,
+      ),
+    );
+  }
+
+  @Get('ledger/contractor/interactive')
+  @RequiredPermission('ledger.contractor.export')
+  @ApiOperation({
+    summary: 'Contractor ledger as an interactive file',
+    description:
+      'Same invoices as the contractor ledger PDF, as one HTML file that opens in any browser. ' +
+      'It filters those invoices by financial year, quarter, status and invoice date and works ' +
+      'every figure out again; it never shows invoices that were not exported. Sent as a download.',
+  })
+  async getContractorLedgerInteractive(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetInvoiceLedgerDto,
+    @Res() res: Response,
+  ) {
+    this.sendLedgerFile(
+      res,
+      await this.ledgerService.exportLedger(
+        query,
+        PartyType.SALE,
+        LedgerExportFormat.INTERACTIVE,
+        userId,
+        activeRole,
+      ),
+    );
   }
 
   @Get('ledger/vendor/pdf')
@@ -110,8 +150,51 @@ export class SiteInvoiceController {
   async getVendorLedgerPdf(
     @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
     @Query() query: GetInvoiceLedgerDto,
+    @Res() res: Response,
   ) {
-    return await this.ledgerService.getLedgerPdf(query, PartyType.PURCHASE, userId, activeRole);
+    this.sendLedgerFile(
+      res,
+      await this.ledgerService.exportLedger(
+        query,
+        PartyType.PURCHASE,
+        LedgerExportFormat.PDF,
+        userId,
+        activeRole,
+      ),
+    );
+  }
+
+  @Get('ledger/vendor/interactive')
+  @RequiredPermission('ledger.vendor.export')
+  @ApiOperation({
+    summary: 'Vendor ledger as an interactive file',
+    description: 'Same as the contractor interactive file, for vendor (PURCHASE) invoices.',
+  })
+  async getVendorLedgerInteractive(
+    @Request() { user: { id: userId, activeRole } }: { user: { id: string; activeRole?: string } },
+    @Query() query: GetInvoiceLedgerDto,
+    @Res() res: Response,
+  ) {
+    this.sendLedgerFile(
+      res,
+      await this.ledgerService.exportLedger(
+        query,
+        PartyType.PURCHASE,
+        LedgerExportFormat.INTERACTIVE,
+        userId,
+        activeRole,
+      ),
+    );
+  }
+
+  /** Sends a built ledger export straight to the browser as a download (nothing is stored). */
+  private sendLedgerFile(res: Response, file: LedgerDocumentFile) {
+    res.set({
+      'Content-Type': file.contentType,
+      'Content-Disposition': `attachment; filename="${file.fileName}"`,
+      'Content-Length': file.buffer.length,
+    });
+    res.send(file.buffer);
   }
 
   @Get('ledger/vendor')

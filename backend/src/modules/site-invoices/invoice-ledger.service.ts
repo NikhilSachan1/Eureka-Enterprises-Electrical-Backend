@@ -9,11 +9,12 @@ import { DefaultPaginationValues } from 'src/utils/utility/constants/utility.con
 import { GetInvoiceLedgerDto } from './dto/get-invoice-ledger.dto';
 import {
   LEDGER_AMOUNT_FIELDS as AMOUNT_FIELDS,
-  LEDGER_PDF_MAX_ROWS,
-  LEDGER_PDF_MESSAGES,
+  LEDGER_EXPORT_MAX_ROWS,
+  LEDGER_EXPORT_MESSAGES,
+  LedgerExportFormat,
   LEDGER_SORT_COLUMNS,
 } from './constants/invoice-ledger.constants';
-import { InvoiceLedgerPdfService } from './invoice-ledger-pdf.service';
+import { InvoiceLedgerDocumentService } from './invoice-ledger-document.service';
 import { LedgerPdfRow } from './types/invoice-ledger-pdf.types';
 import {
   invoiceLedgerPageQuery,
@@ -33,7 +34,7 @@ const toAmount = (value: unknown): number => roundInr(Number(value ?? 0) || 0);
 export class InvoiceLedgerService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly pdfService: InvoiceLedgerPdfService,
+    private readonly documentService: InvoiceLedgerDocumentService,
   ) {}
 
   /** `partyType` comes from the route (contractor / vendor ledger), never from the query. */
@@ -111,12 +112,14 @@ export class InvoiceLedgerService {
   }
 
   /**
-   * The ledger as a PDF: every invoice matching the same filters as the page (no paging), with
-   * the totals. Returns a download URL like the payment sheet PDF does.
+   * The ledger exported as a document: every invoice matching the same filters as the page (no
+   * paging), with the totals, as a PDF or as an interactive file. Returns the built file; the
+   * controller sends it straight to the browser.
    */
-  async getLedgerPdf(
+  async exportLedger(
     query: GetInvoiceLedgerDto,
     partyType: PartyType,
+    format: LedgerExportFormat,
     userId: string,
     activeRole?: string,
   ) {
@@ -126,27 +129,30 @@ export class InvoiceLedgerService {
       activeRole,
       query.siteId,
     );
-    if (siteIds?.length === 0) throw new BadRequestException(LEDGER_PDF_MESSAGES.NO_ROWS);
+    if (siteIds?.length === 0) throw new BadRequestException(LEDGER_EXPORT_MESSAGES.NO_ROWS);
 
     // One row past the cap tells "too many" apart from "exactly the cap".
     const { rows, summary } = await this.runLedgerQueries(
       query,
       partyType,
       siteIds,
-      LEDGER_PDF_MAX_ROWS + 1,
+      LEDGER_EXPORT_MAX_ROWS + 1,
       0,
     );
-    if (!rows.length) throw new BadRequestException(LEDGER_PDF_MESSAGES.NO_ROWS);
-    if (rows.length > LEDGER_PDF_MAX_ROWS) {
-      throw new BadRequestException(LEDGER_PDF_MESSAGES.TOO_MANY_ROWS);
+    if (!rows.length) throw new BadRequestException(LEDGER_EXPORT_MESSAGES.NO_ROWS);
+    if (rows.length > LEDGER_EXPORT_MAX_ROWS) {
+      throw new BadRequestException(LEDGER_EXPORT_MESSAGES.TOO_MANY_ROWS);
     }
 
-    return await this.pdfService.generate({
+    const data = {
       partyType,
       rows: rows.map((row: Record<string, unknown>) => this.mapRow(row)) as LedgerPdfRow[],
       totals: this.mapTotals(summary?.totals),
       generatedAt: new Date(),
-    });
+    };
+    return format === LedgerExportFormat.INTERACTIVE
+      ? await this.documentService.generateInteractive(data)
+      : await this.documentService.generatePdf(data);
   }
 
   /** One page of ledger rows (in the requested order) and the summary over every matching row. */
