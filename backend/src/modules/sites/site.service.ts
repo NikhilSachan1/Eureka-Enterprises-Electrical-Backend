@@ -47,7 +47,10 @@ import {
   getAllocatedEmployeesBySitesQuery,
 } from './queries/site.queries';
 import { OverallSiteStats, AllocatedEmployee, SiteAllocationInfo } from './site.types';
-import { resolveReadableSiteFilter } from '../common/financials/site-access.helper';
+import {
+  resolveReadableSiteFilter,
+  SITE_ACCESS_BYPASS_ROLES,
+} from '../common/financials/site-access.helper';
 
 @Injectable()
 export class SiteService {
@@ -202,9 +205,9 @@ export class SiteService {
       );
     }
 
-    // For EMPLOYEE role — restrict to sites they were ever allocated to
-    const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'OPERATION_MANAGER', 'HR'];
-    const isEmployee = activeRole && !ADMIN_ROLES.includes(activeRole.toUpperCase());
+    // Office roles (incl. ACCOUNTS) see every site; everyone else only sites they were ever
+    // allocated to. Same role list as the shared site-access helper, so the two cannot drift.
+    const isEmployee = activeRole && !SITE_ACCESS_BYPASS_ROLES.includes(activeRole.toUpperCase());
     // Stats follow the same restriction as the list; undefined means every site.
     let visibleSiteIds: string[] | undefined;
     if (isEmployee && requestUserId) {
