@@ -22,7 +22,7 @@ import {
  *    invoice table with one total row, and the "For EUREKA ENTERPRISES · Authorised Signatory"
  *    block, rendered with puppeteer.
  *  - Interactive file (one HTML file): the same document plus a filter bar (financial year,
- *    quarter, status, invoice date). The filters only narrow the invoices already in the file and
+ *    quarter, status, PO, invoice number, invoice date). The filters only narrow the invoices already in the file and
  *    every figure is worked out again from the invoices left.
  * Both are built on request and sent straight back to the browser; nothing is stored.
  *
@@ -175,7 +175,7 @@ export class InvoiceLedgerDocumentService {
 
   // ─── HTML ───
 
-  private row(r: LedgerPdfRow, idx: number, cols: LedgerPdfColumns): string {
+  private row(r: LedgerPdfRow, idx: number, cols: LedgerPdfColumns, paidVerb: string): string {
     const gstNote = r.gstAmount
       ? [
           r.gstPercentage !== null ? `${Number(r.gstPercentage)}%` : '',
@@ -186,7 +186,20 @@ export class InvoiceLedgerDocumentService {
       : '';
     const tdsNote = r.tdsAmount && r.tdsPercentage !== null ? `${Number(r.tdsPercentage)}%` : '';
     const transfers = r.payments.length;
-    const paidNote = transfers ? `${transfers} ${transfers === 1 ? 'transfer' : 'transfers'}` : '';
+    // Share of this invoice's net payable received / paid and still due; together they make 100%.
+    const netPayable = this.netPayableOf(r);
+    const paidNote = [
+      r.paidAmount > 0 && netPayable > 0
+        ? `${this.share(r.paidAmount, netPayable)} ${paidVerb}`
+        : '',
+      transfers ? `${transfers} ${transfers === 1 ? 'transfer' : 'transfers'}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const outstandingNote =
+      r.outstandingAmount > 0 && netPayable > 0
+        ? `${this.share(r.outstandingAmount, netPayable)} due`
+        : '';
     const location = [r.siteCity, r.siteState].filter(Boolean).join(', ');
     const status = String(r.paymentStatus ?? '').toUpperCase();
     const payments = transfers
@@ -206,6 +219,8 @@ export class InvoiceLedgerDocumentService {
       ['q', r.quarter ?? ''],
       ['status', status],
       ['date', r.invoiceDate ? r.invoiceDate.slice(0, 10) : ''],
+      ['po', r.poNumber ?? ''],
+      ['inv', r.invoiceNumber ?? ''],
       ['basic', r.taxableAmount],
       ['cgst', r.cgstAmount],
       ['sgst', r.sgstAmount],
@@ -253,7 +268,7 @@ export class InvoiceLedgerDocumentService {
         }
         <td class="r s-rcv">${this.amountCell(r.paidAmount, 't-rcv', paidNote)}</td>
         <td class="s-rcv">${payments}</td>
-        <td class="r s-out">${this.amountCell(r.outstandingAmount, 't-out')}</td>
+        <td class="r s-out">${this.amountCell(r.outstandingAmount, 't-out', outstandingNote)}</td>
         <td class="c"><span class="badge badge-${status.toLowerCase()}">${this.esc(
       this.titleCase(status || '—'),
     )}</span></td>
@@ -342,13 +357,13 @@ export class InvoiceLedgerDocumentService {
       line('=', 'Net payable', 'c-net', t.netPayable, { cls: 'sub-total' }),
       isVendor
         ? line('−', 'Advance adjusted', 'c-adv', t.advanceAdjusted, {
-            note: `${this.share(t.advanceAdjusted, t.netPayable)} of net payable`,
+            note: `${this.share(t.advanceAdjusted, t.netPayable)} of net payable adjusted`,
             noteKey: 'c-adv-note',
             tone: '#0284c7',
           })
         : '',
       line('−', paidLabel, 'c-paid', t.paidAmount, {
-        note: `${this.share(t.paidAmount, t.netPayable)} of net payable`,
+        note: `${this.share(t.paidAmount, t.netPayable)} of net payable ${paidLabel.toLowerCase()}`,
         noteKey: 'c-paid-note',
         tone: '#16a34a',
       }),
@@ -360,6 +375,8 @@ export class InvoiceLedgerDocumentService {
       line('=', 'Outstanding', 'c-out', t.outstandingAmount, {
         cls: 'grand-total',
         tone: '#dc2626',
+        note: `${this.share(t.outstandingAmount, t.netPayable)} of net payable still outstanding`,
+        noteKey: 'c-out-note',
       }),
     ].join('');
 
@@ -472,13 +489,15 @@ export class InvoiceLedgerDocumentService {
       </tr>`;
   }
 
-  /** Filter bar of the interactive file: only the four filters, plus reset and print. */
+  /** Filter bar of the interactive file: its filters, plus reset and print. */
   private filterBar(total: number): string {
     return `
   <div class="ix-bar no-print">
     <div class="ix-field"><label for="f-fy">Financial year</label><select id="f-fy"><option value="">All years</option></select></div>
     <div class="ix-field"><label for="f-qtr">Quarter</label><select id="f-qtr"><option value="">All quarters</option></select></div>
     <div class="ix-field"><label for="f-status">Status</label><select id="f-status"><option value="">All statuses</option></select></div>
+    <div class="ix-field"><label for="f-po">PO no.</label><select id="f-po"><option value="">All POs</option></select></div>
+    <div class="ix-field"><label for="f-inv">Invoice no.</label><input type="search" id="f-inv" placeholder="Type part of a number" autocomplete="off"/></div>
     <div class="ix-field"><label for="f-from">Invoice date from</label><input type="date" id="f-from"/></div>
     <div class="ix-field"><label for="f-to">Invoice date to</label><input type="date" id="f-to"/></div>
     <div class="ix-actions">
@@ -560,7 +579,7 @@ export class InvoiceLedgerDocumentService {
       </tr>
     </thead>
     <tbody>
-      ${rows.map((r, i) => this.row(r, i, cols)).join('')}
+      ${rows.map((r, i) => this.row(r, i, cols, paidLabel.toLowerCase())).join('')}
       ${
         interactive
           ? `<tr id="ix-empty" style="display:none"><td colspan="${weights.length}" class="c muted">No invoices match these filters.</td></tr>`
@@ -582,7 +601,7 @@ ${interactive ? LEDGER_INTERACTIVE_CSS : ''}
 </style>
 </head>
 <body>
-<div class="page">
+<div class="page" data-paid-verb="${paidLabel.toLowerCase()}">
 
   <div class="header">
     ${logoBase64 ? `<div class="header-logo"><img src="${logoBase64}" alt="logo"/></div>` : ''}

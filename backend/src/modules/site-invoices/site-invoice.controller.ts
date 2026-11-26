@@ -121,7 +121,8 @@ export class SiteInvoiceController {
     summary: 'Contractor ledger as an interactive file',
     description:
       'Same invoices as the contractor ledger PDF, as one HTML file that opens in any browser. ' +
-      'It filters those invoices by financial year, quarter, status and invoice date and works ' +
+      'It filters those invoices by financial year, quarter, status, PO, invoice number and ' +
+      'invoice date and works ' +
       'every figure out again; it never shows invoices that were not exported. Sent as a download.',
   })
   async getContractorLedgerInteractive(
