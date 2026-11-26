@@ -289,6 +289,72 @@ export class InvoiceLedgerPdfService {
     </div>`;
   }
 
+  /**
+   * How many invoices are paid, partly paid and unpaid: the total, a bar split in proportion,
+   * and one box per status with its count, share and gross bill.
+   */
+  private statusBand(data: LedgerPdfData): string {
+    const rows = data.rows;
+    const total = rows.length;
+    const statuses: [string, string, string, string][] = [
+      ['PAID', 'Paid', '#16a34a', '#f0fdf4'],
+      ['PARTIAL', 'Partial', '#d97706', '#fffbeb'],
+      ['UNPAID', 'Unpaid', '#dc2626', '#fef2f2'],
+    ];
+    const groups = statuses.map(([key, label, color, tint]) => {
+      const inStatus = rows.filter((r) => String(r.paymentStatus).toUpperCase() === key);
+      return {
+        label,
+        color,
+        tint,
+        count: inStatus.length,
+        percent: total ? Math.round((inStatus.length / total) * 1000) / 10 : 0,
+        gross: inStatus.reduce((s, r) => s + r.grossAmount, 0),
+        outstanding: inStatus.reduce((s, r) => s + r.outstandingAmount, 0),
+      };
+    });
+
+    const bar = groups
+      .filter((g) => g.count)
+      .map(
+        (g) =>
+          `<span style="flex:${g.count};background:${g.color}">${
+            g.percent >= 12 ? `${g.count} ${g.label}` : ''
+          }</span>`,
+      )
+      .join('');
+    const boxes = groups
+      .map(
+        (g) => `
+        <div class="sb-box" style="--c:${g.color};background:${g.tint}">
+          <div class="sb-box-head"><i></i>${g.label}<span>${g.percent.toLocaleString(
+          'en-IN',
+        )}%</span></div>
+          <div class="sb-box-count">${g.count} <small>${
+          g.count === 1 ? 'invoice' : 'invoices'
+        }</small></div>
+          <div class="sb-figures">
+            <div><small>Billed</small><b>${this.money(g.gross)}</b></div>
+            <div class="due"><small>Due</small>${
+              g.outstanding > 0
+                ? `<b>${this.money(g.outstanding)}</b>`
+                : '<b class="settled">Fully settled ✓</b>'
+            }</div>
+          </div>
+        </div>`,
+      )
+      .join('');
+
+    return `
+    <div class="status-band">
+      <div class="sb-total"><small>Invoices</small><b>${total}</b></div>
+      <div class="sb-main">
+        <div class="sb-bar">${bar}</div>
+        <div class="sb-boxes">${boxes}</div>
+      </div>
+    </div>`;
+  }
+
   /** One total row after the last invoice (a <tfoot> would repeat on every page). */
   private totalRow(data: LedgerPdfData, cols: LedgerPdfColumns): string {
     const t = data.totals;
@@ -372,6 +438,29 @@ export class InvoiceLedgerPdfService {
   .header .doc-badge { text-align: right; }
   .header .doc-title { font-size: 15px; font-weight: bold; color: #1f3a5f; letter-spacing: 1px; }
   .header .doc-sub { font-size: 10px; color: #666; margin-top: 3px; }
+
+  /* Invoice status band — total, proportional bar, one box per status */
+  .status-band { display: flex; gap: 10px; align-items: stretch; margin: 12px 0 0; padding: 8px 10px; border: 1px solid #cfd6df; border-radius: 5px; page-break-inside: avoid; }
+  .sb-total { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 70px; padding-right: 10px; border-right: 1px solid #e2e6ec; }
+  .sb-total small { font-size: 8px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; }
+  .sb-total b { font-size: 22px; color: #1f3a5f; line-height: 1.1; }
+  .sb-main { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .sb-bar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: #e5e7eb; }
+  .sb-bar span { display: flex; align-items: center; justify-content: center; min-width: 4px; color: #fff; font-size: 7.6px; font-weight: bold; white-space: nowrap; }
+  .sb-boxes { display: flex; gap: 6px; }
+  .sb-box { flex: 1; min-width: 0; border: 1px solid #e2e6ec; border-left: 3px solid var(--c); border-radius: 4px; padding: 5px 8px; }
+  .sb-box-head { display: flex; align-items: center; gap: 4px; font-size: 8px; font-weight: bold; color: var(--c); text-transform: uppercase; letter-spacing: 0.3px; }
+  .sb-box-head i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+  .sb-box-head span { margin-left: auto; color: #6b7280; font-weight: 600; }
+  .sb-box-count { font-size: 14px; font-weight: bold; color: #111; margin-top: 2px; }
+  .sb-box-count small { font-size: 8px; font-weight: normal; color: #6b7280; }
+  .sb-figures { display: flex; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #d5dce5; }
+  .sb-figures > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .sb-figures > div + div { padding-left: 6px; border-left: 1px solid #e2e6ec; }
+  .sb-figures small { font-size: 6.8px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; }
+  .sb-figures b { font-size: 9px; color: #111; white-space: nowrap; }
+  .sb-figures .due b { color: var(--c); }
+  .sb-figures .settled { font-size: 8.2px; }
 
   /* Summary — two calculation panels: gross bill, then how the outstanding is worked out */
   .summary { display: flex; gap: 8px; margin: 12px 0 4px; align-items: stretch; page-break-inside: avoid; }
@@ -475,6 +564,7 @@ export class InvoiceLedgerPdfService {
     </div>
   </div>
 
+  ${this.statusBand(data)}
   ${this.summaryBlock(data, paidLabel)}
 
   <div class="section-label">${partyLabel} invoices <span>Amounts in ₹</span></div>

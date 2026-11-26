@@ -94,6 +94,7 @@ export class InvoiceLedgerService {
         statusMix: (summary?.statusMix ?? []).map((s: Record<string, unknown>) => ({
           status: s.status as string,
           count: Number(s.count),
+          gross: toAmount(s.gross),
           outstanding: toAmount(s.outstanding),
         })),
         ageing: (summary?.ageing ?? []).map((a: Record<string, unknown>) => ({
