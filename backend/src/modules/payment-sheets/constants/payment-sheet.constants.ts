@@ -157,6 +157,14 @@ export const DIRECT_PAYMENT_SHEET = {
     [PaymentSourceType.FUEL_EXPENSE]: 'Auto-created from Fuel Expense Reimburse',
     [PaymentSourceType.VENDOR_PAYMENT]: 'Auto-created from Bank Transfer',
   },
+  AUTO_APPROVED: 'Auto approved',
+  PAID_REMARK: 'Paid directly',
+  ROLE_LABEL: {
+    OPERATION_MANAGER: 'OM',
+    HR: 'HR',
+    ADMIN: 'Admin',
+    ACCOUNTS: 'Accounts',
+  },
 } as const;
 
 export const PAYMENT_SHEET_ERRORS = {

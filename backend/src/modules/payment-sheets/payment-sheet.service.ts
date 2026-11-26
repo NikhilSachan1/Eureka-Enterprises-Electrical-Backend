@@ -2220,20 +2220,116 @@ export class PaymentSheetService {
         );
       }
 
-      await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, null, user.id, em, {
-        newAmount: record.amount,
-        reason: remark,
-      });
-      await this.addHistory(item, ItemHistoryAction.PAID, null, user.id, em, {
-        previousAmount: record.amount,
-        newAmount: record.amount,
-        reason: paymentRef,
-      });
-      await this.addStageLog(sheet, StageAction.COMPLETE, null, user, remark, em);
+      await this.writeDirectTrail(sheet, item, record.amount, paymentRef, remark, user, now, em);
 
       await this.recomputeTotals(sheet.id, em);
       return { id: sheet.id, sheetNumber };
     });
+  }
+
+  /**
+   * Walks the configured approval flow so the sheet reads like any other:
+   *   OM — Auto approved → HR — Auto approved → Admin — Auto approved → Accounts — paid → Completed.
+   * Every step is attributed to the person who reimbursed / transferred (they triggered it), and
+   * review stages also get a verification row, as a normal forward would require.
+   * Each row gets its own timestamp (1s apart) so the timeline orders them correctly.
+   */
+  private async writeDirectTrail(
+    sheet: PaymentSheetEntity,
+    item: PaymentSheetItemEntity,
+    amount: number,
+    paymentRef: string,
+    origin: string,
+    user: ActingUser,
+    start: Date,
+    em: EntityManager,
+  ) {
+    const flow = await this.getApprovalFlow(em);
+    const first = flow[0];
+    const last = flow[flow.length - 1];
+    let tick = 0;
+    const at = () => new Date(start.getTime() + tick++ * 1000);
+    const roleLabel = (role: string) =>
+      DIRECT_PAYMENT_SHEET.ROLE_LABEL[role as keyof typeof DIRECT_PAYMENT_SHEET.ROLE_LABEL] ??
+      role.replace(/_/g, ' ');
+    const autoApproved = (role: string) =>
+      `${roleLabel(role)} — ${DIRECT_PAYMENT_SHEET.AUTO_APPROVED} (${origin})`;
+
+    const history = async (
+      action: ItemHistoryAction,
+      stage: string,
+      reason: string,
+      previousAmount: number | null = null,
+    ) => {
+      const row = await this.repo.addHistory(
+        {
+          itemId: item.id,
+          paymentSheetId: sheet.id,
+          stage,
+          action,
+          previousAmount,
+          newAmount: amount,
+          reason,
+          createdBy: user.id,
+        },
+        em,
+      );
+      await this.stampCreatedAt('payment_sheet_item_history', row.id, at(), em);
+    };
+    const stageLog = async (
+      action: StageAction,
+      fromStage: string,
+      toStage: string | null,
+      actedRole: string,
+      remarks: string,
+    ) => {
+      const row = await this.repo.addStageLog(
+        {
+          paymentSheetId: sheet.id,
+          fromStage,
+          toStage,
+          action,
+          actedBy: user.id,
+          actedRole,
+          remarks,
+          createdBy: user.id,
+        },
+        em,
+      );
+      await this.stampCreatedAt('payment_sheet_stage_logs', row.id, at(), em);
+    };
+
+    await history(ItemHistoryAction.ITEM_ADDED, first.stage, origin);
+
+    // Initiation → each review stage → processing: SUBMIT first, FORWARD after.
+    for (let i = 0; i < flow.length - 1; i++) {
+      const stage = flow[i];
+      if (stage.verifyItems) {
+        await this.upsertVerification(item, stage.stage, user.id, em);
+        await history(ItemHistoryAction.VERIFIED, stage.stage, autoApproved(stage.role));
+      }
+      await stageLog(
+        i === 0 ? StageAction.SUBMIT : StageAction.FORWARD,
+        stage.stage,
+        flow[i + 1].stage,
+        stage.role,
+        autoApproved(stage.role),
+      );
+    }
+
+    // The actual payment — by the person who reimbursed / transferred, in their own role.
+    await history(ItemHistoryAction.PAID, last.stage, paymentRef, amount);
+    await stageLog(
+      StageAction.COMPLETE,
+      last.stage,
+      null,
+      user.activeRole || last.role,
+      `${DIRECT_PAYMENT_SHEET.PAID_REMARK} (${origin})`,
+    );
+  }
+
+  private async stampCreatedAt(table: string, id: string, at: Date, em: EntityManager) {
+    await this.repo.raw(`UPDATE "${table}" SET "createdAt" = $1 WHERE id = $2`, [at, id], em);
   }
 
   // ─────────────────────────── reconcile ───────────────────────────
