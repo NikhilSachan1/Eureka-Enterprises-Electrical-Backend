@@ -36,7 +36,16 @@ import {
   PAYMENT_SHEET_DEFAULTS,
   PAYMENT_SHEET_ERRORS,
   PAYMENT_SHEET_RESPONSES,
+  DIRECT_PAYMENT_SHEET,
 } from './constants/payment-sheet.constants';
+import {
+  DirectExpenseReimburseInput,
+  DirectFuelReimburseInput,
+  DirectSheetRecord,
+  DirectSheetResult,
+} from './payment-sheet-direct.types';
+import { CreateBankTransferDto } from 'src/modules/bank-transfers/dto';
+import { BankSnapshot } from './entities/payment-sheet-item.entity';
 import {
   userExpensePendingQuery,
   userFuelPendingQuery,
@@ -1978,6 +1987,253 @@ export class PaymentSheetService {
     );
     this.notifyInitiator(id, StageAction.COMPLETE);
     return true;
+  }
+
+  // ─────────────────────────── direct pay (reimburse / bank transfer → auto sheet) ───────────────────────────
+  //
+  // Reimburse and Bank Transfer can still be done from their own screens. These variants do the same
+  // settlement through the source module, then record it as a one-line, already-COMPLETED payment
+  // sheet so the payment is visible in the payment sheet register. The old endpoints are unchanged.
+  //
+  // Same non-atomic seam as payItem(): the source modules run their own transactions, so the
+  // settlement happens first and the sheet is written afterwards. If the sheet write fails the money
+  // is already recorded — the request still succeeds (a retry would pay twice) and the failure is
+  // logged and reported back as `paymentSheet: null`.
+
+  async directExpenseReimburse(input: DirectExpenseReimburseInput, user: ActingUser) {
+    const pendingSnapshot = await this.readUserPending(PaymentSourceType.EXPENSE, input.userId);
+
+    await this.expenseService.createCreditExpense({ ...input, createdBy: user.id });
+
+    const paymentSheet = await this.recordDirectSheetSafely(
+      {
+        sourceType: PaymentSourceType.EXPENSE,
+        beneficiaryType: BeneficiaryType.USER,
+        userId: input.userId,
+        vendorId: null,
+        amount: Number(input.amount),
+        pendingSnapshot,
+        bankSnapshot: await this.userBankSnapshot(input.userId),
+        paidFromAccountId: input.paidFromAccountId ?? null,
+        utrNumber: input.transactionId ?? null,
+        remarks: input.description ?? null,
+      },
+      user,
+    );
+    return this.directResponse(PAYMENT_SHEET_RESPONSES.DIRECT_EXPENSE_PAID, paymentSheet);
+  }
+
+  async directFuelReimburse(input: DirectFuelReimburseInput, user: ActingUser) {
+    const pendingSnapshot = await this.readUserPending(
+      PaymentSourceType.FUEL_EXPENSE,
+      input.userId,
+    );
+
+    await this.fuelService.createCreditFuelExpense({
+      ...input,
+      createdBy: user.id,
+      entrySourceType: input.sourceType,
+    });
+
+    const paymentSheet = await this.recordDirectSheetSafely(
+      {
+        sourceType: PaymentSourceType.FUEL_EXPENSE,
+        beneficiaryType: BeneficiaryType.USER,
+        userId: input.userId,
+        vendorId: null,
+        amount: Number(input.fuelAmount),
+        pendingSnapshot,
+        bankSnapshot: await this.userBankSnapshot(input.userId),
+        paidFromAccountId: input.paidFromAccountId ?? null,
+        utrNumber: input.transactionId ?? null,
+        remarks: input.description ?? null,
+      },
+      user,
+    );
+    return this.directResponse(PAYMENT_SHEET_RESPONSES.DIRECT_FUEL_PAID, paymentSheet);
+  }
+
+  /** PURCHASE side only — a SALE transfer is money received, not a payment. */
+  async directBankTransfer(dto: CreateBankTransferDto, user: ActingUser) {
+    if (dto.partyType !== PartyType.PURCHASE || !dto.bookPaymentId) {
+      throw new BadRequestException(PAYMENT_SHEET_ERRORS.DIRECT_SALE_NOT_SUPPORTED);
+    }
+    const { query, params } = bookPaymentsTransferableQuery([dto.bookPaymentId]);
+    const bookPayment = (await this.repo.raw(query, params))?.[0];
+    if (!bookPayment) throw new NotFoundException(PAYMENT_SHEET_ERRORS.BOOK_PAYMENT_NOT_FOUND);
+
+    // Validates the ceiling, creates the transfer and its payment advice — exactly as before.
+    const transfer = await this.bankTransferService.create(dto, user.id);
+
+    const paymentSheet = await this.recordDirectSheetSafely(
+      {
+        sourceType: PaymentSourceType.VENDOR_PAYMENT,
+        beneficiaryType: BeneficiaryType.VENDOR,
+        userId: null,
+        vendorId: bookPayment.vendorId,
+        amount: Number(dto.transferAmount),
+        pendingSnapshot: Number(bookPayment.transferable),
+        bankSnapshot: await this.vendorBankSnapshot(bookPayment.vendorId),
+        paidFromAccountId: dto.paidFromAccountId ?? null,
+        utrNumber: dto.utrNumber ?? null,
+        remarks: dto.remarks ?? null,
+        bookPaymentId: dto.bookPaymentId,
+        bankTransferId: transfer.id,
+      },
+      user,
+    );
+    return {
+      ...transfer,
+      ...this.directResponse(PAYMENT_SHEET_RESPONSES.DIRECT_TRANSFER_PAID, paymentSheet),
+    };
+  }
+
+  private directResponse(message: string, paymentSheet: DirectSheetResult | null) {
+    return {
+      message: paymentSheet ? message : PAYMENT_SHEET_RESPONSES.DIRECT_SHEET_FAILED,
+      paymentSheet,
+    };
+  }
+
+  private async readUserPending(
+    sourceType: PaymentSourceType.EXPENSE | PaymentSourceType.FUEL_EXPENSE,
+    userId: string,
+  ): Promise<number> {
+    const { query, params } =
+      sourceType === PaymentSourceType.EXPENSE
+        ? userExpensePendingQuery(userId)
+        : userFuelPendingQuery(userId);
+    const rows = await this.repo.raw(query, params);
+    return Number(rows?.[0]?.pending ?? 0);
+  }
+
+  private async userBankSnapshot(userId: string): Promise<BankSnapshot | null> {
+    const rows = await this.repo.raw(
+      `SELECT "bankHolderName", "bankName", "accountNumber", "ifscCode" FROM "users" WHERE id = $1`,
+      [userId],
+    );
+    const r = rows?.[0];
+    return r
+      ? {
+          accountHolderName: r.bankHolderName ?? null,
+          bankName: r.bankName ?? null,
+          accountNumber: r.accountNumber ?? null,
+          ifscCode: r.ifscCode ?? null,
+        }
+      : null;
+  }
+
+  private async vendorBankSnapshot(vendorId: string): Promise<BankSnapshot | null> {
+    const rows = await this.repo.raw(
+      `SELECT "accountHolderName", "bankName", "accountNumber", "ifscCode" FROM "vendors" WHERE id = $1`,
+      [vendorId],
+    );
+    const r = rows?.[0];
+    return r
+      ? {
+          accountHolderName: r.accountHolderName ?? null,
+          bankName: r.bankName ?? null,
+          accountNumber: r.accountNumber ?? null,
+          ifscCode: r.ifscCode ?? null,
+        }
+      : null;
+  }
+
+  private async recordDirectSheetSafely(
+    record: DirectSheetRecord,
+    user: ActingUser,
+  ): Promise<DirectSheetResult | null> {
+    try {
+      return await this.recordDirectSheet(record, user);
+    } catch (e) {
+      this.logger.error(
+        `Direct ${record.sourceType} payment settled but its payment sheet was not created ` +
+          `(user=${record.userId ?? '-'}, vendor=${record.vendorId ?? '-'}, amount=${
+            record.amount
+          }): ${e}`,
+      );
+      return null;
+    }
+  }
+
+  /** Writes a settled payment as a COMPLETED sheet with one PAID line, its history and stage log. */
+  private async recordDirectSheet(
+    record: DirectSheetRecord,
+    user: ActingUser,
+  ): Promise<DirectSheetResult> {
+    return await this.dataSource.transaction(async (em) => {
+      const now = new Date();
+      const financialYear = getFinancialYear(now);
+      const sheetNumber = await this.generateSheetNumber(financialYear, em);
+      const remark = DIRECT_PAYMENT_SHEET.STAGE_REMARK[record.sourceType];
+
+      const sheet = await this.repo.createSheet(
+        {
+          sheetNumber,
+          title: DIRECT_PAYMENT_SHEET.TITLE[record.sourceType],
+          remarks: record.remarks,
+          financialYear,
+          status: PaymentSheetStatus.COMPLETED,
+          currentStage: null,
+          createdBy: user.id,
+          updatedBy: user.id,
+        },
+        em,
+      );
+
+      const item = await this.repo.createItem(
+        {
+          paymentSheetId: sheet.id,
+          beneficiaryType: record.beneficiaryType,
+          userId: record.userId,
+          vendorId: record.vendorId,
+          sourceType: record.sourceType,
+          pendingSnapshot: record.pendingSnapshot,
+          requestedAmount: record.amount,
+          currentAmount: record.amount,
+          bankSnapshot: record.bankSnapshot,
+          itemStatus: PaymentSheetItemStatus.PAID,
+          paidAmount: record.amount,
+          paidAt: now,
+          paidBy: user.id,
+          utrNumber: record.utrNumber,
+          paidFromAccountId: record.paidFromAccountId,
+          createdBy: user.id,
+        },
+        em,
+      );
+
+      // Same paymentRef convention as payItem(): vendor → bank transfer id, user → trace ref.
+      const paymentRef = record.bankTransferId ?? `PS:${sheetNumber}:${item.id}`;
+      await this.repo.updateItem({ id: item.id }, { paymentRef }, em);
+
+      if (record.bookPaymentId) {
+        await this.repo.createAllocation(
+          {
+            itemId: item.id,
+            bookPaymentId: record.bookPaymentId,
+            allocatedAmount: record.amount,
+            bankTransferId: record.bankTransferId ?? null,
+            createdBy: user.id,
+          },
+          em,
+        );
+      }
+
+      await this.addHistory(item, ItemHistoryAction.ITEM_ADDED, null, user.id, em, {
+        newAmount: record.amount,
+        reason: remark,
+      });
+      await this.addHistory(item, ItemHistoryAction.PAID, null, user.id, em, {
+        previousAmount: record.amount,
+        newAmount: record.amount,
+        reason: paymentRef,
+      });
+      await this.addStageLog(sheet, StageAction.COMPLETE, null, user, remark, em);
+
+      await this.recomputeTotals(sheet.id, em);
+      return { id: sheet.id, sheetNumber };
+    });
   }
 
   // ─────────────────────────── reconcile ───────────────────────────
