@@ -17,13 +17,18 @@ import {
   GetBookPaymentDto,
   GetVendorListQueryDto,
   VendorListResponseDto,
+  BookPaymentDropdownQueryDto,
 } from './dto';
 import { buildVendorListQuery } from './queries/book-payment.queries';
 import { BOOK_PAYMENT_ERRORS, BOOK_PAYMENT_RESPONSES } from './constants/book-payment.constants';
 import { formatUser } from 'src/modules/common/financials/user-format.helper';
 import { resolveReadableSiteFilter } from 'src/modules/common/financials/site-access.helper';
 import { SiteInvoiceEntity } from 'src/modules/site-invoices/entities/site-invoice.entity';
-import { BookPaymentSourceType, PaymentTypeFilter } from './constants/book-payment.constants';
+import {
+  BOOK_PAYMENT_DROPDOWN,
+  BookPaymentSourceType,
+  PaymentTypeFilter,
+} from './constants/book-payment.constants';
 
 /** The booking source each "payment type" filter value stands for. */
 const BOOKING_SOURCE_BY_PAYMENT_TYPE: Record<PaymentTypeFilter, BookPaymentSourceType> = {
@@ -838,14 +843,36 @@ export class BookPaymentService {
   }
 
   /**
-   * Dropdown endpoint — returns Book Payments for an Invoice with eligibility
-   * flags for PURCHASE Bank Transfer creation.
+   * Dropdown endpoint — Book Payments with eligibility flags for PURCHASE Bank Transfer creation.
+   *   • invoiceId                → that invoice's bookings (original behaviour)
+   *   • siteId + paymentType     → the project's bookings of that type. Advance bookings have no
+   *                                invoice and GST releases sit outside it, so this is how a
+   *                                transfer reaches them.
+   * Eligible only when approved and not yet transferred (1 BookPayment = 1 BankTransfer).
    */
-  async getDropdown(invoiceId: string) {
+  async getDropdown(query: BookPaymentDropdownQueryDto) {
+    const { invoiceId, siteId, paymentType } = query;
+    const where: string[] = ['bp."deletedAt" IS NULL'];
+    const params: unknown[] = [];
+    if (invoiceId) {
+      params.push(invoiceId);
+      where.push(`bp."invoiceId" = $${params.length}`);
+    } else if (siteId && paymentType) {
+      params.push(siteId);
+      where.push(`bp."siteId" = $${params.length}`);
+    } else {
+      throw new BadRequestException(BOOK_PAYMENT_ERRORS.DROPDOWN_FILTER_REQUIRED);
+    }
+    if (paymentType) {
+      params.push(BOOKING_SOURCE_BY_PAYMENT_TYPE[paymentType]);
+      where.push(`bp."sourceType" = $${params.length}`);
+    }
+
     const rows = await this.dataSource.query(
       `
       SELECT
         bp.id,
+        bp."sourceType",
         bp."paymentTotalAmount",
         bp."taxableAmount",
         bp."gstAmount",
@@ -853,43 +880,66 @@ export class BookPaymentService {
         to_char(bp."bookingDate", 'YYYY-MM-DD') AS "bookingDate",
         bp."hasTransfer",
         bp."approvalStatus",
-        CASE
-          WHEN bp."hasTransfer" = true THEN false
-          ELSE true
-        END AS eligible,
-        CASE
-          WHEN bp."hasTransfer" = true
-            THEN 'Bank transfer already created for this book payment (1:1 rule)'
-          ELSE NULL
-        END AS reason
+        inv."invoiceNumber",
+        ap."advanceNumber",
+        v."name" AS "vendorName"
       FROM book_payments bp
-      WHERE bp."invoiceId" = $1
-        AND bp."deletedAt" IS NULL
+      LEFT JOIN site_invoices inv ON inv.id = bp."invoiceId"
+      LEFT JOIN advance_payments ap ON ap.id = bp."advancePaymentId"
+      LEFT JOIN vendors v ON v.id = bp."vendorId"
+      WHERE ${where.join(' AND ')}
       ORDER BY bp."createdAt" DESC
 `,
-      [invoiceId],
+      params,
     );
 
     return {
-      records: rows.map((r: any) => ({
-        id: r.id,
-        label: `₹${Number(r.paymentTotalAmount).toLocaleString('en-IN')} — ${
-          r.bookingDate ? r.bookingDate.split('-').reverse().join('/') : ''
-        }`,
-        eligible: r.eligible,
-        reason: r.reason ?? null,
-        meta: {
-          paymentTotalAmount: Number(r.paymentTotalAmount),
-          taxableAmount: Number(r.taxableAmount),
-          gstAmount: Number(r.gstAmount),
-          paymentHoldAmount: Number(r.paymentHoldAmount ?? 0),
-          expectedTransferAmount: Number(r.paymentTotalAmount) - Number(r.paymentHoldAmount ?? 0),
-          bookingDate: r.bookingDate,
-          hasTransfer: r.hasTransfer,
-          approvalStatus: r.approvalStatus,
-        },
-      })),
+      records: rows.map((r: any) => {
+        const reason = r.hasTransfer
+          ? BOOK_PAYMENT_DROPDOWN.REASON_HAS_TRANSFER
+          : r.approvalStatus !== 'APPROVED'
+          ? BOOK_PAYMENT_DROPDOWN.REASON_NOT_APPROVED
+          : null;
+        return {
+          id: r.id,
+          label: this.dropdownLabel(r),
+          eligible: reason === null,
+          reason,
+          meta: {
+            sourceType: r.sourceType,
+            paymentTotalAmount: Number(r.paymentTotalAmount),
+            taxableAmount: Number(r.taxableAmount),
+            gstAmount: Number(r.gstAmount),
+            paymentHoldAmount: Number(r.paymentHoldAmount ?? 0),
+            expectedTransferAmount: Number(r.paymentTotalAmount) - Number(r.paymentHoldAmount ?? 0),
+            bookingDate: r.bookingDate,
+            hasTransfer: r.hasTransfer,
+            approvalStatus: r.approvalStatus,
+            invoiceNumber: r.invoiceNumber ?? null,
+            advanceNumber: r.advanceNumber ?? null,
+            vendorName: r.vendorName ?? null,
+          },
+        };
+      }),
     };
+  }
+
+  /** e.g. "GST Release · INV-104 · ₹18,000 — 12/11/2026"; an invoice booking keeps the short form. */
+  private dropdownLabel(r: any): string {
+    const amountAndDate = `₹${Number(r.paymentTotalAmount).toLocaleString('en-IN')} — ${
+      r.bookingDate ? r.bookingDate.split('-').reverse().join('/') : ''
+    }`;
+    if (r.sourceType === BookPaymentSourceType.INVOICE) return amountAndDate;
+    const reference =
+      r.sourceType === BookPaymentSourceType.ADVANCE ? r.advanceNumber : r.invoiceNumber;
+    return [
+      BOOK_PAYMENT_DROPDOWN.SOURCE_LABEL[r.sourceType] ?? r.sourceType,
+      reference,
+      r.vendorName,
+      amountAndDate,
+    ]
+      .filter(Boolean)
+      .join(' · ');
   }
 
   async getVendorList(query: GetVendorListQueryDto): Promise<VendorListResponseDto> {
