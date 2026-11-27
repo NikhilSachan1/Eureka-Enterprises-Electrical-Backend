@@ -73,6 +73,39 @@ export const applicationForReversalQuery = {
   `,
 };
 
+/** Holidays each employee worked: present on a holiday-calendar date (as payroll counts it). */
+export const holidaysWorkedQuery = (userIds: string[], holidayDates: string[]) => ({
+  query: `
+    SELECT a."userId", to_char(a."attendanceDate", 'YYYY-MM-DD') AS date
+      FROM attendances a
+     WHERE a."userId" = ANY($1)
+       AND a."attendanceDate" = ANY($2::date[])
+       AND a.status IN ('${AttendanceStatus.PRESENT}', '${AttendanceStatus.CHECKED_IN}',
+                        '${AttendanceStatus.CHECKED_OUT}', '${AttendanceStatus.APPROVAL_PENDING}')
+       AND a."isActive" = true
+       AND a."deletedAt" IS NULL
+       AND a."approvalStatus" <> 'rejected'
+  `,
+  params: [userIds, holidayDates],
+});
+
+/** Holiday-work leave already credited for one month. */
+export const holidayCreditForMonthQuery = (
+  userId: string,
+  leaveCategory: string,
+  financialYear: string,
+  periodMonth: string,
+) => ({
+  query: `
+    SELECT COALESCE(SUM(days), 0)::numeric AS total
+      FROM leave_ledger_entries
+     WHERE "userId" = $1 AND "leaveCategory" = $2 AND "financialYear" = $3
+       AND "entryType" = '${LeaveLedgerEntryType.HOLIDAY_WORK_CREDIT}'
+       AND "periodMonth" = $4::date AND "deletedAt" IS NULL
+  `,
+  params: [userId, leaveCategory, financialYear, periodMonth],
+});
+
 /** Net days the ledger holds against one leave application day (debit -1, give-back +1). */
 export const applicationNetDaysQuery = (leaveApplicationId: string) => ({
   query: `

@@ -565,8 +565,9 @@ export class LeaveCronService {
     }
     this.logger.log(
       `[${CRON_NAMES.MONTHLY_LEAVE_ACCRUAL}] Settled through ${result.settledThrough}: ` +
-        `+${result.credited} credited, -${result.clawedBack} settled back, ` +
-        `${result.convertedToLwp} day(s) to LWP, ${result.advancesGiven} advance(s)`,
+        `+${result.credited} credited, +${result.holidayCredited} for holidays worked, ` +
+        `-${result.clawedBack} settled back, ${result.convertedToLwp} day(s) to LWP, ` +
+        `${result.advancesGiven} advance(s)`,
     );
     return result;
   }

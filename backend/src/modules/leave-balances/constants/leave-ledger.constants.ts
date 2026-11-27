@@ -95,6 +95,10 @@ export const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 export const IST_TIMEZONE = 'Asia/Kolkata';
 
+/** holiday_work_compensation.type that pays a worked holiday in leave (else it is money). */
+export const HOLIDAY_WORK_LEAVE_TYPE = 'LEAVE';
+export const DEFAULT_HOLIDAY_WORK_CATEGORY = 'earned';
+
 /** Config reads are cached this long within a run (settlement reads them per employee). */
 export const ACCRUAL_CONFIG_CACHE_MS = 60_000;
 
