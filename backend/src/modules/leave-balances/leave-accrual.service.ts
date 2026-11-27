@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { ConfigurationService } from '../configurations/configuration.service';
@@ -34,20 +34,14 @@ import {
   MonthAttendance,
   MonthCounts,
   MonthlySettlementResult,
-  RecalculationCandidateRow,
-  RecalculationReport,
-  RecalculationRow,
   SettlementOutcome,
   WorkingDaysSettings,
 } from './types/leave-ledger.types';
 import {
-  balanceTotalsQuery,
   convertibleLeaveDaysQuery,
   getAccrualUsersQuery,
   ledgerEntriesQuery,
-  legacyCutoverQuery,
   monthlyAttendanceCountsQuery,
-  recalculationCandidatesQuery,
   sumEntriesQuery,
 } from './queries/leave-ledger.queries';
 
@@ -162,7 +156,7 @@ export class LeaveAccrualService {
     counts: AttendanceCounts,
   ): Promise<SettlementOutcome> {
     const { financialYear } = settings;
-    const windowStart = await this.settlementWindowStart(user, category, financialYear);
+    const windowStart = this.settlementWindowStart(user, financialYear);
     const months =
       windowStart > throughMonth
         ? []
@@ -451,148 +445,6 @@ export class LeaveAccrualService {
     }
   }
 
-  // ==================== Legacy recalculation ====================
-
-  /**
-   * The old monthly credit (ledger opening) measured against attendance, for HR to review.
-   * Nothing changes until {@link applyRecalculation}.
-   */
-  async getRecalculationReport(financialYear: string, today: string): Promise<RecalculationReport> {
-    const settings = await this.getSettings(financialYear);
-    if (!settings) {
-      throw new BadRequestException(
-        LEAVE_LEDGER_ERRORS.CONFIG_NOT_FOUND.replace('{financialYear}', financialYear),
-      );
-    }
-    const quotaOf = new Map(settings.categories.map((c) => [c.category, c.annualQuota]));
-
-    const candidates = recalculationCandidatesQuery(financialYear);
-    const rows: RecalculationCandidateRow[] = await this.dataSource.query(
-      candidates.query,
-      candidates.params,
-    );
-
-    const coveredThrough = rows
-      .map((r) => (r.coveredThrough ?? '').slice(0, 7))
-      .filter(Boolean)
-      .sort()
-      .at(-1);
-    if (!coveredThrough) {
-      throw new BadRequestException(
-        LEAVE_LEDGER_ERRORS.NO_LEGACY.replace('{financialYear}', financialYear),
-      );
-    }
-
-    const fyStart = this.fyStartMonth(financialYear);
-    const counts = await this.loadAttendance(
-      rows.map((r) => r.userId),
-      fyStart,
-      coveredThrough,
-    );
-
-    const reportRows: RecalculationRow[] = [];
-    for (const row of rows) {
-      const quota = quotaOf.get(row.leaveCategory) ?? 0;
-      const userCovered = (row.coveredThrough ?? coveredThrough).slice(0, 7);
-      const start =
-        row.dateOfJoining && this.monthOf(row.dateOfJoining) > fyStart
-          ? this.monthOf(row.dateOfJoining)
-          : fyStart;
-      const months =
-        start > userCovered
-          ? []
-          : await this.buildMonths(row.userId, start, userCovered, quota, counts);
-
-      const oldCredit = this.ledger.round((row.legacyOpening ?? 0) + (row.legacyCorrection ?? 0));
-      const correctCredit = this.floorToStep(this.totalEarned(months), settings.step);
-      const difference = this.ledger.round(correctCredit - oldCredit);
-
-      const totals = balanceTotalsQuery(row.userId, row.leaveCategory, financialYear);
-      const [balance] = await this.dataSource.query(totals.query, totals.params);
-      const availableNow = this.ledger.round((balance?.allocated ?? 0) - (balance?.consumed ?? 0));
-      const applied = row.corrections > 0;
-      const adjustment = applied
-        ? 0
-        : difference >= 0
-        ? difference
-        : -Math.min(-difference, Math.max(0, availableNow));
-
-      reportRows.push({
-        userId: row.userId,
-        employeeName: `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim(),
-        employeeCode: row.employeeId,
-        dateOfJoining: row.dateOfJoining,
-        leaveCategory: row.leaveCategory,
-        oldCredit,
-        correctCredit,
-        difference: applied ? 0 : difference,
-        consumed: this.ledger.round(balance?.consumed ?? 0),
-        availableNow,
-        adjustment: this.ledger.round(adjustment),
-        availableAfter: this.ledger.round(availableNow + adjustment),
-        excessUsed: applied ? 0 : this.ledger.round(adjustment - difference),
-        months,
-        applied,
-      });
-    }
-
-    return {
-      financialYear,
-      coveredThrough,
-      canApply: this.monthOf(today) > coveredThrough,
-      rows: reportRows,
-    };
-  }
-
-  /** Posts the reviewed corrections (only for the employees passed, or all). Runs once per employee. */
-  async applyRecalculation(
-    financialYear: string,
-    today: string,
-    appliedBy: string,
-    userIds?: string[],
-  ): Promise<RecalculationReport> {
-    const report = await this.getRecalculationReport(financialYear, today);
-    if (!report.canApply) {
-      throw new BadRequestException(
-        LEAVE_LEDGER_ERRORS.MONTH_NOT_FINISHED.replace(
-          '{month}',
-          this.monthLabel(report.coveredThrough),
-        ),
-      );
-    }
-
-    const wanted = userIds?.length ? new Set(userIds) : null;
-    for (const row of report.rows) {
-      if (row.applied || row.difference === 0) continue;
-      if (wanted && !wanted.has(row.userId)) continue;
-
-      await this.ledger.inTransaction(undefined, (em) =>
-        this.ledger.post(
-          {
-            userId: row.userId,
-            leaveCategory: row.leaveCategory,
-            financialYear,
-            entryType: LeaveLedgerEntryType.LEGACY_CORRECTION,
-            days: row.difference,
-            periodMonth: `${report.coveredThrough}-01`,
-            reason: LEAVE_LEDGER_REASONS.LEGACY_CORRECTION.replace(
-              '{month}',
-              this.monthLabel(report.coveredThrough),
-            )
-              .replace('{from}', row.oldCredit.toString())
-              .replace('{to}', row.correctCredit.toString()),
-            metadata: { months: row.months, excessUsed: row.excessUsed },
-            createdBy: appliedBy,
-          },
-          em,
-          { clampToZero: true },
-        ),
-      );
-    }
-
-    return this.getRecalculationReport(financialYear, today);
-  }
-
   // ==================== Ledger view ====================
 
   async getLedgerView(
@@ -642,7 +494,6 @@ export class LeaveAccrualService {
             .filter(
               (e) =>
                 e.periodMonth?.slice(0, 7) === m.month &&
-                // The legacy opening is one lump for many months: passbook only.
                 (SETTLED_ENTRY_TYPES.includes(e.entryType) ||
                   e.entryType === LeaveLedgerEntryType.HOLIDAY_WORK_CREDIT),
             )
@@ -667,29 +518,11 @@ export class LeaveAccrualService {
 
   // ==================== Building blocks ====================
 
-  /** First month the settlement measures: FY start, the joining month, or after the legacy opening. */
-  private async settlementWindowStart(
-    user: AccrualUser,
-    category: string,
-    financialYear: string,
-  ): Promise<string> {
-    let start = this.fyStartMonth(financialYear);
-    if (user.dateOfJoining && this.monthOf(user.dateOfJoining) > start) {
-      start = this.monthOf(user.dateOfJoining);
-    }
-    const cutover = legacyCutoverQuery(user.id, category, financialYear);
-    const [legacy] = await this.dataSource.query(cutover.query, cutover.params);
-    if (legacy) {
-      const covered = String(legacy.metadata?.coveredThrough ?? legacy.periodMonth ?? '').slice(
-        0,
-        7,
-      );
-      if (covered) {
-        const after = this.addMonths(covered, 1);
-        if (after > start) start = after;
-      }
-    }
-    return start;
+  /** First month the settlement measures: FY start, or the joining month. */
+  private settlementWindowStart(user: AccrualUser, financialYear: string): string {
+    const start = this.fyStartMonth(financialYear);
+    const joining = user.dateOfJoining ? this.monthOf(user.dateOfJoining) : null;
+    return joining && joining > start ? joining : start;
   }
 
   private async buildMonths(

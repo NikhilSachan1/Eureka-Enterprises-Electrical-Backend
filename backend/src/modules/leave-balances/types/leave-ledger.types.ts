@@ -17,12 +17,10 @@ export interface MonthAttendance {
 
 export interface LeaveLedgerMetadata {
   months?: MonthAttendance[];
-  coveredThrough?: string;
   target?: number;
   creditedBefore?: number;
   unrecovered?: number;
   convertedDates?: string[];
-  legacyNotes?: string | null;
   [key: string]: unknown;
 }
 
@@ -109,19 +107,6 @@ export interface ConvertibleLeaveDay {
   leaveApplicationId: string;
 }
 
-export interface RecalculationCandidateRow {
-  userId: string;
-  leaveCategory: string;
-  legacyOpening: number | null;
-  legacyCorrection: number | null;
-  corrections: number;
-  coveredThrough: string | null;
-  firstName: string;
-  lastName: string;
-  employeeId: string | null;
-  dateOfJoining: string | null;
-}
-
 export interface SettlementOutcome {
   posted: number;
   converted: number;
@@ -159,33 +144,6 @@ export interface MonthlySettlementResult {
   /** Employees who received leave, for notifications */
   credits: SettlementCredit[];
   errors: string[];
-}
-
-export interface RecalculationRow {
-  userId: string;
-  employeeName: string;
-  employeeCode: string | null;
-  dateOfJoining: string | null;
-  leaveCategory: string;
-  oldCredit: number;
-  correctCredit: number;
-  difference: number;
-  consumed: number;
-  availableNow: number;
-  /** what apply will post: difference, limited so the balance stays at 0 or above */
-  adjustment: number;
-  availableAfter: number;
-  /** leave already used beyond what attendance earned; HR decides these by hand */
-  excessUsed: number;
-  months: MonthAttendance[];
-  applied: boolean;
-}
-
-export interface RecalculationReport {
-  financialYear: string;
-  coveredThrough: string;
-  canApply: boolean;
-  rows: RecalculationRow[];
 }
 
 export interface LedgerEntryView {

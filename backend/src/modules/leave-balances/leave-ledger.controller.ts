@@ -1,14 +1,9 @@
-import { Body, Controller, Get, Post, Query, Request } from '@nestjs/common';
+import { Controller, Get, Query, Request } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequiredPermission } from '../auth/decorators/required-permission.decorator';
 import { DateTimeService } from 'src/utils/datetime';
 import { LeaveAccrualService } from './leave-accrual.service';
-import {
-  ApplyLeaveRecalculationDto,
-  GetLeaveLedgerDto,
-  GetLeaveRecalculationDto,
-  GetMyLeaveLedgerDto,
-} from './dto/leave-ledger.dto';
+import { GetLeaveLedgerDto, GetMyLeaveLedgerDto } from './dto/leave-ledger.dto';
 import { IST_TIMEZONE, LEAVE_LEDGER_PERMISSIONS } from './constants/leave-ledger.constants';
 import { LeaveLedgerRequest } from './types/leave-ledger.types';
 
@@ -43,31 +38,6 @@ export class LeaveLedgerController {
       query.financialYear ?? this.accrualService.financialYearOfMonth(today.slice(0, 7)),
       today,
       query.leaveCategory,
-    );
-  }
-
-  @Get('recalculation')
-  @RequiredPermission(LEAVE_LEDGER_PERMISSIONS.RECALCULATE)
-  @ApiOperation({
-    summary: 'Old leave credit measured against attendance (review only, changes nothing)',
-  })
-  getRecalculation(@Query() query: GetLeaveRecalculationDto) {
-    const today = this.today();
-    return this.accrualService.getRecalculationReport(
-      query.financialYear ?? this.accrualService.financialYearOfMonth(today.slice(0, 7)),
-      today,
-    );
-  }
-
-  @Post('recalculation/apply')
-  @RequiredPermission(LEAVE_LEDGER_PERMISSIONS.RECALCULATE)
-  @ApiOperation({ summary: 'Post the reviewed corrections to the ledger (once per employee)' })
-  applyRecalculation(@Request() req: LeaveLedgerRequest, @Body() body: ApplyLeaveRecalculationDto) {
-    return this.accrualService.applyRecalculation(
-      body.financialYear,
-      this.today(),
-      req.user.id,
-      body.userIds,
     );
   }
 

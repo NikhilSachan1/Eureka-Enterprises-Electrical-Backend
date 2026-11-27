@@ -67,8 +67,7 @@ export const syncLeaveBalanceFromLedgerQuery = (balanceId: string) => ({
 export const applicationForReversalQuery = {
   query: `
     SELECT id, "userId", "leaveCategory", "createdAt",
-           to_char("fromDate", 'YYYY-MM-DD') AS "fromDate",
-           ("toDate"::date - "fromDate"::date + 1) AS "spanDays"
+           to_char("fromDate", 'YYYY-MM-DD') AS "fromDate"
       FROM leave_applications
      WHERE id = $1
   `,
@@ -82,23 +81,6 @@ export const applicationNetDaysQuery = (leaveApplicationId: string) => ({
      WHERE "leaveApplicationId" = $1 AND "deletedAt" IS NULL
   `,
   params: [leaveApplicationId],
-});
-
-/** When the legacy opening was written for this year (applications older than it were debited by the old system). */
-export const legacyCutoverQuery = (
-  userId: string,
-  leaveCategory: string,
-  financialYear: string,
-) => ({
-  query: `
-    SELECT "createdAt", "periodMonth"::text AS "periodMonth", metadata
-      FROM leave_ledger_entries
-     WHERE "userId" = $1 AND "leaveCategory" = $2 AND "financialYear" = $3
-       AND "entryType" = '${LeaveLedgerEntryType.LEGACY_OPENING}' AND "deletedAt" IS NULL
-     ORDER BY "createdAt" ASC
-     LIMIT 1
-  `,
-  params: [userId, leaveCategory, financialYear],
 });
 
 /** Sum of the given entry types, optionally only those settling a month up to `throughMonth`. */
@@ -167,7 +149,7 @@ export const monthlyAttendanceCountsQuery = (
 });
 
 /**
- * Paid leave days in a range that the ledger debited (not legacy, not already converted),
+ * Paid leave days in a range that the ledger still holds as taken (not already converted),
  * latest first: the ones settlement may turn into LWP.
  */
 export const convertibleLeaveDaysQuery = (
@@ -219,40 +201,6 @@ export const ledgerEntriesQuery = (
      WHERE e."userId" = $1 AND e."leaveCategory" = $2 AND e."financialYear" = $3
        AND e."deletedAt" IS NULL
      ORDER BY e."createdAt" ASC, e.id ASC
-  `,
-  params: [userId, leaveCategory, financialYear],
-});
-
-export const recalculationCandidatesQuery = (financialYear: string) => ({
-  query: `
-    SELECT e."userId", e."leaveCategory",
-           SUM(e.days) FILTER (WHERE e."entryType" = '${LeaveLedgerEntryType.LEGACY_OPENING}')::float AS "legacyOpening",
-           SUM(e.days) FILTER (WHERE e."entryType" = '${LeaveLedgerEntryType.LEGACY_CORRECTION}')::float AS "legacyCorrection",
-           COUNT(*) FILTER (WHERE e."entryType" = '${LeaveLedgerEntryType.LEGACY_CORRECTION}')::int AS "corrections",
-           MAX(e."periodMonth") FILTER (WHERE e."entryType" = '${LeaveLedgerEntryType.LEGACY_OPENING}')::text AS "coveredThrough",
-           u."firstName", u."lastName", u."employeeId",
-           to_char(u."dateOfJoining", 'YYYY-MM-DD') AS "dateOfJoining"
-      FROM leave_ledger_entries e
-      JOIN users u ON u.id = e."userId"
-     WHERE e."financialYear" = $1 AND e."deletedAt" IS NULL
-       AND e."entryType" IN ('${LeaveLedgerEntryType.LEGACY_OPENING}', '${LeaveLedgerEntryType.LEGACY_CORRECTION}')
-     GROUP BY e."userId", e."leaveCategory", u."firstName", u."lastName", u."employeeId", u."dateOfJoining"
-     ORDER BY u."firstName", u."lastName"
-  `,
-  params: [financialYear],
-});
-
-export const balanceTotalsQuery = (
-  userId: string,
-  leaveCategory: string,
-  financialYear: string,
-) => ({
-  query: `
-    SELECT "totalAllocated"::float AS allocated, consumed::float AS consumed
-      FROM leave_balances
-     WHERE "userId" = $1 AND "leaveCategory" = $2 AND "financialYear" = $3 AND "deletedAt" IS NULL
-     ORDER BY "totalAllocated"::numeric DESC
-     LIMIT 1
   `,
   params: [userId, leaveCategory, financialYear],
 });

@@ -24,7 +24,6 @@ import {
   applicationForReversalQuery,
   applicationNetDaysQuery,
   createEmptyLeaveBalanceQuery,
-  legacyCutoverQuery,
   lockLeaveBalanceQuery,
   syncLeaveBalanceFromLedgerQuery,
 } from './queries/leave-ledger.queries';
@@ -155,8 +154,7 @@ export class LeaveLedgerService {
 
   /**
    * Gives one day of a leave application back to the balance, never more days than it took.
-   * Days an application took before the ledger existed (it predates the legacy opening) count
-   * as taken. Returns false when there was nothing left to give back.
+   * Returns false when there was nothing left to give back.
    */
   async reverseLeaveDay({
     leaveApplicationId,
@@ -178,20 +176,8 @@ export class LeaveLedgerService {
     const net = applicationNetDaysQuery(leaveApplicationId);
     const [{ net: ledgerNet }] = await entityManager.query(net.query, net.params);
 
-    const cutover = legacyCutoverQuery(
-      application.userId,
-      application.leaveCategory,
-      financialYear,
-    );
-    const [legacy] = await entityManager.query(cutover.query, cutover.params);
-    const legacyDays =
-      legacy && new Date(application.createdAt) < new Date(legacy.createdAt)
-        ? Number(application.spanDays) || 1
-        : 0;
-
-    // Debits are -1 and give-backs +1, so what is still taken = legacy days - ledger net.
-    const outstanding = legacyDays - Number(ledgerNet);
-    if (outstanding <= 0) {
+    // Debits are -1 and give-backs +1: a negative net is days still taken.
+    if (Number(ledgerNet) >= 0) {
       this.logger.log(`Leave ${leaveApplicationId} holds no debit — nothing to give back`);
       return false;
     }
