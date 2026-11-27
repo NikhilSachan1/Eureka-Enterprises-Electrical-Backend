@@ -66,6 +66,8 @@ import { SalaryStructureService } from '../salary-structures/salary-structure.se
 import { ExpenseTrackerService } from '../expense-tracker/expense-tracker.service';
 import { LeaveApplicationsService } from '../leave-applications/leave-applications.service';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
+import { LeaveLedgerService } from '../leave-balances/leave-ledger.service';
+import { LEAVE_REVERSAL_CAUSES } from '../leave-balances/constants/leave-ledger.constants';
 import {
   LeaveApplicationType,
   ApprovalStatus as LeaveApprovalStatus,
@@ -113,6 +115,8 @@ export class AttendanceService {
     private readonly leaveApplicationsService: LeaveApplicationsService,
     @Inject(forwardRef(() => LeaveBalancesService))
     private readonly leaveBalancesService: LeaveBalancesService,
+    @Inject(forwardRef(() => LeaveLedgerService))
+    private readonly leaveLedgerService: LeaveLedgerService,
     private readonly auditLogService: AuditLogService,
     private readonly driverAssignmentService: DriverAssignmentService,
     private readonly notificationService: NotificationService,
@@ -3736,18 +3740,14 @@ export class AttendanceService {
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
 
     if (leaveApplication) {
-      const financialYear = this.utilityService.getFinancialYear(attendanceDate);
-
       // Credit back 1 day to leave balance (decrement consumed)
-      await this.leaveBalancesService.update(
-        {
-          userId,
-          leaveCategory: leaveApplication.leaveCategory,
-          financialYear,
-        },
-        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+      await this.leaveLedgerService.reverseLeaveDay({
+        leaveApplicationId: leaveApplication.id,
+        cause: LEAVE_REVERSAL_CAUSES.REGULARIZED_PRESENT,
+        createdBy: actorId,
         entityManager,
-      );
+        leaveDate: this.dateTimeService.toDateString(attendanceDate),
+      });
 
       this.logger.log(
         `Credited back 1 day of ${
@@ -3849,19 +3849,16 @@ export class AttendanceService {
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
 
     if (leaveApplication) {
-      const financialYear = this.utilityService.getFinancialYear(attendanceDate);
       const dateStr = this.dateTimeService.toDateString(attendanceDate);
 
       // Credit back 1 day to leave balance (decrement consumed)
-      await this.leaveBalancesService.update(
-        {
-          userId,
-          leaveCategory: leaveApplication.leaveCategory,
-          financialYear,
-        },
-        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+      await this.leaveLedgerService.reverseLeaveDay({
+        leaveApplicationId: leaveApplication.id,
+        cause: LEAVE_REVERSAL_CAUSES.REGULARIZED_ABSENT,
+        createdBy: actorId,
         entityManager,
-      );
+        leaveDate: dateStr,
+      });
 
       this.logger.log(
         `Credited back 1 day of ${leaveApplication.leaveCategory} leave for user ${userId} on ${dateStr}`,
@@ -3957,19 +3954,16 @@ export class AttendanceService {
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
 
     if (leaveApplication) {
-      const financialYear = this.utilityService.getFinancialYear(attendanceDate);
       const dateStr = this.dateTimeService.toDateString(attendanceDate);
 
       // Credit back 1 day to leave balance (decrement consumed)
-      await this.leaveBalancesService.update(
-        {
-          userId,
-          leaveCategory: leaveApplication.leaveCategory,
-          financialYear,
-        },
-        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+      await this.leaveLedgerService.reverseLeaveDay({
+        leaveApplicationId: leaveApplication.id,
+        cause: LEAVE_REVERSAL_CAUSES.REGULARIZED_HOLIDAY,
+        createdBy: actorId,
         entityManager,
-      );
+        leaveDate: dateStr,
+      });
 
       this.logger.log(
         `Credited back 1 day of ${leaveApplication.leaveCategory} leave for user ${userId} on ${dateStr}`,
@@ -4116,21 +4110,8 @@ export class AttendanceService {
         );
       }
 
-      // Debit 1 day from leave balance (increment consumed)
-      await this.leaveBalancesService.update(
-        {
-          userId,
-          leaveCategory,
-          financialYear,
-        },
-        { consumed: () => '(consumed::int + 1)::varchar' } as any,
-        entityManager,
-      );
-
-      this.logger.log(`Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr}`);
-
-      // Create a forced leave application record
-      await this.leaveApplicationsService.create(
+      // Create a forced leave application record, then debit its day in the ledger
+      const forcedApplication = await this.leaveApplicationsService.create(
         {
           userId,
           leaveConfigId: leaveBalance.leaveConfigId,
@@ -4152,6 +4133,20 @@ export class AttendanceService {
         },
         entityManager,
       );
+
+      await this.leaveLedgerService.debitLeaveDay(
+        {
+          userId,
+          leaveCategory,
+          financialYear,
+          leaveApplicationId: forcedApplication.id,
+          leaveDate: dateStr,
+          createdBy: actorId,
+        },
+        entityManager,
+      );
+
+      this.logger.log(`Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr}`);
     }
 
     // Deactivate old attendance record
@@ -4196,19 +4191,16 @@ export class AttendanceService {
     const leaveApplication = await this.findLeaveApplicationForDate(userId, attendanceDate);
     if (!leaveApplication) return;
 
-    const financialYear = this.utilityService.getFinancialYear(attendanceDate);
     const dateStr = this.dateTimeService.toDateString(attendanceDate);
 
     // Credit back 1 day to leave balance
-    await this.leaveBalancesService.update(
-      {
-        userId,
-        leaveCategory: leaveApplication.leaveCategory,
-        financialYear,
-      },
-      { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+    await this.leaveLedgerService.reverseLeaveDay({
+      leaveApplicationId: leaveApplication.id,
+      cause: LEAVE_REVERSAL_CAUSES.FORCE_ATTENDANCE,
+      createdBy: cancelledBy,
       entityManager,
-    );
+      leaveDate: dateStr,
+    });
 
     this.logger.log(
       `Credited back 1 day of ${leaveApplication.leaveCategory} leave for user ${userId} on ${dateStr} (force attendance applied)`,
@@ -4300,19 +4292,8 @@ export class AttendanceService {
         );
       }
 
-      // Debit 1 day from leave balance
-      await this.leaveBalancesService.update(
-        { userId, leaveCategory, financialYear },
-        { consumed: () => '(consumed::int + 1)::varchar' } as any,
-        entityManager,
-      );
-
-      this.logger.log(
-        `Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr} (force attendance)`,
-      );
-
-      // Create a forced leave application record
-      await this.leaveApplicationsService.create(
+      // Create a forced leave application record, then debit its day in the ledger
+      const forcedApplication = await this.leaveApplicationsService.create(
         {
           userId,
           leaveConfigId: leaveBalance.leaveConfigId,
@@ -4330,6 +4311,22 @@ export class AttendanceService {
           createdBy,
         },
         entityManager,
+      );
+
+      await this.leaveLedgerService.debitLeaveDay(
+        {
+          userId,
+          leaveCategory,
+          financialYear,
+          leaveApplicationId: forcedApplication.id,
+          leaveDate: dateStr,
+          createdBy,
+        },
+        entityManager,
+      );
+
+      this.logger.log(
+        `Debited 1 day of ${leaveCategory} leave for user ${userId} on ${dateStr} (force attendance)`,
       );
     } else {
       const leaveConfigId = await this.getLeaveCalendarLeaveConfigId();
@@ -4631,15 +4628,13 @@ export class AttendanceService {
     }
 
     if (isPaidLeave) {
-      await this.leaveBalancesService.update(
-        {
-          userId: attendance.userId,
-          leaveCategory: application.leaveCategory,
-          financialYear: this.utilityService.getFinancialYear(calendarDate),
-        },
-        { consumed: () => 'GREATEST(0, consumed::int - 1)::varchar' } as any,
+      await this.leaveLedgerService.reverseLeaveDay({
+        leaveApplicationId: application.id,
+        cause: LEAVE_REVERSAL_CAUSES.ATTENDANCE_DELETED,
+        createdBy: actionBy,
         entityManager,
-      );
+        leaveDate: dateStr,
+      });
     }
 
     // Only a single-day application belongs to this one attendance row; a multi-day leave covers

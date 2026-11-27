@@ -37,6 +37,8 @@ import {
 import { ConfigurationService } from '../configurations/configuration.service';
 import { ConfigSettingService } from '../config-settings/config-setting.service';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
+import { LeaveLedgerService } from '../leave-balances/leave-ledger.service';
+import { LEAVE_REVERSAL_CAUSES } from '../leave-balances/constants/leave-ledger.constants';
 import { InjectDataSource } from '@nestjs/typeorm';
 import {
   ForceLeaveApplicationDto,
@@ -84,6 +86,7 @@ export class LeaveApplicationsService {
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
     private readonly leaveBalanceService: LeaveBalancesService,
+    private readonly leaveLedgerService: LeaveLedgerService,
     @Inject(forwardRef(() => AttendanceService))
     private readonly attendanceService: AttendanceService,
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -489,12 +492,7 @@ export class LeaveApplicationsService {
         numberOfDays,
         timezone,
       );
-      const leaveBalance = await this.validateLeaveBalance(
-        userId,
-        leaveCategory,
-        financialYear,
-        numberOfDays,
-      );
+      await this.validateLeaveBalance(userId, leaveCategory, financialYear, numberOfDays);
 
       // Check for existing attendance records before starting transaction
       for (const date of dateRange) {
@@ -551,26 +549,22 @@ export class LeaveApplicationsService {
           return this.create(leaveApplicationData, entityManager);
         });
 
-        // Wait for all leave applications to be created
-        await Promise.all(leaveApplicationPromises);
+        const createdApplications = await Promise.all(leaveApplicationPromises);
 
-        // Update leave balance
-        const updateLeaveBalanceData = {
-          identifierConditions: {
-            userId,
-            leaveCategory,
-            financialYear,
-          },
-          updatedData: {
-            consumed: (parseFloat(leaveBalance.consumed) + numberOfDays).toString(),
-          },
-        };
-
-        await this.leaveBalanceService.update(
-          updateLeaveBalanceData.identifierConditions,
-          updateLeaveBalanceData.updatedData,
-          entityManager,
-        );
+        // One ledger debit per day; refused if the balance would go below 0.
+        for (const [index, application] of createdApplications.entries()) {
+          await this.leaveLedgerService.debitLeaveDay(
+            {
+              userId,
+              leaveCategory,
+              financialYear,
+              leaveApplicationId: application.id,
+              leaveDate: dateRange[index],
+              createdBy,
+            },
+            entityManager,
+          );
+        }
       });
 
       // No notification for applying your own leave (notification requirements v7).
@@ -675,12 +669,7 @@ export class LeaveApplicationsService {
         });
       }
 
-      const leaveBalance = await this.validateLeaveBalance(
-        userId,
-        leaveCategory,
-        financialYear,
-        applicableDates.length,
-      );
+      await this.validateLeaveBalance(userId, leaveCategory, financialYear, applicableDates.length);
 
       await this.dataSource.transaction(async (entityManager) => {
         // Every day of this submission belongs to one application.
@@ -707,24 +696,21 @@ export class LeaveApplicationsService {
           return this.create(leaveApplicationData, entityManager);
         });
 
-        await Promise.all(leaveApplicationPromises);
+        const createdApplications = await Promise.all(leaveApplicationPromises);
 
-        const updateLeaveBalanceData = {
-          identifierConditions: {
-            userId,
-            leaveCategory,
-            financialYear,
-          },
-          updatedData: {
-            consumed: (parseFloat(leaveBalance.consumed) + applicableDates.length).toString(),
-          },
-        };
-
-        await this.leaveBalanceService.update(
-          updateLeaveBalanceData.identifierConditions,
-          updateLeaveBalanceData.updatedData,
-          entityManager,
-        );
+        for (const [index, application] of createdApplications.entries()) {
+          await this.leaveLedgerService.debitLeaveDay(
+            {
+              userId,
+              leaveCategory,
+              financialYear,
+              leaveApplicationId: application.id,
+              leaveDate: applicableDates[index],
+              createdBy,
+            },
+            entityManager,
+          );
+        }
 
         // Create attendance records for applicable leave dates (skip future dates — cron handles them)
         const lwpCategories = ['LWP', 'LEAVE_WITHOUT_PAY', 'UNPAID', 'UNPAID_LEAVE'];
@@ -1300,7 +1286,6 @@ export class LeaveApplicationsService {
       fromDate,
       id: leaveApplicationId,
       userId,
-      leaveCategory,
     }: LeaveApplicationsEntity,
     approvalStatus: ApprovalStatus,
     attendanceStatus: string | null,
@@ -1446,15 +1431,12 @@ export class LeaveApplicationsService {
                     },
                     entityManager,
                   );
-                  await this.leaveBalanceService.update(
-                    {
-                      userId,
-                      leaveCategory,
-                      financialYear: this.utilityService.getFinancialYear(fromDate),
-                    },
-                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
+                  await this.leaveLedgerService.reverseLeaveDay({
+                    leaveApplicationId,
+                    cause: LEAVE_REVERSAL_CAUSES.REJECTED,
+                    createdBy: approvalBy,
                     entityManager,
-                  );
+                  });
                 } else {
                   await this.leaveApplicationsRepository.update(
                     { id: leaveApplicationId },
@@ -1467,15 +1449,12 @@ export class LeaveApplicationsService {
                     },
                     entityManager,
                   );
-                  await this.leaveBalanceService.update(
-                    {
-                      userId,
-                      leaveCategory,
-                      financialYear: this.utilityService.getFinancialYear(fromDate),
-                    },
-                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
+                  await this.leaveLedgerService.reverseLeaveDay({
+                    leaveApplicationId,
+                    cause: LEAVE_REVERSAL_CAUSES.REJECTED,
+                    createdBy: approvalBy,
                     entityManager,
-                  );
+                  });
                 }
               });
               break;
@@ -1497,15 +1476,12 @@ export class LeaveApplicationsService {
                   },
                   entityManager,
                 );
-                await this.leaveBalanceService.update(
-                  {
-                    userId,
-                    leaveCategory,
-                    financialYear: this.utilityService.getFinancialYear(new Date(fromDate)),
-                  },
-                  { consumed: () => '(consumed::int - 1)::varchar' } as any,
+                await this.leaveLedgerService.reverseLeaveDay({
+                  leaveApplicationId,
+                  cause: LEAVE_REVERSAL_CAUSES.CANCELLED,
+                  createdBy: approvalBy,
                   entityManager,
-                );
+                });
               });
               break;
           }
@@ -1563,15 +1539,12 @@ export class LeaveApplicationsService {
                     },
                     entityManager,
                   );
-                  await this.leaveBalanceService.update(
-                    {
-                      userId,
-                      leaveCategory,
-                      financialYear: this.utilityService.getFinancialYear(fromDate),
-                    },
-                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
+                  await this.leaveLedgerService.reverseLeaveDay({
+                    leaveApplicationId,
+                    cause: LEAVE_REVERSAL_CAUSES.REJECTED,
+                    createdBy: approvalBy,
                     entityManager,
-                  );
+                  });
                 } else {
                   await this.leaveApplicationsRepository.update(
                     { id: leaveApplicationId },
@@ -1584,15 +1557,12 @@ export class LeaveApplicationsService {
                     },
                     entityManager,
                   );
-                  await this.leaveBalanceService.update(
-                    {
-                      userId,
-                      leaveCategory,
-                      financialYear: this.utilityService.getFinancialYear(fromDate),
-                    },
-                    { consumed: () => '(consumed::int - 1)::varchar' } as any,
+                  await this.leaveLedgerService.reverseLeaveDay({
+                    leaveApplicationId,
+                    cause: LEAVE_REVERSAL_CAUSES.REJECTED,
+                    createdBy: approvalBy,
                     entityManager,
-                  );
+                  });
                 }
               });
               break;
@@ -1614,15 +1584,12 @@ export class LeaveApplicationsService {
                   },
                   entityManager,
                 );
-                await this.leaveBalanceService.update(
-                  {
-                    userId,
-                    leaveCategory,
-                    financialYear: this.utilityService.getFinancialYear(new Date(fromDate)),
-                  },
-                  { consumed: () => '(consumed::int - 1)::varchar' } as any,
+                await this.leaveLedgerService.reverseLeaveDay({
+                  leaveApplicationId,
+                  cause: LEAVE_REVERSAL_CAUSES.CANCELLED,
+                  createdBy: approvalBy,
                   entityManager,
-                );
+                });
               });
               break;
           }

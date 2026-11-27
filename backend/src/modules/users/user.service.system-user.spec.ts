@@ -15,7 +15,7 @@ jest.mock('../common/file-upload/files.service', () => ({ FilesService: class {}
 jest.mock('../salary-structures/salary-structure.service', () => ({
   SalaryStructureService: class {},
 }));
-jest.mock('../leave-balances/leave-credit.service', () => ({ LeaveCreditService: class {} }));
+jest.mock('../leave-balances/leave-accrual.service', () => ({ LeaveAccrualService: class {} }));
 
 const ADMIN = {
   id: 'admin-id',
@@ -44,7 +44,7 @@ describe('UserService system users', () => {
   let userRepository: any;
   let userRoleService: any;
   let salaryStructureService: any;
-  let leaveCreditService: any;
+  let leaveAccrualService: any;
   let emailService: any;
 
   beforeEach(() => {
@@ -57,7 +57,7 @@ describe('UserService system users', () => {
     };
     userRoleService = { create: jest.fn(), findAll: jest.fn().mockResolvedValue([]) };
     salaryStructureService = { create: jest.fn() };
-    leaveCreditService = { creditLeavesForNewEmployee: jest.fn() };
+    leaveAccrualService = { grantJoiningAdvance: jest.fn() };
     emailService = { sendMail: jest.fn().mockResolvedValue(undefined) };
 
     const utilityService = {
@@ -83,7 +83,8 @@ describe('UserService system users', () => {
       {} as any,
       {} as any,
       salaryStructureService,
-      leaveCreditService,
+      leaveAccrualService,
+      {} as any,
       dataSource as any,
       {} as any,
       emailService,
@@ -109,7 +110,7 @@ describe('UserService system users', () => {
         expect.anything(),
       );
       expect(salaryStructureService.create).not.toHaveBeenCalled();
-      expect(leaveCreditService.creditLeavesForNewEmployee).not.toHaveBeenCalled();
+      expect(leaveAccrualService.grantJoiningAdvance).not.toHaveBeenCalled();
       expect(emailService.sendMail).toHaveBeenCalledTimes(1);
       const { emailData } = emailService.sendMail.mock.calls[0][0];
       expect(emailData.designation).toBeUndefined();
@@ -237,15 +238,12 @@ describe('UserService system users', () => {
       ['dateOfBirth'],
       ['dateOfJoining'],
       ['designation'],
-    ])(
-      'rejects %s on create and update',
-      async (field) => {
-        const extra = { [field]: 'x' };
+    ])('rejects %s on create and update', async (field) => {
+      const extra = { [field]: 'x' };
 
-        await expect(errorsOn(CreateSystemUserDto, { ...dto, ...extra })).resolves.toEqual([field]);
-        await expect(errorsOn(UpdateSystemUserDto, extra)).resolves.toEqual([field]);
-      },
-    );
+      await expect(errorsOn(CreateSystemUserDto, { ...dto, ...extra })).resolves.toEqual([field]);
+      await expect(errorsOn(UpdateSystemUserDto, extra)).resolves.toEqual([field]);
+    });
 
     it('update takes a partial body but not roles or the SYSTEM status', async () => {
       await expect(errorsOn(UpdateSystemUserDto, { firstName: 'New' })).resolves.toEqual([]);
