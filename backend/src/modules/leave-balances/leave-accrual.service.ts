@@ -14,6 +14,7 @@ import {
   ACCRUAL_CONFIG_CACHE_MS,
   DEFAULT_WORKING_DAYS_SETTINGS,
   FY_START_MONTH,
+  LEAVE_DAY_ENTRY_TYPES,
   LEAVE_LEDGER_ERRORS,
   LEAVE_LEDGER_REASONS,
   LWP_ATTENDANCE_COMMENT,
@@ -29,6 +30,7 @@ import {
   AttendanceCounts,
   CachedValue,
   ConvertibleLeaveDay,
+  LedgerEntryQueryRow,
   LedgerEntryRow,
   LedgerRecordView,
   LeaveLedgerView,
@@ -464,9 +466,8 @@ export class LeaveAccrualService {
     const quota = settings?.categories.find((c) => c.category === category)?.annualQuota ?? 0;
 
     const entriesQuery = ledgerEntriesQuery(userId, category, financialYear);
-    const rows: LedgerEntryRow[] = await this.dataSource.query(
-      entriesQuery.query,
-      entriesQuery.params,
+    const rows = this.groupLeaveDays(
+      await this.dataSource.query(entriesQuery.query, entriesQuery.params),
     );
 
     // Attendance of every month so far, to say how each month's credit was earned.
@@ -508,7 +509,10 @@ export class LeaveAccrualService {
         periodMonth: `${m.month}-01`,
         reason: null,
         leaveApplicationId: null,
+        applicationGroupId: null,
         leaveDate: null,
+        leaveDateTo: null,
+        dayCount: 0,
         createdBy: null,
       }));
 
@@ -535,6 +539,8 @@ export class LeaveAccrualService {
         balance,
         periodMonth: row.periodMonth,
         leaveDate: row.leaveDate,
+        leaveDateTo: row.leaveDateTo,
+        dayCount: row.dayCount,
         workingDays: isMonthCredit ? month?.workingDays ?? null : null,
         paidDays: isMonthCredit ? month?.paidDays ?? null : null,
         reason: row.reason,
@@ -557,6 +563,50 @@ export class LeaveAccrualService {
       records: newestFirst.slice((page - 1) * pageSize, page * pageSize),
       totalRecords: newestFirst.length,
     };
+  }
+
+  /**
+   * One statement line per leave application instead of one per day: the days applied together
+   * (same application group) become "16 May – 25 May, 10 days". Give-backs and LWP conversions are
+   * grouped the same way when they happened on the same day.
+   */
+  private groupLeaveDays(rows: LedgerEntryQueryRow[]): LedgerEntryRow[] {
+    const grouped = new Map<string, LedgerEntryRow>();
+    const result: LedgerEntryRow[] = [];
+
+    for (const row of rows) {
+      const isLeaveDay = LEAVE_DAY_ENTRY_TYPES.includes(row.entryType);
+      const sameDayOnly = row.entryType !== LeaveLedgerEntryType.LEAVE_DEBIT;
+      const key =
+        isLeaveDay && row.applicationGroupId
+          ? `${row.entryType}|${row.applicationGroupId}|${
+              sameDayOnly ? row.createdAt.slice(0, 10) : ''
+            }`
+          : null;
+      const existing = key ? grouped.get(key) : undefined;
+
+      if (existing) {
+        existing.days = this.ledger.round(existing.days + row.days);
+        existing.dayCount += 1;
+        if (row.createdAt < existing.createdAt) existing.createdAt = row.createdAt;
+        if (row.leaveDate && (!existing.leaveDate || row.leaveDate < existing.leaveDate)) {
+          existing.leaveDate = row.leaveDate;
+        }
+        if (row.leaveDate && (!existing.leaveDateTo || row.leaveDate > existing.leaveDateTo)) {
+          existing.leaveDateTo = row.leaveDate;
+        }
+        continue;
+      }
+
+      const entry: LedgerEntryRow = {
+        ...row,
+        leaveDateTo: row.leaveDate,
+        dayCount: isLeaveDay ? 1 : 0,
+      };
+      if (key) grouped.set(key, entry);
+      result.push(entry);
+    }
+    return result;
   }
 
   // ==================== Building blocks ====================

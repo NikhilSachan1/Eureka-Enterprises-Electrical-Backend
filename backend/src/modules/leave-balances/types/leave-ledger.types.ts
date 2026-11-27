@@ -153,7 +153,7 @@ export interface LedgerUserRef {
 }
 
 /** A ledger row as read for the statement (createdAt as 'YYYY-MM-DDTHH:mm:ss'). */
-export interface LedgerEntryRow {
+export interface LedgerEntryQueryRow {
   id: string;
   createdAt: string;
   entryType: LeaveLedgerEntryType;
@@ -161,9 +161,19 @@ export interface LedgerEntryRow {
   periodMonth: string | null;
   reason: string | null;
   leaveApplicationId: string | null;
+  /** The days applied together share it. */
+  applicationGroupId: string | null;
   /** The leave day, for a leave debit / give-back / LWP row. */
   leaveDate: string | null;
   createdBy: LedgerUserRef | null;
+}
+
+/** A statement line before the balance: one application's days grouped into one line. */
+export interface LedgerEntryRow extends LedgerEntryQueryRow {
+  /** Last leave day of the group (same as leaveDate for one day). */
+  leaveDateTo: string | null;
+  /** Leave days in the line (0 for a credit). */
+  dayCount: number;
 }
 
 /** One statement line: a credit or a debit, with the balance after it. */
@@ -177,6 +187,8 @@ export interface LedgerRecordView {
   balance: number;
   periodMonth: string | null;
   leaveDate: string | null;
+  leaveDateTo: string | null;
+  dayCount: number;
   /** For a month's credit: that month's working days and days paid (present, half, leave). */
   workingDays: number | null;
   paidDays: number | null;

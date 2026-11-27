@@ -25,6 +25,13 @@ export const CONSUMPTION_ENTRY_TYPES: readonly LeaveLedgerEntryType[] = [
   LeaveLedgerEntryType.LWP_CONVERSION,
 ];
 
+/** Rows about individual leave days, grouped per application in the statement. */
+export const LEAVE_DAY_ENTRY_TYPES: readonly LeaveLedgerEntryType[] = [
+  LeaveLedgerEntryType.LEAVE_DEBIT,
+  LeaveLedgerEntryType.LEAVE_REVERSAL,
+  LeaveLedgerEntryType.LWP_CONVERSION,
+];
+
 /** Credits that the month-end settlement measures against attendance. */
 export const SETTLED_ENTRY_TYPES: readonly LeaveLedgerEntryType[] = [
   LeaveLedgerEntryType.ADVANCE_CREDIT,
