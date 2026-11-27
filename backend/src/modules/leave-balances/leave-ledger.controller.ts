@@ -17,6 +17,7 @@ export class LeaveLedgerController {
   ) {}
 
   @Get('ledger/me')
+  @RequiredPermission(LEAVE_LEDGER_PERMISSIONS.VIEW_ALL)
   @ApiOperation({ summary: 'My leave statement: every credit and debit with the balance after it' })
   getMyLedger(@Request() req: LeaveLedgerRequest, @Query() query: GetMyLeaveLedgerDto) {
     return this.view(req.user.id, query);

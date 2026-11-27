@@ -15,6 +15,7 @@ import {
   LeaveLedgerEntryType,
 } from './constants/leave-ledger.constants';
 import {
+  HolidayWorkCreditInput,
   LedgerEntryInput,
   LeaveDebitInput,
   LeaveReversalInput,
@@ -24,6 +25,7 @@ import {
   applicationForReversalQuery,
   applicationNetDaysQuery,
   createEmptyLeaveBalanceQuery,
+  holidayCreditForMonthQuery,
   lockLeaveBalanceQuery,
   syncLeaveBalanceFromLedgerQuery,
 } from './queries/leave-ledger.queries';
@@ -201,33 +203,42 @@ export class LeaveLedgerService {
     return true;
   }
 
+  /**
+   * Brings a month's holiday-work leave up to `days` (the month's total). What was already
+   * credited for the month counts, so a re-run posts nothing; it is never taken back here.
+   * Returns the days posted.
+   */
   async creditHolidayWork(
-    params: {
-      userId: string;
-      leaveCategory: string;
-      financialYear: string;
-      days: number;
-      holidayDates: string;
-      periodMonth: string;
-      createdBy: string;
-    },
+    params: HolidayWorkCreditInput,
     entityManager?: EntityManager,
-  ): Promise<void> {
-    await this.inTransaction(entityManager, (em) =>
-      this.post(
+  ): Promise<number> {
+    return this.inTransaction(entityManager, async (em) => {
+      await this.lockBalance(params.userId, params.leaveCategory, params.financialYear, em);
+      const already = holidayCreditForMonthQuery(
+        params.userId,
+        params.leaveCategory,
+        params.financialYear,
+        params.periodMonth,
+      );
+      const [{ total }] = await em.query(already.query, already.params);
+      const days = this.round(params.days - Number(total));
+      if (days <= 0) {
+        return 0;
+      }
+      await this.post(
         {
           userId: params.userId,
           leaveCategory: params.leaveCategory,
           financialYear: params.financialYear,
           entryType: LeaveLedgerEntryType.HOLIDAY_WORK_CREDIT,
-          days: params.days,
+          days,
           periodMonth: params.periodMonth,
           reason: LEAVE_LEDGER_REASONS.HOLIDAY_WORK.replace('{dates}', params.holidayDates),
-          createdBy: params.createdBy,
+          createdBy: params.createdBy ?? null,
         },
         em,
-      ),
-    );
+      );
+    });
   }
 
   isAllocation(entryType: LeaveLedgerEntryType): boolean {

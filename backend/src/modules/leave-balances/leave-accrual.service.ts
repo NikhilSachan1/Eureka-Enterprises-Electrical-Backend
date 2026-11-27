@@ -13,7 +13,9 @@ import { LeaveLedgerService } from './leave-ledger.service';
 import {
   ACCRUAL_CONFIG_CACHE_MS,
   DEFAULT_WORKING_DAYS_SETTINGS,
+  DEFAULT_HOLIDAY_WORK_CATEGORY,
   FY_START_MONTH,
+  HOLIDAY_WORK_LEAVE_TYPE,
   LEAVE_DAY_ENTRY_TYPES,
   LEAVE_LEDGER_ERRORS,
   LEAVE_LEDGER_REASONS,
@@ -30,6 +32,8 @@ import {
   AttendanceCounts,
   CachedValue,
   ConvertibleLeaveDay,
+  HolidayWorkedRow,
+  HolidayWorkSettings,
   LedgerEntryQueryRow,
   LedgerEntryRow,
   LedgerRecordView,
@@ -43,6 +47,7 @@ import {
 import {
   convertibleLeaveDaysQuery,
   getAccrualUsersQuery,
+  holidaysWorkedQuery,
   ledgerEntriesQuery,
   monthlyAttendanceCountsQuery,
   sumEntriesQuery,
@@ -78,8 +83,8 @@ export class LeaveAccrualService {
   // ==================== Monthly run ====================
 
   /**
-   * The 1st-of-month run: settles every month up to the one before `asOf`, then, on 1 April,
-   * credits the new year's April advance.
+   * The 1st-of-month run: credits leave for holidays worked, settles every month up to the one
+   * before `asOf`, then, on 1 April, credits the new year's April advance.
    */
   async runMonthly(asOf: string, onlyUserIds?: string[]): Promise<MonthlySettlementResult> {
     const throughMonth = this.addMonths(this.monthOf(asOf), -1);
@@ -93,6 +98,7 @@ export class LeaveAccrualService {
       convertedToLwp: 0,
       unrecovered: 0,
       advancesGiven: 0,
+      holidayCredited: 0,
       credits: [],
       errors: [],
     };
@@ -100,6 +106,13 @@ export class LeaveAccrualService {
     const users = await this.getAccrualUsers(onlyUserIds);
     const settings = await this.getSettings(financialYear);
     if (settings && users.length) {
+      // Holiday leave first: it adds to the balance the settlement then measures.
+      result.holidayCredited = await this.creditHolidaysWorked(
+        users,
+        financialYear,
+        throughMonth,
+        result.errors,
+      );
       const counts = await this.loadAttendance(
         users.map((u) => u.id),
         this.fyStartMonth(financialYear),
@@ -148,6 +161,72 @@ export class LeaveAccrualService {
     }
 
     return result;
+  }
+
+  /**
+   * Leave for working on a holiday (when holiday_work_compensation says LEAVE): for every
+   * finished month of the year, each holiday the employee was present on earns
+   * `leavePerHoliday`. A month already credited posts nothing, so re-runs are harmless.
+   */
+  private async creditHolidaysWorked(
+    users: AccrualUser[],
+    financialYear: string,
+    throughMonth: string,
+    errors: string[],
+  ): Promise<number> {
+    const settings = await this.getHolidayWorkSettings();
+    if (!settings) return 0;
+
+    const fyStart = this.fyStartMonth(financialYear);
+    const holidays = [...(await this.getHolidays(financialYear))]
+      .filter((date) => date.slice(0, 7) >= fyStart && date.slice(0, 7) <= throughMonth)
+      .sort();
+    if (!holidays.length) return 0;
+
+    const q = holidaysWorkedQuery(
+      users.map((u) => u.id),
+      holidays,
+    );
+    const worked: HolidayWorkedRow[] = await this.dataSource.query(q.query, q.params);
+
+    let credited = 0;
+    for (const user of users) {
+      const firstMonth = this.settlementWindowStart(user, financialYear);
+      const byMonth = new Map<string, string[]>();
+      for (const row of worked) {
+        if (row.userId !== user.id || row.date.slice(0, 7) < firstMonth) continue;
+        const month = row.date.slice(0, 7);
+        byMonth.set(month, [...(byMonth.get(month) ?? []), row.date]);
+      }
+
+      for (const [month, dates] of byMonth) {
+        try {
+          credited += await this.ledger.creditHolidayWork({
+            userId: user.id,
+            leaveCategory: settings.leaveCategory,
+            financialYear,
+            days: dates.length * settings.leavePerHoliday,
+            holidayDates: dates.map((d) => this.dayLabel(d)).join(', '),
+            periodMonth: `${month}-01`,
+          });
+        } catch (error) {
+          errors.push(`Holiday leave ${user.id} ${month}: ${error.message}`);
+        }
+      }
+    }
+    return credited;
+  }
+
+  private async getHolidayWorkSettings(): Promise<HolidayWorkSettings | null> {
+    const value = await this.getConfigValue(
+      CONFIGURATION_MODULES.PAYROLL,
+      CONFIGURATION_KEYS.HOLIDAY_WORK_COMPENSATION,
+    );
+    if (value?.type !== HOLIDAY_WORK_LEAVE_TYPE) return null;
+    return {
+      leaveCategory: value.leaveCategory || DEFAULT_HOLIDAY_WORK_CATEGORY,
+      leavePerHoliday: Number(value.leavePerHoliday) || 1,
+    };
   }
 
   private async settleUser(
@@ -837,6 +916,12 @@ export class LeaveAccrualService {
   private monthLabel(month: string): string {
     const [year, mon] = month.split('-').map(Number);
     return `${MONTH_SHORT_NAMES[mon - 1]} ${year}`;
+  }
+
+  /** "2026-11-08" → "8 Nov 2026" */
+  private dayLabel(date: string): string {
+    const [year, mon, day] = date.split('-').map(Number);
+    return `${day} ${MONTH_SHORT_NAMES[mon - 1]} ${year}`;
   }
 
   fyStartMonth(financialYear: string): string {

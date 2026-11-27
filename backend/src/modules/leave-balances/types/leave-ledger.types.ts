@@ -47,6 +47,30 @@ export interface LeaveDebitInput {
   createdBy: string;
 }
 
+export interface HolidayWorkCreditInput {
+  userId: string;
+  leaveCategory: string;
+  financialYear: string;
+  /** The month's total holiday-work leave (not the increment). */
+  days: number;
+  /** e.g. "8 Nov 2026" */
+  holidayDates: string;
+  /** YYYY-MM-01 */
+  periodMonth: string;
+  createdBy?: string | null;
+}
+
+/** holiday_work_compensation config (payroll module). */
+export interface HolidayWorkSettings {
+  leaveCategory: string;
+  leavePerHoliday: number;
+}
+
+export interface HolidayWorkedRow {
+  userId: string;
+  date: string;
+}
+
 export interface LeaveReversalInput {
   leaveApplicationId: string;
   cause: string;
@@ -141,6 +165,8 @@ export interface MonthlySettlementResult {
   convertedToLwp: number;
   unrecovered: number;
   advancesGiven: number;
+  /** Leave credited for holidays worked */
+  holidayCredited: number;
   /** Employees who received leave, for notifications */
   credits: SettlementCredit[];
   errors: string[];
