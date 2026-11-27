@@ -196,6 +196,7 @@ export const ledgerEntriesQuery = (
            e."entryType", e.days::float AS days,
            e."periodMonth"::text AS "periodMonth", e.reason, e."leaveApplicationId",
            to_char(la."fromDate", 'YYYY-MM-DD') AS "leaveDate",
+           la."applicationGroupId"::text AS "applicationGroupId",
            CASE WHEN cb.id IS NULL THEN NULL
                 ELSE json_build_object('id', cb.id, 'firstName', cb."firstName", 'lastName', cb."lastName")
            END AS "createdBy"
