@@ -141,6 +141,32 @@ export const PAYMENT_SHEET_DEFAULTS = {
   SETTLEMENT_DESCRIPTION: 'Payment sheet settlement',
 } as const;
 
+/**
+ * Direct payment — a reimbursement / bank transfer made from its own screen, outside a sheet.
+ * The payment is recorded as an already-COMPLETED one-line sheet so it still shows up in the
+ * payment sheet register. Title + stage-log remark carry the origin (no schema change).
+ */
+export const DIRECT_PAYMENT_SHEET = {
+  TITLE: {
+    [PaymentSourceType.EXPENSE]: 'Direct Expense Reimbursement',
+    [PaymentSourceType.FUEL_EXPENSE]: 'Direct Fuel Expense Reimbursement',
+    [PaymentSourceType.VENDOR_PAYMENT]: 'Direct Vendor Bank Transfer',
+  },
+  STAGE_REMARK: {
+    [PaymentSourceType.EXPENSE]: 'Auto-created from Expense Reimburse',
+    [PaymentSourceType.FUEL_EXPENSE]: 'Auto-created from Fuel Expense Reimburse',
+    [PaymentSourceType.VENDOR_PAYMENT]: 'Auto-created from Bank Transfer',
+  },
+  AUTO_APPROVED: 'Auto approved',
+  PAID_REMARK: 'Paid directly',
+  ROLE_LABEL: {
+    OPERATION_MANAGER: 'OM',
+    HR: 'HR',
+    ADMIN: 'Admin',
+    ACCOUNTS: 'Accounts',
+  },
+} as const;
+
 export const PAYMENT_SHEET_ERRORS = {
   NOT_FOUND: 'Payment sheet not found',
   ITEM_NOT_FOUND: 'Payment sheet item not found',
@@ -179,6 +205,9 @@ export const PAYMENT_SHEET_ERRORS = {
   ITEM_NOT_VERIFIED: 'This item is not verified for the current stage',
   EDIT_LOCKED_VERIFIED:
     'This item has been verified by a later stage and can no longer be edited or removed here',
+  DIRECT_SALE_NOT_SUPPORTED:
+    'Only a PURCHASE bank transfer (vendor payment) can be recorded on a payment sheet',
+  BOOK_PAYMENT_NOT_FOUND: 'Book payment not found',
 } as const;
 
 export const PAYMENT_SHEET_RESPONSES = {
@@ -202,6 +231,11 @@ export const PAYMENT_SHEET_RESPONSES = {
   ALL_VERIFIED: 'All items verified for the current stage',
   COMPLETED: 'Payment sheet completed',
   PDF_GENERATING: 'Payment sheet PDF is being generated; try again in a moment',
+  DIRECT_EXPENSE_PAID: 'Expense reimbursed and payment sheet created',
+  DIRECT_FUEL_PAID: 'Fuel expense reimbursed and payment sheet created',
+  DIRECT_TRANSFER_PAID: 'Bank transfer recorded and payment sheet created',
+  DIRECT_SHEET_FAILED:
+    'Payment recorded, but the payment sheet could not be created. Please inform the admin.',
 } as const;
 
 // Permission names (seeded via migration). One permission per endpoint/action.

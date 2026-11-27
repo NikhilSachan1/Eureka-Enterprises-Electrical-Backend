@@ -43,7 +43,19 @@ export const BOOK_PAYMENT_ERRORS = {
     'A GST release is booked from the GST summary, after the entry is verified in GSTR-2B.',
   GST_RELEASE_AMOUNT_NOT_EDITABLE:
     'The amount of a GST release is the full held GST of the invoice and cannot be edited.',
+  DROPDOWN_FILTER_REQUIRED: 'Pass invoiceId, or siteId with paymentType.',
 };
+
+/** Book Payment dropdown (bank transfer creation): label prefix per source and ineligibility reasons. */
+export const BOOK_PAYMENT_DROPDOWN = {
+  SOURCE_LABEL: {
+    INVOICE: 'Invoice',
+    ADVANCE: 'Advance',
+    GST_RELEASE: 'GST Release',
+  } as Record<string, string>,
+  REASON_HAS_TRANSFER: 'Bank transfer already created for this book payment (1:1 rule)',
+  REASON_NOT_APPROVED: 'Book payment is not approved yet',
+} as const;
 
 export const GST_HOLD_REMARK =
   'GST component withheld pending vendor compliance verification. The GST amount will be disbursed upon receipt of a compliance certificate or upon verification of return filing status on the GST portal.';

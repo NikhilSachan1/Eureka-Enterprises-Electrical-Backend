@@ -17,6 +17,7 @@ import {
   GetBookPaymentDto,
   GetVendorListQueryDto,
   VendorListResponseDto,
+  BookPaymentDropdownQueryDto,
 } from './dto';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { RequiredPermission } from 'src/modules/auth/decorators/required-permission.decorator';
@@ -65,13 +66,14 @@ export class BookPaymentController {
   @ApiOperation({
     summary: 'Book Payment dropdown for PURCHASE Bank Transfer creation',
     description:
-      'Returns all Book Payments for an Invoice with eligibility flags. ' +
-      'A Book Payment is eligible only when it does not yet have a Bank Transfer ' +
-      '(1 BookPayment = 1 BankTransfer, BRD §11 confirmed-2). ' +
-      'Ineligible items are included with eligible=false and a reason.',
+      'Pass invoiceId for that invoice’s Book Payments, or siteId + paymentType ' +
+      '(INVOICE | ADVANCE | GST) for the project’s Book Payments of that type — advance and ' +
+      'GST-release bookings are reached this way. A Book Payment is eligible only when it is ' +
+      'approved and has no Bank Transfer yet (1 BookPayment = 1 BankTransfer, BRD §11 ' +
+      'confirmed-2). Ineligible items are included with eligible=false and a reason.',
   })
-  getDropdown(@Query('invoiceId') invoiceId: string) {
-    return this.bookPaymentService.getDropdown(invoiceId);
+  getDropdown(@Query() query: BookPaymentDropdownQueryDto) {
+    return this.bookPaymentService.getDropdown(query);
   }
 
   @Get()
