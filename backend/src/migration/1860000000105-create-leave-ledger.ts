@@ -410,6 +410,17 @@ export class CreateLeaveLedger1860000000105 implements MigrationInterface {
     return `${match[3]}-${String(mon + 1).padStart(2, '0')}-${match[1].padStart(2, '0')}`;
   }
 
+  /** Hard-deletes permissions with every grant and per-user override of them. */
+  private async deletePermissions(queryRunner: QueryRunner, names: string[]): Promise<void> {
+    const ids = `(SELECT id FROM permissions WHERE name = ANY($1))`;
+    await queryRunner.query(`DELETE FROM role_permissions WHERE "permissionId" IN ${ids}`, [names]);
+    await queryRunner.query(
+      `DELETE FROM user_permission_overrides WHERE "permissionId" IN ${ids}`,
+      [names],
+    );
+    await queryRunner.query(`DELETE FROM permissions WHERE name = ANY($1)`, [names]);
+  }
+
   private async seedPermission(queryRunner: QueryRunner): Promise<void> {
     const { PERMISSION_MODULE, GRANT_LIKE, PERMISSION } = CreateLeaveLedger1860000000105;
     await queryRunner.query(
@@ -436,14 +447,7 @@ export class CreateLeaveLedger1860000000105 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // leave.credit.recalculate came from an earlier draft of this migration.
-    const names = [CreateLeaveLedger1860000000105.PERMISSION.name, 'leave.credit.recalculate'];
-    await queryRunner.query(
-      `DELETE FROM role_permissions
-        WHERE "permissionId" IN (SELECT id FROM permissions WHERE name = ANY($1))`,
-      [names],
-    );
-    await queryRunner.query(`DELETE FROM permissions WHERE name = ANY($1)`, [names]);
+    await this.deletePermissions(queryRunner, [CreateLeaveLedger1860000000105.PERMISSION.name]);
 
     const [{ backup }] = await queryRunner.query(
       `SELECT to_regclass('public.leave_balances_before_ledger') IS NOT NULL AS backup`,

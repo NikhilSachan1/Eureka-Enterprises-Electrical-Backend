@@ -191,12 +191,16 @@ export const ledgerEntriesQuery = (
   financialYear: string,
 ) => ({
   query: `
-    SELECT e.id, e."createdAt", e."entryType", e.days::float AS days,
+    SELECT e.id::text AS id,
+           to_char(e."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS') AS "createdAt",
+           e."entryType", e.days::float AS days,
            e."periodMonth"::text AS "periodMonth", e.reason, e."leaveApplicationId",
+           to_char(la."fromDate", 'YYYY-MM-DD') AS "leaveDate",
            CASE WHEN cb.id IS NULL THEN NULL
                 ELSE json_build_object('id', cb.id, 'firstName', cb."firstName", 'lastName', cb."lastName")
            END AS "createdBy"
       FROM leave_ledger_entries e
+      LEFT JOIN leave_applications la ON la.id = e."leaveApplicationId"
       LEFT JOIN users cb ON cb.id = e."createdBy"
      WHERE e."userId" = $1 AND e."leaveCategory" = $2 AND e."financialYear" = $3
        AND e."deletedAt" IS NULL

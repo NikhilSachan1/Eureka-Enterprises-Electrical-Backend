@@ -146,23 +146,49 @@ export interface MonthlySettlementResult {
   errors: string[];
 }
 
-export interface LedgerEntryView {
+export interface LedgerUserRef {
   id: string;
-  createdAt: Date;
+  firstName: string;
+  lastName: string;
+}
+
+/** A ledger row as read for the statement (createdAt as 'YYYY-MM-DDTHH:mm:ss'). */
+export interface LedgerEntryRow {
+  id: string;
+  createdAt: string;
   entryType: LeaveLedgerEntryType;
   days: number;
-  balanceAfter: number;
   periodMonth: string | null;
   reason: string | null;
   leaveApplicationId: string | null;
-  createdBy: { id: string; firstName: string; lastName: string } | null;
+  /** The leave day, for a leave debit / give-back / LWP row. */
+  leaveDate: string | null;
+  createdBy: LedgerUserRef | null;
+}
+
+/** One statement line: a credit or a debit, with the balance after it. */
+export interface LedgerRecordView {
+  id: string;
+  date: string;
+  entryType: LeaveLedgerEntryType;
+  credit: number;
+  debit: number;
+  days: number;
+  balance: number;
+  periodMonth: string | null;
+  leaveDate: string | null;
+  /** For a month's credit: that month's working days and days paid (present, half, leave). */
+  workingDays: number | null;
+  paidDays: number | null;
+  reason: string | null;
+  createdBy: LedgerUserRef | null;
 }
 
 export interface LeaveLedgerView {
   userId: string;
   leaveCategory: string;
   financialYear: string;
-  summary: { credited: number; used: number; available: number };
-  months: Array<MonthAttendance & { credited: number }>;
-  entries: LedgerEntryView[];
+  summary: { earned: number; used: number; available: number };
+  records: LedgerRecordView[];
+  totalRecords: number;
 }

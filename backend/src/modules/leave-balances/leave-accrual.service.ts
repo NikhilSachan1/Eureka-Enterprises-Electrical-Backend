@@ -29,7 +29,8 @@ import {
   AttendanceCounts,
   CachedValue,
   ConvertibleLeaveDay,
-  LedgerEntryView,
+  LedgerEntryRow,
+  LedgerRecordView,
   LeaveLedgerView,
   MonthAttendance,
   MonthCounts,
@@ -447,32 +448,28 @@ export class LeaveAccrualService {
 
   // ==================== Ledger view ====================
 
+  /**
+   * The employee's leave statement for one year, newest first, like a bank passbook: each row a
+   * credit or a debit with the balance after it. A finished month that earned nothing (e.g. absent
+   * all month) still gets a row with 0, so the reader sees why no leave came.
+   */
   async getLedgerView(
     userId: string,
     financialYear: string,
     today: string,
-    leaveCategory?: string,
+    options: { leaveCategory?: string; page?: number; pageSize?: number } = {},
   ): Promise<LeaveLedgerView> {
     const settings = await this.getSettings(financialYear);
-    const category = leaveCategory ?? settings?.categories[0]?.category ?? 'earned';
+    const category = options.leaveCategory ?? settings?.categories[0]?.category ?? 'earned';
     const quota = settings?.categories.find((c) => c.category === category)?.annualQuota ?? 0;
 
     const entriesQuery = ledgerEntriesQuery(userId, category, financialYear);
-    const rows: Omit<LedgerEntryView, 'balanceAfter'>[] = await this.dataSource.query(
+    const rows: LedgerEntryRow[] = await this.dataSource.query(
       entriesQuery.query,
       entriesQuery.params,
     );
 
-    let running = 0;
-    let credited = 0;
-    let used = 0;
-    const entries = rows.map((row) => {
-      running = this.ledger.round(running + row.days);
-      if (this.ledger.isAllocation(row.entryType)) credited += row.days;
-      else used -= row.days;
-      return { ...row, balanceAfter: running };
-    });
-
+    // Attendance of every month so far, to say how each month's credit was earned.
     const [user] = await this.dataSource.query(
       `SELECT to_char("dateOfJoining", 'YYYY-MM-DD') AS "dateOfJoining" FROM users WHERE id = $1`,
       [userId],
@@ -481,38 +478,84 @@ export class LeaveAccrualService {
     const fyEnd = this.addMonths(fyStart, 11);
     const doj: string | null = user?.dateOfJoining ?? null;
     const first = doj && this.monthOf(doj) > fyStart ? this.monthOf(doj) : fyStart;
-    const last = this.monthOf(today) < fyEnd ? this.monthOf(today) : fyEnd;
+    const currentMonth = this.monthOf(today);
+    const last = currentMonth < fyEnd ? currentMonth : fyEnd;
+    const months =
+      first <= last && quota > 0
+        ? await this.buildMonths(
+            userId,
+            first,
+            last,
+            quota,
+            await this.loadAttendance([userId], first, last),
+          )
+        : [];
+    const monthOf = new Map(months.map((m) => [m.month, m]));
 
-    let months: LeaveLedgerView['months'] = [];
-    if (first <= last && quota > 0) {
-      const counts = await this.loadAttendance([userId], first, last);
-      const built = await this.buildMonths(userId, first, last, quota, counts);
-      months = built.map((m) => ({
-        ...m,
-        credited: this.ledger.round(
-          entries
-            .filter(
-              (e) =>
-                e.periodMonth?.slice(0, 7) === m.month &&
-                (SETTLED_ENTRY_TYPES.includes(e.entryType) ||
-                  e.entryType === LeaveLedgerEntryType.HOLIDAY_WORK_CREDIT),
-            )
-            .reduce((sum, e) => sum + e.days, 0),
-        ),
+    // A finished month with no credit row earned nothing: show it as a 0 row.
+    const creditedMonths = new Set(
+      rows
+        .filter((r) => SETTLED_ENTRY_TYPES.includes(r.entryType) && r.periodMonth)
+        .map((r) => (r.periodMonth as string).slice(0, 7)),
+    );
+    const zeroMonths: LedgerEntryRow[] = months
+      .filter((m) => m.month < currentMonth && !creditedMonths.has(m.month))
+      .map((m) => ({
+        id: `month-${m.month}`,
+        createdAt: `${m.month}-01T00:05:00`,
+        entryType: LeaveLedgerEntryType.MONTHLY_ACCRUAL,
+        days: 0,
+        periodMonth: `${m.month}-01`,
+        reason: null,
+        leaveApplicationId: null,
+        leaveDate: null,
+        createdBy: null,
       }));
-    }
 
+    const ordered = [...rows, ...zeroMonths].sort((a, b) =>
+      a.createdAt === b.createdAt ? a.id.localeCompare(b.id) : a.createdAt < b.createdAt ? -1 : 1,
+    );
+
+    let balance = 0;
+    let earned = 0;
+    let used = 0;
+    const records: LedgerRecordView[] = ordered.map((row) => {
+      balance = this.ledger.round(balance + row.days);
+      if (this.ledger.isAllocation(row.entryType)) earned += row.days;
+      else used -= row.days;
+      const month = row.periodMonth ? monthOf.get(row.periodMonth.slice(0, 7)) : undefined;
+      const isMonthCredit = SETTLED_ENTRY_TYPES.includes(row.entryType);
+      return {
+        id: row.id,
+        date: row.createdAt,
+        entryType: row.entryType,
+        credit: row.days > 0 ? row.days : 0,
+        debit: row.days < 0 ? -row.days : 0,
+        days: row.days,
+        balance,
+        periodMonth: row.periodMonth,
+        leaveDate: row.leaveDate,
+        workingDays: isMonthCredit ? month?.workingDays ?? null : null,
+        paidDays: isMonthCredit ? month?.paidDays ?? null : null,
+        reason: row.reason,
+        createdBy: row.createdBy,
+      };
+    });
+
+    const newestFirst = records.reverse();
+    const pageSize = options.pageSize ?? newestFirst.length;
+    const page = options.page ?? 1;
     return {
       userId,
       leaveCategory: category,
       financialYear,
       summary: {
-        credited: this.ledger.round(credited),
+        earned: this.ledger.round(earned),
         used: this.ledger.round(used),
-        available: running,
+        available: balance,
       },
-      months: months.reverse(),
-      entries: entries.reverse(),
+      records: newestFirst.slice((page - 1) * pageSize, page * pageSize),
+      totalRecords: newestFirst.length,
     };
   }
 

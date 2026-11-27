@@ -17,31 +17,25 @@ export class LeaveLedgerController {
   ) {}
 
   @Get('ledger/me')
-  @ApiOperation({ summary: 'My leave ledger: every credit and debit, with month-wise earning' })
+  @ApiOperation({ summary: 'My leave statement: every credit and debit with the balance after it' })
   getMyLedger(@Request() req: LeaveLedgerRequest, @Query() query: GetMyLeaveLedgerDto) {
-    const today = this.today();
-    return this.accrualService.getLedgerView(
-      req.user.id,
-      query.financialYear ?? this.accrualService.financialYearOfMonth(today.slice(0, 7)),
-      today,
-      query.leaveCategory,
-    );
+    return this.view(req.user.id, query);
   }
 
   @Get('ledger')
   @RequiredPermission(LEAVE_LEDGER_PERMISSIONS.VIEW_ALL)
-  @ApiOperation({ summary: "Any employee's leave ledger" })
+  @ApiOperation({ summary: "Any employee's leave statement" })
   getLedger(@Query() query: GetLeaveLedgerDto) {
-    const today = this.today();
-    return this.accrualService.getLedgerView(
-      query.userId,
-      query.financialYear ?? this.accrualService.financialYearOfMonth(today.slice(0, 7)),
-      today,
-      query.leaveCategory,
-    );
+    return this.view(query.userId, query);
   }
 
-  private today(): string {
-    return this.dateTimeService.getTodayString(IST_TIMEZONE);
+  private view(userId: string, query: GetMyLeaveLedgerDto) {
+    const today = this.dateTimeService.getTodayString(IST_TIMEZONE);
+    return this.accrualService.getLedgerView(
+      userId,
+      query.financialYear ?? this.accrualService.financialYearOfMonth(today.slice(0, 7)),
+      today,
+      { leaveCategory: query.leaveCategory, page: query.page, pageSize: query.pageSize },
+    );
   }
 }

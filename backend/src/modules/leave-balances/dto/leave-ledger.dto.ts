@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUUID, Matches } from 'class-validator';
+import { BaseGetDto } from 'src/utils/base-dto/base-get-dto';
 
 const FINANCIAL_YEAR_PATTERN = /^\d{4}-\d{4}$/;
 const FINANCIAL_YEAR_MESSAGE = 'financialYear must look like 2026-2027';
 
-export class GetMyLeaveLedgerDto {
-  @ApiProperty({ example: '2026-2027', required: false })
+export class GetMyLeaveLedgerDto extends BaseGetDto {
+  @ApiProperty({ example: '2026-2027', required: false, description: 'Default: current FY' })
   @IsOptional()
   @Matches(FINANCIAL_YEAR_PATTERN, { message: FINANCIAL_YEAR_MESSAGE })
   financialYear?: string;
