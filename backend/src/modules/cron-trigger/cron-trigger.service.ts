@@ -619,16 +619,17 @@ export class CronTriggerService {
       case TriggerableCronJob.MONTHLY_LEAVE_ACCRUAL:
         return {
           ...baseResponse,
-          message: `Would credit monthly leave accruals for ${month || 'current month'}/${
-            year || 'current year'
-          }`,
+          message: `Would settle leave earned from attendance for every month before ${
+            month || 'the current month'
+          }/${year || 'current year'}`,
           targetMonth: month,
           targetYear: year,
-          description: 'Credits monthly quota of leaves to employees with monthly creditFrequency',
+          description:
+            'Credits leave earned from attendance (quota / 12 × paid days / working days); April also gets an advance',
           potentialActions: [
-            'Identify leave categories with monthly frequency',
-            'Calculate pro-rata credits based on FY month',
-            'Update leave balances',
+            'Count paid days per month (present, half day, paid leave)',
+            'Post the difference between earned and credited to the leave ledger',
+            'Turn paid leave into LWP only when the balance would go below 0',
           ],
         };
 

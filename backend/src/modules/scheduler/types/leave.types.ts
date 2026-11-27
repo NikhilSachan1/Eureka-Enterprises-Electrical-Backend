@@ -53,24 +53,6 @@ export interface AutoApproveLeavesResult {
 }
 
 /**
- * CRON 7
- * Monthly Leave Accrual
- * Runs on 1st of every month at 12:30 AM IST (after auto-approve cron)
- *
- * Credits monthly leaves based on config (e.g., 52 EL/year = 4-5 per month)
- * Uses cumulative calculation to ensure no decimals while totaling to annual quota
- *
- * Formula: toCredit = floor(annualQuota * currentMonth / 12) - alreadyCredited
- */
-export interface MonthlyLeaveAccrualResult {
-  usersProcessed: number;
-  categoriesProcessed: number;
-  leavesCredited: number;
-  skipped: number;
-  errors: string[];
-}
-
-/**
  * CRON 20
  * Leave Approval Reminder
  * Runs daily from 25th to end of month at 9:00 AM IST

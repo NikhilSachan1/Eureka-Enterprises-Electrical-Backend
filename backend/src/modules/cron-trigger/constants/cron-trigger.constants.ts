@@ -152,7 +152,8 @@ export const CRON_JOB_DESCRIPTIONS: Record<TriggerableCronJob, string> = {
     'Sends birthday and work anniversary wishes for a specific date',
   [TriggerableCronJob.MONTHLY_PAYROLL_GENERATION]:
     'Generates payroll for all employees for a specific month',
-  [TriggerableCronJob.MONTHLY_LEAVE_ACCRUAL]: 'Credits monthly leave accruals to employees',
+  [TriggerableCronJob.MONTHLY_LEAVE_ACCRUAL]:
+    'Settles leave earned from attendance for finished months (April also gets an advance)',
   [TriggerableCronJob.PUBLISH_SCHEDULED_ANNOUNCEMENTS]:
     'Publishes announcements scheduled for today',
   [TriggerableCronJob.EXPIRE_ANNOUNCEMENTS]: 'Expires announcements past their end date',

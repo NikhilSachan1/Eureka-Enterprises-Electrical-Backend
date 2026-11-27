@@ -66,8 +66,6 @@ export const PAYROLL_DTO_ERRORS = {
 
 export const HOLIDAY_WORK_CREDIT = {
   SOURCE: 'holiday_work',
-  NOTE_TEMPLATE:
-    'Credited {leavesToCredit} Earned Leave(s) for working on holidays ({holidayDates}) during payroll {monthYear}',
   LOG_SUCCESS: 'Credited {leavesToCredit} earned leaves to user {userId} for holiday work',
   LOG_ERROR: 'Failed to credit holiday work leaves for user {userId}',
   LOG_CONFIG_NOT_FOUND:

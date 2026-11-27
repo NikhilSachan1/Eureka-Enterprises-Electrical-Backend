@@ -50,10 +50,11 @@ import {
   USER_DOCUMENT_ERRORS,
 } from '../user-documents/constants/user-document.constants';
 import { SalaryStructureService } from '../salary-structures/salary-structure.service';
-import { LeaveCreditService } from '../leave-balances/leave-credit.service';
+import { LeaveAccrualService } from '../leave-balances/leave-accrual.service';
+import { IST_TIMEZONE } from '../leave-balances/constants/leave-ledger.constants';
+import { DateTimeService } from 'src/utils/datetime';
 import { Environments } from 'env-configs';
 import { AUTH_REDIRECT_ROUTES } from '../auth/constants/auth.constants';
-import { LEAVE_CREDIT_LOG_MESSAGES } from '../leave-balances/constants/leave-credit.constants';
 import { EmailService } from '../common/email/email.service';
 import { EMAIL_SUBJECT, EMAIL_TEMPLATE } from '../common/email/constants/email.constants';
 import { COMPANY_DETAILS } from 'src/utils/master-constants/master-constants';
@@ -74,7 +75,8 @@ export class UserService {
     private userDocumentService: UserDocumentService,
     @Inject(forwardRef(() => SalaryStructureService))
     private salaryStructureService: SalaryStructureService,
-    private leaveCreditService: LeaveCreditService,
+    private leaveAccrualService: LeaveAccrualService,
+    private dateTimeService: DateTimeService,
     @InjectDataSource() private dataSource: DataSource,
     private jwtService: JwtService,
     private emailService: EmailService,
@@ -337,26 +339,14 @@ export class UserService {
           );
         }
 
-        let leaveCreditResult = null;
+        // Joining-month leave in advance; later months are earned from attendance.
         if (userData.dateOfJoining) {
-          leaveCreditResult = await this.leaveCreditService.creditLeavesForNewEmployee(
+          await this.leaveAccrualService.grantJoiningAdvance(
             user.id,
-            new Date(userData.dateOfJoining),
+            this.dateTimeService.toDateString(new Date(userData.dateOfJoining)),
+            this.dateTimeService.getTodayString(IST_TIMEZONE),
             createdBy,
             entityManager,
-          );
-
-          if (leaveCreditResult.errors.length > 0) {
-            throw new BadRequestException(
-              `Failed to credit leaves: ${leaveCreditResult.errors.join(', ')}`,
-            );
-          }
-
-          Logger.log(
-            LEAVE_CREDIT_LOG_MESSAGES.LEAVE_CREDIT_FOR_USER.replace('{email}', email).replace(
-              '{categoriesCredited}',
-              leaveCreditResult.categoriesCredited.length.toString(),
-            ),
           );
         }
 
@@ -395,7 +385,6 @@ export class UserService {
           employeeId: user.employeeId,
           message: USERS_RESPONSES.EMPLOYEE_CREATED,
           salaryCreated: !!salaryDetails,
-          leavesCredited: leaveCreditResult?.categoriesCredited || [],
         };
       } catch (error) {
         Logger.error('Create employee failed:', error);

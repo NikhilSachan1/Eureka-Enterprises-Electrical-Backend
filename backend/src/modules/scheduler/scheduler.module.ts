@@ -27,6 +27,7 @@ import { EmailModule } from '../common/email/email.module';
 import { SharedModule } from '../shared/shared.module';
 import { CronLogModule } from '../cron-logs/cron-log.module';
 import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module';
+import { LeaveBalancesModule } from '../leave-balances/leave-balances.module';
 
 @Module({
   controllers: [SchedulerController],
@@ -41,6 +42,7 @@ import { ExpenseTrackerModule } from '../expense-tracker/expense-tracker.module'
     EmailModule,
     CronLogModule,
     ExpenseTrackerModule,
+    LeaveBalancesModule,
   ],
   providers: [
     SchedulerService,

@@ -6,6 +6,7 @@ import { SalaryStructureService } from '../salary-structures/salary-structure.se
 import { BonusService } from '../bonuses/bonus.service';
 import { BonusRepository } from '../bonuses/bonus.repository';
 import { LeaveBalancesService } from '../leave-balances/leave-balances.service';
+import { LeaveLedgerService } from '../leave-balances/leave-ledger.service';
 import { PayslipService } from './payslip/payslip.service';
 import { GeneratePayrollDto, GenerateBulkPayrollDto, GetPayrollDto, UpdatePayrollDto } from './dto';
 import { PayrollEntity } from './entities/payroll.entity';
@@ -51,6 +52,7 @@ export class PayrollService {
     private readonly bonusService: BonusService,
     private readonly bonusRepository: BonusRepository,
     private readonly leaveBalancesService: LeaveBalancesService,
+    private readonly leaveLedgerService: LeaveLedgerService,
     private readonly payslipService: PayslipService,
     private readonly configurationService: ConfigurationService,
     private readonly configSettingService: ConfigSettingService,
@@ -1153,29 +1155,15 @@ export class PayrollService {
         })
         .join(', ');
 
-      const monthName = new Date(year, month - 1, 1).toLocaleDateString('en-IN', {
-        month: 'short',
-      });
-
-      const creditNote = HOLIDAY_WORK_CREDIT.NOTE_TEMPLATE.replace(
-        '{leavesToCredit}',
-        leavesToCredit.toString(),
-      )
-        .replace('{holidayDates}', formattedDates)
-        .replace('{monthYear}', `${monthName}-${year}`);
-
-      const newTotalAllocated = parseFloat(existingBalance.totalAllocated) + leavesToCredit;
-
-      const updatedNotes = existingBalance.notes
-        ? `${existingBalance.notes} | ${creditNote}`
-        : creditNote;
-
-      await this.leaveBalancesService.update(
-        { id: existingBalance.id },
+      await this.leaveLedgerService.creditHolidayWork(
         {
-          totalAllocated: newTotalAllocated.toString(),
-          notes: updatedNotes,
-          updatedBy: createdBy,
+          userId,
+          leaveCategory,
+          financialYear,
+          days: leavesToCredit,
+          holidayDates: formattedDates,
+          periodMonth: `${year}-${String(month).padStart(2, '0')}-01`,
+          createdBy,
         },
         entityManager,
       );

@@ -24,7 +24,6 @@ import {
   FYLeaveConfigAutoCopyResult,
   LeaveCarryForwardResult,
   AutoApproveLeavesResult,
-  MonthlyLeaveAccrualResult,
   LeaveApprovalReminderResult,
   PendingLeaveAlert,
   LeaveApprovalEmailItem,
@@ -33,10 +32,6 @@ import {
 import {
   getPendingLeavesForPeriodQuery,
   autoApproveLeaveQuery,
-  getActiveUsersQuery,
-  getUserLeaveBalanceQuery,
-  updateLeaveBalanceQuery,
-  createLeaveBalanceQuery,
   getPendingLeavesForCurrentMonthQuery,
   getPendingLeavesByCategoryQuery,
 } from '../queries';
@@ -47,6 +42,10 @@ import { CronLogService } from '../../cron-logs/cron-log.service';
 import { CronJobType } from '../../cron-logs/constants/cron-log.constants';
 import { NotificationService } from 'src/modules/notifications/notification.service';
 import { NotificationEvents } from 'src/modules/notifications/notification.events';
+import { LeaveAccrualService } from 'src/modules/leave-balances/leave-accrual.service';
+import { IST_TIMEZONE } from 'src/modules/leave-balances/constants/leave-ledger.constants';
+import { MonthlySettlementResult } from 'src/modules/leave-balances/types/leave-ledger.types';
+import { DateTimeService } from 'src/utils/datetime';
 
 @Injectable()
 export class LeaveCronService {
@@ -63,6 +62,8 @@ export class LeaveCronService {
     private readonly userService: UserService,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly notificationService: NotificationService,
+    private readonly leaveAccrualService: LeaveAccrualService,
+    private readonly dateTimeService: DateTimeService,
   ) {}
 
   /**
@@ -523,350 +524,51 @@ export class LeaveCronService {
   }
 
   /**
-   * CRON 7: Monthly Leave Accrual
-   * Runs on 1st of every month at 12:30 AM IST (after auto-approve cron)
+   * CRON 7: Monthly Leave Settlement
+   * Runs on 1st of every month at 12:30 AM IST
    *
-   * Credits monthly leaves based on config. Uses cumulative calculation
-   * to ensure no decimals while totaling to annual quota.
-   *
-   * Formula: toCredit = floor(annualQuota * currentMonth / 12) - alreadyCredited
-   *
-   * Example for 52 leaves/year:
-   * - Month 1: floor(52 * 1/12) = 4
-   * - Month 2: floor(52 * 2/12) - 4 = 8 - 4 = 4
-   * - Month 3: floor(52 * 3/12) - 8 = 13 - 8 = 5
-   * - ...
-   * - Month 12: floor(52 * 12/12) - 48 = 52 - 48 = 4
+   * Leave is earned from attendance (see LeaveAccrualService): the finished month is settled
+   * against what it earned, and on 1 April the new year's April advance is credited.
    */
   @Cron(CRON_SCHEDULES.MONTHLY_FIRST_1230AM_IST)
-  async handleMonthlyLeaveAccrual(): Promise<MonthlyLeaveAccrualResult | null> {
-    const cronName = CRON_NAMES.MONTHLY_LEAVE_ACCRUAL;
-
-    return this.cronLogService.execute(cronName, CronJobType.LEAVE, async () => {
-      const result: MonthlyLeaveAccrualResult = {
-        usersProcessed: 0,
-        categoriesProcessed: 0,
-        leavesCredited: 0,
-        skipped: 0,
-        errors: [],
-      };
-
-      const currentDate = this.schedulerService.getCurrentDateIST();
-      const financialYear = this.utilityService.getFinancialYear(currentDate);
-      const currentMonth = this.getMonthInFinancialYear(currentDate);
-
-      this.logger.log(
-        `[${cronName}] Processing for FY: ${financialYear}, Month in FY: ${currentMonth}`,
-      );
-
-      const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(financialYear);
-
-      if (!leaveCategoriesConfig) {
-        this.logger.warn(`[${cronName}] No leave categories config found for ${financialYear}`);
-        return result;
-      }
-
-      const leaveConfigId = await this.getLeaveConfigSettingId(financialYear);
-
-      const { query: usersQuery, params: usersParams } = getActiveUsersQuery();
-      const activeUsers: Array<{ id: string }> = await this.dataSource.query(
-        usersQuery,
-        usersParams,
-      );
-
-      if (activeUsers.length === 0) {
-        this.logger.log(`[${cronName}] No active users found`);
-        return result;
-      }
-
-      this.logger.log(`[${cronName}] Processing ${activeUsers.length} active users`);
-
-      const leaveCategories = Object.keys(leaveCategoriesConfig);
-
-      await this.dataSource.transaction(async (entityManager) => {
-        for (const category of leaveCategories) {
-          const categoryConfig = leaveCategoriesConfig[category]?.actual;
-
-          if (!categoryConfig) {
-            this.logger.warn(`[${cronName}] No config found for category: ${category}`);
-            continue;
-          }
-
-          if (categoryConfig.creditFrequency !== 'monthly') {
-            this.logger.log(`[${cronName}] Skipping ${category} - creditFrequency is not monthly`);
-            result.skipped++;
-            continue;
-          }
-
-          const annualQuota = Number(categoryConfig.annualQuota) || 0;
-
-          if (annualQuota <= 0) {
-            this.logger.log(`[${cronName}] Skipping ${category} - annualQuota is 0 or invalid`);
-            result.skipped++;
-            continue;
-          }
-
-          const shouldHaveCreditedByNow = Math.floor((annualQuota * currentMonth) / 12);
-
-          this.logger.log(
-            `[${cronName}] ${category}: annualQuota=${annualQuota}, month=${currentMonth}, shouldHaveByNow=${shouldHaveCreditedByNow}`,
-          );
-
-          result.categoriesProcessed++;
-
-          for (const user of activeUsers) {
-            try {
-              const credited = await this.creditLeavesForUser(
-                user.id,
-                category,
-                financialYear,
-                leaveConfigId,
-                shouldHaveCreditedByNow,
-                currentMonth,
-                entityManager,
-                cronName,
-              );
-
-              if (credited > 0) {
-                result.leavesCredited += credited;
-              }
-            } catch (error) {
-              result.errors.push(`User ${user.id}, ${category}: ${error.message}`);
-              this.logger.error(
-                `[${cronName}] Error processing ${category} for user ${user.id}`,
-                error,
-              );
-            }
-          }
-        }
-
-        result.usersProcessed = activeUsers.length;
-      });
-
-      return result;
-    });
+  async handleMonthlyLeaveAccrual(): Promise<MonthlySettlementResult | null> {
+    return this.cronLogService.execute(CRON_NAMES.MONTHLY_LEAVE_ACCRUAL, CronJobType.LEAVE, () =>
+      this.runSettlement(this.dateTimeService.getTodayString(IST_TIMEZONE)),
+    );
   }
 
   /**
-   * Manual trigger for monthly leave accrual with specific month/year
+   * Manual trigger: settles as the 1st of `targetMonth` would (every month before it).
+   * Safe to repeat — a settled month posts nothing.
    */
   async handleMonthlyLeaveAccrualManual(
     targetMonth?: number,
     targetYear?: number,
-  ): Promise<MonthlyLeaveAccrualResult> {
-    const cronName = CRON_NAMES.MONTHLY_LEAVE_ACCRUAL;
+  ): Promise<MonthlySettlementResult> {
+    const asOf =
+      targetMonth && targetYear
+        ? `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
+        : this.dateTimeService.getTodayString(IST_TIMEZONE);
+    return this.runSettlement(asOf);
+  }
 
-    const result: MonthlyLeaveAccrualResult = {
-      usersProcessed: 0,
-      categoriesProcessed: 0,
-      leavesCredited: 0,
-      skipped: 0,
-      errors: [],
-    };
-
-    // Use provided month/year or default to current
-    let effectiveDate: Date;
-    if (targetMonth && targetYear) {
-      effectiveDate = new Date(targetYear, targetMonth - 1, 1);
-    } else {
-      effectiveDate = this.schedulerService.getCurrentDateIST();
+  private async runSettlement(asOf: string): Promise<MonthlySettlementResult> {
+    const result = await this.leaveAccrualService.runMonthly(asOf);
+    for (const credit of result.credits) {
+      void this.sendLeaveBalanceCreditedNotification(
+        credit.userId,
+        credit.leaveCategory,
+        credit.days,
+        credit.availableAfter,
+        credit.month,
+      );
     }
-
-    const financialYear = this.utilityService.getFinancialYear(effectiveDate);
-    const currentMonth = this.getMonthInFinancialYear(effectiveDate);
-
     this.logger.log(
-      `[${cronName}] Manual trigger - Processing for FY: ${financialYear}, Month in FY: ${currentMonth}`,
+      `[${CRON_NAMES.MONTHLY_LEAVE_ACCRUAL}] Settled through ${result.settledThrough}: ` +
+        `+${result.credited} credited, -${result.clawedBack} settled back, ` +
+        `${result.convertedToLwp} day(s) to LWP, ${result.advancesGiven} advance(s)`,
     );
-
-    const leaveCategoriesConfig = await this.getLeaveCategoriesConfig(financialYear);
-
-    if (!leaveCategoriesConfig) {
-      this.logger.warn(`[${cronName}] No leave categories config found for ${financialYear}`);
-      return result;
-    }
-
-    const leaveConfigId = await this.getLeaveConfigSettingId(financialYear);
-
-    const { query: usersQuery, params: usersParams } = getActiveUsersQuery();
-    const activeUsers: Array<{ id: string }> = await this.dataSource.query(usersQuery, usersParams);
-
-    if (activeUsers.length === 0) {
-      this.logger.log(`[${cronName}] No active users found`);
-      return result;
-    }
-
-    this.logger.log(`[${cronName}] Processing ${activeUsers.length} active users`);
-
-    const leaveCategories = Object.keys(leaveCategoriesConfig);
-
-    await this.dataSource.transaction(async (entityManager) => {
-      for (const category of leaveCategories) {
-        const categoryConfig = leaveCategoriesConfig[category]?.actual;
-
-        if (!categoryConfig) {
-          this.logger.warn(`[${cronName}] No config found for category: ${category}`);
-          continue;
-        }
-
-        if (categoryConfig.creditFrequency !== 'monthly') {
-          this.logger.log(`[${cronName}] Skipping ${category} - creditFrequency is not monthly`);
-          result.skipped++;
-          continue;
-        }
-
-        result.categoriesProcessed++;
-
-        const annualQuota = Number(categoryConfig.annualQuota) || 0;
-        const shouldHaveCreditedByNow = Math.floor((annualQuota * currentMonth) / 12);
-
-        for (const user of activeUsers) {
-          try {
-            const credited = await this.creditLeavesForUser(
-              user.id,
-              category,
-              financialYear,
-              leaveConfigId,
-              shouldHaveCreditedByNow,
-              currentMonth,
-              entityManager,
-              cronName,
-            );
-
-            if (credited > 0) {
-              result.leavesCredited += credited;
-            }
-          } catch (error) {
-            result.errors.push(`User ${user.id}, ${category}: ${error.message}`);
-            this.logger.error(
-              `[${cronName}] Error processing ${category} for user ${user.id}`,
-              error,
-            );
-          }
-        }
-      }
-
-      result.usersProcessed = activeUsers.length;
-    });
-
     return result;
-  }
-
-  private getMonthInFinancialYear(date: Date): number {
-    const month = date.getMonth(); // 0-indexed (0 = Jan)
-    // FY starts in April (month 3)
-    // April = month 1, May = month 2, ..., March = month 12
-    if (month >= 3) {
-      return month - 2; // April(3) -> 1, May(4) -> 2, etc.
-    } else {
-      return month + 10; // Jan(0) -> 10, Feb(1) -> 11, Mar(2) -> 12
-    }
-  }
-
-  private getMonthNameFromFYMonth(fyMonth: number): string {
-    const monthNames = [
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-      'Jan',
-      'Feb',
-      'Mar',
-    ];
-    return monthNames[fyMonth - 1] || 'Unknown';
-  }
-
-  private async getLeaveConfigSettingId(financialYear: string): Promise<string | null> {
-    try {
-      const config = await this.configurationService.findOne({
-        where: {
-          module: CONFIGURATION_MODULES.LEAVE,
-          key: CONFIGURATION_KEYS.LEAVE_CATEGORIES_CONFIG,
-        },
-      });
-
-      if (!config) return null;
-
-      const configSetting = await this.configSettingService.findOne({
-        where: {
-          configId: config.id,
-          contextKey: financialYear,
-          isActive: true,
-        },
-      });
-
-      return configSetting?.id || null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async creditLeavesForUser(
-    userId: string,
-    leaveCategory: string,
-    financialYear: string,
-    leaveConfigId: string | null,
-    shouldHaveCreditedByNow: number,
-    currentMonth: number,
-    entityManager: any,
-    cronName: string,
-  ): Promise<number> {
-    const { query: balanceQuery, params: balanceParams } = getUserLeaveBalanceQuery(
-      userId,
-      leaveCategory,
-      financialYear,
-    );
-    const [existingBalance] = await entityManager.query(balanceQuery, balanceParams);
-
-    const currentlyAllocated = existingBalance ? Number(existingBalance.totalAllocated) || 0 : 0;
-    const toCredit = shouldHaveCreditedByNow - currentlyAllocated;
-
-    if (toCredit <= 0) {
-      return 0;
-    }
-
-    const monthName = this.getMonthNameFromFYMonth(currentMonth);
-    const note = `[${monthName}] +${toCredit} leaves credited (cumulative: ${shouldHaveCreditedByNow})`;
-
-    if (existingBalance) {
-      const { query: updateQuery, params: updateParams } = updateLeaveBalanceQuery(
-        existingBalance.id,
-        shouldHaveCreditedByNow,
-        note,
-      );
-      await entityManager.query(updateQuery, updateParams);
-    } else {
-      const { query: createQuery, params: createParams } = createLeaveBalanceQuery(
-        userId,
-        leaveConfigId || '',
-        leaveCategory,
-        financialYear,
-        shouldHaveCreditedByNow,
-        'monthly_accrual',
-        note,
-      );
-      await entityManager.query(createQuery, createParams);
-    }
-
-    this.logger.log(
-      `[${cronName}] Credited ${toCredit} ${leaveCategory} to user ${userId} (total: ${shouldHaveCreditedByNow})`,
-    );
-
-    // Fire-and-forget WhatsApp notification
-    this.sendLeaveBalanceCreditedNotification(
-      userId,
-      leaveCategory,
-      toCredit,
-      shouldHaveCreditedByNow,
-      this.getMonthNameFromFYMonth(currentMonth),
-    );
-
-    return toCredit;
   }
 
   private async sendLeaveBalanceCreditedNotification(
