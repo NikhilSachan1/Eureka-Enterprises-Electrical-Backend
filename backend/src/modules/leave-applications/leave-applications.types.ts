@@ -25,3 +25,14 @@ export interface RequestWithTimezone {
   user: { id: string };
   timezone: string;
 }
+
+/** One holiday of the leave calendar, as the apply / force leave date pickers show it. */
+export interface LeaveHoliday {
+  date: string;
+  name: string;
+}
+
+export interface LeaveHolidaysResponse {
+  financialYear: string;
+  holidays: LeaveHoliday[];
+}

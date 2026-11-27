@@ -7,6 +7,7 @@ import {
   GetLeaveApplicationsDto,
   LeaveApplicationListResponseDto,
   GroupedLeaveApplicationListResponseDto,
+  GetLeaveHolidaysDto,
   LeaveBulkApprovalDto,
 } from './dto';
 import { LeaveApplicationType } from './constants/leave-application.constants';
@@ -93,6 +94,16 @@ export class LeaveApplicationsController {
   })
   async getLeaveApplicationGroups(@Query() filters: GetLeaveApplicationsDto) {
     return this.leaveApplicationsService.getLeaveApplicationGroups(filters);
+  }
+
+  @Get('holidays')
+  @ApiOperation({
+    summary: 'Holiday calendar for a financial year',
+    description:
+      'Every holiday (date and name) of the year, for disabling holiday dates in the leave date pickers. Leave cannot be applied on these days.',
+  })
+  getHolidays(@Query() query: GetLeaveHolidaysDto) {
+    return this.leaveApplicationsService.getHolidayCalendar(query.financialYear);
   }
 
   @Post('approval')

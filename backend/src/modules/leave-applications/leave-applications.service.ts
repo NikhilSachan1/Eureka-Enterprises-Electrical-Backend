@@ -61,7 +61,11 @@ import {
   buildLeaveGroupPageQuery,
   buildLeaveGroupRecordsQuery,
 } from './queries/leave-group.queries';
-import { LeaveApplicationGroupResponse } from './leave-applications.types';
+import {
+  LeaveApplicationGroupResponse,
+  LeaveHoliday,
+  LeaveHolidaysResponse,
+} from './leave-applications.types';
 import { randomUUID } from 'crypto';
 import { UserService } from '../users/user.service';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -278,6 +282,37 @@ export class LeaveApplicationsService {
     }
 
     return dates;
+  }
+
+  /** The year's holiday calendar (date + name), sorted, for the leave date pickers. */
+  async getHolidayCalendar(year?: string): Promise<LeaveHolidaysResponse> {
+    const financialYear = year ?? this.utilityService.getFinancialYear(new Date());
+    const config = await this.configurationService.findOne({
+      where: { module: CONFIGURATION_MODULES.LEAVE, key: CONFIGURATION_KEYS.HOLIDAY_CALENDAR },
+    });
+    if (!config) {
+      return { financialYear, holidays: [] };
+    }
+    const setting =
+      (await this.configSettingService.findOne({
+        where: { configId: config.id, contextKey: financialYear, isActive: true },
+      })) ??
+      (await this.configSettingService.findOne({
+        where: { configId: config.id, contextKey: financialYear },
+      }));
+
+    const raw: Array<string | { date?: string; title?: string; name?: string }> =
+      setting?.value?.holidays ?? [];
+    const holidays: LeaveHoliday[] = raw
+      .map((h) =>
+        typeof h === 'string'
+          ? { date: h, name: '' }
+          : { date: h?.date ?? '', name: h?.title ?? h?.name ?? '' },
+      )
+      .filter((h) => /^\d{4}-\d{2}-\d{2}$/.test(h.date))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return { financialYear, holidays };
   }
 
   private async validateHolidays(dates: string[], financialYear: string): Promise<void> {
